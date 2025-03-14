@@ -8,12 +8,12 @@
     "dbhub": "dist/index.js"
   },
   "files": [
-    "dist/**/*",
+    "dist",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsup src/index.ts --format esm",
     "start": "node dist/index.js",
     "dev": "NODE_ENV=development tsx src/index.ts"
   },
@@ -32,6 +32,7 @@
     "@types/node": "^22.13.10",
     "@types/pg": "^8.11.11",
     "ts-node": "^10.9.2",
+    "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   },
