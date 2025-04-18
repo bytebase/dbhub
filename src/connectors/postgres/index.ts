@@ -1,6 +1,15 @@
 import pg from 'pg';
 const { Pool } = pg;
-import { Connector, ConnectorRegistry, DSNParser, QueryResult, TableColumn, TableIndex, StoredProcedure } from '../interface.js';
+import {
+  Connector,
+  ConnectorRegistry,
+  DSNParser,
+  QueryResult,
+  TableColumn,
+  TableIndex,
+  StoredProcedure,
+} from '../interface.js';
+import { allowedKeywords } from '../../utils/allowed-keywords.js';
 
 /**
  * PostgreSQL DSN Parser
@@ -17,7 +26,7 @@ class PostgresDSNParser implements DSNParser {
       // For PostgreSQL, we can actually pass the DSN directly to the Pool constructor
       // But we'll parse it here for consistency and to extract components if needed
       const url = new URL(dsn);
-      
+
       const config: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
@@ -25,7 +34,7 @@ class PostgresDSNParser implements DSNParser {
         user: url.username,
         password: url.password ? decodeURIComponent(url.password) : '',
       };
-      
+
       // Handle query parameters (like sslmode, etc.)
       url.searchParams.forEach((value, key) => {
         if (key === 'sslmode') {
@@ -33,7 +42,7 @@ class PostgresDSNParser implements DSNParser {
         }
         // Add other parameters as needed
       });
-      
+
       return config;
     } catch (error) {
       throw new Error(`Failed to parse PostgreSQL DSN: ${error instanceof Error ? error.message : String(error)}`);
@@ -61,20 +70,20 @@ export class PostgresConnector implements Connector {
   id = 'postgres';
   name = 'PostgreSQL';
   dsnParser = new PostgresDSNParser();
-  
+
   private pool: pg.Pool | null = null;
 
   async connect(dsn: string): Promise<void> {
     try {
       const config = await this.dsnParser.parse(dsn);
       this.pool = new Pool(config);
-      
+
       // Test the connection
       const client = await this.pool.connect();
-      console.error("Successfully connected to PostgreSQL database");
+      console.error('Successfully connected to PostgreSQL database');
       client.release();
     } catch (err) {
-      console.error("Failed to connect to PostgreSQL database:", err);
+      console.error('Failed to connect to PostgreSQL database:', err);
       throw err;
     }
   }
@@ -90,7 +99,7 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       const result = await client.query(`
@@ -99,8 +108,8 @@ export class PostgresConnector implements Connector {
         WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
         ORDER BY schema_name
       `);
-      
-      return result.rows.map(row => row.schema_name);
+
+      return result.rows.map((row) => row.schema_name);
     } finally {
       client.release();
     }
@@ -110,21 +119,24 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // 'public' is the standard default schema in PostgreSQL databases
       const schemaToUse = schema || 'public';
-      
-      const result = await client.query(`
+
+      const result = await client.query(
+        `
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = $1
         ORDER BY table_name
-      `, [schemaToUse]);
-      
-      return result.rows.map(row => row.table_name);
+      `,
+        [schemaToUse]
+      );
+
+      return result.rows.map((row) => row.table_name);
     } finally {
       client.release();
     }
@@ -134,20 +146,23 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       const schemaToUse = schema || 'public';
-      
-      const result = await client.query(`
+
+      const result = await client.query(
+        `
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = $1 
           AND table_name = $2
         )
-      `, [schemaToUse, tableName]);
-      
+      `,
+        [schemaToUse, tableName]
+      );
+
       return result.rows[0].exists;
     } finally {
       client.release();
@@ -158,14 +173,15 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       const schemaToUse = schema || 'public';
-      
+
       // Query to get all indexes for the table
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT 
           i.relname as index_name,
           array_agg(a.attname) as column_names,
@@ -192,13 +208,15 @@ export class PostgresConnector implements Connector {
           ix.indisprimary
         ORDER BY 
           i.relname
-      `, [tableName, schemaToUse]);
-      
-      return result.rows.map(row => ({
+      `,
+        [tableName, schemaToUse]
+      );
+
+      return result.rows.map((row) => ({
         index_name: row.index_name,
         column_names: row.column_names,
         is_unique: row.is_unique,
-        is_primary: row.is_primary
+        is_primary: row.is_primary,
       }));
     } finally {
       client.release();
@@ -209,15 +227,16 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // Tables are created in the 'public' schema by default unless otherwise specified
       const schemaToUse = schema || 'public';
-      
+
       // Get table columns
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT 
           column_name, 
           data_type, 
@@ -227,8 +246,10 @@ export class PostgresConnector implements Connector {
         WHERE table_schema = $1
         AND table_name = $2
         ORDER BY ordinal_position
-      `, [schemaToUse, tableName]);
-      
+      `,
+        [schemaToUse, tableName]
+      );
+
       return result.rows;
     } finally {
       client.release();
@@ -239,22 +260,25 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       const schemaToUse = schema || 'public';
-      
+
       // Get stored procedures and functions from PostgreSQL
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT 
           routine_name
         FROM information_schema.routines
         WHERE routine_schema = $1
         ORDER BY routine_name
-      `, [schemaToUse]);
-      
-      return result.rows.map(row => row.routine_name);
+      `,
+        [schemaToUse]
+      );
+
+      return result.rows.map((row) => row.routine_name);
     } finally {
       client.release();
     }
@@ -264,14 +288,15 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       const schemaToUse = schema || 'public';
-      
+
       // Get stored procedure details from PostgreSQL
-      const result = await client.query(`
+      const result = await client.query(
+        `
         SELECT 
           routine_name as procedure_name,
           routine_type,
@@ -294,27 +319,32 @@ export class PostgresConnector implements Connector {
         FROM information_schema.routines
         WHERE routine_schema = $1
         AND routine_name = $2
-      `, [schemaToUse, procedureName]);
-      
+      `,
+        [schemaToUse, procedureName]
+      );
+
       if (result.rows.length === 0) {
         throw new Error(`Stored procedure '${procedureName}' not found in schema '${schemaToUse}'`);
       }
-      
+
       const procedure = result.rows[0];
 
       // If routine_definition is NULL, try to get the procedure body with pg_get_functiondef
       let definition = procedure.definition;
-      
+
       try {
         // Get the OID for the procedure/function
-        const oidResult = await client.query(`
+        const oidResult = await client.query(
+          `
           SELECT p.oid, p.prosrc
           FROM pg_proc p
           JOIN pg_namespace n ON p.pronamespace = n.oid
           WHERE p.proname = $1
           AND n.nspname = $2
-        `, [procedureName, schemaToUse]);
-        
+        `,
+          [procedureName, schemaToUse]
+        );
+
         if (oidResult.rows.length > 0) {
           // If definition is still null, get the full definition
           if (!definition) {
@@ -332,14 +362,14 @@ export class PostgresConnector implements Connector {
         // Ignore errors trying to get definition - it's optional
         console.error(`Error getting procedure definition: ${err}`);
       }
-      
+
       return {
         procedure_name: procedure.procedure_name,
         procedure_type: procedure.procedure_type,
         language: procedure.language || 'sql',
         parameter_list: procedure.parameter_list || '',
         return_type: procedure.return_type !== 'void' ? procedure.return_type : undefined,
-        definition: definition || undefined
+        definition: definition || undefined,
       };
     } finally {
       client.release();
@@ -350,10 +380,10 @@ export class PostgresConnector implements Connector {
     if (!this.pool) {
       throw new Error('Not connected to database');
     }
-    
+
     const safetyCheck = this.validateQuery(query);
     if (!safetyCheck.isValid) {
-      throw new Error(safetyCheck.message || "Query validation failed");
+      throw new Error(safetyCheck.message || 'Query validation failed');
     }
 
     const client = await this.pool.connect();
@@ -367,10 +397,10 @@ export class PostgresConnector implements Connector {
   validateQuery(query: string): { isValid: boolean; message?: string } {
     // Basic check to prevent non-SELECT queries
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery.startsWith('select')) {
+    if (!allowedKeywords.some((keyword) => normalizedQuery.startsWith(keyword))) {
       return {
         isValid: false,
-        message: "Only SELECT queries are allowed for security reasons."
+        message: 'Only SELECT queries are allowed for security reasons.',
       };
     }
     return { isValid: true };

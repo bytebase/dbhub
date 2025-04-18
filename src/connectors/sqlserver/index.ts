@@ -1,6 +1,15 @@
 import sql from 'mssql';
-import { Connector, ConnectorRegistry, DSNParser, QueryResult, TableColumn, TableIndex, StoredProcedure } from '../interface.js';
-import {DefaultAzureCredential} from "@azure/identity";
+import {
+  Connector,
+  ConnectorRegistry,
+  DSNParser,
+  QueryResult,
+  TableColumn,
+  TableIndex,
+  StoredProcedure,
+} from '../interface.js';
+import { DefaultAzureCredential } from '@azure/identity';
+import { allowedKeywords } from '../../utils/allowed-keywords.js';
 
 /**
  * SQL Server DSN parser
@@ -53,20 +62,20 @@ export class SQLServerDSNParser implements DSNParser {
     };
 
     // Handle Azure Active Directory authentication with access token
-    if (options.authentication === "azure-active-directory-access-token") {
-      try {        
+    if (options.authentication === 'azure-active-directory-access-token') {
+      try {
         // Create a credential instance
         const credential = new DefaultAzureCredential();
-        
+
         // Get token for SQL Server resource
-        const token = await credential.getToken("https://database.windows.net/");
-        
+        const token = await credential.getToken('https://database.windows.net/');
+
         // Set the token in the config
         config.authentication = {
-          type: "azure-active-directory-access-token",
+          type: 'azure-active-directory-access-token',
           options: {
-            token: token.token
-          }
+            token: token.token,
+          },
         };
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -135,7 +144,7 @@ export class SQLServerConnector implements Connector {
           ORDER BY SCHEMA_NAME
       `);
 
-      return result.recordset.map((row) => row.SCHEMA_NAME);
+      return result.recordset.map((row: { SCHEMA_NAME: any }) => row.SCHEMA_NAME);
     } catch (error) {
       throw new Error(`Failed to get schemas: ${(error as Error).message}`);
     }
@@ -151,8 +160,7 @@ export class SQLServerConnector implements Connector {
       // This is the default schema for SQL Server databases
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
-        .input('schema', sql.VarChar, schemaToUse);
+      const request = this.connection.request().input('schema', sql.VarChar, schemaToUse);
 
       const query = `
           SELECT TABLE_NAME
@@ -163,7 +171,7 @@ export class SQLServerConnector implements Connector {
 
       const result = await request.query(query);
 
-      return result.recordset.map((row) => row.TABLE_NAME);
+      return result.recordset.map((row: { TABLE_NAME: any }) => row.TABLE_NAME);
     } catch (error) {
       throw new Error(`Failed to get tables: ${(error as Error).message}`);
     }
@@ -178,7 +186,8 @@ export class SQLServerConnector implements Connector {
       // In SQL Server, use 'dbo' as the default schema if none specified
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
+      const request = this.connection
+        .request()
         .input('tableName', sql.VarChar, tableName)
         .input('schema', sql.VarChar, schemaToUse);
 
@@ -206,7 +215,8 @@ export class SQLServerConnector implements Connector {
       // In SQL Server, use 'dbo' as the default schema if none specified
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
+      const request = this.connection
+        .request()
         .input('tableName', sql.VarChar, tableName)
         .input('schema', sql.VarChar, schemaToUse);
 
@@ -235,11 +245,14 @@ export class SQLServerConnector implements Connector {
       const result = await request.query(query);
 
       // Group by index name to collect all columns for each index
-      const indexMap = new Map<string, {
-        columns: string[],
-        is_unique: boolean,
-        is_primary: boolean
-      }>();
+      const indexMap = new Map<
+        string,
+        {
+          columns: string[];
+          is_unique: boolean;
+          is_primary: boolean;
+        }
+      >();
 
       for (const row of result.recordset) {
         const indexName = row.index_name;
@@ -251,7 +264,7 @@ export class SQLServerConnector implements Connector {
           indexMap.set(indexName, {
             columns: [],
             is_unique: isUnique,
-            is_primary: isPrimary
+            is_primary: isPrimary,
           });
         }
 
@@ -266,7 +279,7 @@ export class SQLServerConnector implements Connector {
           index_name: name,
           column_names: info.columns,
           is_unique: info.is_unique,
-          is_primary: info.is_primary
+          is_primary: info.is_primary,
         });
       });
 
@@ -285,7 +298,8 @@ export class SQLServerConnector implements Connector {
       // In SQL Server, use 'dbo' as the default schema if none specified
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
+      const request = this.connection
+        .request()
         .input('tableName', sql.VarChar, tableName)
         .input('schema', sql.VarChar, schemaToUse);
 
@@ -317,8 +331,7 @@ export class SQLServerConnector implements Connector {
       // In SQL Server, use 'dbo' as the default schema if none specified
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
-        .input('schema', sql.VarChar, schemaToUse);
+      const request = this.connection.request().input('schema', sql.VarChar, schemaToUse);
 
       const query = `
           SELECT ROUTINE_NAME
@@ -329,7 +342,7 @@ export class SQLServerConnector implements Connector {
       `;
 
       const result = await request.query(query);
-      return result.recordset.map(row => row.ROUTINE_NAME);
+      return result.recordset.map((row: { ROUTINE_NAME: any }) => row.ROUTINE_NAME);
     } catch (error) {
       throw new Error(`Failed to get stored procedures: ${(error as Error).message}`);
     }
@@ -344,7 +357,8 @@ export class SQLServerConnector implements Connector {
       // In SQL Server, use 'dbo' as the default schema if none specified
       const schemaToUse = schema || 'dbo';
 
-      const request = this.connection.request()
+      const request = this.connection
+        .request()
         .input('procedureName', sql.VarChar, procedureName)
         .input('schema', sql.VarChar, schemaToUse);
 
@@ -385,11 +399,12 @@ export class SQLServerConnector implements Connector {
       let parameterList = '';
       if (parameterResult.recordset.length > 0) {
         parameterList = parameterResult.recordset
-          .map(param => {
-            const lengthStr = param.CHARACTER_MAXIMUM_LENGTH > 0 ?
-              `(${param.CHARACTER_MAXIMUM_LENGTH})` : '';
-            return `${param.PARAMETER_NAME} ${param.PARAMETER_MODE} ${param.DATA_TYPE}${lengthStr}`;
-          })
+          .map(
+            (param: { CHARACTER_MAXIMUM_LENGTH: number; PARAMETER_NAME: any; PARAMETER_MODE: any; DATA_TYPE: any }) => {
+              const lengthStr = param.CHARACTER_MAXIMUM_LENGTH > 0 ? `(${param.CHARACTER_MAXIMUM_LENGTH})` : '';
+              return `${param.PARAMETER_NAME} ${param.PARAMETER_MODE} ${param.DATA_TYPE}${lengthStr}`;
+            }
+          )
           .join(', ');
       }
 
@@ -416,7 +431,7 @@ export class SQLServerConnector implements Connector {
         language: 'sql', // SQL Server procedures are typically in T-SQL
         parameter_list: parameterList,
         return_type: routine.ROUTINE_TYPE === 'FUNCTION' ? routine.return_data_type : undefined,
-        definition: definition
+        definition: definition,
       };
     } catch (error) {
       throw new Error(`Failed to get stored procedure details: ${(error as Error).message}`);
@@ -430,18 +445,19 @@ export class SQLServerConnector implements Connector {
 
     const safetyCheck = this.validateQuery(query);
     if (!safetyCheck.isValid) {
-      throw new Error(safetyCheck.message || "Query validation failed");
+      throw new Error(safetyCheck.message || 'Query validation failed');
     }
 
     try {
       const result = await this.connection.request().query(query);
       return {
         rows: result.recordset || [],
-        fields: result.recordset && result.recordset.length > 0
-          ? Object.keys(result.recordset[0]).map(key => ({
-            name: key,
-          }))
-          : [],
+        fields:
+          result.recordset && result.recordset.length > 0
+            ? Object.keys(result.recordset[0]).map((key) => ({
+                name: key,
+              }))
+            : [],
         rowCount: result.rowsAffected[0] || 0,
       };
     } catch (error) {
@@ -452,13 +468,13 @@ export class SQLServerConnector implements Connector {
   validateQuery(query: string): { isValid: boolean; message?: string } {
     // Basic check to prevent non-SELECT queries
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery.startsWith('select')) {
+    if (!allowedKeywords.some((keyword: string) => normalizedQuery.startsWith(keyword))) {
       return {
         isValid: false,
-        message: "Only SELECT queries are allowed for security reasons."
+        message: 'Only SELECT queries are allowed for security reasons.',
       };
     }
-    return {isValid: true};
+    return { isValid: true };
   }
 }
 
