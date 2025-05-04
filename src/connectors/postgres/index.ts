@@ -38,29 +38,33 @@ class PostgresDSNParser implements DSNParser {
       // Handle query parameters (like sslmode, etc.)
       url.searchParams.forEach((value, key) => {
         if (key === "sslmode") {
-          config.ssl = value !== "disable";
+          if (value === "disable") {
+            config.ssl = false;
+          } else {
+            // Allow for env variable to override sslmode
+            // NODE_TLS_REJECT_UNAUTHORIZED=0 disables SSL certificate validation
+            // NODE_TLS_REJECT_UNAUTHORIZED=1 enforces SSL certificate validation
+            // Default to 1 to maintain security
+
+            let {
+              NODE_TLS_REJECT_UNAUTHORIZED,
+            } = process.env;
+
+            if (NODE_TLS_REJECT_UNAUTHORIZED === undefined) {
+              NODE_TLS_REJECT_UNAUTHORIZED = "1"; // Default to enforcing SSL cert validation
+            }
+
+            // Configure SSL settings based on env var
+            // rejectUnauthorized: true = Validate SSL cert
+            // rejectUnauthorized: false = Allow self-signed/invalid certs
+            config.ssl = {
+              rejectUnauthorized: JSON.parse(NODE_TLS_REJECT_UNAUTHORIZED) == true,
+            };
+          }
         }
         // Add other parameters as needed
       });
 
-      // Allow for env variable to override sslmode
-      // NODE_TLS_REJECT_UNAUTHORIZED=0 disables SSL certificate validation
-      // NODE_TLS_REJECT_UNAUTHORIZED=1 enforces SSL certificate validation
-      // Default to 1 to main security
-      let {
-        NODE_TLS_REJECT_UNAUTHORIZED,
-      } = process.env;
-
-      if (!NODE_TLS_REJECT_UNAUTHORIZED) {
-        NODE_TLS_REJECT_UNAUTHORIZED = "1"; // Default to disallowing self-signed certs
-      }
-
-      // Configure SSL settings based on env var
-      // rejectUnauthorized: true = Validate SSL cert
-      // rejectUnauthorized: false = Allow self-signed/invalid certs
-      config.ssl = {
-        rejectUnauthorized: JSON.parse(NODE_TLS_REJECT_UNAUTHORIZED) == true,
-      };
 
       return config;
     } catch (error) {
