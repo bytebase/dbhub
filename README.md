@@ -236,6 +236,15 @@ DBHub supports the following database connection string formats:
 
 If you see the error "NJS-138: connections to this database server version are not supported by node-oracledb in Thin mode", you need to use Thick mode as described below.
 
+#### PostgreSQL SSL
+
+By default, DBHub will validate the SSL certificate of the PostgreSQL server. If you want to allow self-signed certificates, you can set the `NODE_TLS_REJECT_UNAUTHORIZED` environment variable to `0`.
+
+```bash
+export NODE_TLS_REJECT_UNAUTHORIZED=0
+npx @bytebase/dbhub --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+```
+
 ##### Docker
 
 Use `bytebase/dbhub-oracle-thick` instead of `bytebase/dbhub` docker image.
