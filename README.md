@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/bytebase-dbhub-badge.png)](https://mseep.ai/app/bytebase-dbhub)
+
 <p align="center">
 <a href="https://dbhub.ai/" target="_blank">
 <picture>
