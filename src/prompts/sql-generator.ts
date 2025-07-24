@@ -133,6 +133,11 @@ export async function sqlGeneratorPromptHandler(
           "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
           "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
         ],
+        mariadb: [
+          "SELECT * FROM users WHERE created_at > NOW() - INTERVAL 1 DAY",
+          "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
+          "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
+        ],
         mssql: [
           "SELECT * FROM users WHERE created_at > DATEADD(day, -1, GETDATE())",
           "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
