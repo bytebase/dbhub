@@ -45,6 +45,9 @@ export async function sqlGeneratorPromptHandler(
       case "sqlserver":
         sqlDialect = "mssql";
         break;
+      case "dameng":
+        sqlDialect = "dameng";
+        break;
       default:
         sqlDialect = "ansi"; // Default to standard SQL if connector type is unknown
     }
@@ -134,6 +137,12 @@ export async function sqlGeneratorPromptHandler(
           "SELECT * FROM users WHERE created_at > DATEADD(day, -1, GETDATE())",
           "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
           "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
+        ],
+        dameng: [
+          "SELECT * FROM users WHERE created_at > SYSDATE - INTERVAL '1' DAY",
+          "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
+          "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
+          "SELECT DISTINCT OWNER AS SCHEMA_NAME FROM ALL_OBJECTS WHERE OWNER NOT IN ('SYS','SYSDBA')"
         ],
         ansi: [
           "SELECT * FROM users WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '1' DAY",
