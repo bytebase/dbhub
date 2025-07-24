@@ -17,6 +17,9 @@ importers:
       better-sqlite3:
         specifier: ^11.9.0
         version: 11.10.0
+      dmdb:
+        specifier: ^1.0.38220
+        version: 1.0.38220
       dotenv:
         specifier: ^16.4.7
         version: 16.5.0
@@ -1162,6 +1165,18 @@ packages:
     resolution: {integrity: sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==}
     engines: {node: '>=0.3.1'}
 
+  dmdb@1.0.38220:
+    resolution: {integrity: sha512-YSpnVu08iucnaPChr0PAfPvH2rZCLvdsSUJIeNKkaOgky4EI5yhYGXrI5Ga2LwdOnAryjX8RMNeysEHkp2Zg2g==}
+    engines: {node: '>= 12'}
+    peerDependencies:
+      snappy: ^7.2.0
+      snappyjs: ^0.7.0
+    peerDependenciesMeta:
+      snappy:
+        optional: true
+      snappyjs:
+        optional: true
+
   docker-compose@1.2.0:
     resolution: {integrity: sha512-wIU1eHk3Op7dFgELRdmOYlPYS4gP8HhH1ZmZa13QZF59y0fblzFDFmKPhyc05phCy2hze9OEvNZAsoljrs+72w==}
     engines: {node: '>= 6.0.0'}
@@ -1432,6 +1447,10 @@ packages:
 
   iconv-lite@0.4.24:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
+    engines: {node: '>=0.10.0'}
+
+  iconv-lite@0.5.2:
+    resolution: {integrity: sha512-kERHXvpSaB4aU3eANwidg79K8FlrN77m8G9V+0vOR3HYaRifrlwMEpT7ZBJqLSEIHnEgJTHcWK82wwLwwKwtag==}
     engines: {node: '>=0.10.0'}
 
   iconv-lite@0.6.3:
@@ -3543,6 +3562,10 @@ snapshots:
 
   diff@4.0.2: {}
 
+  dmdb@1.0.38220:
+    dependencies:
+      iconv-lite: 0.5.2
+
   docker-compose@1.2.0:
     dependencies:
       yaml: 2.8.0
@@ -3917,6 +3940,10 @@ snapshots:
   husky@9.1.7: {}
 
   iconv-lite@0.4.24:
+    dependencies:
+      safer-buffer: 2.1.2
+
+  iconv-lite@0.5.2:
     dependencies:
       safer-buffer: 2.1.2
 
