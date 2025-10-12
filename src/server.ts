@@ -169,6 +169,11 @@ See documentation for more details on configuring database connections.
         next();
       });
 
+      // Root endpoint for client connection checks
+      app.get("/", (req, res) => {
+        res.status(200).send();
+      });
+
       // Health check endpoint
       app.get("/healthz", (req, res) => {
         res.status(200).send("OK");
