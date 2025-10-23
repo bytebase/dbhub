@@ -8,13 +8,15 @@ DBHub is a Universal Database Gateway implementing the Model Context Protocol (M
 
 ## Commands
 
-- Build: `pnpm run build` - Compiles TypeScript to JavaScript using tsup
-- Start: `pnpm run start` - Runs the compiled server
-- Dev: `pnpm run dev` - Runs server with tsx (no compilation needed)
-- Test: `pnpm test` - Run all tests
-- Test Watch: `pnpm test:watch` - Run tests in watch mode
-- Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)
-- Pre-commit: `./scripts/setup-husky.sh` - Setup git hooks for automated testing
+- **Build**: `pnpm run build` - Compiles TypeScript to JavaScript using tsup
+- **Start**: `pnpm run start` - Runs the compiled server
+- **Dev**: `pnpm run dev` - Runs server with tsx (no compilation needed)
+- **Cross-platform Dev**: `pnpm run crossdev` - Cross-platform development with tsx
+- **Test**: `pnpm test` - Run all tests with Vitest
+- **Test Watch**: `pnpm test:watch` - Run tests in watch mode
+- **Integration Tests**: `pnpm test:integration` - Run database integration tests (requires Docker)
+- **Pre-commit**: `./scripts/setup-husky.sh` - Setup git hooks for automated testing
+- **Pre-commit Hook**: `pnpm run pre-commit` - Run lint-staged checks
 
 ## Architecture Overview
 
@@ -78,12 +80,19 @@ Key architectural patterns:
 
 ## Testing Approach
 
-- Unit tests for individual components and utilities
-- Integration tests using Testcontainers for real database testing
-- All connectors have comprehensive integration test coverage
-- Pre-commit hooks run related tests automatically
-- Test specific databases: `pnpm test src/connectors/__tests__/{db-type}.integration.test.ts`
-- SSH tunnel tests: `pnpm test postgres-ssh-simple.integration.test.ts`
+- **Unit Tests**: Individual components and utilities using Vitest
+- **Integration Tests**: Real database testing using Testcontainers with Docker
+- **Test Coverage**: All connectors have comprehensive integration test coverage
+- **Pre-commit Hooks**: Automatic test execution via lint-staged
+- **Test Specific Databases**:
+  - PostgreSQL: `pnpm test src/connectors/__tests__/postgres.integration.test.ts`
+  - MySQL: `pnpm test src/connectors/__tests__/mysql.integration.test.ts`
+  - MariaDB: `pnpm test src/connectors/__tests__/mariadb.integration.test.ts`
+  - SQL Server: `pnpm test src/connectors/__tests__/sqlserver.integration.test.ts`
+  - SQLite: `pnpm test src/connectors/__tests__/sqlite.integration.test.ts`
+  - SSH Tunnel: `pnpm test src/connectors/__tests__/postgres-ssh.integration.test.ts`
+  - JSON RPC: `pnpm test src/__tests__/json-rpc-integration.test.ts`
+- **Test Utilities**: Shared integration test base in `src/connectors/__tests__/shared/integration-test-base.ts`
 
 ## SSH Tunnel Support
 
@@ -98,6 +107,24 @@ DBHub supports SSH tunnels for secure database connections through bastion hosts
 - Support for both password and key-based authentication
 - Default SSH key detection (tries `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.)
 - Tunnel lifecycle managed by `ConnectorManager`
+
+## Development Environment
+
+- **TypeScript**: Strict mode enabled with ES2020 target
+- **Module System**: ES modules with `.js` extension in imports
+- **Package Manager**: pnpm for dependency management
+- **Build Tool**: tsup for TypeScript compilation
+- **Test Framework**: Vitest for unit and integration testing
+- **Development Runtime**: tsx for development without compilation
+
+## Key Architectural Patterns
+
+- **Connector Registry**: Dynamic registration system for database connectors with automatic DSN detection
+- **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients) with CORS protection
+- **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
+- **SSH Tunnel Integration**: Automatic tunnel establishment when SSH config detected
+- **Singleton Manager**: `ConnectorManager` provides unified interface across all database operations
+- **Integration Test Base**: Shared test utilities for consistent connector testing
 
 ## Code Style
 

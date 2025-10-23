@@ -25,6 +25,7 @@ venv/
 ENV/
 config.local.js
 *.local.json
+package-lock.json
 
 # Logs
 logs
