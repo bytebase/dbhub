@@ -8,8 +8,8 @@ import {
  * Indexes resource handler
  * Returns information about indexes on a table
  */
-export async function indexesResourceHandler(uri: URL, variables: any, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function indexesResourceHandler(uri: URL, variables: any, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   // Extract schema and table names from URL variables
   const schemaName =
@@ -62,6 +62,7 @@ export async function indexesResourceHandler(uri: URL, variables: any, _extra: a
       schema: schemaName,
       indexes: indexes,
       count: indexes.length,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response

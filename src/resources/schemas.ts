@@ -8,8 +8,8 @@ import {
  * Schemas resource handler
  * Returns a list of all schemas in the database
  */
-export async function schemasResourceHandler(uri: URL, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function schemasResourceHandler(uri: URL, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   try {
     const schemas = await connector.getSchemas();
@@ -18,6 +18,7 @@ export async function schemasResourceHandler(uri: URL, _extra: any) {
     const responseData = {
       schemas: schemas,
       count: schemas.length,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response

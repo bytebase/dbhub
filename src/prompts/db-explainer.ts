@@ -23,7 +23,8 @@ export async function dbExplainerPromptHandler(
     schema?: string;
     table?: string;
   },
-  _extra: any
+  _extra: any,
+  databaseId?: string
 ): Promise<{
   messages: {
     role: "assistant" | "user";
@@ -39,7 +40,8 @@ export async function dbExplainerPromptHandler(
   [key: string]: unknown;
 }> {
   try {
-    const connector = ConnectorManager.getCurrentConnector();
+    // Get connector based on database ID
+    const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
     // Verify schema exists if provided
     if (schema) {

@@ -51,6 +51,7 @@ Key architectural patterns:
 - **Connector Registry**: Dynamic registration system for database connectors
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients)
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
+- **Multi-Database Support**: Simultaneous connections to multiple databases with isolated contexts
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
 ## Environment
@@ -64,6 +65,43 @@ Key architectural patterns:
   - Set `--transport=http` for streamable HTTP transport with HTTP server
 - Demo mode: Use `--demo` flag for bundled SQLite employee database
 - Read-only mode: Use `--readonly` flag to restrict to read-only SQL operations
+
+## Multi-Database Support
+
+DBHub supports connecting to multiple databases simultaneously:
+
+### Configuration
+- **Single Database**: Use `DSN` environment variable or `--dsn` command line argument
+- **Multiple Databases**: Use `DSN_dev`, `DSN_test`, etc. environment variables
+
+### Usage Examples
+
+```bash
+# Single database (backward compatible)
+export DSN="postgres://user:pass@localhost:5432/mydb"
+
+# Multiple databases
+export DSN_dev="postgres://user:pass@localhost:5432/db1"
+export DSN_test="mysql://user:pass@localhost:3306/db2"
+export DSN_prod="sqlite:///path/to/database.db"
+```
+
+### HTTP Transport Endpoints
+When using HTTP transport (`--transport=http`), multiple endpoints are available:
+
+- `http://localhost:8080/message` - Default database (first configured)
+- `http://localhost:8080/message/{databaseId}` - Specific database (e.g., `http://localhost:8080/message/db1`)
+
+### STDIO Transport
+- STDIO transport uses the default database
+- Available databases are listed in startup messages
+- Use HTTP transport for full multi-database access
+
+### Database Context
+All MCP tools, resources, and prompts support database-specific operations:
+- Tools: `execute_sql_{databaseId}`
+- Resources: Database-specific schema exploration
+- Prompts: `generate_sql_{databaseId}`, `explain_db_{databaseId}`
 
 ## Database Connectors
 
@@ -122,6 +160,8 @@ DBHub supports SSH tunnels for secure database connections through bastion hosts
 - **Connector Registry**: Dynamic registration system for database connectors with automatic DSN detection
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients) with CORS protection
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
+- **Multi-Database Management**: Simultaneous connections to multiple databases with database ID-based routing
+- **Database Context Propagation**: Consistent database ID flow through all MCP handlers
 - **SSH Tunnel Integration**: Automatic tunnel establishment when SSH config detected
 - **Singleton Manager**: `ConnectorManager` provides unified interface across all database operations
 - **Integration Test Base**: Shared test utilities for consistent connector testing

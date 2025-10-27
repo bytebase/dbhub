@@ -236,6 +236,105 @@ export function resolveDSN(): { dsn: string; source: string; isDemo?: boolean } 
 }
 
 /**
+ * Resolve multiple DSN configurations from environment variables
+ * Supports both single DSN (backward compatible) and multiple DSN_* formats
+ * Returns a map of database IDs to DSN strings
+ */
+export function resolveMultiDSN(): Map<string, { dsn: string; source: string; isDemo?: boolean }> {
+  const multiDSN = new Map<string, { dsn: string; source: string; isDemo?: boolean }>();
+
+  // Get command line arguments
+  const args = parseCommandLineArgs();
+
+  // Check for demo mode first (highest priority)
+  if (isDemoMode()) {
+    multiDSN.set("default", {
+      dsn: "sqlite:///:memory:",
+      source: "demo mode",
+      isDemo: true,
+    });
+    return multiDSN;
+  }
+
+  // 1. Check command line arguments for single DSN
+  if (args.dsn) {
+    multiDSN.set("default", { dsn: args.dsn, source: "command line argument" });
+    return multiDSN;
+  }
+
+  // 2. Check for multiple DSN configurations from environment variables
+  const dsnPattern = /^DSN_(\w+)$/;
+  let foundMultiDSN = false;
+
+  // Check environment variables before loading .env
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key === "DSN" && value) {
+      // Single DSN format (backward compatible)
+      multiDSN.set("default", { dsn: value, source: "environment variable" });
+    } else if (dsnPattern.test(key) && value) {
+      // Multiple DSN format: DSN_dev=postgres://...
+      const match = key.match(dsnPattern);
+      if (match) {
+        const id = match[1];
+        multiDSN.set(id, { dsn: value, source: "environment variable" });
+        foundMultiDSN = true;
+      }
+    }
+  }
+
+  // 3. If no multi-DSN found, check for individual DB parameters
+  if (multiDSN.size === 0) {
+    const envParamsResult = buildDSNFromEnvParams();
+    if (envParamsResult) {
+      multiDSN.set("default", envParamsResult);
+    }
+  }
+
+  // 4. Try loading from .env files if no DSNs found yet
+  if (multiDSN.size === 0) {
+    const loadedEnvFile = loadEnvFiles();
+
+    if (loadedEnvFile) {
+      // Check for single DSN in .env file
+      if (process.env.DSN) {
+        multiDSN.set("default", { dsn: process.env.DSN, source: `${loadedEnvFile} file` });
+      }
+
+      // Check for multiple DSN configurations in .env file
+      for (const [key, value] of Object.entries(process.env)) {
+        if (dsnPattern.test(key) && value) {
+          const match = key.match(dsnPattern);
+          if (match) {
+            const id = match[1];
+            multiDSN.set(id, { dsn: value, source: `${loadedEnvFile} file` });
+            foundMultiDSN = true;
+          }
+        }
+      }
+
+      // Check for individual DB parameters from .env file
+      if (multiDSN.size === 0) {
+        const envFileParamsResult = buildDSNFromEnvParams();
+        if (envFileParamsResult) {
+          multiDSN.set("default", {
+            dsn: envFileParamsResult.dsn,
+            source: `${loadedEnvFile} file (individual parameters)`
+          });
+        }
+      }
+    }
+  }
+
+  // If we found multiple DSN configurations but no default, use the first one as default
+  if (foundMultiDSN && !multiDSN.has("default") && multiDSN.size > 0) {
+    const firstEntry = Array.from(multiDSN.entries())[0];
+    multiDSN.set("default", { ...firstEntry[1], source: `${firstEntry[1].source} (as default)` });
+  }
+
+  return multiDSN;
+}
+
+/**
  * Resolve transport type from command line args or environment variables
  * Returns 'stdio' or 'http' (streamable HTTP), with 'stdio' as the default
  */

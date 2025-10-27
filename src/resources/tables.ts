@@ -8,8 +8,8 @@ import {
  * Tables resource handler
  * Returns a list of all tables in the database or within a specific schema
  */
-export async function tablesResourceHandler(uri: URL, variables: any, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function tablesResourceHandler(uri: URL, variables: any, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   // Extract the schema name from URL variables if present
   const schemaName =
@@ -40,6 +40,7 @@ export async function tablesResourceHandler(uri: URL, variables: any, _extra: an
       tables: tableNames,
       count: tableNames.length,
       schema: schemaName,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response

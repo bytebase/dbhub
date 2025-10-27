@@ -150,6 +150,24 @@ export interface Connector {
 }
 
 /**
+ * Database connection configuration
+ */
+export interface DatabaseConnection {
+  /** Unique identifier for this database connection */
+  id: string;
+  /** Database connector instance */
+  connector: Connector;
+  /** Database connection string */
+  dsn: string;
+  /** Source of the DSN configuration */
+  source: string;
+  /** Whether this is a demo database */
+  isDemo?: boolean;
+  /** SSH tunnel configuration if applicable */
+  sshConfig?: any;
+}
+
+/**
  * Registry for available database connectors
  */
 export class ConnectorRegistry {

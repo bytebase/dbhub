@@ -9,8 +9,8 @@ import {
  * Schema resource handler
  * Returns schema information for a specific table, optionally within a specific database schema
  */
-export async function tableStructureResourceHandler(uri: URL, variables: Variables, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function tableStructureResourceHandler(uri: URL, variables: Variables, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   // Handle tableName which could be a string or string array from URL template
   const tableName = Array.isArray(variables.tableName)
@@ -65,6 +65,7 @@ export async function tableStructureResourceHandler(uri: URL, variables: Variabl
       schema: schemaName,
       columns: formattedColumns,
       count: formattedColumns.length,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response

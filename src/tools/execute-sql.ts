@@ -78,8 +78,8 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  * execute_sql tool handler
  * Executes a SQL query and returns the results
  */
-export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: any, databaseId?: string) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
   const executeOptions = ConnectorManager.getCurrentExecuteOptions();
 
   try {
@@ -90,7 +90,7 @@ export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: an
         "READONLY_VIOLATION"
       );
     }
-    
+
     // Execute the SQL (single or multiple statements) if validation passed
     const result = await connector.executeSQL(sql, executeOptions);
 
@@ -98,6 +98,7 @@ export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: an
     const responseData = {
       rows: result.rows,
       count: result.rows.length,
+      database: databaseId || "default"
     };
 
     return createToolSuccessResponse(responseData);

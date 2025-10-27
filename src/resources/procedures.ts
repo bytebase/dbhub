@@ -8,8 +8,8 @@ import {
  * Stored procedures/functions resource handler
  * Returns a list of all stored procedures/functions in the database or within a specific schema
  */
-export async function proceduresResourceHandler(uri: URL, variables: any, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function proceduresResourceHandler(uri: URL, variables: any, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   // Extract the schema name from URL variables if present
   const schemaName =
@@ -40,6 +40,7 @@ export async function proceduresResourceHandler(uri: URL, variables: any, _extra
       procedures: procedureNames,
       count: procedureNames.length,
       schema: schemaName,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response
@@ -57,8 +58,8 @@ export async function proceduresResourceHandler(uri: URL, variables: any, _extra
  * Stored procedure/function details resource handler
  * Returns details for a specific stored procedure/function
  */
-export async function procedureDetailResourceHandler(uri: URL, variables: any, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
+export async function procedureDetailResourceHandler(uri: URL, variables: any, databaseId?: string, _extra?: any) {
+  const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
   // Extract parameters from URL variables
   const schemaName =
@@ -105,6 +106,7 @@ export async function procedureDetailResourceHandler(uri: URL, variables: any, _
       returnType: procedureDetails.return_type,
       definition: procedureDetails.definition,
       schema: schemaName,
+      database: databaseId || "default"
     };
 
     // Use the utility to create a standardized response

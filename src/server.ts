@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveDSN, resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId } from "./config/env.js";
+import { resolveMultiDSN, resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId } from "./config/env.js";
 import { getSqliteInMemorySetupSql } from "./config/demo-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
@@ -54,10 +54,10 @@ export async function main(): Promise<void> {
     const idData = resolveId();
     const id = idData?.id;
 
-    // Resolve DSN from command line args, environment variables, or .env files
-    const dsnData = resolveDSN();
+    // Resolve DSNs from command line args, environment variables, or .env files
+    const dsnData = resolveMultiDSN();
 
-    if (!dsnData) {
+    if (!dsnData || dsnData.size === 0) {
       const samples = ConnectorRegistry.getAllSampleDSNs();
       const sampleFormats = Object.entries(samples)
         .map(([id, dsn]) => `  - ${id}: ${dsn}`)
@@ -72,6 +72,10 @@ Please provide the DSN in one of these ways (in order of priority):
 3. Environment variable: export DSN="your-connection-string"
 4. .env file: DSN=your-connection-string
 
+For multiple databases:
+1. Environment variables: DSN_dev, DSN_test, etc.
+2. .env file: DSN_dev=your-connection-string, DSN_test=another-connection-string
+
 Example formats:
 ${sampleFormats}
 
@@ -81,15 +85,15 @@ See documentation for more details on configuring database connections.
     }
 
     // Create MCP server factory function for HTTP transport
-    const createServer = () => {
+    const createServer = (databaseId?: string) => {
       const server = new McpServer({
         name: SERVER_NAME,
         version: SERVER_VERSION,
       });
 
-      // Register resources, tools, and prompts
-      registerResources(server);
-      registerTools(server, id);
+      // Register resources, tools, and prompts with optional database ID
+      registerResources(server, databaseId);
+      registerTools(server, databaseId);
       registerPrompts(server);
 
       return server;
@@ -97,20 +101,29 @@ See documentation for more details on configuring database connections.
 
     // Create server factory function (will be used for both STDIO and HTTP transports)
 
-    // Create connector manager and connect to database
+    // Create connector manager and connect to databases
     const connectorManager = new ConnectorManager();
-    console.error(`Connecting with DSN: ${redactDSN(dsnData.dsn)}`);
-    console.error(`DSN source: ${dsnData.source}`);
-    if (idData) {
-      console.error(`ID: ${idData.id} (from ${idData.source})`);
+    
+    if (isDemoMode()) {
+      // If in demo mode, load the employee database
+      const initScript = getSqliteInMemorySetupSql();
+      const databaseId = "default";
+      const dsnInfo = dsnData.get(databaseId)!;
+      await connectorManager.connectWithDSN(dsnInfo.dsn, databaseId, initScript);
+    } else {
+      // Connect to all databases
+      for (const [databaseId, dsnInfo] of dsnData) {
+        console.error(`Connecting to database '${databaseId}' with DSN: ${redactDSN(dsnInfo.dsn)}`);
+        console.error(`DSN source: ${dsnInfo.source}`);
+        await connectorManager.connectWithDSN(dsnInfo.dsn, databaseId);
+      }
     }
 
-    // If in demo mode, load the employee database
-    if (dsnData.isDemo) {
-      const initScript = getSqliteInMemorySetupSql();
-      await connectorManager.connectWithDSN(dsnData.dsn, initScript);
-    } else {
-      await connectorManager.connectWithDSN(dsnData.dsn);
+    // Store the connector manager instance globally so it can be accessed by all endpoints
+    (global as any).__dbhubConnectorManager = connectorManager;
+
+    if (idData) {
+      console.error(`ID: ${idData.id} (from ${idData.source})`);
     }
 
     // Resolve transport type
@@ -120,21 +133,23 @@ See documentation for more details on configuring database connections.
 
     // Print ASCII art banner with version and slogan
     const readonly = isReadOnlyMode();
-    
+
     // Collect active modes
     const activeModes: string[] = [];
     const modeDescriptions: string[] = [];
-    
-    if (dsnData.isDemo) {
+
+    // Check if any database is in demo mode
+    const hasDemoMode = Array.from(dsnData.values()).some(dsnInfo => dsnInfo.isDemo);
+    if (hasDemoMode) {
       activeModes.push("DEMO");
       modeDescriptions.push("using sample employee database");
     }
-    
+
     if (readonly) {
       activeModes.push("READ-ONLY");
       modeDescriptions.push("only read only queries allowed");
     }
-    
+
     // Output mode information
     if (activeModes.length > 0) {
       console.error(`Running in ${activeModes.join(' and ')} mode - ${modeDescriptions.join(', ')}`);
@@ -179,27 +194,28 @@ See documentation for more details on configuring database connections.
         res.status(200).send("OK");
       });
 
-      // Main endpoint for streamable HTTP transport
-      app.post("/message", async (req, res) => {
-        try {
-          // In stateless mode, create a new instance of transport and server for each request
-          // to ensure complete isolation. A single instance would cause request ID collisions
-          // when multiple clients connect concurrently.
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined, // Disable session management for stateless mode
-            enableJsonResponse: false // Use SSE streaming
-          });
-          const server = createServer();
 
-          await server.connect(transport);
-          await transport.handleRequest(req, res, req.body);
-        } catch (error) {
-          console.error("Error handling request:", error);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Internal server error' });
+      // Unified endpoints for all databases
+      for (const [databaseId] of dsnData) {
+        const path = databaseId === "default" ? "/message" : `/message/${databaseId}`;
+        app.post(path, async (req, res) => {
+          try {
+            const transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: undefined,
+              enableJsonResponse: false
+            });
+            const server = createServer(databaseId);
+
+            await server.connect(transport);
+            await transport.handleRequest(req, res, req.body);
+          } catch (error) {
+            console.error(`Error handling request for database '${databaseId}':`, error);
+            if (!res.headersSent) {
+              res.status(500).json({ error: 'Internal server error' });
+            }
           }
-        }
-      });
+        });
+      }
 
 
       // Start the HTTP server
@@ -208,13 +224,27 @@ See documentation for more details on configuring database connections.
       console.error(`Port source: ${portData.source}`);
       app.listen(port, '0.0.0.0', () => {
         console.error(`DBHub server listening at http://0.0.0.0:${port}`);
-        console.error(`Connect to MCP server at http://0.0.0.0:${port}/message`);
+        console.error(`Available database endpoints:`);
+        for (const [databaseId] of dsnData) {
+          const path = databaseId === "default" ? "/message" : `/message/${databaseId}`;
+          console.error(`  - ${databaseId}: http://0.0.0.0:${port}${path}`);
+        }
       });
     } else {
       // Set up STDIO transport
       const server = createServer();
       const transport = new StdioServerTransport();
       console.error("Starting with STDIO transport");
+
+      // Show available databases for STDIO mode
+      if (dsnData.size > 1) {
+        console.error("Available databases:");
+        for (const [databaseId, dsnInfo] of dsnData) {
+          console.error(`  - ${databaseId}: ${redactDSN(dsnInfo.dsn)}`);
+        }
+        console.error("Note: STDIO mode uses the default database. Use HTTP transport for multi-database access.");
+      }
+
       await server.connect(transport);
 
       // Listen for SIGINT to gracefully shut down

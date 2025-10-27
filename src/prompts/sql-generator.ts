@@ -24,11 +24,12 @@ export async function sqlGeneratorPromptHandler(
     description: string;
     schema?: string;
   },
-  _extra: any
+  _extra: any,
+  databaseId?: string
 ) {
   try {
-    // Get current connector to determine dialect
-    const connector = ConnectorManager.getCurrentConnector();
+    // Get connector based on database ID
+    const connector = databaseId ? ConnectorManager.getConnector(databaseId) : ConnectorManager.getCurrentConnector();
 
     // Determine SQL dialect from connector automatically
     let sqlDialect: SQLDialect;
@@ -130,6 +131,11 @@ export async function sqlGeneratorPromptHandler(
           "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
           "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
         ],
+        mariadb: [
+          "SELECT * FROM users WHERE created_at > NOW() - INTERVAL 1 DAY",
+          "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
+          "SELECT product_name, price FROM products WHERE price > (SELECT AVG(price) FROM products)",
+        ],
         mssql: [
           "SELECT * FROM users WHERE created_at > DATEADD(day, -1, GETDATE())",
           "SELECT u.name, COUNT(o.id) FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name HAVING COUNT(o.id) > 5",
@@ -145,19 +151,6 @@ export async function sqlGeneratorPromptHandler(
       // Build a prompt that would help generate the SQL
       // In a real implementation, this would call an AI model
       const schemaInfo = schema ? `in schema '${schema}'` : "across all schemas";
-      const prompt = `
-Generate a ${sqlDialect} SQL query based on this description: "${description}"
-
-${schemaContext}
-Working ${schemaInfo}
-
-The query should:
-1. Be written for ${sqlDialect} dialect
-2. Use only the available tables and columns
-3. Prioritize readability
-4. Include appropriate comments
-5. Be compatible with ${sqlDialect} syntax
-`;
 
       // In a real implementation, this would be the result from an AI model call
       // For this demo, we'll generate a simple SQL query based on the description
