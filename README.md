@@ -1,4 +1,4 @@
-> [!NOTE]  
+> [!NOTE]
 > Brought to you by [Bytebase](https://www.bytebase.com/), open-source database DevSecOps platform.
 
 <p align="center">
@@ -117,6 +117,33 @@ dbhub:
   depends_on:
     - database
 ```
+
+**Multiple Database Support:**
+
+DBHub supports connecting to multiple databases simultaneously using .env file with volume mount:
+
+```bash
+# Create .env file with multiple database configurations
+cat > .env << EOF
+DSN_dev=postgres://user:password@localhost:5432/db1
+DSN_test=mysql://user:password@localhost:3306/db2
+DSN_prod=sqlite:///path/to/database.db
+EOF
+
+# Run container with .env file mounted
+docker run --rm --init \
+   --name dbhub \
+   --publish 8080:8080 \
+   --volume "$(pwd)/.env:/app/.env" \
+   bytebase/dbhub \
+   --transport http \
+   --port 8080
+```
+
+Available endpoints when using multiple databases:
+
+- `http://localhost:8080/message` - Default database (first configured)
+- `http://localhost:8080/message/{databaseId}` - Specific database (e.g., `http://localhost:8080/message/dev`, `http://localhost:8080/message/test`)
 
 ### NPM
 
