@@ -23,9 +23,7 @@
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --testNamePattern='Integration Tests'",
-    "prepare": "[[ \"$NODE_ENV\" != \"production\" ]] && husky || echo \"Skipping husky in production\"",
-    "pre-commit": "lint-staged"
+    "test:integration": "vitest run --testNamePattern='Integration Tests'"
   },
   "keywords": [],
   "author": "",
@@ -56,8 +54,6 @@
     "@types/pg": "^8.11.11",
     "@types/ssh2": "^1.15.5",
     "cross-env": "^7.0.3",
-    "husky": "^9.0.11",
-    "lint-staged": "^15.2.2",
     "prettier": "^3.5.3",
     "testcontainers": "^11.0.3",
     "ts-node": "^10.9.2",
@@ -77,8 +73,5 @@
   },
   "include": [
     "src/**/*"
-  ],
-  "lint-staged": {
-    "*.{js,ts}": "vitest related --run"
-  }
+  ]
 }

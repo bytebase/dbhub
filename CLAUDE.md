@@ -14,7 +14,6 @@ DBHub is a Universal Database Gateway implementing the Model Context Protocol (M
 - Test: `pnpm test` - Run all tests
 - Test Watch: `pnpm test:watch` - Run tests in watch mode
 - Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)
-- Pre-commit: `./scripts/setup-husky.sh` - Setup git hooks for automated testing
 
 ## Architecture Overview
 

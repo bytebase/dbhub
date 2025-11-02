@@ -658,18 +658,6 @@ pnpm test:integration -- --testNamePattern="PostgreSQL"
 docker logs <container_id>
 ```
 
-#### Pre-commit Hooks (for Developers)
-
-The project includes pre-commit hooks to run tests automatically before each commit:
-
-1. After cloning the repository, set up the pre-commit hooks:
-
-   ```bash
-   ./scripts/setup-husky.sh
-   ```
-
-2. This ensures the test suite runs automatically whenever you create a commit, preventing commits that would break tests.
-
 ### Debug with [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 
 ![mcp-inspector](https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/mcp-inspector.webp)
