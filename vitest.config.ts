@@ -9,5 +9,21 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
     },
+    // Define separate projects for unit and integration tests
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*integration*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'integration',
+          include: ['src/**/*integration*.test.ts'],
+        },
+      },
+    ],
   },
 });

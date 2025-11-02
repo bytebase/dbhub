@@ -22,8 +22,9 @@
     "dev": "NODE_ENV=development tsx src/index.ts",
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
     "test": "vitest run",
+    "test:unit": "vitest run --project unit",
     "test:watch": "vitest",
-    "test:integration": "vitest run --testNamePattern='Integration Tests'"
+    "test:integration": "vitest run --project integration"
   },
   "keywords": [],
   "author": "",
@@ -60,7 +61,7 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
-    "vitest": "^1.6.1"
+    "vitest": "^4.0.6"
   },
   "compilerOptions": {
     "target": "ES2020",
