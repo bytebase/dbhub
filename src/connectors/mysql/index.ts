@@ -13,6 +13,7 @@ import {
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { parseQueryResults } from "../../utils/multi-statement-result-parser.js";
 
 /**
  * MySQL DSN Parser
@@ -471,6 +472,9 @@ export class MySQLConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
+    // Get a dedicated connection from the pool to ensure session consistency
+    // This is critical for session-specific features like LAST_INSERT_ID()
+    const conn = await this.pool.getConnection();
     try {
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sql;
@@ -479,50 +483,33 @@ export class MySQLConnector implements Connector {
         const statements = sql.split(';')
           .map(statement => statement.trim())
           .filter(statement => statement.length > 0);
-        
-        const processedStatements = statements.map(statement => 
+
+        const processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)
         );
-        
+
         processedSQL = processedStatements.join('; ');
         if (sql.trim().endsWith(';')) {
           processedSQL += ';';
         }
       }
 
-      // Use pool.query with multipleStatements: true support
-      const results = await this.pool.query(processedSQL) as any;
-      
-      // MySQL2 with multipleStatements returns:
-      // - Single statement: [rows, fields] 
-      // - Multiple statements: [array_of_results, fields] where array_of_results contains [rows, fields] for each statement
-      
+      // Use dedicated connection with multipleStatements: true support
+      const results = await conn.query(processedSQL) as any;
+
+      // MySQL2 returns results in format [rows, fields]
+      // Extract the first element which contains the actual row data
       const [firstResult] = results;
-      
-      // Check if this is a multi-statement result
-      if (Array.isArray(firstResult) && firstResult.length > 0 && 
-          Array.isArray(firstResult[0])) {
-        // Multiple statements - firstResult is an array of results  
-        let allRows: any[] = [];
-        
-        for (const result of firstResult) {
-          // Each result is either a ResultSetHeader object (for INSERT/UPDATE/DELETE) 
-          // or an array of rows (for SELECT)
-          if (Array.isArray(result)) {
-            // This is a rows array from a SELECT query
-            allRows.push(...result);
-          }
-          // Skip non-array results (ResultSetHeader objects)
-        }
-        
-        return { rows: allRows };
-      } else {
-        // Single statement - firstResult is the rows array directly
-        return { rows: Array.isArray(firstResult) ? firstResult : [] };
-      }
+
+      // Parse results using shared utility that handles both single and multi-statement queries
+      const rows = parseQueryResults(firstResult);
+      return { rows };
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;
+    } finally {
+      // Always release the connection back to the pool
+      conn.release();
     }
   }
 }
