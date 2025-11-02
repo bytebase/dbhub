@@ -508,11 +508,12 @@ export class MySQLConnector implements Connector {
       // Multi-statements return an array where elements can be ResultSetHeader objects or row arrays
       if (Array.isArray(firstResult) && firstResult.length > 0) {
         // Check if this looks like multi-statement results by checking the first element
+        // ResultSetHeader objects have properties like affectedRows, insertId, fieldCount
         const firstElement = firstResult[0];
-        const isMultiStatement = firstElement && typeof firstElement === 'object' &&
-          ('constructor' in firstElement && firstElement.constructor.name === 'ResultSetHeader' ||
-           'affectedRows' in firstElement || 'warningStatus' in firstElement ||
-           Array.isArray(firstElement));
+        const isResultSetHeader = firstElement && typeof firstElement === 'object' &&
+          !Array.isArray(firstElement) &&
+          ('affectedRows' in firstElement || 'insertId' in firstElement || 'fieldCount' in firstElement);
+        const isMultiStatement = isResultSetHeader || Array.isArray(firstElement);
 
         if (isMultiStatement) {
           // Multiple statements - collect only row arrays (from SELECT queries)
