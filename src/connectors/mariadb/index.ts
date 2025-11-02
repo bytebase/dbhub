@@ -474,6 +474,9 @@ export class MariaDBConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
+    // Get a dedicated connection from the pool to ensure session consistency
+    // This is critical for session-specific features like LAST_INSERT_ID()
+    const conn = await this.pool.getConnection();
     try {
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sql;
@@ -482,37 +485,37 @@ export class MariaDBConnector implements Connector {
         const statements = sql.split(';')
           .map(statement => statement.trim())
           .filter(statement => statement.length > 0);
-        
-        const processedStatements = statements.map(statement => 
+
+        const processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)
         );
-        
+
         processedSQL = processedStatements.join('; ');
         if (sql.trim().endsWith(';')) {
           processedSQL += ';';
         }
       }
 
-      // Use pool.query - MariaDB driver returns rows directly for single statements
-      const results = await this.pool.query(processedSQL) as any;
-      
+      // Use dedicated connection - MariaDB driver returns rows directly for single statements
+      const results = await conn.query(processedSQL) as any;
+
       // MariaDB driver returns different formats:
       // - Single statement: returns rows array directly
       // - Multiple statements: returns array of results (when multipleStatements is true)
-      
+
       if (Array.isArray(results)) {
         // Check if this looks like multiple statement results
         // Multiple statements return an array where each element might be an array of results
         if (results.length > 0 && Array.isArray(results[0]) && results[0].length > 0) {
           // This might be multiple statement results - flatten them
           let allRows: any[] = [];
-          
+
           for (const result of results) {
             if (Array.isArray(result)) {
               allRows.push(...result);
             }
           }
-          
+
           return { rows: allRows };
         } else {
           // Single statement result - results is the rows array
@@ -525,6 +528,9 @@ export class MariaDBConnector implements Connector {
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;
+    } finally {
+      // Always release the connection back to the pool
+      conn.release();
     }
   }
 }

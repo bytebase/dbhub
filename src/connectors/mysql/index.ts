@@ -471,6 +471,9 @@ export class MySQLConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
+    // Get a dedicated connection from the pool to ensure session consistency
+    // This is critical for session-specific features like LAST_INSERT_ID()
+    const conn = await this.pool.getConnection();
     try {
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sql;
@@ -479,34 +482,34 @@ export class MySQLConnector implements Connector {
         const statements = sql.split(';')
           .map(statement => statement.trim())
           .filter(statement => statement.length > 0);
-        
-        const processedStatements = statements.map(statement => 
+
+        const processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)
         );
-        
+
         processedSQL = processedStatements.join('; ');
         if (sql.trim().endsWith(';')) {
           processedSQL += ';';
         }
       }
 
-      // Use pool.query with multipleStatements: true support
-      const results = await this.pool.query(processedSQL) as any;
-      
+      // Use dedicated connection with multipleStatements: true support
+      const results = await conn.query(processedSQL) as any;
+
       // MySQL2 with multipleStatements returns:
-      // - Single statement: [rows, fields] 
+      // - Single statement: [rows, fields]
       // - Multiple statements: [array_of_results, fields] where array_of_results contains [rows, fields] for each statement
-      
+
       const [firstResult] = results;
-      
+
       // Check if this is a multi-statement result
-      if (Array.isArray(firstResult) && firstResult.length > 0 && 
+      if (Array.isArray(firstResult) && firstResult.length > 0 &&
           Array.isArray(firstResult[0])) {
-        // Multiple statements - firstResult is an array of results  
+        // Multiple statements - firstResult is an array of results
         let allRows: any[] = [];
-        
+
         for (const result of firstResult) {
-          // Each result is either a ResultSetHeader object (for INSERT/UPDATE/DELETE) 
+          // Each result is either a ResultSetHeader object (for INSERT/UPDATE/DELETE)
           // or an array of rows (for SELECT)
           if (Array.isArray(result)) {
             // This is a rows array from a SELECT query
@@ -514,7 +517,7 @@ export class MySQLConnector implements Connector {
           }
           // Skip non-array results (ResultSetHeader objects)
         }
-        
+
         return { rows: allRows };
       } else {
         // Single statement - firstResult is the rows array directly
@@ -523,6 +526,9 @@ export class MySQLConnector implements Connector {
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;
+    } finally {
+      // Always release the connection back to the pool
+      conn.release();
     }
   }
 }
