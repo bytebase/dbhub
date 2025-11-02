@@ -13,6 +13,7 @@ import {
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { parseQueryResults } from "../../utils/multi-statement-result-parser.js";
 
 /**
  * MariaDB DSN Parser
@@ -499,39 +500,9 @@ export class MariaDBConnector implements Connector {
       // Use dedicated connection - MariaDB driver returns rows directly for single statements
       const results = await conn.query(processedSQL) as any;
 
-      // MariaDB driver returns different formats:
-      // - Single statement: returns rows array directly
-      // - Multiple statements: returns array of results (when multipleStatements is true)
-
-      if (Array.isArray(results)) {
-        // Check if this is a multi-statement result
-        // Multi-statements return an array where elements can be:
-        // - Metadata objects (from INSERT/UPDATE/DELETE) with properties like affectedRows, insertId
-        // - Arrays of rows (from SELECT queries)
-
-        // Check if first element has metadata properties (indicates multi-statement)
-        if (results.length > 0 && results[0] && typeof results[0] === 'object' &&
-            ('affectedRows' in results[0] || 'warningStatus' in results[0] || Array.isArray(results[0]))) {
-          // This is multi-statement results - collect only row arrays (from SELECT queries)
-          let allRows: any[] = [];
-
-          for (const result of results) {
-            if (Array.isArray(result)) {
-              // This is a SELECT result - add all rows
-              allRows.push(...result);
-            }
-            // Skip metadata objects from INSERT/UPDATE/DELETE
-          }
-
-          return { rows: allRows };
-        } else {
-          // Single statement result - results is the rows array
-          return { rows: results };
-        }
-      } else {
-        // Non-array result (like for INSERT/UPDATE/DELETE without RETURNING)
-        return { rows: [] };
-      }
+      // Parse results using shared utility that handles both single and multi-statement queries
+      const rows = parseQueryResults(results);
+      return { rows };
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;
