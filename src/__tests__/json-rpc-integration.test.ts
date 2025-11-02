@@ -43,9 +43,9 @@ describe('JSON RPC Integration Tests', () => {
     for (let i = 0; i < 20; i++) {
       try {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const response = await fetch(`${baseUrl}/message`, {
+        const response = await fetch(`${baseUrl}/mcp`, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream'
           },
@@ -126,7 +126,7 @@ describe('JSON RPC Integration Tests', () => {
   });
 
   async function makeJsonRpcCall(method: string, params: any): Promise<any> {
-    const response = await fetch(`${baseUrl}/message`, {
+    const response = await fetch(`${baseUrl}/mcp`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -327,7 +327,7 @@ describe('JSON RPC Integration Tests', () => {
     });
 
     it('should handle malformed requests gracefully', async () => {
-      const response = await fetch(`${baseUrl}/message`, {
+      const response = await fetch(`${baseUrl}/mcp`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

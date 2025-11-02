@@ -47,6 +47,9 @@ src/
 Key architectural patterns:
 - **Connector Registry**: Dynamic registration system for database connectors
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients)
+  - HTTP transport endpoint: `/mcp` (aligns with official MCP SDK standard)
+  - Implemented in `src/server.ts` using `StreamableHTTPServerTransport`
+  - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
@@ -58,7 +61,7 @@ Key architectural patterns:
   - Set `DB_CONNECTOR_TYPE` to select a connector with its default DSN
 - Transport options:
   - Set `--transport=stdio` (default) for stdio transport
-  - Set `--transport=http` for streamable HTTP transport with HTTP server
+  - Set `--transport=http` for streamable HTTP transport with HTTP server (endpoint: `/mcp`)
 - Demo mode: Use `--demo` flag for bundled SQLite employee database
 - Read-only mode: Use `--readonly` flag to restrict to read-only SQL operations
 

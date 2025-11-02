@@ -180,7 +180,7 @@ See documentation for more details on configuring database connections.
       });
 
       // Main endpoint for streamable HTTP transport
-      app.post("/message", async (req, res) => {
+      app.post("/mcp", async (req, res) => {
         try {
           // In stateless mode, create a new instance of transport and server for each request
           // to ensure complete isolation. A single instance would cause request ID collisions
@@ -208,7 +208,7 @@ See documentation for more details on configuring database connections.
       console.error(`Port source: ${portData.source}`);
       app.listen(port, '0.0.0.0', () => {
         console.error(`DBHub server listening at http://0.0.0.0:${port}`);
-        console.error(`Connect to MCP server at http://0.0.0.0:${port}/message`);
+        console.error(`Connect to MCP server at http://0.0.0.0:${port}/mcp`);
       });
     } else {
       // Set up STDIO transport
