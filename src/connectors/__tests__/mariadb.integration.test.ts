@@ -222,20 +222,15 @@ describe('MariaDB Connector Integration Tests', () => {
     });
 
     it('should handle MariaDB auto-increment properly', async () => {
-      const insertResult = await mariadbTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('Auto Inc Test', 'autoinc@example.com', 40)",
+      // Execute INSERT and SELECT LAST_INSERT_ID() in a single call to ensure same connection
+      const result = await mariadbTest.connector.executeSQL(
+        "INSERT INTO users (name, email, age) VALUES ('Auto Inc Test', 'autoinc@example.com', 40); SELECT LAST_INSERT_ID() as last_id",
         {}
       );
-      
-      expect(insertResult).toBeDefined();
-      
-      const selectResult = await mariadbTest.connector.executeSQL(
-        'SELECT LAST_INSERT_ID() as last_id',
-        {}
-      );
-      
-      expect(selectResult.rows).toHaveLength(1);
-      expect(Number(selectResult.rows[0].last_id)).toBeGreaterThan(0);
+
+      expect(result).toBeDefined();
+      expect(result.rows).toHaveLength(1);
+      expect(Number(result.rows[0].last_id)).toBeGreaterThan(0);
     });
 
     it('should work with MariaDB-specific functions', async () => {

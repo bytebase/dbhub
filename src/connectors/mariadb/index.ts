@@ -504,16 +504,23 @@ export class MariaDBConnector implements Connector {
       // - Multiple statements: returns array of results (when multipleStatements is true)
 
       if (Array.isArray(results)) {
-        // Check if this looks like multiple statement results
-        // Multiple statements return an array where each element might be an array of results
-        if (results.length > 0 && Array.isArray(results[0]) && results[0].length > 0) {
-          // This might be multiple statement results - flatten them
+        // Check if this is a multi-statement result
+        // Multi-statements return an array where elements can be:
+        // - Metadata objects (from INSERT/UPDATE/DELETE) with properties like affectedRows, insertId
+        // - Arrays of rows (from SELECT queries)
+
+        // Check if first element has metadata properties (indicates multi-statement)
+        if (results.length > 0 && results[0] && typeof results[0] === 'object' &&
+            ('affectedRows' in results[0] || 'warningStatus' in results[0] || Array.isArray(results[0]))) {
+          // This is multi-statement results - collect only row arrays (from SELECT queries)
           let allRows: any[] = [];
 
           for (const result of results) {
             if (Array.isArray(result)) {
+              // This is a SELECT result - add all rows
               allRows.push(...result);
             }
+            // Skip metadata objects from INSERT/UPDATE/DELETE
           }
 
           return { rows: allRows };

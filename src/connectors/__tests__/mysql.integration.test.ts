@@ -213,20 +213,15 @@ describe('MySQL Connector Integration Tests', () => {
     });
 
     it('should handle MySQL auto-increment properly', async () => {
-      const insertResult = await mysqlTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('Auto Inc Test', 'autoinc@example.com', 40)",
+      // Execute INSERT and SELECT LAST_INSERT_ID() in a single call to ensure same connection
+      const result = await mysqlTest.connector.executeSQL(
+        "INSERT INTO users (name, email, age) VALUES ('Auto Inc Test', 'autoinc@example.com', 40); SELECT LAST_INSERT_ID() as last_id",
         {}
       );
-      
-      expect(insertResult).toBeDefined();
-      
-      const selectResult = await mysqlTest.connector.executeSQL(
-        'SELECT LAST_INSERT_ID() as last_id',
-        {}
-      );
-      
-      expect(selectResult.rows).toHaveLength(1);
-      expect(Number(selectResult.rows[0].last_id)).toBeGreaterThan(0);
+
+      expect(result).toBeDefined();
+      expect(result.rows).toHaveLength(1);
+      expect(Number(result.rows[0].last_id)).toBeGreaterThan(0);
     });
 
     it('should work with MySQL-specific functions', async () => {

@@ -498,31 +498,42 @@ export class MySQLConnector implements Connector {
 
       // MySQL2 with multipleStatements returns:
       // - Single statement: [rows, fields]
-      // - Multiple statements: [array_of_results, fields] where array_of_results contains [rows, fields] for each statement
+      // - Multiple statements: [array_of_results, fields] where array_of_results contains mixed types:
+      //   - ResultSetHeader objects (for INSERT/UPDATE/DELETE) with properties like affectedRows, insertId
+      //   - Arrays of rows (for SELECT queries)
 
       const [firstResult] = results;
 
       // Check if this is a multi-statement result
-      if (Array.isArray(firstResult) && firstResult.length > 0 &&
-          Array.isArray(firstResult[0])) {
-        // Multiple statements - firstResult is an array of results
-        let allRows: any[] = [];
+      // Multi-statements return an array where elements can be ResultSetHeader objects or row arrays
+      if (Array.isArray(firstResult) && firstResult.length > 0) {
+        // Check if this looks like multi-statement results by checking the first element
+        const firstElement = firstResult[0];
+        const isMultiStatement = firstElement && typeof firstElement === 'object' &&
+          ('constructor' in firstElement && firstElement.constructor.name === 'ResultSetHeader' ||
+           'affectedRows' in firstElement || 'warningStatus' in firstElement ||
+           Array.isArray(firstElement));
 
-        for (const result of firstResult) {
-          // Each result is either a ResultSetHeader object (for INSERT/UPDATE/DELETE)
-          // or an array of rows (for SELECT)
-          if (Array.isArray(result)) {
-            // This is a rows array from a SELECT query
-            allRows.push(...result);
+        if (isMultiStatement) {
+          // Multiple statements - collect only row arrays (from SELECT queries)
+          let allRows: any[] = [];
+
+          for (const result of firstResult) {
+            // Each result is either a ResultSetHeader object (for INSERT/UPDATE/DELETE)
+            // or an array of rows (for SELECT)
+            if (Array.isArray(result)) {
+              // This is a rows array from a SELECT query
+              allRows.push(...result);
+            }
+            // Skip ResultSetHeader objects from INSERT/UPDATE/DELETE
           }
-          // Skip non-array results (ResultSetHeader objects)
-        }
 
-        return { rows: allRows };
-      } else {
-        // Single statement - firstResult is the rows array directly
-        return { rows: Array.isArray(firstResult) ? firstResult : [] };
+          return { rows: allRows };
+        }
       }
+
+      // Single statement - firstResult is the rows array directly
+      return { rows: Array.isArray(firstResult) ? firstResult : [] };
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;
