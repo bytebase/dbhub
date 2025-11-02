@@ -4,13 +4,9 @@
 <p align="center">
 <a href="https://dbhub.ai/" target="_blank">
 <picture>
-  <img src="https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/logo-full.webp" width="50%">
+  <img src="https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/logo-full.webp" width="75%">
 </picture>
 </a>
-</p>
-
-<p align="center">
-  <a href="https://discord.gg/BjEkZpsJzn"><img src="https://img.shields.io/badge/%20-Hang%20out%20on%20Discord-5865F2?style=for-the-badge&logo=discord&labelColor=EEEEEE" alt="Join our Discord" height="32" /></a>
 </p>
 
 ![Star History Chart](https://api.star-history.com/svg?repos=bytebase/dbhub&type=Date)
