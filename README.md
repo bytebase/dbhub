@@ -225,7 +225,7 @@ VSCode with GitHub Copilot can connect to DBHub via both `stdio` and `http` tran
 {
   "servers": {
     "dbhub": {
-      "url": "http://localhost:8080/message",
+      "url": "http://localhost:8080/mcp",
       "type": "http"
     }
   },
@@ -679,7 +679,7 @@ pnpm dev --transport=http --port=8080
 npx @modelcontextprotocol/inspector
 ```
 
-Connect to the DBHub server `/message` endpoint
+Connect to the DBHub server `/mcp` endpoint
 
 ## Contributors
 
