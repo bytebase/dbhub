@@ -6,7 +6,7 @@ import { homedir } from "os";
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
 import type { SourceConfig } from "../types/config.js";
-import { loadTomlConfig, buildDSNFromSource } from "./toml-loader.js";
+import { loadTomlConfig } from "./toml-loader.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
