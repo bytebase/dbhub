@@ -1,0 +1,107 @@
+# DBHub Multi-Database Configuration Example
+# Save this file as 'dbhub.toml' in your project directory
+# Or use '--config=path/to/your/config.toml' to specify a custom location
+
+# Define multiple database sources using [[sources]] array syntax
+# Each source requires a unique 'id' field for identification
+
+## Example 1: PostgreSQL with DSN (recommended)
+[[sources]]
+id = "prod_pg"
+dsn = "postgres://user:password@localhost:5432/production?sslmode=require"
+readonly = false
+max_rows = 1000
+
+## Example 2: MySQL with individual parameters
+[[sources]]
+id = "staging_mysql"
+type = "mysql"
+host = "localhost"
+port = 3306
+database = "staging"
+user = "root"
+password = "secret"
+readonly = false
+max_rows = 500
+
+## Example 3: MariaDB with SSH tunnel
+[[sources]]
+id = "remote_mariadb"
+dsn = "mariadb://dbuser:dbpass@10.0.0.5:3306/mydb"
+ssh_host = "bastion.example.com"
+ssh_port = 22
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+# ssh_passphrase = "optional_key_passphrase"
+# ssh_password = "optional_ssh_password"  # Use instead of ssh_key for password auth
+
+## Example 4: SQL Server
+[[sources]]
+id = "analytics_sqlserver"
+type = "sqlserver"
+host = "sqlserver.example.com"
+port = 1433
+database = "analytics"
+user = "sa"
+password = "YourStrong@Passw0rd"
+max_rows = 2000
+
+## Example 5: SQLite local file
+[[sources]]
+id = "local_sqlite"
+type = "sqlite"
+database = "/path/to/database.db"
+readonly = true
+
+## Example 6: SQLite in-memory (for testing)
+[[sources]]
+id = "test_db"
+dsn = "sqlite:///:memory:"
+
+# Connection Parameters Reference:
+# -------------------------------
+# Required for each source:
+#   - id: Unique identifier for this database source
+#
+# Connection options (choose one):
+#   Option A: Full DSN string
+#     - dsn: Complete connection string (e.g., "postgres://user:pass@host:port/db")
+#
+#   Option B: Individual parameters
+#     - type: Database type (postgres, mysql, mariadb, sqlserver, sqlite)
+#     - host: Database host (not needed for sqlite)
+#     - port: Database port (optional, uses default if not specified)
+#     - database: Database name or file path (for sqlite)
+#     - user: Database username (not needed for sqlite)
+#     - password: Database password (not needed for sqlite)
+#
+# Execution options (optional):
+#   - readonly: Limit to read-only operations (default: false)
+#   - max_rows: Maximum rows to return per query (default: unlimited)
+#
+# SSH tunnel options (optional):
+#   - ssh_host: SSH server hostname or IP
+#   - ssh_port: SSH server port (default: 22)
+#   - ssh_user: SSH username
+#   - ssh_password: SSH password (for password authentication)
+#   - ssh_key: Path to private key file (for key-based authentication)
+#   - ssh_passphrase: Passphrase for encrypted private key (optional)
+
+# Default Port Numbers:
+# - PostgreSQL: 5432
+# - MySQL/MariaDB: 3306
+# - SQL Server: 1433
+# - SQLite: N/A (file-based)
+
+# Usage Notes:
+# ------------
+# 1. The first [[sources]] entry is the default database
+# 2. Access specific sources in MCP tools using the source_id parameter
+# 3. Paths starting with ~/ will be expanded to your home directory
+# 4. Passwords in DSN strings will be redacted in logs automatically
+# 5. For security, consider using environment variables for sensitive data
+
+# Future: Custom Tools
+# ---------------------
+# [[tools]]
+# # Custom tool definitions will be supported in future releases

@@ -8,6 +8,7 @@ import { ConnectorType } from "../connectors/interface.js";
 // Schema for execute_sql tool
 export const executeSqlSchema = {
   sql: z.string().describe("SQL query or multiple SQL statements to execute (separated by semicolons)"),
+  source_id: z.string().optional().describe("Database source ID to execute the query against (optional, defaults to first configured source)"),
 };
 
 /**
@@ -78,11 +79,12 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  * execute_sql tool handler
  * Executes a SQL query and returns the results
  */
-export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: any) {
-  const connector = ConnectorManager.getCurrentConnector();
-  const executeOptions = ConnectorManager.getCurrentExecuteOptions();
-
+export async function executeSqlToolHandler({ sql, source_id }: { sql: string; source_id?: string }, _extra: any) {
   try {
+    // Get connector and execute options for the specified source (or default)
+    const connector = ConnectorManager.getCurrentConnector(source_id);
+    const executeOptions = ConnectorManager.getCurrentExecuteOptions(source_id);
+
     // Check if SQL is allowed based on readonly mode
     if (isReadOnlyMode() && !areAllStatementsReadOnly(sql, connector.id)) {
       return createToolErrorResponse(
@@ -90,7 +92,7 @@ export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: an
         "READONLY_VIOLATION"
       );
     }
-    
+
     // Execute the SQL (single or multiple statements) if validation passed
     const result = await connector.executeSQL(sql, executeOptions);
 
@@ -98,6 +100,7 @@ export async function executeSqlToolHandler({ sql }: { sql: string }, _extra: an
     const responseData = {
       rows: result.rows,
       count: result.rows.length,
+      source_id: source_id || "(default)", // Include source_id in response for clarity
     };
 
     return createToolSuccessResponse(responseData);

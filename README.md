@@ -306,6 +306,129 @@ With this configuration:
 - Production database tools: `execute_sql_prod`
 - Staging database tools: `execute_sql_staging`
 
+### Multi-Database Configuration (TOML)
+
+**New in v0.11.6+**: DBHub now supports TOML-based configuration files for managing multiple database connections within a single instance. This is the recommended approach for projects that need to query across multiple databases.
+
+#### Quick Start
+
+1. Create a `dbhub.toml` file in your project directory:
+
+```toml
+[[sources]]
+id = "prod_pg"
+dsn = "postgres://user:password@localhost:5432/production"
+readonly = false
+max_rows = 1000
+
+[[sources]]
+id = "staging_mysql"
+type = "mysql"
+host = "localhost"
+port = 3306
+database = "staging"
+user = "root"
+password = "secret"
+max_rows = 500
+```
+
+2. Run DBHub:
+
+```bash
+# Automatically loads ./dbhub.toml
+npx @bytebase/dbhub --transport http --port 8080
+
+# Or specify custom config location
+npx @bytebase/dbhub --config=/path/to/config.toml --transport http --port 8080
+```
+
+#### Configuration Structure
+
+Each database source is defined with `[[sources]]` and requires a unique `id` field:
+
+**Using DSN (recommended):**
+
+```toml
+[[sources]]
+id = "my_database"
+dsn = "postgres://user:pass@localhost:5432/dbname"
+readonly = false
+max_rows = 1000
+```
+
+**Using individual parameters:**
+
+```toml
+[[sources]]
+id = "my_database"
+type = "mysql"            # postgres, mysql, mariadb, sqlserver, sqlite
+host = "localhost"
+port = 3306
+database = "mydb"
+user = "root"
+password = "secret"
+readonly = false
+max_rows = 1000
+```
+
+**With SSH tunnel:**
+
+```toml
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/dbname"
+ssh_host = "bastion.example.com"
+ssh_port = 22
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+# ssh_password = "password"  # Alternative to ssh_key
+# ssh_passphrase = "key_pass"  # If key is encrypted
+```
+
+#### Using Multiple Databases in MCP Tools
+
+When using multi-database configuration, you can specify which database to query using the `source_id` parameter:
+
+```javascript
+// Execute SQL on specific database
+execute_sql({
+  sql: "SELECT * FROM users LIMIT 10",
+  source_id: "prod_pg"  // Uses the source with id="prod_pg"
+});
+
+// Execute on default database (first in config)
+execute_sql({
+  sql: "SELECT * FROM orders LIMIT 10"
+  // No source_id specified - uses first [[sources]] entry
+});
+```
+
+#### Configuration Priority
+
+DBHub follows this priority order for configuration:
+
+1. **TOML config file** (e.g., `--config` or `./dbhub.toml`) **OR** **CLI arguments** (e.g., `--dsn`)  
+   (These are mutually exclusive: if `--config` is provided, TOML is used; otherwise, `--dsn` is used.)
+2. **Environment variables** (e.g., `DSN`)
+3. **.env files** (e.g., `.env` or `.env.local`)
+
+**Note**: `--config` (TOML) and `--dsn` (CLI) are alternative primary configuration methods, both taking precedence over environment variables and `.env` files. Users cannot combine `--dsn` with TOML configuration.
+
+#### Example: Complete Multi-Database Setup
+
+See `dbhub.toml.example` in the repository for a comprehensive example with all supported options and detailed comments.
+
+**Key Features:**
+
+- **Default database**: The first `[[sources]]` entry is the default
+- **Per-source settings**: Each source can have its own `readonly` and `max_rows` settings
+- **Path expansion**: Paths starting with `~/` are expanded to your home directory
+- **Security**: Passwords in DSN strings are automatically redacted in logs
+
+#### Backward Compatibility
+
+Single-database configurations using CLI arguments, environment variables, or `.env` files continue to work exactly as before. TOML configuration is optional and only needed for multi-database scenarios.
+
 ### Row Limiting
 
 You can limit the number of rows returned from SELECT queries using the `--max-rows` parameter. This helps prevent accidentally retrieving too much data from large tables:
