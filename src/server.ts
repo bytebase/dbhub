@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveDSN, resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId, resolveSourceConfigs } from "./config/env.js";
+import { resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId, resolveSourceConfigs } from "./config/env.js";
 import { getSqliteInMemorySetupSql } from "./config/demo-loader.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
