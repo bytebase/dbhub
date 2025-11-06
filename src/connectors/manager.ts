@@ -199,6 +199,9 @@ export class ConnectorManager {
     if (source.max_rows !== undefined) {
       options.maxRows = source.max_rows;
     }
+    if (source.readonly !== undefined) {
+      options.readonly = source.readonly;
+    }
     this.executeOptions.set(sourceId, options);
 
     console.error(`  Connected successfully`);
