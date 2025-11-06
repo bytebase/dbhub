@@ -407,12 +407,12 @@ execute_sql({
 
 DBHub follows this priority order for configuration:
 
-1. **CLI arguments** (e.g., `--dsn`)
-2. **TOML config file** (e.g., `--config` or `./dbhub.toml`)
-3. **Environment variables** (e.g., `DSN`)
-4. **.env files** (e.g., `.env` or `.env.local`)
+1. **TOML config file** (e.g., `--config` or `./dbhub.toml`) **OR** **CLI arguments** (e.g., `--dsn`)  
+   (These are mutually exclusive: if `--config` is provided, TOML is used; otherwise, `--dsn` is used.)
+2. **Environment variables** (e.g., `DSN`)
+3. **.env files** (e.g., `.env` or `.env.local`)
 
-**Note**: TOML configuration takes precedence over environment variables and `.env` files, but CLI arguments always have the highest priority.
+**Note**: `--config` (TOML) and `--dsn` (CLI) are alternative primary configuration methods, both taking precedence over environment variables and `.env` files. Users cannot combine `--dsn` with TOML configuration.
 
 #### Example: Complete Multi-Database Setup
 
