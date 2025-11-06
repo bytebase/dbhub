@@ -100,7 +100,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
     if (!source.id) {
       throw new Error(
         `Configuration file ${configPath}: each source must have an 'id' field. ` +
-          `Example: [[sources]]\\nid = "my_db"`
+          `Example: [[sources]]\nid = "my_db"`
       );
     }
 
