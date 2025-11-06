@@ -350,8 +350,9 @@ export class ConnectorManager {
   }
 
   /**
-   * Get all available source IDs
-   * This is used to list available databases
+   * Public static accessor to retrieve all available source IDs from the singleton ConnectorManager instance.
+   * Use this method to list available databases when you do not have an instance of ConnectorManager.
+   * Throws an error if the ConnectorManager has not been initialized.
    */
   static getAvailableSourceIds(): string[] {
     if (!managerInstance) {
