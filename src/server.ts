@@ -129,7 +129,8 @@ See documentation for more details on configuring database connections.
       // Multi-source TOML mode: use new connection method
       console.error(`Connecting to ${sources.length} database source(s)...`);
       for (const source of sources) {
-        console.error(`  - ${source.id}: ${redactDSN(source.dsn || buildDSNFromSource(source))}`);
+        const dsn = source.dsn || buildDSNFromSource(source);
+        console.error(`  - ${source.id}: ${redactDSN(dsn)}`);
       }
       await connectorManager.connectWithSources(sources);
     }
