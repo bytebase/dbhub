@@ -31,6 +31,7 @@
   "license": "MIT",
   "dependencies": {
     "@azure/identity": "^4.8.0",
+    "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "better-sqlite3": "^11.9.0",
     "dotenv": "^16.4.7",

@@ -8,8 +8,9 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveDSN, resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId } from "./config/env.js";
+import { resolveDSN, resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId, resolveSourceConfigs } from "./config/env.js";
 import { getSqliteInMemorySetupSql } from "./config/demo-loader.js";
+import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts/index.js";
@@ -54,26 +55,32 @@ export async function main(): Promise<void> {
     const idData = resolveId();
     const id = idData?.id;
 
-    // Resolve DSN from command line args, environment variables, or .env files
-    const dsnData = resolveDSN();
+    // Resolve source configurations from TOML or fallback to single DSN
+    const sourceConfigsData = resolveSourceConfigs();
 
-    if (!dsnData) {
+    if (!sourceConfigsData) {
       const samples = ConnectorRegistry.getAllSampleDSNs();
       const sampleFormats = Object.entries(samples)
         .map(([id, dsn]) => `  - ${id}: ${dsn}`)
         .join("\n");
 
       console.error(`
-ERROR: Database connection string (DSN) is required.
-Please provide the DSN in one of these ways (in order of priority):
+ERROR: Database connection configuration is required.
+Please provide configuration in one of these ways (in order of priority):
 
 1. Use demo mode: --demo (uses in-memory SQLite with sample employee database)
-2. Command line argument: --dsn="your-connection-string"
-3. Environment variable: export DSN="your-connection-string"
-4. .env file: DSN=your-connection-string
+2. TOML config file: --config=path/to/dbhub.toml or ./dbhub.toml
+3. Command line argument: --dsn="your-connection-string"
+4. Environment variable: export DSN="your-connection-string"
+5. .env file: DSN=your-connection-string
 
-Example formats:
+Example DSN formats:
 ${sampleFormats}
+
+Example TOML config (dbhub.toml):
+  [[sources]]
+  id = "my_db"
+  dsn = "postgres://user:pass@localhost:5432/dbname"
 
 See documentation for more details on configuring database connections.
 `);
@@ -97,20 +104,34 @@ See documentation for more details on configuring database connections.
 
     // Create server factory function (will be used for both STDIO and HTTP transports)
 
-    // Create connector manager and connect to database
+    // Create connector manager and connect to database(s)
     const connectorManager = new ConnectorManager();
-    console.error(`Connecting with DSN: ${redactDSN(dsnData.dsn)}`);
-    console.error(`DSN source: ${dsnData.source}`);
+    const sources = sourceConfigsData.sources;
+
+    console.error(`Configuration source: ${sourceConfigsData.source}`);
     if (idData) {
       console.error(`ID: ${idData.id} (from ${idData.source})`);
     }
 
-    // If in demo mode, load the employee database
-    if (dsnData.isDemo) {
+    // Check if demo mode (legacy single source with empty ID and demo flag)
+    const isDemo = sources.length === 1 && sources[0].id === "" && isDemoMode();
+
+    // Connect to database(s)
+    if (isDemo) {
+      // Demo mode: use legacy single connection with init script
       const initScript = getSqliteInMemorySetupSql();
-      await connectorManager.connectWithDSN(dsnData.dsn, initScript);
+      await connectorManager.connectWithDSN(sources[0].dsn!, initScript);
+    } else if (sources.length === 1 && sources[0].id === "") {
+      // Legacy single DSN mode: use backward compatible connection
+      console.error(`Connecting with DSN: ${redactDSN(sources[0].dsn!)}`);
+      await connectorManager.connectWithDSN(sources[0].dsn!);
     } else {
-      await connectorManager.connectWithDSN(dsnData.dsn);
+      // Multi-source TOML mode: use new connection method
+      console.error(`Connecting to ${sources.length} database source(s)...`);
+      for (const source of sources) {
+        console.error(`  - ${source.id}: ${redactDSN(source.dsn || buildDSNFromSource(source))}`);
+      }
+      await connectorManager.connectWithSources(sources);
     }
 
     // Resolve transport type
@@ -120,26 +141,31 @@ See documentation for more details on configuring database connections.
 
     // Print ASCII art banner with version and slogan
     const readonly = isReadOnlyMode();
-    
+
     // Collect active modes
     const activeModes: string[] = [];
     const modeDescriptions: string[] = [];
-    
-    if (dsnData.isDemo) {
+
+    if (isDemo) {
       activeModes.push("DEMO");
       modeDescriptions.push("using sample employee database");
     }
-    
+
     if (readonly) {
       activeModes.push("READ-ONLY");
       modeDescriptions.push("only read only queries allowed");
     }
-    
+
+    // Multi-source mode indicator
+    if (sources.length > 1) {
+      console.error(`Multi-source mode: ${sources.length} databases configured`);
+    }
+
     // Output mode information
     if (activeModes.length > 0) {
       console.error(`Running in ${activeModes.join(' and ')} mode - ${modeDescriptions.join(', ')}`);
     }
-    
+
     console.error(generateBanner(SERVER_VERSION, activeModes));
 
     // Set up transport based on type

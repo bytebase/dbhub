@@ -46,24 +46,82 @@ src/
 
 Key architectural patterns:
 - **Connector Registry**: Dynamic registration system for database connectors
+- **Connector Manager**: Manages database connections (single or multiple)
+  - Supports multi-database configuration via TOML
+  - Maintains `Map<id, Connector>` for named connections
+  - `getConnector(sourceId?)` returns connector by ID or default (first)
+  - `getCurrentConnector(sourceId?)` static method for tool/resource handlers
+  - Backward compatible with single-connection mode
+  - Location: `src/connectors/manager.ts`
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients)
   - HTTP transport endpoint: `/mcp` (aligns with official MCP SDK standard)
   - Implemented in `src/server.ts` using `StreamableHTTPServerTransport`
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
+  - Tools accept optional `source_id` parameter for multi-database routing
+  - Resources use default (first) database only
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
-## Environment
+## Configuration
 
+DBHub supports three configuration methods (in priority order):
+
+### 1. TOML Configuration File (Multi-Database)
+**Recommended for projects requiring multiple database connections**
+
+- Create `dbhub.toml` in your project directory or use `--config=path/to/config.toml`
+- Configuration structure uses `[[sources]]` array with unique `id` fields
+- Example:
+  ```toml
+  [[sources]]
+  id = "prod_pg"
+  dsn = "postgres://user:pass@localhost:5432/production"
+  readonly = true
+  max_rows = 1000
+
+  [[sources]]
+  id = "staging_mysql"
+  type = "mysql"
+  host = "localhost"
+  database = "staging"
+  user = "root"
+  password = "secret"
+  ```
+- Key files:
+  - `src/types/config.ts`: TypeScript interfaces for TOML structure
+  - `src/config/toml-loader.ts`: TOML parsing and validation
+  - `src/config/__tests__/toml-loader.test.ts`: Comprehensive test suite
+- Features:
+  - Per-source SSH tunnel configuration (inline: `ssh_host`, `ssh_user`, `ssh_key`, etc.)
+  - Per-source execution options (`readonly`, `max_rows`)
+  - Path expansion for `~/` in file paths
+  - Automatic password redaction in logs
+  - First source is the default database
+- Usage in MCP tools: Add optional `source_id` parameter (e.g., `execute_sql(sql, source_id="prod_pg")`)
+- See `dbhub.toml.example` for complete configuration reference
+
+### 2. Environment Variables (Single Database)
 - Copy `.env.example` to `.env` and configure for your database connection
 - Two ways to configure:
   - Set `DSN` to a full connection string (recommended)
-  - Set `DB_CONNECTOR_TYPE` to select a connector with its default DSN
-- Transport options:
-  - Set `--transport=stdio` (default) for stdio transport
-  - Set `--transport=http` for streamable HTTP transport with HTTP server (endpoint: `/mcp`)
-- Demo mode: Use `--demo` flag for bundled SQLite employee database
-- Read-only mode: Use `--readonly` flag to restrict to read-only SQL operations
+  - Set individual parameters: `DB_TYPE`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- SSH tunnel via environment: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD`, `SSH_KEY`, `SSH_PASSPHRASE`
+
+### 3. Command-Line Arguments (Single Database, Highest Priority)
+- `--dsn`: Database connection string
+- `--transport`: `stdio` (default) or `http` for streamable HTTP transport (endpoint: `/mcp`)
+- `--port`: HTTP server port (default: 8080)
+- `--config`: Path to TOML configuration file
+- `--demo`: Use bundled SQLite employee database
+- `--readonly`: Restrict to read-only SQL operations
+- `--max-rows`: Limit rows returned from SELECT queries
+- SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
+
+### Configuration Priority Order
+1. Command-line arguments (highest)
+2. TOML config file (if present)
+3. Environment variables
+4. `.env` files (`.env.local` in development, `.env` in production)
 
 ## Database Connectors
 

@@ -5,6 +5,8 @@ import { fileURLToPath } from "url";
 import { homedir } from "os";
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
+import type { SourceConfig } from "../types/config.js";
+import { loadTomlConfig, buildDSNFromSource } from "./toml-loader.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -463,4 +465,53 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     config: config as SSHTunnelConfig,
     source: sources.join(", ")
   };
+}
+
+/**
+ * Resolve source configurations from TOML config or fallback to single DSN
+ * Priority: TOML config (--config flag or ./dbhub.toml) > single DSN/env vars
+ * Returns array of source configs and the source of the configuration
+ */
+export function resolveSourceConfigs(): { sources: SourceConfig[]; source: string } | null {
+  // 1. Try loading from TOML configuration file (highest priority for multi-source)
+  const tomlConfig = loadTomlConfig();
+  if (tomlConfig) {
+    return tomlConfig;
+  }
+
+  // 2. Fallback to single DSN configuration for backward compatibility
+  const dsnResult = resolveDSN();
+  if (dsnResult) {
+    // Create a single source config from the resolved DSN
+    // Use empty string as ID for backward compatibility (default/unnamed source)
+    const source: SourceConfig = {
+      id: "",
+      dsn: dsnResult.dsn,
+    };
+
+    // Add SSH config if available
+    const sshResult = resolveSSHConfig();
+    if (sshResult) {
+      source.ssh_host = sshResult.config.host;
+      source.ssh_port = sshResult.config.port;
+      source.ssh_user = sshResult.config.username;
+      source.ssh_password = sshResult.config.password;
+      source.ssh_key = sshResult.config.privateKey;
+      source.ssh_passphrase = sshResult.config.passphrase;
+    }
+
+    // Add execution options
+    source.readonly = isReadOnlyMode();
+    const maxRowsResult = resolveMaxRows();
+    if (maxRowsResult) {
+      source.max_rows = maxRowsResult.maxRows;
+    }
+
+    return {
+      sources: [source],
+      source: dsnResult.isDemo ? "demo mode" : dsnResult.source,
+    };
+  }
+
+  return null;
 }
