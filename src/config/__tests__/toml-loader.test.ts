@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import fs from 'fs';
