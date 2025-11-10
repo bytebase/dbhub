@@ -101,6 +101,10 @@ export class SQLiteConnector implements Connector {
   private db: Database.Database | null = null;
   private dbPath: string = ":memory:"; // Default to in-memory database
 
+  clone(): Connector {
+    return new SQLiteConnector();
+  }
+
   async connect(dsn: string, initScript?: string): Promise<void> {
     const config = await this.dsnParser.parse(dsn);
     this.dbPath = config.dbPath;

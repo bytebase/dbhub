@@ -179,13 +179,18 @@ export class ConnectorManager {
       );
     }
 
-    // Find connector for this DSN
-    const connector = ConnectorRegistry.getConnectorForDSN(actualDSN);
-    if (!connector) {
+    // Find connector prototype for this DSN
+    const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
+    if (!connectorPrototype) {
       throw new Error(
         `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
       );
     }
+
+    // Create a new instance of the connector (clone) to avoid sharing state between sources
+    // Only SQLite currently supports cloning for multi-source configurations
+    // Other databases will reuse the singleton instance (not recommended for multi-source)
+    const connector = connectorPrototype.clone ? connectorPrototype.clone() : connectorPrototype;
 
     // Connect to the database
     await connector.connect(actualDSN);
