@@ -1,0 +1,207 @@
+---
+title: "Installation"
+description: "Install DBHub using Docker, NPM, or as a standalone binary"
+---
+
+DBHub can be installed through multiple methods depending on your environment and preferences.
+
+## Docker
+
+The recommended way to run DBHub is using Docker, which provides isolation and consistent behavior across platforms.
+
+<Tabs>
+  <Tab title="PostgreSQL Example">
+    ```bash
+    docker run --rm --init \
+      --name dbhub \
+      --publish 8080:8080 \
+      bytebase/dbhub \
+      --transport http \
+      --port 8080 \
+      --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+    ```
+  </Tab>
+
+  <Tab title="Demo Mode">
+    ```bash
+    # Run with bundled SQLite sample employee database
+    docker run --rm --init \
+      --name dbhub \
+      --publish 8080:8080 \
+      bytebase/dbhub \
+      --transport http \
+      --port 8080 \
+      --demo
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+When connecting to databases on your host machine from Docker, use `host.docker.internal` instead of `localhost`:
+
+```bash
+--dsn "postgres://user:password@host.docker.internal:5432/dbname"
+```
+</Warning>
+
+### Docker Compose
+
+For development environments using Docker Compose, add DBHub to your `docker-compose.yml`:
+
+```yaml docker-compose.yml
+services:
+  dbhub:
+    image: bytebase/dbhub:latest
+    container_name: dbhub
+    ports:
+      - "8080:8080"
+    environment:
+      - DBHUB_LOG_LEVEL=info
+    command:
+      - --transport
+      - http
+      - --port
+      - "8080"
+      - --dsn
+      - "postgres://user:password@database:5432/dbname"
+    depends_on:
+      - database
+
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
+```
+
+## NPM
+
+Install and run DBHub directly using NPM/NPX:
+
+<Tabs>
+  <Tab title="NPX (No Installation)">
+    ```bash
+    # PostgreSQL example
+    npx @bytebase/dbhub \
+      --transport http \
+      --port 8080 \
+      --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+    ```
+  </Tab>
+
+  <Tab title="Global Installation">
+    ```bash
+    # Install globally
+    npm install -g @bytebase/dbhub
+
+    # Run the server
+    dbhub --transport http --port 8080 --dsn "postgres://..."
+    ```
+  </Tab>
+
+  <Tab title="Demo Mode">
+    ```bash
+    # Run with sample employee database
+    npx @bytebase/dbhub --transport http --port 8080 --demo
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+The demo mode includes a bundled SQLite sample "employee" database with tables for employees, departments, salaries, and more - perfect for testing!
+</Note>
+
+## Verifying Installation
+
+After installing DBHub, verify it's working correctly:
+
+### Test with Demo Mode
+
+```bash
+# Start DBHub in demo mode
+npx @bytebase/dbhub --transport http --port 8080 --demo
+
+# In another terminal, test the MCP endpoint
+curl http://localhost:8080/mcp
+```
+
+You should see a JSON response indicating the MCP server is running.
+
+### Test with Your Database
+
+```bash
+# Start DBHub with your database
+npx @bytebase/dbhub \
+  --transport http \
+  --port 8080 \
+  --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+# Test connection
+curl http://localhost:8080/mcp
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Follow the quickstart guide to connect DBHub to an AI tool
+  </Card>
+
+  <Card title="Configuration" icon="gear" href="/config/dsn">
+    Learn about DSN formats and configuration options
+  </Card>
+
+  <Card title="Claude Desktop" icon="message-bot" href="/integrations/claude-desktop">
+    Set up DBHub with Claude Desktop
+  </Card>
+
+  <Card title="Multi-Database" icon="database" href="/config/multi-database">
+    Configure multiple database connections
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Docker: Cannot Connect to Host Database
+
+If Docker can't connect to a database on your host machine:
+
+```bash
+# ❌ Won't work from Docker
+--dsn "postgres://user:password@localhost:5432/dbname"
+
+# ✅ Use host.docker.internal instead
+--dsn "postgres://user:password@host.docker.internal:5432/dbname"
+```
+
+### NPM: Permission Errors
+
+If you encounter permission errors when installing globally:
+
+```bash
+# Use npx instead (no installation needed)
+npx @bytebase/dbhub --help
+
+# Or install without sudo using a Node version manager
+# Install nvm: https://github.com/nvm-sh/nvm
+nvm install node
+npm install -g @bytebase/dbhub
+```
+
+### Connection Refused Errors
+
+If you get "connection refused" errors:
+
+1. Check that your database is running
+2. Verify the connection string is correct
+3. Ensure firewall rules allow the connection
+4. For SSL issues, try adding `?sslmode=disable` to your DSN
+
+### Port Already in Use
+
+If port 8080 is already in use:
+
+```bash
+# Use a different port
+npx @bytebase/dbhub --transport http --port 3000 --demo
+```
