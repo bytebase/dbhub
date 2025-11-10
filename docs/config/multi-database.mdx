@@ -1,0 +1,439 @@
+---
+title: "Multi-Database Configuration"
+description: "Connect to multiple databases simultaneously using TOML configuration"
+---
+
+<Note>
+**New in v0.11.6+**: DBHub now supports TOML-based configuration for managing multiple database connections within a single instance.
+</Note>
+
+## Overview
+
+Multi-database configuration allows you to:
+- Connect to multiple databases from a single DBHub instance
+- Route queries to specific databases using `source_id` parameters
+- Configure per-database settings (read-only, row limits, SSH tunnels)
+- Manage all database connections in one configuration file
+
+## Quick Start
+
+### 1. Create Configuration File
+
+Create a `dbhub.toml` file in your project directory:
+
+```toml dbhub.toml
+[[sources]]
+id = "prod_pg"
+dsn = "postgres://user:password@prod.example.com:5432/production"
+readonly = true
+max_rows = 1000
+
+[[sources]]
+id = "dev_mysql"
+type = "mysql"
+host = "localhost"
+port = 3306
+database = "development"
+user = "root"
+password = "secret"
+readonly = false
+max_rows = 500
+```
+
+### 2. Start DBHub
+
+```bash
+# Automatically loads ./dbhub.toml
+npx @bytebase/dbhub --transport http --port 8080
+
+# Or specify custom location
+npx @bytebase/dbhub --config=/path/to/config.toml --transport http --port 8080
+```
+
+### 3. Query Specific Databases
+
+When using MCP tools, specify which database to query:
+
+```javascript
+// Query production database
+execute_sql({
+  sql: "SELECT * FROM users LIMIT 10",
+  source_id: "prod_pg"
+});
+
+// Query development database
+execute_sql({
+  sql: "SELECT * FROM orders LIMIT 10",
+  source_id: "dev_mysql"
+});
+
+// No source_id = uses default (first database)
+execute_sql({
+  sql: "SELECT * FROM products LIMIT 10"
+});
+```
+
+## Configuration Methods
+
+You can configure database connections in two ways:
+
+### Method 1: Using DSN (Recommended)
+
+```toml
+[[sources]]
+id = "my_database"
+dsn = "postgres://user:pass@localhost:5432/dbname"
+readonly = false
+max_rows = 1000
+```
+
+**Advantages:**
+- Concise and familiar format
+- Easy to copy from existing configs
+- Works with any database type
+
+### Method 2: Using Individual Parameters
+
+```toml
+[[sources]]
+id = "my_database"
+type = "mysql"
+host = "localhost"
+port = 3306
+database = "mydb"
+user = "root"
+password = "secret"
+readonly = false
+max_rows = 1000
+```
+
+**Advantages:**
+- No URL encoding needed for special characters
+- Clear and explicit
+- Better for passwords with special characters
+
+<Tip>
+Use the individual parameter method when your password contains special characters like `@`, `:`, `/`, or `#`.
+</Tip>
+
+## Configuration Options
+
+### Required Fields
+
+| Field | Description |
+| ----- | ----------- |
+| `id` | Unique identifier for this database connection |
+| `dsn` **OR** `type` + connection params | Database connection information |
+
+### Optional Fields
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `readonly` | boolean | `false` | Restrict to read-only operations |
+| `max_rows` | integer | unlimited | Maximum rows returned by SELECT queries |
+
+### Connection Parameters (when not using DSN)
+
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `type` | string | Yes | `postgres`, `mysql`, `mariadb`, `sqlserver`, or `sqlite` |
+| `host` | string | Yes* | Database server hostname |
+| `port` | integer | No | Database port (uses default if omitted) |
+| `database` | string | Yes | Database name or SQLite file path |
+| `user` | string | Yes* | Database username |
+| `password` | string | Yes* | Database password |
+
+*Not required for SQLite
+
+## SSH Tunnel Configuration
+
+Each database source can have its own SSH tunnel configuration:
+
+```toml
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/dbname"
+
+# SSH tunnel configuration
+ssh_host = "bastion.example.com"
+ssh_port = 22
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+# ssh_password = "password"      # Alternative to ssh_key
+# ssh_passphrase = "key_pass"    # If key is encrypted
+```
+
+<Warning>
+When using SSH tunnels, the database host in your DSN should be the hostname/IP **as seen from the SSH server**, not from your local machine.
+</Warning>
+
+## Complete Examples
+
+### Production + Staging Setup
+
+```toml dbhub.toml
+# Production database (read-only, limited rows)
+[[sources]]
+id = "production"
+dsn = "postgres://readonly_user:pass@prod.db.example.com:5432/myapp"
+readonly = true
+max_rows = 1000
+
+# Staging database (full access)
+[[sources]]
+id = "staging"
+dsn = "postgres://admin:pass@staging.db.example.com:5432/myapp"
+readonly = false
+max_rows = 5000
+
+# Local development (SQLite)
+[[sources]]
+id = "local"
+dsn = "sqlite:///./dev.db"
+readonly = false
+```
+
+### Multi-Cloud Setup
+
+```toml dbhub.toml
+# AWS RDS PostgreSQL
+[[sources]]
+id = "aws_main"
+type = "postgres"
+host = "mydb.abc123.us-east-1.rds.amazonaws.com"
+port = 5432
+database = "production"
+user = "app_user"
+password = "securepass123"
+readonly = true
+max_rows = 1000
+
+# Azure SQL Server
+[[sources]]
+id = "azure_analytics"
+type = "sqlserver"
+host = "myserver.database.windows.net"
+port = 1433
+database = "analytics"
+user = "analytics_reader"
+password = "pass@word!123"
+readonly = true
+max_rows = 10000
+
+# Google Cloud SQL MySQL
+[[sources]]
+id = "gcp_warehouse"
+type = "mysql"
+host = "34.123.456.78"
+port = 3306
+database = "warehouse"
+user = "etl_user"
+password = "complex#pass"
+readonly = false
+```
+
+### With SSH Tunnels
+
+```toml dbhub.toml
+# Production DB through bastion host
+[[sources]]
+id = "prod_secure"
+dsn = "postgres://user:pass@db.internal.corp:5432/production"
+readonly = true
+ssh_host = "bastion.example.com"
+ssh_user = "deploy"
+ssh_key = "~/.ssh/prod_key"
+ssh_passphrase = "key_passphrase"
+
+# Staging with password auth
+[[sources]]
+id = "staging_secure"
+dsn = "mysql://user:pass@mysql.internal.corp:3306/staging"
+ssh_host = "staging-jump.example.com"
+ssh_user = "admin"
+ssh_password = "ssh_password"
+```
+
+## Default Database
+
+The first `[[sources]]` entry in your configuration is the default database. It will be used when no `source_id` is specified:
+
+```toml
+[[sources]]
+id = "default_db"      # This is the default
+dsn = "postgres://..."
+
+[[sources]]
+id = "secondary_db"    # Requires explicit source_id
+dsn = "mysql://..."
+```
+
+## Using with MCP Clients
+
+### Claude Desktop
+
+```json claude_desktop_config.json
+{
+  "mcpServers": {
+    "dbhub-multi": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bytebase/dbhub",
+        "--transport",
+        "stdio",
+        "--config",
+        "/path/to/dbhub.toml"
+      ]
+    }
+  }
+}
+```
+
+### Cursor
+
+Configure with environment variable:
+
+```json
+{
+  "mcpServers": {
+    "dbhub-multi": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub"],
+      "env": {
+        "CONFIG": "/path/to/dbhub.toml",
+        "TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+### Claude Code / VS Code
+
+Start DBHub server with HTTP transport:
+
+```bash
+npx @bytebase/dbhub --config=dbhub.toml --transport http --port 8080
+```
+
+Configure MCP client:
+
+```json .vscode/mcp.json
+{
+  "servers": {
+    "dbhub": {
+      "url": "http://localhost:8080/mcp",
+      "type": "http"
+    }
+  }
+}
+```
+
+## Configuration Priority
+
+DBHub resolves configuration in this order:
+
+1. **TOML config file** (if `--config` specified) **OR** **CLI arguments** (if `--dsn` specified)
+2. **Environment variables** (e.g., `DSN`, `READONLY`)
+3. **.env files** (`.env.local` in dev, `.env` in production)
+
+<Warning>
+`--config` (TOML) and `--dsn` (CLI) are mutually exclusive. You cannot use both. Choose TOML for multi-database setups, or CLI/env vars for single-database setups.
+</Warning>
+
+## Path Expansion
+
+Paths starting with `~/` are automatically expanded to your home directory:
+
+```toml
+[[sources]]
+id = "local"
+dsn = "sqlite:///~/databases/local.db"     # Expands to /Users/you/databases/local.db
+ssh_key = "~/.ssh/id_rsa"                  # Expands to /Users/you/.ssh/id_rsa
+```
+
+## Security Features
+
+### Password Redaction
+
+Passwords in DSN strings are automatically redacted in logs:
+
+```
+# Logged as:
+postgres://user:***@localhost:5432/mydb
+
+# Instead of:
+postgres://user:secretpass@localhost:5432/mydb
+```
+
+### Per-Database Security
+
+```toml
+# Production: read-only with row limits
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+readonly = true        # Only SELECT queries allowed
+max_rows = 1000       # Prevent large data extractions
+
+# Development: full access
+[[sources]]
+id = "development"
+dsn = "postgres://..."
+readonly = false      # All operations allowed
+```
+
+## Backward Compatibility
+
+Single-database configurations using CLI arguments, environment variables, or `.env` files continue to work exactly as before. TOML configuration is optional and only needed for multi-database scenarios.
+
+## Troubleshooting
+
+### Configuration Not Loading
+
+```
+# Verify file exists and is valid TOML
+npx @bytebase/dbhub --config=dbhub.toml --transport http --port 8080
+
+# Check for TOML syntax errors
+```
+
+### Wrong Database Being Queried
+
+Verify you're specifying the correct `source_id`:
+
+```javascript
+// ✅ Correct
+execute_sql({ sql: "...", source_id: "production" })
+
+// ❌ Wrong - uses default database
+execute_sql({ sql: "..." })
+```
+
+### SSH Tunnel Failures
+
+1. Verify SSH host is reachable
+2. Check SSH credentials are correct
+3. Ensure database host is accessible from SSH server
+4. Test SSH connection manually: `ssh user@ssh_host`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="SSH Tunneling" icon="shield" href="/features/ssh-tunnel">
+    Learn more about SSH tunnel configuration
+  </Card>
+
+  <Card title="Read-Only Mode" icon="lock" href="/features/readonly-mode">
+    Secure your production databases
+  </Card>
+
+  <Card title="DSN Reference" icon="link" href="/config/dsn">
+    Database connection string formats
+  </Card>
+
+  <Card title="Environment Variables" icon="code" href="/config/environment">
+    Alternative configuration methods
+  </Card>
+</CardGroup>

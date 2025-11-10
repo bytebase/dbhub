@@ -1,97 +1,136 @@
 ---
 title: "Introduction"
-description: "Welcome to the new home for your documentation"
+description: "Universal database gateway implementing the Model Context Protocol"
 ---
 
-## Setting up
+<img
+  className="block dark:hidden"
+  src="/logo/light.svg"
+/>
 
-Get your documentation site up and running in minutes.
+<img
+  className="hidden dark:block"
+  src="/logo/dark.svg"
+/>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+## What is DBHub?
 
-## Make it yours
+DBHub is a universal database gateway that implements the Model Context Protocol (MCP) server interface. It enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
 
-Design a docs site that looks great and empowers your users.
+```
+ +------------------+    +--------------+    +------------------+
+ |                  |    |              |    |                  |
+ |                  |    |              |    |                  |
+ |  Claude Desktop  +--->+              +--->+    PostgreSQL    |
+ |                  |    |              |    |                  |
+ |  Claude Code     +--->+              +--->+    SQL Server    |
+ |                  |    |              |    |                  |
+ |  Cursor          +--->+    DBHub     +--->+    SQLite        |
+ |                  |    |              |    |                  |
+ |  VS Code         +--->+              +--->+    MySQL         |
+ |                  |    |              |    |                  |
+ |  Other Clients   +--->+              +--->+    MariaDB       |
+ |                  |    |              |    |                  |
+ |                  |    |              |    |                  |
+ +------------------+    +--------------+    +------------------+
+     MCP Clients           MCP Server             Databases
+```
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+## Why DBHub?
+
+DBHub brings powerful database capabilities to AI coding assistants:
+
+- **Universal Gateway**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
+- **Secure Access**: Read-only mode, SSH tunneling, and SSL/TLS encryption support
+- **Multi-Database**: Connect to multiple databases simultaneously with TOML configuration
+- **Production-Ready**: Row limiting, lock timeout control, and connection pooling
+- **MCP Native**: Full implementation of Model Context Protocol with resources, tools, and prompts
+
+## Key Features
+
+### Database Exploration
+
+AI assistants can discover and explore your database schema:
+- List schemas, tables, and columns
+- View table structures and relationships
+- Inspect indexes and stored procedures
+- Understand database constraints
+
+### SQL Execution
+
+Execute SQL queries directly from AI tools:
+- Run SELECT queries for data analysis
+- Execute DDL/DML in read-write mode
+- Support for parameterized queries
+- Multi-statement execution with transaction support
+
+### AI-Powered Prompts
+
+Built-in prompts help AI assistants:
+- Generate optimized SQL queries
+- Explain database elements and relationships
+- Suggest schema improvements
+- Debug complex queries
+
+### Security Features
+
+- **Read-only Mode**: Restrict operations to SELECT queries only
+- **SSH Tunneling**: Secure connections through bastion hosts
+- **SSL/TLS**: Encrypted database connections
+- **Row Limiting**: Prevent accidental large data retrieval
+
+## Supported Databases
+
+| Database   | Version | Resources | Tools | Prompts |
+| ---------- | :-----: | :-------: | :---: | :-----: |
+| PostgreSQL |  12+    |    ✅     |  ✅   |   ✅    |
+| MySQL      |  5.7+   |    ✅     |  ✅   |   ✅    |
+| MariaDB    |  10.3+  |    ✅     |  ✅   |   ✅    |
+| SQL Server |  2017+  |    ✅     |  ✅   |   ✅    |
+| SQLite     |   3+    |    ✅     |  ✅   |   ✅    |
+
+## Getting Started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install DBHub using Docker, NPM, or pre-built binaries
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
 
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get DBHub running with your first database connection
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
 
-## Need inspiration?
+  <Card title="Claude Desktop" icon="message-bot" href="/integrations/claude-desktop">
+    Integrate with Claude Desktop for AI-powered database access
+  </Card>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+  <Card title="Multi-Database Setup" icon="database" href="/config/multi-database">
+    Configure multiple database connections with TOML
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+### Development Assistance
+
+Enable AI assistants to:
+- Query your development database for context
+- Generate SQL based on schema understanding
+- Debug queries and performance issues
+- Suggest schema improvements
+
+### Data Analysis
+
+Allow AI tools to:
+- Explore datasets and identify patterns
+- Generate complex analytical queries
+- Create data visualizations
+- Summarize findings from database queries
+
+### Schema Management
+
+Get AI help with:
+- Understanding legacy database schemas
+- Planning schema migrations
+- Documenting database structures
+- Identifying optimization opportunities
