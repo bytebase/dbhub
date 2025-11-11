@@ -1,0 +1,128 @@
+---
+title: "Claude Code"
+description: "Connect DBHub to Claude Code for AI-powered database development"
+---
+
+## Overview
+
+Claude Code is Anthropic's official CLI tool that supports MCP servers. DBHub integrates seamlessly to provide database access during coding sessions.
+
+## Configuration
+
+Add DBHub to your Claude Code MCP configuration:
+
+<Tabs>
+  <Tab title="MacOS/Linux">
+    Edit `~/.config/claude-code/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\claude-code\mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Using DBHub in Claude Code
+
+Start Claude Code in your project directory:
+
+```bash
+claude-code
+```
+
+Then interact with your database:
+
+- "Show me the schema for the users table"
+- "Generate a TypeScript type for the products table"
+- "Write a query to find all orders from the last 30 days"
+- "Explain what this SQL query does: SELECT ..."
+
+## Project-Local Configuration
+
+For project-specific database connections, use a TOML config:
+
+```bash
+# Create dbhub.toml in your project
+cat > dbhub.toml << EOF
+[[sources]]
+id = "app_db"
+dsn = "postgres://localhost:5432/myapp"
+readonly = true
+max_rows = 100
+EOF
+```
+
+Update MCP config to use the project config:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--config",
+        "./dbhub.toml"
+      ]
+    }
+  }
+}
+```
+
+## Common Use Cases
+
+### Generate Database Models
+
+"Based on the users table, generate a Prisma schema"
+
+### Write Migrations
+
+"Create a migration to add a created_at timestamp to all tables"
+
+### Query Optimization
+
+"Analyze this query and suggest optimizations: SELECT ..."
+
+### Documentation
+
+"Generate documentation for all tables in the public schema"
+
+## Best Practices
+
+- Use `--readonly` mode for safer operations
+- Set `--max-rows` to avoid overwhelming responses
+- Use demo mode (`--demo`) for learning and testing
+- Keep DSN credentials in environment variables for security

@@ -22,6 +22,15 @@
         ]
       },
       {
+        "group": "Integrations",
+        "pages": [
+          "integrations/claude-desktop",
+          "integrations/claude-code",
+          "integrations/cursor",
+          "integrations/vscode"
+        ]
+      },
+      {
         "group": "Database Support",
         "pages": [
           "databases/overview",

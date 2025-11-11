@@ -1,0 +1,161 @@
+---
+title: "VS Code"
+description: "Connect DBHub to Visual Studio Code via MCP-compatible extensions"
+---
+
+## Overview
+
+VS Code can connect to DBHub through MCP-compatible extensions, enabling AI-powered database interactions in your development workflow.
+
+## Installation
+
+### Option 1: Using Cline Extension
+
+[Cline](https://github.com/cline/cline) is a VS Code extension that supports MCP servers.
+
+1. Install the Cline extension from the VS Code marketplace
+2. Configure MCP settings in Cline's settings UI or edit the config file
+
+### Option 2: Using Continue Extension
+
+[Continue](https://continue.dev) is another VS Code extension with MCP support.
+
+1. Install Continue from the VS Code marketplace
+2. Configure MCP in Continue's settings
+
+## Configuration
+
+Add DBHub to your MCP configuration:
+
+<Tabs>
+  <Tab title="Cline">
+    Edit `~/.cline/mcp_servers.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Continue">
+    Edit `~/.continue/config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Workspace Configuration
+
+For workspace-specific database connections, create `.vscode/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "workspace-db": {
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--config",
+        "./dbhub.toml"
+      ]
+    }
+  }
+}
+```
+
+## Using DBHub in VS Code
+
+Once configured, you can:
+
+1. Open the AI assistant (Cline/Continue)
+2. Ask database-related questions
+3. Generate code based on your schema
+4. Query and explore your database
+
+### Example Prompts
+
+- "Show me all tables in the database"
+- "Generate a TypeScript interface for the users table"
+- "Write a SQL query to get monthly sales"
+- "Explain the relationships between tables"
+
+## Multi-Database Setup
+
+Use a TOML configuration for multiple databases:
+
+```toml dbhub.toml
+[[sources]]
+id = "local"
+dsn = "postgres://localhost:5432/dev_db"
+
+[[sources]]
+id = "docker"
+dsn = "postgres://postgres:password@localhost:5433/app_db"
+```
+
+Reference in VS Code settings:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--config",
+        "${workspaceFolder}/dbhub.toml"
+      ]
+    }
+  }
+}
+```
+
+## Security Best Practices
+
+- Store credentials in `.env` files (not in committed config)
+- Use `--readonly` mode for production database connections
+- Add `.env` and `dbhub.toml` to `.gitignore`
+- Consider using SSH tunnels for remote databases
+
+## Troubleshooting
+
+### MCP Server Not Connecting
+
+1. Check the extension's output panel for errors
+2. Verify DBHub is installed: `npx @bytebase/dbhub --help`
+3. Test the DSN connection outside VS Code
+4. Restart VS Code after configuration changes
+
+### Database Connection Errors
+
+- Verify your DSN is correct
+- Ensure the database is running and accessible
+- Check firewall and network settings
+- Review database user permissions
