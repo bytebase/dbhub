@@ -135,10 +135,15 @@ See documentation for more details on configuring database connections.
       await connectorManager.connectWithSources(sources);
     }
 
-    // Resolve transport type
+    // Resolve transport type (for MCP server)
     const transportData = resolveTransport();
-    console.error(`Using transport: ${transportData.type}`);
+    console.error(`MCP transport: ${transportData.type}`);
     console.error(`Transport source: ${transportData.source}`);
+
+    // Resolve port for HTTP server (always start HTTP for frontend)
+    const portData = resolvePort();
+    const port = portData.port;
+    console.error(`HTTP server port: ${port} (source: ${portData.source})`);
 
     // Print ASCII art banner with version and slogan
     const readonly = isReadOnlyMode();
@@ -169,43 +174,42 @@ See documentation for more details on configuring database connections.
 
     console.error(generateBanner(SERVER_VERSION, activeModes));
 
-    // Set up transport based on type
+    // Always set up Express server for frontend (regardless of MCP transport)
+    const app = express();
+
+    // Enable JSON parsing
+    app.use(express.json());
+
+    // Handle CORS and security headers
+    app.use((req, res, next) => {
+      // Validate Origin header to prevent DNS rebinding attacks
+      const origin = req.headers.origin;
+      if (origin && !origin.startsWith('http://localhost') && !origin.startsWith('https://localhost')) {
+        return res.status(403).json({ error: 'Forbidden origin' });
+      }
+
+      res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
+      res.header('Access-Control-Allow-Credentials', 'true');
+
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+      next();
+    });
+
+    // Serve static frontend files
+    const frontendPath = path.join(__dirname, "..", "frontend", "dist");
+    app.use(express.static(frontendPath));
+
+    // Health check endpoint
+    app.get("/healthz", (req, res) => {
+      res.status(200).send("OK");
+    });
+
+    // Set up MCP endpoint if using HTTP transport
     if (transportData.type === "http") {
-      // Set up Express server for Streamable HTTP transport
-      const app = express();
-
-      // Enable JSON parsing
-      app.use(express.json());
-
-      // Handle CORS and security headers
-      app.use((req, res, next) => {
-        // Validate Origin header to prevent DNS rebinding attacks
-        const origin = req.headers.origin;
-        if (origin && !origin.startsWith('http://localhost') && !origin.startsWith('https://localhost')) {
-          return res.status(403).json({ error: 'Forbidden origin' });
-        }
-        
-        res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
-        res.header('Access-Control-Allow-Credentials', 'true');
-        
-        if (req.method === 'OPTIONS') {
-          return res.sendStatus(200);
-        }
-        next();
-      });
-
-      // Root endpoint for client connection checks
-      app.get("/", (req, res) => {
-        res.status(200).send();
-      });
-
-      // Health check endpoint
-      app.get("/healthz", (req, res) => {
-        res.status(200).send("OK");
-      });
-
       // Main endpoint for streamable HTTP transport
       app.post("/mcp", async (req, res) => {
         try {
@@ -227,21 +231,38 @@ See documentation for more details on configuring database connections.
           }
         }
       });
+    }
 
+    // SPA fallback - serve index.html for all non-API routes
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(frontendPath, "index.html"));
+    });
 
-      // Start the HTTP server
-      const portData = resolvePort();
-      const port = portData.port;
-      console.error(`Port source: ${portData.source}`);
-      app.listen(port, '0.0.0.0', () => {
-        console.error(`DBHub server listening at http://0.0.0.0:${port}`);
-        console.error(`Connect to MCP server at http://0.0.0.0:${port}/mcp`);
-      });
-    } else {
-      // Set up STDIO transport
+    // Start the HTTP server (always for frontend)
+    app.listen(port, '0.0.0.0', () => {
+      console.error(`DBHub HTTP server listening at http://0.0.0.0:${port}`);
+
+      // In development mode, suggest using the Vite dev server for hot reloading
+      if (process.env.NODE_ENV === 'development') {
+        console.error('');
+        console.error('🚀 Development mode detected!');
+        console.error('   Frontend dev server (with HMR): http://localhost:5173');
+        console.error('   Backend API: http://localhost:8080');
+        console.error('');
+      } else {
+        console.error(`Frontend accessible at http://0.0.0.0:${port}/`);
+      }
+
+      if (transportData.type === "http") {
+        console.error(`MCP server endpoint at http://0.0.0.0:${port}/mcp`);
+      }
+    });
+
+    // If using STDIO transport, also set up STDIO connection for MCP
+    if (transportData.type === "stdio") {
       const server = createServer();
       const transport = new StdioServerTransport();
-      console.error("Starting with STDIO transport");
+      console.error("Starting MCP with STDIO transport");
       await server.connect(transport);
 
       // Listen for SIGINT to gracefully shut down
