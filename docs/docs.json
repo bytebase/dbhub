@@ -75,6 +75,11 @@
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "cursor", "vscode"]
   },
+  "errors": {
+    "404": {
+      "redirect": false
+    }
+  },
   "seo": {
     "metatags": {
       "canonical": "https://dbhub.ai"
