@@ -17,9 +17,13 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && cd frontend && pnpm run build",
+    "build:backend": "tsup",
+    "build:frontend": "cd frontend && pnpm run build",
     "start": "node dist/index.js",
-    "dev": "NODE_ENV=development tsx src/index.ts",
+    "dev": "concurrently --kill-others \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "dev:backend": "NODE_ENV=development tsx src/index.ts --demo --transport=http",
+    "dev:frontend": "cd frontend && pnpm run dev",
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
@@ -55,6 +59,7 @@
     "@types/node": "^22.13.10",
     "@types/pg": "^8.11.11",
     "@types/ssh2": "^1.15.5",
+    "concurrently": "^9.2.1",
     "cross-env": "^7.0.3",
     "prettier": "^3.5.3",
     "testcontainers": "^11.0.3",

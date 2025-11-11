@@ -1,5 +1,6 @@
 packages:
   - '.'
+  - 'frontend'
 
 approvedBuilds:
   - better-sqlite3
