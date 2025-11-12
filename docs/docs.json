@@ -76,5 +76,10 @@
     "metatags": {
       "canonical": "https://dbhub.ai"
     }
+  },
+  "integrations": {
+    "plausible": {
+        "domain": "dbhub.ai"
+    }
   }
 }
