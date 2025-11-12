@@ -45,31 +45,7 @@ database = "analytics"
 user = "sa"
 password = "YourStrong@Passw0rd"
 max_rows = 2000
-
-## Example 4a: SQL Server Named Instance (ENV1 on port 1433)
-# Multiple named instances on single host (e.g., ENV1, ENV2, ENV3)
-[[sources]]
-id = "sqlserver_env1"
-type = "sqlserver"
-host = "127.0.0.1"
-port = 1433
-database = "Inventory"
-user = "sa"
-password = "YourPassword123"
-instanceName = "ENV1"
-readonly = false
-
-## Example 4b: SQL Server Named Instance (ENV2 on port 1434)
-[[sources]]
-id = "sqlserver_env2"
-type = "sqlserver"
-host = "127.0.0.1"
-port = 1434
-database = "Inventory"
-user = "sa"
-password = "YourPassword123"
-instanceName = "ENV2"
-readonly = false
+# instanceName = "optional_instance_name"
 
 ## Example 5: SQLite local file
 [[sources]]
