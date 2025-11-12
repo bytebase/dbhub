@@ -6,9 +6,9 @@
   },
   "name": "DBHub",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#DCFCE7",
-    "dark": "#15803D"
+    "primary": "#335DFF",
+    "light": "#E8ECFF",
+    "dark": "#0A1633"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -22,34 +22,35 @@
         ]
       },
       {
-        "group": "Database Support",
+        "group": "MCP Components",
         "pages": [
-          "databases/overview",
-          "databases/postgresql",
-          "databases/mysql",
-          "databases/mariadb",
-          "databases/sqlserver",
-          "databases/sqlite"
+          "components/resources",
+          "components/tools",
+          "components/prompts"
+        ]
+      },
+      {
+        "group": "Integrations",
+        "pages": [
+          "integrations/claude-desktop",
+          "integrations/claude-code",
+          "integrations/cursor",
+          "integrations/vscode"
         ]
       },
       {
         "group": "Configuration",
         "pages": [
-          "config/dsn",
+          "config/server-options",
           "config/multi-database",
-          "config/environment",
-          "config/ssl",
-          "features/ssh-tunnel",
-          "features/readonly-mode",
-          "features/row-limiting",
-          "features/multi-instance"
+          "config/debug"
         ]
       }
     ]
   },
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "light": "/images/logo/full-light.svg",
+    "dark": "/images/logo/full-dark.svg"
   },
   "navbar": {
     "primary": {
@@ -66,9 +67,19 @@
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "cursor", "vscode"]
   },
+  "errors": {
+    "404": {
+      "redirect": false
+    }
+  },
   "seo": {
     "metatags": {
       "canonical": "https://dbhub.ai"
+    }
+  },
+  "integrations": {
+    "plausible": {
+        "domain": "dbhub.ai"
     }
   }
 }

@@ -1,0 +1,70 @@
+---
+title: "Cursor"
+---
+
+<img src="/images/cursor.webp" alt="Cursor with DBHub" />
+
+<Tabs>
+  <Tab title="MacOS/Linux">
+    Edit `~/.cursor/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%USERPROFILE%\.cursor\mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Project-Specific Configuration
+
+For project-specific database connections, create `.cursor/mcp_config.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "project-db": {
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--transport",
+        "stdio",
+        "--config",
+        "./dbhub.toml"
+      ]
+    }
+  }
+}
+```

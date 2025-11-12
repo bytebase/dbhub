@@ -1,0 +1,55 @@
+---
+title: "Claude Code"
+---
+
+<Tabs>
+  <Tab title="MacOS/Linux">
+    Edit `~/.config/claude-code/mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\claude-code\mcp_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Using DBHub in Claude Code
+
+Start Claude Code in your project directory:
+
+```bash
+claude
+```

@@ -1,21 +1,18 @@
 ---
 title: "Introduction"
-description: "Universal Database MCP Server implementing the Model Context Protocol"
 ---
 
 <img
   className="block dark:hidden"
-  src="/logo/light.svg"
+  src="/images/logo/full-light.svg"
 />
 
 <img
   className="hidden dark:block"
-  src="/logo/dark.svg"
+  src="/images/logo/full-dark.svg"
 />
 
-## What is DBHub?
-
-DBHub is a Universal Database MCP Server that implements the Model Context Protocol (MCP) server interface. It enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
+DBHub is a universal database gateway that implements the MCP (Model Context Protocol) server interface. It enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
 
 ```
  +------------------+    +--------------+    +------------------+
@@ -35,6 +32,10 @@ DBHub is a Universal Database MCP Server that implements the Model Context Proto
  +------------------+    +--------------+    +------------------+
      MCP Clients           MCP Server             Databases
 ```
+
+## Supported Databases
+
+PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite.
 
 ## Why DBHub?
 
@@ -79,15 +80,6 @@ Built-in prompts help AI assistants:
 - **SSL/TLS**: Encrypted database connections
 - **Row Limiting**: Prevent accidental large data retrieval
 
-## Supported Databases
-
-| Database   | Version | Resources | Tools | Prompts |
-| ---------- | :-----: | :-------: | :---: | :-----: |
-| PostgreSQL |  12+    |    ✅     |  ✅   |   ✅    |
-| MySQL      |  5.7+   |    ✅     |  ✅   |   ✅    |
-| MariaDB    |  10.3+  |    ✅     |  ✅   |   ✅    |
-| SQL Server |  2017+  |    ✅     |  ✅   |   ✅    |
-| SQLite     |   3+    |    ✅     |  ✅   |   ✅    |
 
 ## Getting Started
 
@@ -99,38 +91,4 @@ Built-in prompts help AI assistants:
   <Card title="Quickstart" icon="rocket" href="/quickstart">
     Get DBHub running with your first database connection
   </Card>
-
-  <Card title="Claude Desktop" icon="message-bot" href="/integrations/claude-desktop">
-    Integrate with Claude Desktop for AI-powered database access
-  </Card>
-
-  <Card title="Multi-Database Setup" icon="database" href="/config/multi-database">
-    Configure multiple database connections with TOML
-  </Card>
 </CardGroup>
-
-## Use Cases
-
-### Development Assistance
-
-Enable AI assistants to:
-- Query your development database for context
-- Generate SQL based on schema understanding
-- Debug queries and performance issues
-- Suggest schema improvements
-
-### Data Analysis
-
-Allow AI tools to:
-- Explore datasets and identify patterns
-- Generate complex analytical queries
-- Create data visualizations
-- Summarize findings from database queries
-
-### Schema Management
-
-Get AI help with:
-- Understanding legacy database schemas
-- Planning schema migrations
-- Documenting database structures
-- Identifying optimization opportunities

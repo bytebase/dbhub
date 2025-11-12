@@ -1,0 +1,75 @@
+---
+title: "Claude Desktop"
+---
+
+<img src="/images/claude-desktop.webp" alt="Claude Desktop with DBHub" />
+
+<Tabs>
+  <Tab title="MacOS/Linux">
+    Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Edit `%APPDATA%\Claude\claude_desktop_config.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Demo Mode
+
+For testing, you can use the built-in demo database:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--transport",
+        "stdio",
+        "--demo"
+      ]
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+- Verify your DSN connection string is correct
+- Check that the database is accessible from your machine
+- Review Claude Desktop logs: `~/Library/Logs/Claude/mcp*.log` (MacOS)
