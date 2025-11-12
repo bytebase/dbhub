@@ -161,6 +161,26 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate connection_timeout if provided
+  if (source.connection_timeout !== undefined) {
+    if (typeof source.connection_timeout !== "number" || source.connection_timeout <= 0) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid connection_timeout. ` +
+          `Must be a positive number (in seconds).`
+      );
+    }
+  }
+
+  // Validate request_timeout if provided
+  if (source.request_timeout !== undefined) {
+    if (typeof source.request_timeout !== "number" || source.request_timeout <= 0) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid request_timeout. ` +
+          `Must be a positive number (in seconds).`
+      );
+    }
+  }
+
   // Validate SSH port if provided
   if (source.ssh_port !== undefined) {
     if (

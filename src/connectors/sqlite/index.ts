@@ -15,6 +15,7 @@ import {
   TableIndex,
   StoredProcedure,
   ExecuteOptions,
+  ConnectorConfig,
 } from "../interface.js";
 import Database from "better-sqlite3";
 import { SafeURL } from "../../utils/safe-url.js";
@@ -27,9 +28,12 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
  * - sqlite:///path/to/database.db (absolute path)
  * - sqlite://./relative/path/to/database.db (relative path)
  * - sqlite:///:memory: (in-memory database)
+ *
+ * Note: SQLite is a local file-based database and does not support connection timeouts.
+ * The config parameter is accepted for interface compliance but ignored.
  */
 class SQLiteDSNParser implements DSNParser {
-  async parse(dsn: string): Promise<{ dbPath: string }> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<{ dbPath: string }> {
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -105,9 +109,14 @@ export class SQLiteConnector implements Connector {
     return new SQLiteConnector();
   }
 
-  async connect(dsn: string, initScript?: string): Promise<void> {
-    const config = await this.dsnParser.parse(dsn);
-    this.dbPath = config.dbPath;
+  /**
+   * Connect to SQLite database
+   * Note: SQLite does not support connection timeouts as it's a local file-based database.
+   * The config parameter is accepted for interface compliance but ignored.
+   */
+  async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
+    const parsedConfig = await this.dsnParser.parse(dsn, config);
+    this.dbPath = parsedConfig.dbPath;
 
     try {
       this.db = new Database(this.dbPath);

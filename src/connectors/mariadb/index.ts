@@ -9,6 +9,7 @@ import {
   TableIndex,
   StoredProcedure,
   ExecuteOptions,
+  ConnectorConfig,
 } from "../interface.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -24,7 +25,8 @@ import { parseQueryResults } from "../../utils/multi-statement-result-parser.js"
  * - Any other value: Standard SSL connection with certificate verification
  */
 class MariadbDSNParser implements DSNParser {
-  async parse(dsn: string): Promise<mariadb.ConnectionConfig> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<mariadb.ConnectionConfig> {
+    const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -46,7 +48,9 @@ class MariadbDSNParser implements DSNParser {
         user: url.username,
         password: url.password,
         multipleStatements: true, // Enable native multi-statement support
-        connectTimeout: 5000, // 5 second timeout for connections
+        ...(connectionTimeoutSeconds !== undefined && {
+          connectTimeout: connectionTimeoutSeconds * 1000
+        }),
       };
 
       // Handle query parameters
@@ -94,11 +98,11 @@ export class MariaDBConnector implements Connector {
 
   private pool: mariadb.Pool | null = null;
 
-  async connect(dsn: string): Promise<void> {
+  async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
-      const config = await this.dsnParser.parse(dsn);
+      const connectionConfig = await this.dsnParser.parse(dsn, config);
 
-      this.pool = mariadb.createPool(config);
+      this.pool = mariadb.createPool(connectionConfig);
 
       // Test the connection
       console.error("Testing connection to MariaDB...");

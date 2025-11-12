@@ -1,4 +1,4 @@
-import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions } from "./interface.js";
+import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions, ConnectorConfig } from "./interface.js";
 import { SSHTunnel } from "../utils/ssh-tunnel.js";
 import { resolveSSHConfig, resolveMaxRows } from "../config/env.js";
 import type { SSHTunnelConfig } from "../types/ssh.js";
@@ -192,8 +192,17 @@ export class ConnectorManager {
     // Other databases will reuse the singleton instance (not recommended for multi-source)
     const connector = connectorPrototype.clone ? connectorPrototype.clone() : connectorPrototype;
 
-    // Connect to the database
-    await connector.connect(actualDSN);
+    // Build config for database-specific options
+    const config: ConnectorConfig = {};
+    if (source.connection_timeout !== undefined) {
+      config.connectionTimeoutSeconds = source.connection_timeout;
+    }
+    if (connector.id === 'sqlserver' && source.request_timeout !== undefined) {
+      config.requestTimeoutSeconds = source.request_timeout;
+    }
+
+    // Connect to the database with config
+    await connector.connect(actualDSN, undefined, config);
 
     // Store connector
     this.connectors.set(sourceId, connector);

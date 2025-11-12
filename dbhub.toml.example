@@ -7,87 +7,101 @@
 
 ## Example 1: PostgreSQL with DSN (recommended)
 [[sources]]
-id = "prod_pg"
-dsn = "postgres://user:password@localhost:5432/production?sslmode=require"
-readonly = false
-max_rows = 1000
+id = "prod_pg"  # Required: Unique identifier
+dsn = "postgres://user:password@localhost:5432/production?sslmode=require"  # Required: Connection string
+readonly = false  # Optional: Limit to read-only operations (default: false)
+max_rows = 1000  # Optional: Maximum rows to return per query (default: unlimited)
+connection_timeout = 30  # Optional: Connection timeout in seconds (default: driver-specific)
 
 ## Example 2: MySQL with individual parameters
 [[sources]]
-id = "staging_mysql"
-type = "mysql"
-host = "localhost"
-port = 3306
-database = "staging"
-user = "root"
-password = "secret"
-readonly = false
-max_rows = 500
+id = "staging_mysql"  # Required: Unique identifier
+type = "mysql"  # Required when using individual parameters (not DSN)
+host = "localhost"  # Required when using individual parameters
+port = 3306  # Optional: Uses default if not specified (MySQL default: 3306)
+database = "staging"  # Required: Database name
+user = "root"  # Required: Database username
+password = "secret"  # Required: Database password
+readonly = false  # Optional: Limit to read-only operations (default: false)
+max_rows = 500  # Optional: Maximum rows to return per query (default: unlimited)
+connection_timeout = 60  # Optional: Connection timeout in seconds (useful for high-latency connections)
 
 ## Example 3: MariaDB with SSH tunnel
 [[sources]]
-id = "remote_mariadb"
-dsn = "mariadb://dbuser:dbpass@10.0.0.5:3306/mydb"
-ssh_host = "bastion.example.com"
-ssh_port = 22
-ssh_user = "ubuntu"
-ssh_key = "~/.ssh/id_rsa"
-# ssh_passphrase = "optional_key_passphrase"
-# ssh_password = "optional_ssh_password"  # Use instead of ssh_key for password auth
+id = "remote_mariadb"  # Required: Unique identifier
+dsn = "mariadb://dbuser:dbpass@10.0.0.5:3306/mydb"  # Required: Connection string (target DB behind SSH tunnel)
+ssh_host = "bastion.example.com"  # Optional: SSH server hostname (required if using SSH tunnel)
+ssh_port = 22  # Optional: SSH server port (default: 22)
+ssh_user = "ubuntu"  # Optional: SSH username (required if using SSH tunnel)
+ssh_key = "~/.ssh/id_rsa"  # Optional: Path to private key file (use ssh_key OR ssh_password)
+# ssh_passphrase = "key_passphrase"  # Optional: Passphrase for encrypted private key
+# ssh_password = "ssh_password"  # Optional: SSH password (use instead of ssh_key for password auth)
 
-## Example 4: SQL Server
+## Example 4: SQL Server with timeouts
 [[sources]]
-id = "analytics_sqlserver"
-type = "sqlserver"
-host = "sqlserver.example.com"
-port = 1433
-database = "analytics"
-user = "sa"
-password = "YourStrong@Passw0rd"
-max_rows = 2000
-# instanceName = "optional_instance_name"
+id = "analytics_sqlserver"  # Required: Unique identifier
+type = "sqlserver"  # Required when using individual parameters
+host = "sqlserver.example.com"  # Required when using individual parameters
+port = 1433  # Optional: Uses default if not specified (SQL Server default: 1433)
+database = "analytics"  # Required: Database name
+user = "sa"  # Required: Database username
+password = "YourStrong@Passw0rd"  # Required: Database password
+max_rows = 2000  # Optional: Maximum rows to return per query (default: unlimited)
+connection_timeout = 30  # Optional: Connection establishment timeout in seconds (default: 15s)
+request_timeout = 120    # Optional: Query execution timeout in seconds (SQL Server only, default: 15s)
+# instanceName = "INSTANCE1"  # Optional: SQL Server named instance (e.g., SERVER\INSTANCE1)
 
 ## Example 5: SQLite local file
 [[sources]]
-id = "local_sqlite"
-type = "sqlite"
-database = "/path/to/database.db"
-readonly = true
+id = "local_sqlite"  # Required: Unique identifier
+type = "sqlite"  # Required when using individual parameters
+database = "/path/to/database.db"  # Required: Path to SQLite database file
+readonly = true  # Optional: Limit to read-only operations (default: false)
 
 ## Example 6: SQLite in-memory (for testing)
 [[sources]]
-id = "test_db"
-dsn = "sqlite:///:memory:"
+id = "test_db"  # Required: Unique identifier
+dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
 
 # Connection Parameters Reference:
 # -------------------------------
-# Required for each source:
-#   - id: Unique identifier for this database source
 #
-# Connection options (choose one):
-#   Option A: Full DSN string
-#     - dsn: Complete connection string (e.g., "postgres://user:pass@host:port/db")
+# REQUIRED FIELDS:
+# ----------------
+#   - id: Unique identifier for this database source (string)
 #
-#   Option B: Individual parameters
-#     - type: Database type (postgres, mysql, mariadb, sqlserver, sqlite)
-#     - host: Database host (not needed for sqlite)
-#     - port: Database port (optional, uses default if not specified)
-#     - database: Database name or file path (for sqlite)
-#     - user: Database username (not needed for sqlite)
-#     - password: Database password (not needed for sqlite)
-#     - instanceName: SQL Server named instance (optional, for sqlserver only)
+#   AND one of:
+#     Option A: DSN (connection string)
+#       - dsn: Complete connection string (e.g., "postgres://user:pass@host:port/db")
 #
-# Execution options (optional):
+#     Option B: Individual connection parameters
+#       - type: Database type (postgres, mysql, mariadb, sqlserver, sqlite) [REQUIRED]
+#       - database: Database name or file path [REQUIRED]
+#       For network databases (postgres, mysql, mariadb, sqlserver):
+#         - host: Database host [REQUIRED]
+#         - user: Database username [REQUIRED]
+#         - password: Database password [REQUIRED]
+#       For SQLite: only database path is needed
+#
+# OPTIONAL FIELDS:
+# ----------------
+# Connection parameters:
+#   - port: Database port (default: 5432 for postgres, 3306 for mysql/mariadb, 1433 for sqlserver)
+#   - instanceName: SQL Server named instance (sqlserver only, e.g., "INSTANCE1")
+#
+# Execution options:
 #   - readonly: Limit to read-only operations (default: false)
-#   - max_rows: Maximum rows to return per query (default: unlimited)
+#   - max_rows: Maximum rows to return per query (default: unlimited, e.g., 1000)
+#   - connection_timeout: Connection timeout in seconds (default: driver-specific, e.g., 30, 60)
+#   - request_timeout: Query execution timeout in seconds (SQL Server only, default: 15, e.g., 120)
 #
-# SSH tunnel options (optional):
+# SSH tunnel options (all optional, but if using SSH tunnel, ssh_host, ssh_user required):
 #   - ssh_host: SSH server hostname or IP
 #   - ssh_port: SSH server port (default: 22)
 #   - ssh_user: SSH username
-#   - ssh_password: SSH password (for password authentication)
-#   - ssh_key: Path to private key file (for key-based authentication)
-#   - ssh_passphrase: Passphrase for encrypted private key (optional)
+#   - ssh_key: Path to private key file (use ssh_key OR ssh_password, not both)
+#   - ssh_password: SSH password (use instead of ssh_key for password authentication)
+#   - ssh_passphrase: Passphrase for encrypted private key
 
 # Default Port Numbers:
 # - PostgreSQL: 5432

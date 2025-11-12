@@ -9,6 +9,7 @@ import {
   TableIndex,
   StoredProcedure,
   ExecuteOptions,
+  ConnectorConfig,
 } from "../interface.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -24,7 +25,8 @@ import { parseQueryResults } from "../../utils/multi-statement-result-parser.js"
  * - Any other value: Standard SSL connection with certificate verification
  */
 class MySQLDSNParser implements DSNParser {
-  async parse(dsn: string): Promise<mysql.ConnectionOptions> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.ConnectionOptions> {
+    const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -62,6 +64,12 @@ class MySQLDSNParser implements DSNParser {
         // Add other parameters as needed
       });
 
+      // Apply connection timeout if specified
+      if (connectionTimeoutSeconds !== undefined) {
+        // mysql2 library expects connectTimeout in milliseconds
+        config.connectTimeout = connectionTimeoutSeconds * 1000;
+      }
+
       return config;
     } catch (error) {
       throw new Error(
@@ -93,10 +101,10 @@ export class MySQLConnector implements Connector {
 
   private pool: mysql.Pool | null = null;
 
-  async connect(dsn: string): Promise<void> {
+  async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
-      const config = await this.dsnParser.parse(dsn);
-      this.pool = mysql.createPool(config);
+      const connectionOptions = await this.dsnParser.parse(dsn, config);
+      this.pool = mysql.createPool(connectionOptions);
 
       // Test the connection
       const [rows] = await this.pool.query("SELECT 1");
