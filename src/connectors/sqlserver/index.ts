@@ -111,7 +111,7 @@ export class SQLServerDSNParser implements DSNParser {
   }
 
   getSampleDSN(): string {
-    return "sqlserver://username:password@localhost:1433/database?sslmode=disable";
+    return "sqlserver://username:password@localhost:1433/database?sslmode=disable&instanceName=INSTANCE1";
   }
 
   isValidDSN(dsn: string): boolean {
