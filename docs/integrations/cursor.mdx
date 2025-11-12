@@ -1,15 +1,6 @@
 ---
 title: "Cursor"
-description: "Connect DBHub to Cursor for AI-powered database development"
 ---
-
-## Overview
-
-Cursor supports MCP servers, allowing you to use DBHub for database queries and schema exploration directly in your IDE.
-
-## Configuration
-
-Add DBHub to your Cursor MCP settings:
 
 <Tabs>
   <Tab title="MacOS/Linux">
@@ -75,46 +66,3 @@ For project-specific database connections, create `.cursor/mcp_config.json` in y
   }
 }
 ```
-
-## Using DBHub in Cursor
-
-With DBHub connected:
-
-1. Open Cursor's AI chat
-2. Ask database-related questions:
-   - "Generate a migration to add an email column to users"
-   - "Show me the indexes on the orders table"
-   - "Write a query to find inactive users"
-
-## Multi-Database Support
-
-Use a TOML config file for multiple databases:
-
-```toml
-[[sources]]
-id = "dev"
-dsn = "postgres://localhost:5432/dev_db"
-
-[[sources]]
-id = "staging"
-dsn = "postgres://localhost:5432/staging_db"
-```
-
-Then reference in Cursor:
-
-```json
-{
-  "mcpServers": {
-    "dbhub": {
-      "command": "npx",
-      "args": ["@bytebase/dbhub", "--config", "./dbhub.toml"]
-    }
-  }
-}
-```
-
-## Tips
-
-- Use `--readonly` mode to prevent accidental data modifications
-- Set `--max-rows` to limit query results in the IDE
-- Restart Cursor after configuration changes

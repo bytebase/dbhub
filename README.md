@@ -458,8 +458,6 @@ You can specify the SSL mode using the `sslmode` parameter in your DSN string:
 - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
 - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified. This provides protection against packet sniffing but not against man-in-the-middle attacks. You may use this for trusted self-signed CA.
 
-Without specifying `sslmode`, most databases default to certificate verification, which provides the highest level of security.
-
 Example usage:
 
 ```bash

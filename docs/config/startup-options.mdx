@@ -1,0 +1,343 @@
+---
+title: "Startup Options"
+---
+
+## Database Connection
+
+### dsn
+
+<ParamField path="--dsn" type="string" env="DSN">
+  Database connection string (Data Source Name). Format: `database_type://username:password@host:port/database_name?options`
+
+  <Tabs>
+    <Tab title="PostgreSQL">
+      ```bash
+      # Format: postgres://[user]:[password]@[host]:[port]/[database]?[options]
+      postgres://myuser:mypassword@localhost:5432/mydb
+      ```
+    </Tab>
+
+    <Tab title="MySQL">
+      ```bash
+      # Format: mysql://[user]:[password]@[host]:[port]/[database]?[options]
+      mysql://root:password@localhost:3306/mydb
+      ```
+    </Tab>
+
+    <Tab title="MariaDB">
+      ```bash
+      # Format: mariadb://[user]:[password]@[host]:[port]/[database]?[options]
+      mariadb://root:password@localhost:3306/mydb
+      ```
+    </Tab>
+
+    <Tab title="SQL Server">
+      ```bash
+      # Format: sqlserver://[user]:[password]@[host]:[port]/[database]?[options]
+      sqlserver://sa:YourPassword123@localhost:1433/mydb
+
+      # Azure AD authentication
+      sqlserver://username@localhost:1433/mydb?authentication=azure-active-directory-access-token
+      ```
+    </Tab>
+
+    <Tab title="SQLite">
+      ```bash
+      # Format: sqlite:///[path/to/database.db] or sqlite:///:memory:
+
+      # Unix/Linux/macOS
+      sqlite:///var/lib/data/mydb.db
+
+      # Windows
+      sqlite:C:/Users/YourName/data/database.db
+
+      # In-memory
+      sqlite:///:memory:
+      ```
+    </Tab>
+  </Tabs>
+
+  **SSL/TLS Options**
+
+  | Database   | `sslmode=disable` | `sslmode=require` | Default |
+  | ---------- | :---------------: | :---------------: | :-----: |
+  | PostgreSQL |        ✅         |        ✅         | Certificate verification |
+  | MySQL      |        ✅         |        ✅         | Certificate verification |
+  | MariaDB    |        ✅         |        ✅         | Certificate verification |
+  | SQL Server |        ✅         |        ✅         | Certificate verification |
+  | SQLite     |        ❌         |        ❌         | N/A (file-based) |
+
+  - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
+  - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
+
+  ```bash
+  # Examples
+  postgres://user:password@localhost:5432/dbname?sslmode=disable
+  postgres://user:password@localhost:5432/dbname?sslmode=require
+  ```
+
+### Environment Variables
+
+  Recommended for databases with complex passwords containing special characters:
+
+  <ParamField path="DB_TYPE" type="string" env="DB_TYPE">
+    Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `sqlite`
+  </ParamField>
+
+  <ParamField path="DB_HOST" type="string" env="DB_HOST">
+    Database server hostname (not needed for SQLite)
+  </ParamField>
+
+  <ParamField path="DB_PORT" type="number" env="DB_PORT">
+    Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`)
+  </ParamField>
+
+  <ParamField path="DB_USER" type="string" env="DB_USER">
+    Database username (not needed for SQLite)
+  </ParamField>
+
+  <ParamField path="DB_PASSWORD" type="string" env="DB_PASSWORD">
+    Database password (not needed for SQLite). Supports special characters without URL encoding.
+  </ParamField>
+
+  <ParamField path="DB_NAME" type="string" env="DB_NAME">
+    Database name or SQLite file path
+  </ParamField>
+
+  ```bash
+  export DB_TYPE=postgres
+  export DB_HOST=localhost
+  export DB_PORT=5432
+  export DB_USER=myuser
+  export DB_PASSWORD='p@ss:word#123'
+  export DB_NAME=mydb
+  npx @bytebase/dbhub
+  ```
+</ParamField>
+
+## Execution Controls
+
+### readonly
+
+<ParamField path="--readonly" type="boolean" env="READONLY" default="false">
+  Restrict SQL execution to read-only operations. Only [allowed SQL keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are permitted.
+
+  Recommended for production databases to prevent accidental modifications.
+
+  ```bash
+  npx @bytebase/dbhub --readonly --dsn "postgres://user:password@localhost:5432/mydb"
+  ```
+</ParamField>
+
+### max-rows
+
+<ParamField path="--max-rows" type="number" env="MAX_ROWS">
+  Limit the number of rows returned from SELECT queries to prevent accidentally retrieving too much data.
+
+  - Only applied to SELECT statements, not INSERT/UPDATE/DELETE
+  - If your query has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
+
+  ```bash
+  npx @bytebase/dbhub --max-rows 1000 --dsn "..."
+  ```
+</ParamField>
+
+## General
+
+### transport
+
+<ParamField path="--transport" type="string" env="TRANSPORT" default="stdio">
+  Transport protocol for MCP communication.
+
+  **Options:**
+  - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor with stdio config)
+  - `http` - For browser and network clients, streamable HTTP transport
+
+  ```bash
+  # stdio (default) - for Claude Desktop, Claude Code
+  npx @bytebase/dbhub --transport stdio --dsn "..."
+
+  # http - for web clients and remote access
+  npx @bytebase/dbhub --transport http --port 8080 --dsn "..."
+  ```
+</ParamField>
+
+### port
+
+<ParamField path="--port" type="number" env="PORT" default="8080">
+  HTTP server port. Only applicable when using `--transport=http`.
+
+  ```bash
+  npx @bytebase/dbhub --transport http --port 3000 --dsn "..."
+  ```
+</ParamField>
+
+### id
+
+<ParamField path="--id" type="string" env="ID">
+  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor).
+
+  Tools will be named `execute_sql_{id}` for each instance.
+
+  ```bash
+  npx @bytebase/dbhub --id prod --dsn "postgres://user:pass@prod-host:5432/db"
+  npx @bytebase/dbhub --id staging --dsn "postgres://user:pass@staging-host:5432/db"
+  ```
+
+  Result: `execute_sql_prod` and `execute_sql_staging` tools
+</ParamField>
+
+### config
+
+<ParamField path="--config" type="string" default="./dbhub.toml">
+  Path to TOML configuration file for managing multiple database connections.
+
+  Automatically loads `./dbhub.toml` if it exists in the current directory.
+
+  ```bash
+  npx @bytebase/dbhub --config ./dbhub.toml --transport http --port 8080
+  ```
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration details.
+</ParamField>
+
+### demo
+
+<ParamField path="--demo" type="boolean" default="false">
+  Run DBHub with a bundled SQLite sample "employee" database for testing.
+
+  The demo database includes tables for employees, departments, salaries, titles, and more.
+
+  ```bash
+  npx @bytebase/dbhub --demo --transport http --port 8080
+  ```
+</ParamField>
+
+## SSH Tunnel
+
+### ssh-host
+
+<ParamField path="--ssh-host" type="string" env="SSH_HOST">
+  SSH server hostname for tunnel connection. Can also use SSH config host aliases from `~/.ssh/config`.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "postgres://user:pass@database.internal:5432/mydb" \
+    --ssh-host bastion.example.com
+  ```
+
+  See [SSH Tunnel](/features/ssh-tunnel) for detailed SSH configuration examples.
+</ParamField>
+
+### ssh-port
+
+<ParamField path="--ssh-port" type="number" env="SSH_PORT" default="22">
+  SSH server port.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "..." \
+    --ssh-host bastion.example.com \
+    --ssh-port 2222
+  ```
+</ParamField>
+
+### ssh-user
+
+<ParamField path="--ssh-user" type="string" env="SSH_USER">
+  SSH username.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "..." \
+    --ssh-host bastion.example.com \
+    --ssh-user ubuntu
+  ```
+</ParamField>
+
+### ssh-password
+
+<ParamField path="--ssh-password" type="string" env="SSH_PASSWORD">
+  SSH password for password authentication.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "..." \
+    --ssh-host bastion.example.com \
+    --ssh-user ubuntu \
+    --ssh-password mypassword
+  ```
+</ParamField>
+
+### ssh-key
+
+<ParamField path="--ssh-key" type="string" env="SSH_KEY">
+  Path to SSH private key file for key-based authentication.
+
+  DBHub automatically tries common default locations (`~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.) if not specified.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "..." \
+    --ssh-host bastion.example.com \
+    --ssh-user ubuntu \
+    --ssh-key ~/.ssh/id_rsa
+  ```
+</ParamField>
+
+### ssh-passphrase
+
+<ParamField path="--ssh-passphrase" type="string" env="SSH_PASSPHRASE">
+  Passphrase for encrypted SSH private key.
+
+  ```bash
+  npx @bytebase/dbhub \
+    --dsn "..." \
+    --ssh-host bastion.example.com \
+    --ssh-user ubuntu \
+    --ssh-key ~/.ssh/id_rsa \
+    --ssh-passphrase mykeypassphrase
+  ```
+</ParamField>
+
+## Configuration Priority
+
+DBHub follows this priority order for configuration:
+
+1. **Command-line arguments** (highest priority)
+2. **TOML config file** (if `--config` is provided or `./dbhub.toml` exists)
+3. **Environment variables**
+4. **`.env` files** (`.env.local` in development, `.env` in production)
+
+<Note>
+`--config` (TOML) and `--dsn` (CLI) are mutually exclusive. If `--config` is provided, TOML configuration takes precedence. You cannot combine `--dsn` with TOML configuration.
+</Note>
+
+## Quick Reference
+
+| CLI Option | Env | Type | Default | Description |
+|------------|---------------------|------|---------|-------------|
+| `--dsn` | `DSN` | string | Required* | Database connection string |
+| - | `DB_TYPE` | string | - | Database type: postgres, mysql, mariadb, sqlserver, sqlite |
+| - | `DB_HOST` | string | - | Database hostname |
+| - | `DB_PORT` | number | Varies | Database port |
+| - | `DB_USER` | string | - | Database username |
+| - | `DB_PASSWORD` | string | - | Database password |
+| - | `DB_NAME` | string | - | Database name or SQLite file path |
+| `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
+| `--port` | `PORT` | number | `8080` | HTTP server port |
+| `--readonly` | `READONLY` | boolean | `false` | Restrict to read-only operations |
+| `--max-rows` | `MAX_ROWS` | number | - | Limit SELECT query results |
+| `--demo` | - | boolean | `false` | Use sample employee database |
+| `--id` | `ID` | string | - | Instance identifier for tool names |
+| `--config` | - | string | `./dbhub.toml` | Path to TOML config file |
+| `--ssh-host` | `SSH_HOST` | string | - | SSH server hostname |
+| `--ssh-port` | `SSH_PORT` | number | `22` | SSH server port |
+| `--ssh-user` | `SSH_USER` | string | - | SSH username |
+| `--ssh-password` | `SSH_PASSWORD` | string | - | SSH password |
+| `--ssh-key` | `SSH_KEY` | string | - | Path to SSH private key |
+| `--ssh-passphrase` | `SSH_PASSPHRASE` | string | - | SSH key passphrase |
+
+<Note>
+*Required unless using `--demo` or `--config`
+</Note>

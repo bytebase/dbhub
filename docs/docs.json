@@ -31,27 +31,10 @@
         ]
       },
       {
-        "group": "Database Support",
-        "pages": [
-          "databases/overview",
-          "databases/postgresql",
-          "databases/mysql",
-          "databases/mariadb",
-          "databases/sqlserver",
-          "databases/sqlite"
-        ]
-      },
-      {
         "group": "Configuration",
         "pages": [
-          "config/dsn",
-          "config/multi-database",
-          "config/environment",
-          "config/ssl",
-          "features/ssh-tunnel",
-          "features/readonly-mode",
-          "features/row-limiting",
-          "features/multi-instance"
+          "config/startup-options",
+          "config/multi-database"
         ]
       }
     ]

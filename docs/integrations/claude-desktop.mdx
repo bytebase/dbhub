@@ -1,15 +1,6 @@
 ---
 title: "Claude Desktop"
-description: "Connect DBHub to Claude Desktop for AI-powered database queries"
 ---
-
-## Overview
-
-Claude Desktop can connect to DBHub via the Model Context Protocol (MCP) to interact with your databases through natural language.
-
-## Configuration
-
-Add DBHub to your Claude Desktop configuration file:
 
 <Tabs>
   <Tab title="MacOS/Linux">
@@ -75,26 +66,8 @@ For testing, you can use the built-in demo database:
 }
 ```
 
-## Using DBHub in Claude Desktop
-
-After configuration:
-
-1. Restart Claude Desktop
-2. Look for the 🔌 icon indicating MCP servers are connected
-3. Ask questions like:
-   - "Show me all tables in my database"
-   - "What are the top 10 customers by revenue?"
-   - "Explain the schema of the users table"
-
 ## Troubleshooting
-
-### DBHub not connecting
 
 - Verify your DSN connection string is correct
 - Check that the database is accessible from your machine
 - Review Claude Desktop logs: `~/Library/Logs/Claude/mcp*.log` (MacOS)
-
-### Permission errors
-
-- Ensure your database user has appropriate permissions
-- Consider using `--readonly` flag for safer queries
