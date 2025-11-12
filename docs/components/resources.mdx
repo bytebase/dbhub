@@ -1,0 +1,131 @@
+---
+title: "Resources"
+---
+
+MCP Resources provide read-only access to database metadata and structure. These resources allow clients to explore database schemas, tables, indexes, and stored procedures.
+
+## Supported Resources
+
+| Resource Name               | URI Format                                             | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
+| --------------------------- | ------------------------------------------------------ | :--------: | :---: | :-----: | :--------: | :----: |
+| schemas                     | `db://schemas`                                         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
+| tables_in_schema            | `db://schemas/{schemaName}/tables`                     |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
+| table_structure_in_schema   | `db://schemas/{schemaName}/tables/{tableName}`         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
+| indexes_in_table            | `db://schemas/{schemaName}/tables/{tableName}/indexes` |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
+| procedures_in_schema        | `db://schemas/{schemaName}/procedures`                 |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
+| procedure_details_in_schema | `db://schemas/{schemaName}/procedures/{procedureName}` |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
+
+## Usage
+
+### List Schemas
+
+Get all schemas/databases in your database instance.
+
+```
+db://schemas
+```
+
+**Example Response:**
+```
+- public
+- information_schema
+- pg_catalog
+```
+
+### List Tables in Schema
+
+Get all tables within a specific schema.
+
+```
+db://schemas/public/tables
+```
+
+**Example Response:**
+```
+- users
+- orders
+- products
+- categories
+```
+
+### Get Table Structure
+
+Get detailed structure information for a specific table, including columns, data types, and constraints.
+
+```
+db://schemas/public/tables/users
+```
+
+**Example Response:**
+```
+Table: users
+Columns:
+  - id (integer, PRIMARY KEY, NOT NULL)
+  - name (varchar(255), NOT NULL)
+  - email (varchar(255), UNIQUE, NOT NULL)
+  - created_at (timestamp, DEFAULT CURRENT_TIMESTAMP)
+  - updated_at (timestamp)
+```
+
+### Get Table Indexes
+
+Get all indexes defined on a specific table.
+
+```
+db://schemas/public/tables/users/indexes
+```
+
+**Example Response:**
+```
+Indexes on table: users
+  - users_pkey (PRIMARY KEY): id
+  - users_email_idx (UNIQUE): email
+  - users_created_at_idx: created_at
+```
+
+### List Stored Procedures
+
+Get all stored procedures in a schema.
+
+```
+db://schemas/public/procedures
+```
+
+**Example Response:**
+```
+- update_user_timestamp
+- calculate_order_total
+- get_user_statistics
+```
+
+<Note>
+SQLite does not support stored procedures, so procedure-related resources are not available for SQLite databases.
+</Note>
+
+### Get Procedure Details
+
+Get detailed information about a specific stored procedure, including parameters and definition.
+
+```
+db://schemas/public/procedures/update_user_timestamp
+```
+
+**Example Response:**
+```
+Procedure: update_user_timestamp
+Parameters:
+  - user_id (integer, IN)
+  - new_timestamp (timestamp, IN)
+Returns: void
+Language: plpgsql
+Definition:
+  BEGIN
+    UPDATE users SET updated_at = new_timestamp WHERE id = user_id;
+  END;
+```
+
+## Multi-Database Usage
+
+In [multi-database configuration](/config/multi-database), resources use the default database (the first source defined in your TOML configuration).
+
+To explore a different database, configure it as the first source or use the appropriate MCP client features to switch contexts.

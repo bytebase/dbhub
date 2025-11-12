@@ -4,7 +4,9 @@
 <p align="center">
 <a href="https://dbhub.ai/" target="_blank">
 <picture>
-  <img src="https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/logo-full.webp" width="75%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-dark.svg" width="75%">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-light.svg" width="75%">
+  <img src="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-light.svg" width="75%" alt="DBHub Logo">
 </picture>
 </a>
 </p>
@@ -34,31 +36,13 @@ DBHub is a Universal Database MCP Server implementing the Model Context Protocol
       MCP Clients           MCP Server             Databases
 ```
 
-## Supported Matrix
+## MCP Components
 
-### Database Resources
+DBHub implements MCP Resources, Tools, and Prompts for database operations:
 
-| Resource Name               | URI Format                                             | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
-| --------------------------- | ------------------------------------------------------ | :--------: | :---: | :-----: | :--------: | :----: |
-| schemas                     | `db://schemas`                                         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| tables_in_schema            | `db://schemas/{schemaName}/tables`                     |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| table_structure_in_schema   | `db://schemas/{schemaName}/tables/{tableName}`         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| indexes_in_table            | `db://schemas/{schemaName}/tables/{tableName}/indexes` |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| procedures_in_schema        | `db://schemas/{schemaName}/procedures`                 |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
-| procedure_details_in_schema | `db://schemas/{schemaName}/procedures/{procedureName}` |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
-
-### Database Tools
-
-| Tool        | Command Name  | Description                                                         | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
-| ----------- | ------------- | ------------------------------------------------------------------- | :--------: | :---: | :-----: | :--------: | ------ |
-| Execute SQL | `execute_sql` | Execute single or multiple SQL statements (separated by semicolons) |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |
-
-### Prompt Capabilities
-
-| Prompt              | Command Name   | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
-| ------------------- | -------------- | :--------: | :---: | :-----: | :--------: | ------ |
-| Generate SQL        | `generate_sql` |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |
-| Explain DB Elements | `explain_db`   |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |
+- **[Resources](https://dbhub.ai/components/resources)**: Database schema exploration (schemas, tables, indexes, procedures)
+- **[Tools](https://dbhub.ai/components/tools)**: SQL execution with transaction support
+- **[Prompts](https://dbhub.ai/components/prompts)**: AI-assisted SQL generation and database explanation
 
 ## Installation
 

@@ -1,5 +1,5 @@
 ---
-title: "Startup Options"
+title: "Server Options"
 ---
 
 ## Database Connection
@@ -120,26 +120,25 @@ title: "Startup Options"
 ### readonly
 
 <ParamField path="--readonly" type="boolean" env="READONLY" default="false">
-  Restrict SQL execution to read-only operations. Only [allowed SQL keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are permitted.
-
-  Recommended for production databases to prevent accidental modifications.
+  Restrict SQL execution to read-only operations.
 
   ```bash
   npx @bytebase/dbhub --readonly --dsn "postgres://user:password@localhost:5432/mydb"
   ```
+
+  See [Read-Only Mode](/components/tools#read-only-mode) for details on allowed operations.
 </ParamField>
 
 ### max-rows
 
 <ParamField path="--max-rows" type="number" env="MAX_ROWS">
-  Limit the number of rows returned from SELECT queries to prevent accidentally retrieving too much data.
-
-  - Only applied to SELECT statements, not INSERT/UPDATE/DELETE
-  - If your query has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
+  Limit the number of rows returned from SELECT queries.
 
   ```bash
   npx @bytebase/dbhub --max-rows 1000 --dsn "..."
   ```
+
+  See [Row Limiting](/components/tools#row-limiting) for details on how limits are applied.
 </ParamField>
 
 ## General

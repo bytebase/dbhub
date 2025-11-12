@@ -1,0 +1,55 @@
+---
+title: "Debug"
+---
+
+## MCP Inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a web-based debugging tool for testing and inspecting MCP servers. It's useful for:
+
+- Testing DBHub server functionality before integrating with AI tools
+- Debugging connection issues
+- Exploring available resources and tools
+- Verifying SQL query execution
+
+Start DBHub with HTTP transport:
+
+```bash
+# Start DBHub with HTTP transport
+npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/mydb"
+
+# Start the MCP Inspector in another terminal
+npx @modelcontextprotocol/inspector
+```
+
+The inspector will open in your browser where you can connect to `http://localhost:8080/mcp` and test all available tools and resources.
+
+<img src="/images/mcp-inspector.webp" alt="MCP Inspector with DBHub" />
+
+## Troubleshooting
+
+### Connection Issues
+
+If you can't connect to DBHub:
+
+1. Verify DBHub is running with HTTP transport (`--transport http`)
+2. Check the port matches (default: 8080)
+3. Ensure no firewall is blocking the connection
+4. Test the endpoint directly: `curl http://localhost:8080/mcp`
+
+### Database Connection Errors
+
+If DBHub connects but database queries fail:
+
+1. Verify your DSN connection string is correct
+2. Test the database connection with a native client
+3. Check database user permissions
+4. Review DBHub logs for specific error messages
+
+### Logs
+
+Enable verbose logging to troubleshoot issues:
+
+```bash
+# Set log level to debug
+npx @bytebase/dbhub --transport http --port 8080 --dsn "your-dsn" --log-level debug
+```

@@ -1,0 +1,142 @@
+---
+title: "Tools"
+---
+
+MCP Tools enable executable operations on the database. DBHub provides SQL execution capabilities with support for transactions and multiple statements.
+
+## Supported Tools
+
+| Tool        | Command Name  | Description                                                         | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
+| ----------- | ------------- | ------------------------------------------------------------------- | :--------: | :---: | :-----: | :--------: | ------ |
+| Execute SQL | `execute_sql` | Execute single or multiple SQL statements (separated by semicolons) |     ✅     |  ✅   |   ✅    |     ✅     | ✅     |
+
+## Execute SQL
+
+Execute SQL queries and statements on your database.
+
+### Features
+
+- **Single statements**: Execute a single SQL query or command
+- **Multiple statements**: Separate multiple statements with semicolons (`;`)
+- **Transactions**: Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution
+- **Read-only mode**: When enabled with `--readonly` flag, only SELECT and read-only operations are allowed
+- **Row limiting**: Configure `--max-rows` to limit SELECT query results
+
+### Single Query
+
+Execute a single SELECT, INSERT, UPDATE, or DELETE statement.
+
+<CodeGroup>
+```sql SELECT
+SELECT * FROM users WHERE status = 'active' LIMIT 10;
+```
+
+```sql INSERT
+INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+```
+
+```sql UPDATE
+UPDATE users SET last_login = NOW() WHERE id = 123;
+```
+
+```sql DELETE
+DELETE FROM sessions WHERE expires_at < NOW();
+```
+</CodeGroup>
+
+### Multiple Statements
+
+Execute multiple SQL statements in sequence by separating them with semicolons.
+
+```sql
+INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com');
+INSERT INTO users (name, email) VALUES ('Charlie', 'charlie@example.com');
+```
+
+<Note>
+Each statement is executed sequentially. If one statement fails, subsequent statements may not be executed depending on the database error handling.
+</Note>
+
+### Transactions
+
+Wrap multiple operations in a transaction to ensure atomicity. Use `BEGIN`/`COMMIT` for successful transactions or `ROLLBACK` to undo changes.
+
+<CodeGroup>
+```sql Successful Transaction
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+UPDATE accounts SET balance = balance + 100 WHERE id = 2;
+COMMIT;
+```
+
+```sql Rollback Transaction
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 1;
+-- Something went wrong, undo changes
+ROLLBACK;
+```
+</CodeGroup>
+
+### DDL Operations
+
+Create, alter, or drop database objects.
+
+<CodeGroup>
+```sql CREATE TABLE
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  price DECIMAL(10, 2) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+```sql ALTER TABLE
+ALTER TABLE products ADD COLUMN category VARCHAR(100);
+```
+
+```sql CREATE INDEX
+CREATE INDEX idx_products_category ON products(category);
+```
+
+```sql DROP TABLE
+DROP TABLE IF EXISTS temp_data;
+```
+</CodeGroup>
+
+<Warning>
+DDL operations are not allowed in [read-only mode](/config/server-options#readonly). Use read-only mode when connecting to production databases to prevent accidental schema changes.
+</Warning>
+
+## Read-Only Mode
+
+Enable read-only mode to restrict SQL execution to safe, read-only operations:
+
+```bash
+npx @bytebase/dbhub --readonly --dsn "postgres://user:pass@localhost:5432/mydb"
+```
+
+In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are permitted, including:
+
+- `SELECT` queries
+- `SHOW` commands
+- `DESCRIBE` commands
+- `EXPLAIN` queries
+- Other read-only operations
+
+<Tip>
+Use read-only mode when connecting to production databases to prevent accidental data modifications or schema changes.
+</Tip>
+
+## Row Limiting
+
+Limit the number of rows returned from SELECT queries to prevent accidentally retrieving too much data:
+
+```bash
+npx @bytebase/dbhub --max-rows 1000 --dsn "..."
+```
+
+- Only applied to SELECT statements, not INSERT/UPDATE/DELETE
+- If your query already has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
+- Can be configured per-database in [multi-database TOML configuration](/config/multi-database)
