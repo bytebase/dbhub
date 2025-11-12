@@ -308,6 +308,23 @@ ssh_port = 99999
       expect(dsn).toBe('sqlserver://sa:StrongPass123@localhost:1433/master');
     });
 
+    it('should build SQL Server DSN with instanceName', () => {
+      const source: SourceConfig = {
+        id: 'sqlserver_instance',
+        type: 'sqlserver',
+        host: 'localhost',
+        port: 1433,
+        database: 'testdb',
+        user: 'sa',
+        password: 'Pass123!',
+        instanceName: 'ENV1'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://sa:Pass123!@localhost:1433/testdb?instanceName=ENV1');
+    });
+
     it('should build SQLite DSN from database path', () => {
       const source: SourceConfig = {
         id: 'test',

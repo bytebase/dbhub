@@ -45,6 +45,7 @@ database = "analytics"
 user = "sa"
 password = "YourStrong@Passw0rd"
 max_rows = 2000
+# instanceName = "optional_instance_name"
 
 ## Example 5: SQLite local file
 [[sources]]
@@ -74,6 +75,7 @@ dsn = "sqlite:///:memory:"
 #     - database: Database name or file path (for sqlite)
 #     - user: Database username (not needed for sqlite)
 #     - password: Database password (not needed for sqlite)
+#     - instanceName: SQL Server named instance (optional, for sqlserver only)
 #
 # Execution options (optional):
 #   - readonly: Limit to read-only operations (default: false)

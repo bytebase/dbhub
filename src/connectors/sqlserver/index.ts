@@ -47,6 +47,8 @@ export class SQLServerDSNParser implements DSNParser {
           options.authentication = value;
         } else if (key === "sslmode") {
           options.sslmode = value;
+        } else if (key === "instanceName") {
+          options.instanceName = value;
         }
       });
       
@@ -74,6 +76,7 @@ export class SQLServerDSNParser implements DSNParser {
           trustServerCertificate: options.trustServerCertificate ?? false,
           connectTimeout: options.connectTimeout ?? 15000,
           requestTimeout: options.requestTimeout ?? 15000,
+          instanceName: options.instanceName, // Add named instance support
         },
       };
       
@@ -108,7 +111,7 @@ export class SQLServerDSNParser implements DSNParser {
   }
 
   getSampleDSN(): string {
-    return "sqlserver://username:password@localhost:1433/database?sslmode=disable";
+    return "sqlserver://username:password@localhost:1433/database?sslmode=disable&instanceName=INSTANCE1";
   }
 
   isValidDSN(dsn: string): boolean {

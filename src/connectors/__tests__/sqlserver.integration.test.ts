@@ -156,11 +156,40 @@ describe('SQL Server Connector Integration Tests', () => {
   }
   sqlServerTest.createErrorHandlingTests();
 
+  describe('Named Instance Configuration', () => {
+    it('should parse instanceName from query parameter', async () => {
+      const parser = new SQLServerConnector().dsnParser;
+      const config = await parser.parse('sqlserver://user:pass@localhost:1433/testdb?instanceName=ENV1');
+
+      expect(config.options?.instanceName).toBe('ENV1');
+      expect(config.server).toBe('localhost');
+      expect(config.port).toBe(1433);
+      expect(config.database).toBe('testdb');
+    });
+
+    it('should parse instanceName with other query parameters', async () => {
+      const parser = new SQLServerConnector().dsnParser;
+      const config = await parser.parse('sqlserver://user:pass@localhost:1433/testdb?instanceName=ENV2&sslmode=disable');
+
+      expect(config.options?.instanceName).toBe('ENV2');
+      expect(config.options?.encrypt).toBe(false);
+    });
+
+    it('should work without instanceName (backward compatibility)', async () => {
+      const parser = new SQLServerConnector().dsnParser;
+      const config = await parser.parse('sqlserver://user:pass@localhost:1433/testdb');
+
+      expect(config.options?.instanceName).toBeUndefined();
+      expect(config.server).toBe('localhost');
+      expect(config.port).toBe(1433);
+    });
+  });
+
   describe('SQL Server SSL/TLS Configuration', () => {
     it('should parse sslmode=disable correctly', async () => {
       const parser = new SQLServerConnector().dsnParser;
       const config = await parser.parse('sqlserver://user:pass@localhost:1433/db?sslmode=disable');
-      
+
       expect(config.options?.encrypt).toBe(false);
       expect(config.options?.trustServerCertificate).toBe(false);
     });
