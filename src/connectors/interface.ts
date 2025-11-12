@@ -42,6 +42,20 @@ export interface StoredProcedure {
 export interface ExecuteOptions {
   /** Maximum number of rows to return (applied via database-native LIMIT) */
   maxRows?: number;
+  /** Restrict to read-only SQL operations */
+  readonly?: boolean;
+}
+
+/**
+ * Configuration options for database connections
+ * Different databases may use different subset of these options
+ */
+export interface ConnectorConfig {
+  /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  connectionTimeoutSeconds?: number;
+  /** Request/query timeout in seconds (SQL Server only) */
+  requestTimeoutSeconds?: number;
+  // Future database-specific options can be added here as optional fields
 }
 
 /**
@@ -51,13 +65,15 @@ export interface ExecuteOptions {
 export interface DSNParser {
   /**
    * Parse a connection string into connector-specific configuration
+   * @param dsn - Database connection string
+   * @param config - Optional database-specific configuration options
    * Example DSN formats:
    * - PostgreSQL: "postgres://user:password@localhost:5432/dbname?sslmode=disable"
    * - MariaDB: "mariadb://user:password@localhost:3306/dbname"
    * - MySQL: "mysql://user:password@localhost:3306/dbname"
    * - SQLite: "sqlite:///path/to/database.db" or "sqlite:///:memory:"
    */
-  parse(dsn: string): Promise<any>;
+  parse(dsn: string, config?: ConnectorConfig): Promise<any>;
 
   /**
    * Generate a sample DSN string for this connector type
@@ -83,8 +99,8 @@ export interface Connector {
   /** Create a new instance of this connector (for multi-source support) - optional, only implemented for tested connectors */
   clone?(): Connector;
 
-  /** Connect to the database using DSN, with optional init script */
-  connect(dsn: string, initScript?: string): Promise<void>;
+  /** Connect to the database using DSN, with optional init script and database-specific configuration */
+  connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void>;
 
   /** Close the connection */
   disconnect(): Promise<void>;

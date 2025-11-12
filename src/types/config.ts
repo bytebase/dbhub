@@ -44,6 +44,8 @@ export interface SourceConfig
     ExecutionOptions {
   id: string;
   dsn?: string;
+  connection_timeout?: number; // Connection timeout in seconds
+  request_timeout?: number; // Request/query timeout in seconds (SQL Server only)
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   TableIndex,
   StoredProcedure,
   ExecuteOptions,
+  ConnectorConfig,
 } from "../interface.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -24,7 +25,8 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
  * - Any other value: SSL with certificate verification
  */
 class PostgresDSNParser implements DSNParser {
-  async parse(dsn: string): Promise<pg.PoolConfig> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
+    const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -61,6 +63,12 @@ class PostgresDSNParser implements DSNParser {
         // Add other parameters as needed
       });
 
+      // Apply connection timeout if specified
+      if (connectionTimeoutSeconds !== undefined) {
+        // pg library expects timeout in milliseconds
+        config.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
+      }
+
       return config;
     } catch (error) {
       throw new Error(
@@ -92,10 +100,10 @@ export class PostgresConnector implements Connector {
 
   private pool: pg.Pool | null = null;
 
-  async connect(dsn: string): Promise<void> {
+  async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
-      const config = await this.dsnParser.parse(dsn);
-      this.pool = new Pool(config);
+      const poolConfig = await this.dsnParser.parse(dsn, config);
+      this.pool = new Pool(poolConfig);
 
       // Test the connection
       const client = await this.pool.connect();

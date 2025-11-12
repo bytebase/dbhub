@@ -233,6 +233,134 @@ ssh_port = 99999
 
       expect(() => loadTomlConfig()).toThrow('Configuration file specified by --config flag not found');
     });
+
+    describe('connection_timeout validation', () => {
+      it('should accept valid connection_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+connection_timeout = 60
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].connection_timeout).toBe(60);
+      });
+
+      it('should throw error for negative connection_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+connection_timeout = -30
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid connection_timeout');
+      });
+
+      it('should throw error for zero connection_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+connection_timeout = 0
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid connection_timeout');
+      });
+
+      it('should accept large connection_timeout values', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+connection_timeout = 300
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].connection_timeout).toBe(300);
+      });
+
+      it('should work without connection_timeout (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].connection_timeout).toBeUndefined();
+      });
+    });
+
+    describe('request_timeout validation', () => {
+      it('should accept valid request_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb"
+request_timeout = 120
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].request_timeout).toBe(120);
+      });
+
+      it('should throw error for negative request_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb"
+request_timeout = -60
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid request_timeout');
+      });
+
+      it('should throw error for zero request_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb"
+request_timeout = 0
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid request_timeout');
+      });
+
+      it('should accept both connection_timeout and request_timeout', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb"
+connection_timeout = 30
+request_timeout = 120
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].connection_timeout).toBe(30);
+        expect(result?.sources[0].request_timeout).toBe(120);
+      });
+    });
   });
 
   describe('buildDSNFromSource', () => {

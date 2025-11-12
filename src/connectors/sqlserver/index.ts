@@ -9,6 +9,7 @@ import {
   TableIndex,
   StoredProcedure,
   ExecuteOptions,
+  ConnectorConfig,
 } from "../interface.js";
 import { DefaultAzureCredential } from "@azure/identity";
 import { SafeURL } from "../../utils/safe-url.js";
@@ -20,7 +21,9 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
  * Expected format: mssql://username:password@host:port/database
  */
 export class SQLServerDSNParser implements DSNParser {
-  async parse(dsn: string): Promise<sql.config> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<sql.config> {
+    const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
+    const requestTimeoutSeconds = config?.requestTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -39,11 +42,7 @@ export class SQLServerDSNParser implements DSNParser {
       
       // Process query parameters
       url.forEachSearchParam((value, key) => {
-        if (key === "connectTimeout") {
-          options.connectTimeout = parseInt(value, 10);
-        } else if (key === "requestTimeout") {
-          options.requestTimeout = parseInt(value, 10);
-        } else if (key === "authentication") {
+        if (key === "authentication") {
           options.authentication = value;
         } else if (key === "sslmode") {
           options.sslmode = value;
@@ -74,8 +73,12 @@ export class SQLServerDSNParser implements DSNParser {
         options: {
           encrypt: options.encrypt ?? false, // Default to unencrypted for development
           trustServerCertificate: options.trustServerCertificate ?? false,
-          connectTimeout: options.connectTimeout ?? 15000,
-          requestTimeout: options.requestTimeout ?? 15000,
+          ...(connectionTimeoutSeconds !== undefined && {
+            connectTimeout: connectionTimeoutSeconds * 1000
+          }),
+          ...(requestTimeoutSeconds !== undefined && {
+            requestTimeout: requestTimeoutSeconds * 1000
+          }),
           instanceName: options.instanceName, // Add named instance support
         },
       };
@@ -134,9 +137,9 @@ export class SQLServerConnector implements Connector {
   private connection?: sql.ConnectionPool;
   private config?: sql.config;
 
-  async connect(dsn: string): Promise<void> {
+  async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
-      this.config = await this.dsnParser.parse(dsn);
+      this.config = await this.dsnParser.parse(dsn, config);
 
       if (!this.config.options) {
         this.config.options = {};
