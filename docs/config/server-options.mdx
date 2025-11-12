@@ -36,6 +36,9 @@ title: "Server Options"
       # Format: sqlserver://[user]:[password]@[host]:[port]/[database]?[options]
       sqlserver://sa:YourPassword123@localhost:1433/mydb
 
+      # Named instance (e.g., ENV1, ENV2, ENV3)
+      sqlserver://sa:YourPassword123@localhost:1433/mydb?instanceName=ENV1
+
       # Azure AD authentication
       sqlserver://username@localhost:1433/mydb?authentication=azure-active-directory-access-token
       ```
