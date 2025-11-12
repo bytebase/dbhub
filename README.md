@@ -105,89 +105,10 @@ See [Multi-Database Configuration](https://dbhub.ai/config/multi-database) for c
 
 ### Testing
 
-The project uses Vitest for comprehensive unit and integration testing:
-
-- **Run all tests**: `pnpm test`
-- **Run tests in watch mode**: `pnpm test:watch`
-- **Run integration tests**: `pnpm test:integration`
-
-#### Integration Tests
-
-DBHub includes comprehensive integration tests for all supported database connectors using [Testcontainers](https://testcontainers.com/). These tests run against real database instances in Docker containers, ensuring full compatibility and feature coverage.
-
-##### Prerequisites
-
-- **Docker**: Ensure Docker is installed and running on your machine
-- **Docker Resources**: Allocate sufficient memory (recommended: 4GB+) for multiple database containers
-- **Network Access**: Ability to pull Docker images from registries
-
-##### Running Integration Tests
-
-**Note**: This command runs all integration tests in parallel, which may take 5-15 minutes depending on your system resources and network speed.
-
-```bash
-# Run all database integration tests
-pnpm test:integration
-```
-
-```bash
-# Run only PostgreSQL integration tests
-pnpm test src/connectors/__tests__/postgres.integration.test.ts
-# Run only MySQL integration tests
-pnpm test src/connectors/__tests__/mysql.integration.test.ts
-# Run only MariaDB integration tests
-pnpm test src/connectors/__tests__/mariadb.integration.test.ts
-# Run only SQL Server integration tests
-pnpm test src/connectors/__tests__/sqlserver.integration.test.ts
-# Run only SQLite integration tests
-pnpm test src/connectors/__tests__/sqlite.integration.test.ts
-# Run JSON RPC integration tests
-pnpm test src/__tests__/json-rpc-integration.test.ts
-```
-
-All integration tests follow these patterns:
-
-1. **Container Lifecycle**: Start database container → Connect → Setup test data → Run tests → Cleanup
-2. **Shared Test Utilities**: Common test patterns implemented in `IntegrationTestBase` class
-3. **Database-Specific Features**: Each database includes tests for unique features and capabilities
-4. **Error Handling**: Comprehensive testing of connection errors, invalid SQL, and edge cases
-
-##### Troubleshooting Integration Tests
-
-**Container Startup Issues:**
-
-```bash
-# Check Docker is running
-docker ps
-
-# Check available memory
-docker system df
-
-# Pull images manually if needed
-docker pull postgres:15-alpine
-docker pull mysql:8.0
-docker pull mariadb:10.11
-docker pull mcr.microsoft.com/mssql/server:2019-latest
-```
-
-**SQL Server Timeout Issues:**
-
-- SQL Server containers require significant startup time (3-5 minutes)
-- Ensure Docker has sufficient memory allocated (4GB+ recommended)
-- Consider running SQL Server tests separately if experiencing timeouts
-
-**Network/Resource Issues:**
-
-```bash
-# Run tests with verbose output
-pnpm test:integration --reporter=verbose
-
-# Run single database test to isolate issues
-pnpm test:integration -- --testNamePattern="PostgreSQL"
-
-# Check Docker container logs if tests fail
-docker logs <container_id>
-```
+See [TESTING.md](TESTING.md) for comprehensive testing documentation, including:
+- Test commands and workflows
+- Integration testing with Docker/Testcontainers
+- Prerequisites and troubleshooting guides
 
 ### Debug with [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 
