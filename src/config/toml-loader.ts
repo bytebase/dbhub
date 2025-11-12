@@ -270,7 +270,13 @@ export function buildDSNFromSource(source: SourceConfig): string {
   const encodedPassword = encodeURIComponent(source.password);
   const encodedDatabase = encodeURIComponent(source.database);
 
-  // Build DSN
-  const dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}/${encodedDatabase}`;
+  // Build base DSN
+  let dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}/${encodedDatabase}`;
+
+  // Add SQL Server specific query parameters
+  if (source.type === "sqlserver" && source.instanceName) {
+    dsn += `?instanceName=${encodeURIComponent(source.instanceName)}`;
+  }
+
   return dsn;
 }

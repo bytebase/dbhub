@@ -24,6 +24,7 @@ export interface ConnectionParams {
   database?: string;
   user?: string;
   password?: string;
+  instanceName?: string; // SQL Server named instance support
 }
 
 /**
