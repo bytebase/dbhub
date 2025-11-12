@@ -105,33 +105,11 @@ See [Multi-Database Configuration](https://dbhub.ai/config/multi-database) for c
 
 ### Testing
 
-See [TESTING.md](TESTING.md) for comprehensive testing documentation, including:
-- Test commands and workflows
-- Integration testing with Docker/Testcontainers
-- Prerequisites and troubleshooting guides
+See [TESTING.md](.claude/skills/testing/SKILL.md).
 
-### Debug with [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+### Debug 
 
-![mcp-inspector](https://raw.githubusercontent.com/bytebase/dbhub/main/resources/images/mcp-inspector.webp)
-
-#### stdio
-
-```bash
-# PostgreSQL example
-TRANSPORT=stdio DSN="postgres://user:password@localhost:5432/dbname?sslmode=disable" npx @modelcontextprotocol/inspector node /path/to/dbhub/dist/index.js
-```
-
-#### HTTP
-
-```bash
-# Start DBHub with HTTP transport
-pnpm dev --transport=http --port=8080
-
-# Start the MCP Inspector in another terminal
-npx @modelcontextprotocol/inspector
-```
-
-Connect to the DBHub server `/mcp` endpoint
+See [Debug](https://dbhub.ai/config/debug).
 
 ## Contributors
 
