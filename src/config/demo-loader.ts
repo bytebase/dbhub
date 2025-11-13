@@ -75,3 +75,18 @@ export function getSqliteInMemorySetupSql(): string {
 
   return sql;
 }
+
+/**
+ * Create a SourceConfig for demo mode
+ * This allows demo mode to work with the multi-source architecture
+ */
+export function createDemoSourceConfig(): import("../types/config.js").SourceConfig {
+  return {
+    id: "demo",
+    type: "sqlite",
+    dsn: getInMemorySqliteDSN(),
+    database: "Employee Demo Database",
+    // Demo mode is not read-only by default (unless --readonly is specified)
+    // The readonly flag from command line will be applied separately
+  };
+}

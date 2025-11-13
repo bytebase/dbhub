@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
 import { resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId, resolveSourceConfigs } from "./config/env.js";
-import { getSqliteInMemorySetupSql } from "./config/demo-loader.js";
+import { getSqliteInMemorySetupSql, createDemoSourceConfig } from "./config/demo-loader.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
@@ -114,20 +114,20 @@ See documentation for more details on configuring database connections.
       console.error(`ID: ${idData.id} (from ${idData.source})`);
     }
 
-    // Check if demo mode (legacy single source with empty ID and demo flag)
-    const isDemo = sources.length === 1 && sources[0].id === "" && isDemoMode();
+    // Check if demo mode
+    const isDemo = isDemoMode();
 
     // Connect to database(s)
     if (isDemo) {
-      // Demo mode: use legacy single connection with init script
-      const initScript = getSqliteInMemorySetupSql();
-      await connectorManager.connectWithDSN(sources[0].dsn!, initScript);
-    } else if (sources.length === 1 && sources[0].id === "") {
-      // Legacy single DSN mode: use backward compatible connection
-      console.error(`Connecting with DSN: ${redactDSN(sources[0].dsn!)}`);
-      await connectorManager.connectWithDSN(sources[0].dsn!);
+      // Demo mode: create a proper SourceConfig with init script
+      const demoSource = createDemoSourceConfig();
+      demoSource.init_script = getSqliteInMemorySetupSql();
+
+      console.error(`Connecting to demo database...`);
+      console.error(`  - ${demoSource.id}: ${redactDSN(demoSource.dsn!)}`);
+      await connectorManager.connectWithSources([demoSource]);
     } else {
-      // Multi-source TOML mode: use new connection method
+      // All modes (single DSN, multi-source TOML) use the same connection method
       console.error(`Connecting to ${sources.length} database source(s)...`);
       for (const source of sources) {
         const dsn = source.dsn || buildDSNFromSource(source);

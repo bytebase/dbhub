@@ -1,6 +1,5 @@
 import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions, ConnectorConfig } from "./interface.js";
 import { SSHTunnel } from "../utils/ssh-tunnel.js";
-import { resolveSSHConfig, resolveMaxRows } from "../config/env.js";
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
@@ -20,93 +19,10 @@ export class ConnectorManager {
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
 
-  // Legacy single-connector support (for backward compatibility)
-  private activeConnector: Connector | null = null;
-  private connected = false;
-  private sshTunnel: SSHTunnel | null = null;
-  private originalDSN: string | null = null;
-  private maxRows: number | null = null;
-
   constructor() {
     if (!managerInstance) {
       managerInstance = this;
     }
-    
-    // Initialize maxRows from command line arguments
-    const maxRowsData = resolveMaxRows();
-    if (maxRowsData) {
-      this.maxRows = maxRowsData.maxRows;
-      console.error(`Max rows limit: ${this.maxRows} (from ${maxRowsData.source})`);
-    }
-  }
-
-  /**
-   * Initialize and connect to the database using a DSN
-   */
-  async connectWithDSN(dsn: string, initScript?: string): Promise<void> {
-    // Store original DSN for reference
-    this.originalDSN = dsn;
-    
-    // Check if SSH tunnel is needed
-    const sshConfig = resolveSSHConfig();
-    let actualDSN = dsn;
-    
-    if (sshConfig) {
-      console.error(`SSH tunnel configuration loaded from ${sshConfig.source}`);
-      
-      // Parse DSN to get database host and port
-      const url = new URL(dsn);
-      const targetHost = url.hostname;
-      const targetPort = parseInt(url.port) || this.getDefaultPort(dsn);
-      
-      // Create and establish SSH tunnel
-      this.sshTunnel = new SSHTunnel();
-      const tunnelInfo = await this.sshTunnel.establish(sshConfig.config, {
-        targetHost,
-        targetPort,
-      });
-      
-      // Update DSN to use local tunnel endpoint
-      url.hostname = '127.0.0.1';
-      url.port = tunnelInfo.localPort.toString();
-      actualDSN = url.toString();
-      
-      console.error(`Database connection will use SSH tunnel through localhost:${tunnelInfo.localPort}`);
-    }
-
-    // First try to find a connector that can handle this DSN
-    let connector = ConnectorRegistry.getConnectorForDSN(actualDSN);
-
-    if (!connector) {
-      throw new Error(`No connector found that can handle the DSN: ${actualDSN}`);
-    }
-
-    this.activeConnector = connector;
-
-    // Connect to the database through tunnel if applicable
-    await this.activeConnector.connect(actualDSN, initScript);
-    this.connected = true;
-  }
-
-  /**
-   * Initialize and connect to the database using a specific connector type
-   */
-  async connectWithType(connectorType: ConnectorType, dsn?: string): Promise<void> {
-    // Get the connector from the registry
-    const connector = ConnectorRegistry.getConnector(connectorType);
-
-    if (!connector) {
-      throw new Error(`Connector "${connectorType}" not found`);
-    }
-
-    this.activeConnector = connector;
-
-    // Use provided DSN or get sample DSN
-    const connectionString = dsn || connector.dsnParser.getSampleDSN();
-
-    // Connect to the database
-    await this.activeConnector.connect(connectionString);
-    this.connected = true;
   }
 
   /**
@@ -202,8 +118,8 @@ export class ConnectorManager {
       config.requestTimeoutSeconds = source.request_timeout;
     }
 
-    // Connect to the database with config
-    await connector.connect(actualDSN, undefined, config);
+    // Connect to the database with config and optional init script
+    await connector.connect(actualDSN, source.init_script, config);
 
     // Store connector
     this.connectors.set(sourceId, connector);
@@ -254,20 +170,6 @@ export class ConnectorManager {
     this.executeOptions.clear();
     this.sourceConfigs.clear();
     this.sourceIds = [];
-
-    // Disconnect legacy single connector
-    if (this.activeConnector && this.connected) {
-      await this.activeConnector.disconnect();
-      this.connected = false;
-    }
-
-    // Close legacy SSH tunnel if it exists
-    if (this.sshTunnel) {
-      await this.sshTunnel.close();
-      this.sshTunnel = null;
-    }
-
-    this.originalDSN = null;
   }
 
   /**
@@ -275,36 +177,20 @@ export class ConnectorManager {
    * If sourceId is not provided, returns the default (first) connector
    */
   getConnector(sourceId?: string): Connector {
-    // Multi-source mode
-    if (this.connectors.size > 0) {
-      const id = sourceId || this.sourceIds[0];
-      const connector = this.connectors.get(id);
+    const id = sourceId || this.sourceIds[0];
+    const connector = this.connectors.get(id);
 
-      if (!connector) {
-        if (sourceId) {
-          throw new Error(
-            `Source '${sourceId}' not found. Available sources: ${this.sourceIds.join(", ")}`
-          );
-        } else {
-          throw new Error("No default source found");
-        }
+    if (!connector) {
+      if (sourceId) {
+        throw new Error(
+          `Source '${sourceId}' not found. Available sources: ${this.sourceIds.join(", ")}`
+        );
+      } else {
+        throw new Error("No sources connected. Call connectWithSources() first.");
       }
-
-      return connector;
     }
 
-    // Legacy single-connector mode
-    if (!this.activeConnector) {
-      throw new Error("No active connector. Call connectWithDSN() or connectWithType() first.");
-    }
-    return this.activeConnector;
-  }
-
-  /**
-   * Check if there's an active connection
-   */
-  isConnected(): boolean {
-    return this.connected;
+    return connector;
   }
 
   /**
@@ -338,18 +224,8 @@ export class ConnectorManager {
    * @param sourceId - Optional source ID. If not provided, returns default options
    */
   getExecuteOptions(sourceId?: string): ExecuteOptions {
-    // Multi-source mode
-    if (this.connectors.size > 0) {
-      const id = sourceId || this.sourceIds[0];
-      return this.executeOptions.get(id) || {};
-    }
-
-    // Legacy single-connector mode
-    const options: ExecuteOptions = {};
-    if (this.maxRows !== null) {
-      options.maxRows = this.maxRows;
-    }
-    return options;
+    const id = sourceId || this.sourceIds[0];
+    return this.executeOptions.get(id) || {};
   }
 
   /**

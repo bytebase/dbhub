@@ -482,10 +482,31 @@ export function resolveSourceConfigs(): { sources: SourceConfig[]; source: strin
   // 2. Fallback to single DSN configuration for backward compatibility
   const dsnResult = resolveDSN();
   if (dsnResult) {
+    // Parse DSN to extract database type
+    const dsnUrl = new URL(dsnResult.dsn);
+    const protocol = dsnUrl.protocol.replace(':', '');
+
+    // Map protocol to database type
+    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+    if (protocol === 'postgresql' || protocol === 'postgres') {
+      dbType = 'postgres';
+    } else if (protocol === 'mysql') {
+      dbType = 'mysql';
+    } else if (protocol === 'mariadb') {
+      dbType = 'mariadb';
+    } else if (protocol === 'sqlserver') {
+      dbType = 'sqlserver';
+    } else if (protocol === 'sqlite') {
+      dbType = 'sqlite';
+    } else {
+      throw new Error(`Unsupported database type in DSN: ${protocol}`);
+    }
+
     // Create a single source config from the resolved DSN
-    // Use empty string as ID for backward compatibility (default/unnamed source)
+    // Use "default" as ID so it appears in the API sources list
     const source: SourceConfig = {
-      id: "",
+      id: "default",
+      type: dbType,
       dsn: dsnResult.dsn,
     };
 
