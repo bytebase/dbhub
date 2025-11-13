@@ -95,7 +95,7 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
       sourceConfig.ssh_host = 'example.com';
       // Missing ssh_user
 
-      await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow(/SSH tunnel requires either ssh_password or ssh_key/);
+      await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow(/SSH tunnel requires ssh_user/);
     });
 
     it('should validate SSH authentication method', async () => {

@@ -55,10 +55,17 @@ export class ConnectorManager {
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
     if (source.ssh_host) {
+      // Validate required SSH fields
+      if (!source.ssh_user) {
+        throw new Error(
+          `Source '${sourceId}': SSH tunnel requires ssh_user`
+        );
+      }
+
       const sshConfig: SSHTunnelConfig = {
         host: source.ssh_host,
         port: source.ssh_port || 22,
-        username: source.ssh_user!,
+        username: source.ssh_user,
         password: source.ssh_password,
         privateKey: source.ssh_key,
         passphrase: source.ssh_passphrase,
