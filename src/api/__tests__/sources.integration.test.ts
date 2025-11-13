@@ -104,7 +104,7 @@ describe('Data Sources API Integration Tests', () => {
       expect(sources[2].is_default).toBe(false);
     });
 
-    it('should include all database type for all sources', async () => {
+    it('should include database type for all sources', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
@@ -204,80 +204,6 @@ describe('Data Sources API Integration Tests', () => {
 
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('test_sqlite_main');
-    });
-  });
-
-  describe('Data Source with SSH Configuration', () => {
-    let managerWithSSH: ConnectorManager;
-    let appWithSSH: Application;
-    let serverWithSSH: Server;
-    const SSH_TEST_PORT = 13580;
-    const SSH_BASE_URL = `http://localhost:${SSH_TEST_PORT}`;
-
-    beforeAll(async () => {
-      // Configure source with SSH tunnel (but don't actually connect since we don't have a real SSH server)
-      // We'll just test that the config is stored and exposed correctly
-      const sourcesWithSSH: SourceConfig[] = [
-        {
-          id: 'postgres_with_ssh',
-          type: 'postgres',
-          host: 'internal-db.example.com',
-          port: 5432,
-          database: 'testdb',
-          user: 'testuser',
-          password: 'secret123',
-          readonly: true,
-          max_rows: 1000,
-          ssh_host: 'bastion.example.com',
-          ssh_port: 22,
-          ssh_user: 'deploy',
-          ssh_password: 'ssh_secret',
-        },
-      ];
-
-      // Store the config without actually connecting (since we don't have real servers)
-      // We'll just test the API response format
-      managerWithSSH = new ConnectorManager();
-
-      // For this test, we'll manually populate the sourceConfigs to test the API response
-      // without actually connecting to real databases
-      // This is a bit of a hack but allows us to test the API endpoint behavior
-
-      // Skip actual connection for this test suite
-      // The test will be focused on response format, not actual connectivity
-    });
-
-    afterAll(async () => {
-      if (serverWithSSH) {
-        await new Promise<void>((resolve, reject) => {
-          serverWithSSH.close((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      }
-      if (managerWithSSH) {
-        await managerWithSSH.disconnect();
-      }
-    });
-
-    // Note: This test is commented out because it requires a real database connection
-    // In a real scenario, you'd either use a mock or test container
-    it.skip('should include SSH tunnel configuration without credentials', async () => {
-      const response = await fetch(`${SSH_BASE_URL}/api/sources/postgres_with_ssh`);
-      const source = (await response.json()) as DataSource;
-
-      // Should include SSH tunnel config
-      expect(source.ssh_tunnel).toBeDefined();
-      expect(source.ssh_tunnel?.enabled).toBe(true);
-      expect(source.ssh_tunnel?.ssh_host).toBe('bastion.example.com');
-      expect(source.ssh_tunnel?.ssh_port).toBe(22);
-      expect(source.ssh_tunnel?.ssh_user).toBe('deploy');
-
-      // Should NOT include SSH credentials
-      expect(source).not.toHaveProperty('ssh_password');
-      expect(source).not.toHaveProperty('ssh_key');
-      expect(source).not.toHaveProperty('ssh_passphrase');
     });
   });
 
