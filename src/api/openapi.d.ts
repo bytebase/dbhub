@@ -24,7 +24,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources/{source-id}": {
+    "/api/sources/{sourceId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -170,7 +170,7 @@ export interface operations {
                  * @description Unique identifier of the data source
                  * @example prod_pg
                  */
-                "source-id": string;
+                sourceId: string;
             };
             cookie?: never;
         };

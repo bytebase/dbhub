@@ -395,7 +395,7 @@ export class ConnectorManager {
    * Get all source configurations
    */
   getAllSourceConfigs(): SourceConfig[] {
-    return this.sourceIds.map(id => this.sourceConfigs.get(id)!).filter(Boolean);
+    return this.sourceIds.map(id => this.sourceConfigs.get(id)!);
   }
 
   /**

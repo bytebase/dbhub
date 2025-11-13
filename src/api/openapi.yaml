@@ -51,13 +51,13 @@ paths:
                   summary: No sources configured
                   value: []
 
-  /api/sources/{source-id}:
+  /api/sources/{sourceId}:
     get:
       summary: Get a specific data source
       description: Returns details of a single data source by ID
       operationId: getSource
       parameters:
-        - name: source-id
+        - name: sourceId
           in: path
           required: true
           description: Unique identifier of the data source

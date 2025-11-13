@@ -15,9 +15,15 @@ function transformSourceConfig(
   source: SourceConfig,
   isDefault: boolean
 ): DataSource {
+  // Type is guaranteed to be present for connected sources
+  // It's set during connection either from DSN parsing or explicit config
+  if (!source.type) {
+    throw new Error(`Source ${source.id} is missing required type field`);
+  }
+
   const dataSource: DataSource = {
     id: source.id,
-    type: source.type!,
+    type: source.type,
     is_default: isDefault,
   };
 
@@ -70,7 +76,6 @@ function transformSourceConfig(
 export function listSources(req: Request, res: Response): void {
   try {
     const sourceConfigs = ConnectorManager.getAllSourceConfigs();
-    const sourceIds = ConnectorManager.getAvailableSourceIds();
 
     // Transform configs to API response format
     const sources: DataSource[] = sourceConfigs.map((config, index) => {
@@ -97,17 +102,7 @@ export function getSource(req: Request, res: Response): void {
     const sourceId = req.params.sourceId;
     const sourceIds = ConnectorManager.getAvailableSourceIds();
 
-    // Check if source exists
-    if (!sourceIds.includes(sourceId)) {
-      const errorResponse: ErrorResponse = {
-        error: "Source not found",
-        source_id: sourceId,
-      };
-      res.status(404).json(errorResponse);
-      return;
-    }
-
-    // Get source config
+    // Get source config - will be null if source doesn't exist
     const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
     if (!sourceConfig) {
       const errorResponse: ErrorResponse = {
