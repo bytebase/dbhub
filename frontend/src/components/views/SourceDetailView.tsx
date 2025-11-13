@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
-import type { DataSource } from '../../types/datasource';
+import type { DataSource, DatabaseType } from '../../types/datasource';
+
+const DB_TYPE_DISPLAY_NAMES: Record<DatabaseType, string> = {
+  postgres: 'PostgreSQL',
+  mysql: 'MySQL',
+  mariadb: 'MariaDB',
+  sqlserver: 'SQL Server',
+  sqlite: 'SQLite',
+};
 
 export default function SourceDetailView() {
   const { sourceId } = useParams<{ sourceId: string }>();
@@ -65,7 +73,7 @@ export default function SourceDetailView() {
             {source.id}
           </h1>
           <p className="text-muted-foreground">
-            {source.type.charAt(0).toUpperCase() + source.type.slice(1)} Database
+            {DB_TYPE_DISPLAY_NAMES[source.type]} Database
           </p>
         </div>
 
@@ -93,10 +101,12 @@ export default function SourceDetailView() {
               </div>
             )}
 
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Database</dt>
-              <dd className="mt-1 text-sm text-foreground font-mono">{source.database}</dd>
-            </div>
+            {source.database && (
+              <div>
+                <dt className="text-sm font-medium text-muted-foreground">Database</dt>
+                <dd className="mt-1 text-sm text-foreground font-mono">{source.database}</dd>
+              </div>
+            )}
 
             {source.user && (
               <div>

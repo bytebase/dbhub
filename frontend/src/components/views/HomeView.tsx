@@ -30,8 +30,8 @@ export default function HomeView() {
             <div>
               <h3 className="text-lg font-medium text-foreground mb-2">1. Configure Data Sources</h3>
               <p className="leading-relaxed">
-                Set up your database connections using the <code className="px-2 py-1 bg-muted rounded text-sm">dbhub.toml</code> configuration
-                file or environment variables. Each data source can be configured with connection details,
+                Set up your database connections using the <code className="px-2 py-1 bg-muted rounded text-sm">dbhub.toml</code> file
+                or environment variables. Each data source can be configured with connection details,
                 read-only restrictions, and row limits.
               </p>
             </div>

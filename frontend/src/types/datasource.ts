@@ -12,7 +12,7 @@ export interface DataSource {
   type: DatabaseType;
   host?: string;
   port?: number;
-  database: string;
+  database?: string;
   user?: string;
   is_default: boolean;
   readonly?: boolean;

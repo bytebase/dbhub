@@ -15,13 +15,21 @@ const DB_COLORS: Record<DatabaseType, string> = {
   sqlite: '#003B57',
 };
 
+const DB_ABBREVIATIONS: Record<DatabaseType, string> = {
+  postgres: 'PG',
+  mysql: 'MY',
+  mariadb: 'MB',
+  sqlserver: 'MS',
+  sqlite: 'SL',
+};
+
 function DatabaseIcon({ type }: { type: DatabaseType }) {
   return (
     <div
       className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold"
       style={{ backgroundColor: DB_COLORS[type] }}
     >
-      {type.slice(0, 2).toUpperCase()}
+      {DB_ABBREVIATIONS[type]}
     </div>
   );
 }
