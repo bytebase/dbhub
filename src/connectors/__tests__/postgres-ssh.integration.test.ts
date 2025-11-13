@@ -5,7 +5,18 @@ import { ConnectorManager } from '../manager.js';
 import { ConnectorRegistry } from '../interface.js';
 import { SSHTunnel } from '../../utils/ssh-tunnel.js';
 import type { SSHTunnelConfig } from '../../types/ssh.js';
+import type { SourceConfig } from '../../types/config.js';
 import * as sshConfigParser from '../../utils/ssh-config-parser.js';
+
+/**
+ * Helper function to create a SourceConfig from a DSN for testing
+ */
+function createSourceConfigFromDSN(dsn: string, sourceId: string = 'test'): SourceConfig {
+  return {
+    id: sourceId,
+    dsn: dsn,
+  };
+}
 
 describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
   let postgresContainer: StartedPostgreSqlContainer;
@@ -60,161 +71,119 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
       
       // Make sure no SSH config is set
       delete process.env.SSH_HOST;
-      
+
       const dsn = postgresContainer.getConnectionUri();
-      
-      await manager.connectWithDSN(dsn);
-      
+      const sourceConfig = createSourceConfigFromDSN(dsn);
+
+      await manager.connectWithSources([sourceConfig]);
+
       // Test that connection works
       const connector = manager.getConnector();
       const result = await connector.executeSQL('SELECT 1 as test', {});
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0].test).toBe(1);
-      
+
       await manager.disconnect();
     });
 
     it('should fail gracefully when SSH config is invalid', async () => {
       const manager = new ConnectorManager();
-      
-      // Set invalid SSH config (missing required fields)
-      process.env.SSH_HOST = 'example.com';
-      // Missing SSH_USER
-      
-      try {
-        const dsn = postgresContainer.getConnectionUri();
-        await expect(manager.connectWithDSN(dsn)).rejects.toThrow(/SSH tunnel configuration requires/);
-      } finally {
-        delete process.env.SSH_HOST;
-      }
+
+      // Create source config with invalid SSH config (missing required fields)
+      const dsn = postgresContainer.getConnectionUri();
+      const sourceConfig = createSourceConfigFromDSN(dsn);
+      sourceConfig.ssh_host = 'example.com';
+      // Missing ssh_user
+
+      await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow(/SSH tunnel requires ssh_user/);
     });
 
     it('should validate SSH authentication method', async () => {
       const manager = new ConnectorManager();
-      
-      // Set SSH config without authentication method
-      process.env.SSH_HOST = 'example.com';
-      process.env.SSH_USER = 'testuser';
-      // Missing both SSH_PASSWORD and SSH_KEY
-      
-      try {
-        const dsn = postgresContainer.getConnectionUri();
-        await expect(manager.connectWithDSN(dsn)).rejects.toThrow(/SSH tunnel configuration requires either/);
-      } finally {
-        delete process.env.SSH_HOST;
-        delete process.env.SSH_USER;
-      }
+
+      // Create source config with SSH but without authentication method
+      const dsn = postgresContainer.getConnectionUri();
+      const sourceConfig = createSourceConfigFromDSN(dsn);
+      sourceConfig.ssh_host = 'example.com';
+      sourceConfig.ssh_user = 'testuser';
+      // Missing both ssh_password and ssh_key
+
+      await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow(/SSH tunnel requires either ssh_password or ssh_key/);
     });
 
-    it('should handle SSH config file resolution', async () => {
+    it('should handle SSH tunnel with source config', async () => {
       const manager = new ConnectorManager();
-      
-      // Mock the SSH config parser functions
-      const mockParseSSHConfig = vi.spyOn(sshConfigParser, 'parseSSHConfig');
-      const mockLooksLikeSSHAlias = vi.spyOn(sshConfigParser, 'looksLikeSSHAlias');
-      
+
       // Spy on the SSH tunnel establish method to verify the config values
       const mockSSHTunnelEstablish = vi.spyOn(SSHTunnel.prototype, 'establish');
-      
+
       try {
-        // Configure mocks to simulate SSH config file lookup with specific values
-        mockLooksLikeSSHAlias.mockReturnValue(true);
-        mockParseSSHConfig.mockReturnValue({
+        // Mock SSH tunnel establish to capture the config and prevent actual connection
+        mockSSHTunnelEstablish.mockRejectedValue(new Error('SSH connection failed (expected in test)'));
+
+        const dsn = postgresContainer.getConnectionUri();
+        const sourceConfig = createSourceConfigFromDSN(dsn);
+
+        // Configure SSH tunnel via source config
+        sourceConfig.ssh_host = 'bastion.example.com';
+        sourceConfig.ssh_user = 'sshuser';
+        sourceConfig.ssh_port = 2222;
+        sourceConfig.ssh_key = '/home/user/.ssh/id_rsa';
+
+        // This should fail during SSH connection (expected), but we can verify the config
+        await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow();
+
+        // Verify that SSH tunnel was attempted with the correct config values
+        expect(mockSSHTunnelEstablish).toHaveBeenCalledTimes(1);
+        const sshTunnelCall = mockSSHTunnelEstablish.mock.calls[0];
+        const [sshConfig, tunnelOptions] = sshTunnelCall;
+
+        // Verify SSH config values were properly set from source config
+        expect(sshConfig).toMatchObject({
           host: 'bastion.example.com',
           username: 'sshuser',
           port: 2222,
           privateKey: '/home/user/.ssh/id_rsa'
         });
-        
-        // Mock SSH tunnel establish to capture the config and prevent actual connection
-        mockSSHTunnelEstablish.mockRejectedValue(new Error('SSH connection failed (expected in test)'));
-        
-        // Set SSH host alias (would normally come from command line)
-        process.env.SSH_HOST = 'mybastion';
-        
-        const dsn = postgresContainer.getConnectionUri();
-        
-        // This should fail during SSH connection (expected), but we can verify the config parsing
-        await expect(manager.connectWithDSN(dsn)).rejects.toThrow();
-        
-        // Verify that SSH config parsing functions were called correctly
-        expect(mockLooksLikeSSHAlias).toHaveBeenCalledWith('mybastion');
-        expect(mockParseSSHConfig).toHaveBeenCalledWith('mybastion', expect.stringContaining('.ssh/config'));
-        
-        // Verify that SSH tunnel was attempted with the correct config values from SSH config
-        expect(mockSSHTunnelEstablish).toHaveBeenCalledTimes(1);
-        const sshTunnelCall = mockSSHTunnelEstablish.mock.calls[0];
-        const [sshConfig, tunnelOptions] = sshTunnelCall;
-        
-        // Debug: Log the actual values being passed (for verification)
-        // SSH Config should contain the values from our mocked SSH config file
-        // Tunnel Options should contain database connection details from the container DSN
-        
-        // Verify SSH config values were properly resolved from the SSH config file
-        expect(sshConfig).toMatchObject({
-          host: 'bastion.example.com',    // Should use HostName from SSH config
-          username: 'sshuser',           // Should use User from SSH config  
-          port: 2222,                    // Should use Port from SSH config
-          privateKey: '/home/user/.ssh/id_rsa' // Should use IdentityFile from SSH config
-        });
-        
+
         // Verify tunnel options are correctly set up for the database connection
-        expect(tunnelOptions).toMatchObject({
-          targetHost: expect.any(String), // Database host from DSN
-          targetPort: expect.any(Number)  // Database port from DSN
-        });
-        
-        // The localPort might be undefined for dynamic allocation, so check separately if it exists
-        if (tunnelOptions.localPort !== undefined) {
-          expect(typeof tunnelOptions.localPort).toBe('number');
-        }
-        
-        // Verify that the target database details from the DSN are preserved
         const originalDsnUrl = new URL(dsn);
         expect(tunnelOptions.targetHost).toBe(originalDsnUrl.hostname);
         expect(tunnelOptions.targetPort).toBe(parseInt(originalDsnUrl.port));
-        
+
       } finally {
-        // Clean up
-        delete process.env.SSH_HOST;
-        mockParseSSHConfig.mockRestore();
-        mockLooksLikeSSHAlias.mockRestore();
         mockSSHTunnelEstablish.mockRestore();
       }
     });
 
-    it('should skip SSH config lookup for direct hostnames', async () => {
+    it('should handle SSH tunnel with password authentication', async () => {
       const manager = new ConnectorManager();
-      
-      // Mock the SSH config parser functions
-      const mockParseSSHConfig = vi.spyOn(sshConfigParser, 'parseSSHConfig');
-      const mockLooksLikeSSHAlias = vi.spyOn(sshConfigParser, 'looksLikeSSHAlias');
-      
+
+      // Spy on the SSH tunnel establish method
+      const mockSSHTunnelEstablish = vi.spyOn(SSHTunnel.prototype, 'establish');
+
       try {
-        // Configure mocks - direct hostname should not trigger SSH config lookup
-        mockLooksLikeSSHAlias.mockReturnValue(false);
-        
-        // Set a direct hostname with required SSH credentials
-        process.env.SSH_HOST = 'ssh.example.com';
-        process.env.SSH_USER = 'sshuser';
-        process.env.SSH_PASSWORD = 'sshpass';
-        
+        // Mock SSH tunnel establish to prevent actual connection
+        mockSSHTunnelEstablish.mockRejectedValue(new Error('SSH connection failed (expected in test)'));
+
         const dsn = postgresContainer.getConnectionUri();
-        
-        // This should fail during actual SSH connection, but we can verify the parsing behavior
-        await expect(manager.connectWithDSN(dsn)).rejects.toThrow();
-        
-        // Verify that SSH config parsing was checked but not executed
-        expect(mockLooksLikeSSHAlias).toHaveBeenCalledWith('ssh.example.com');
-        expect(mockParseSSHConfig).not.toHaveBeenCalled();
-        
+        const sourceConfig = createSourceConfigFromDSN(dsn);
+
+        // Configure SSH tunnel with password authentication
+        sourceConfig.ssh_host = 'ssh.example.com';
+        sourceConfig.ssh_user = 'sshuser';
+        sourceConfig.ssh_password = 'sshpass';
+
+        // This should fail during actual SSH connection
+        await expect(manager.connectWithSources([sourceConfig])).rejects.toThrow();
+
+        // Verify SSH tunnel was attempted with password auth
+        expect(mockSSHTunnelEstablish).toHaveBeenCalledTimes(1);
+        const [sshConfig] = mockSSHTunnelEstablish.mock.calls[0];
+        expect(sshConfig.password).toBe('sshpass');
+
       } finally {
-        // Clean up
-        delete process.env.SSH_HOST;
-        delete process.env.SSH_USER;
-        delete process.env.SSH_PASSWORD;
-        mockParseSSHConfig.mockRestore();
-        mockLooksLikeSSHAlias.mockRestore();
+        mockSSHTunnelEstablish.mockRestore();
       }
     });
   });

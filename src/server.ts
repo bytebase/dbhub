@@ -8,8 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, isDemoMode, redactDSN, isReadOnlyMode, resolveId, resolveSourceConfigs } from "./config/env.js";
-import { getSqliteInMemorySetupSql } from "./config/demo-loader.js";
+import { resolveTransport, resolvePort, redactDSN, resolveId, resolveSourceConfigs, isReadOnlyMode, isDemoMode } from "./config/env.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
@@ -57,7 +56,7 @@ export async function main(): Promise<void> {
     const id = idData?.id;
 
     // Resolve source configurations from TOML or fallback to single DSN
-    const sourceConfigsData = resolveSourceConfigs();
+    const sourceConfigsData = await resolveSourceConfigs();
 
     if (!sourceConfigsData) {
       const samples = ConnectorRegistry.getAllSampleDSNs();
@@ -114,27 +113,13 @@ See documentation for more details on configuring database connections.
       console.error(`ID: ${idData.id} (from ${idData.source})`);
     }
 
-    // Check if demo mode (legacy single source with empty ID and demo flag)
-    const isDemo = sources.length === 1 && sources[0].id === "" && isDemoMode();
-
-    // Connect to database(s)
-    if (isDemo) {
-      // Demo mode: use legacy single connection with init script
-      const initScript = getSqliteInMemorySetupSql();
-      await connectorManager.connectWithDSN(sources[0].dsn!, initScript);
-    } else if (sources.length === 1 && sources[0].id === "") {
-      // Legacy single DSN mode: use backward compatible connection
-      console.error(`Connecting with DSN: ${redactDSN(sources[0].dsn!)}`);
-      await connectorManager.connectWithDSN(sources[0].dsn!);
-    } else {
-      // Multi-source TOML mode: use new connection method
-      console.error(`Connecting to ${sources.length} database source(s)...`);
-      for (const source of sources) {
-        const dsn = source.dsn || buildDSNFromSource(source);
-        console.error(`  - ${source.id}: ${redactDSN(dsn)}`);
-      }
-      await connectorManager.connectWithSources(sources);
+    // Connect to database(s) - works uniformly for all modes (demo, single DSN, multi-source TOML)
+    console.error(`Connecting to ${sources.length} database source(s)...`);
+    for (const source of sources) {
+      const dsn = source.dsn || buildDSNFromSource(source);
+      console.error(`  - ${source.id}: ${redactDSN(dsn)}`);
     }
+    await connectorManager.connectWithSources(sources);
 
     // Resolve transport type (for MCP server)
     const transportData = resolveTransport();
@@ -152,6 +137,7 @@ See documentation for more details on configuring database connections.
     // Collect active modes
     const activeModes: string[] = [];
     const modeDescriptions: string[] = [];
+    const isDemo = isDemoMode();
 
     if (isDemo) {
       activeModes.push("DEMO");

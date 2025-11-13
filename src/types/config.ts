@@ -46,6 +46,7 @@ export interface SourceConfig
   dsn?: string;
   connection_timeout?: number; // Connection timeout in seconds
   request_timeout?: number; // Request/query timeout in seconds (SQL Server only)
+  init_script?: string; // Optional SQL script to run on connection (for demo mode or initialization)
 }
 
 /**

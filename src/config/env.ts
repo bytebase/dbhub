@@ -472,7 +472,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
  * Priority: TOML config (--config flag or ./dbhub.toml) > single DSN/env vars
  * Returns array of source configs and the source of the configuration
  */
-export function resolveSourceConfigs(): { sources: SourceConfig[]; source: string } | null {
+export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; source: string } | null> {
   // 1. Try loading from TOML configuration file (highest priority for multi-source)
   const tomlConfig = loadTomlConfig();
   if (tomlConfig) {
@@ -482,10 +482,39 @@ export function resolveSourceConfigs(): { sources: SourceConfig[]; source: strin
   // 2. Fallback to single DSN configuration for backward compatibility
   const dsnResult = resolveDSN();
   if (dsnResult) {
+    // Parse DSN to extract database type
+    let dsnUrl: URL;
+    try {
+      dsnUrl = new URL(dsnResult.dsn);
+    } catch (error) {
+      throw new Error(
+        `Invalid DSN format: ${dsnResult.dsn}. Expected format: protocol://[user[:password]@]host[:port]/database`
+      );
+    }
+
+    const protocol = dsnUrl.protocol.replace(':', '');
+
+    // Map protocol to database type
+    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+    if (protocol === 'postgresql' || protocol === 'postgres') {
+      dbType = 'postgres';
+    } else if (protocol === 'mysql') {
+      dbType = 'mysql';
+    } else if (protocol === 'mariadb') {
+      dbType = 'mariadb';
+    } else if (protocol === 'sqlserver') {
+      dbType = 'sqlserver';
+    } else if (protocol === 'sqlite') {
+      dbType = 'sqlite';
+    } else {
+      throw new Error(`Unsupported database type in DSN: ${protocol}`);
+    }
+
     // Create a single source config from the resolved DSN
-    // Use empty string as ID for backward compatibility (default/unnamed source)
+    // Use "default" as ID so it appears in the API sources list
     const source: SourceConfig = {
-      id: "",
+      id: "default",
+      type: dbType,
       dsn: dsnResult.dsn,
     };
 
@@ -505,6 +534,12 @@ export function resolveSourceConfigs(): { sources: SourceConfig[]; source: strin
     const maxRowsResult = resolveMaxRows();
     if (maxRowsResult) {
       source.max_rows = maxRowsResult.maxRows;
+    }
+
+    // Add init script for demo mode
+    if (dsnResult.isDemo) {
+      const { getSqliteInMemorySetupSql } = await import('./demo-loader.js');
+      source.init_script = getSqliteInMemorySetupSql();
     }
 
     return {
