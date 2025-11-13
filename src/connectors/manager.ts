@@ -17,6 +17,7 @@ export class ConnectorManager {
   private connectors: Map<string, Connector> = new Map();
   private sshTunnels: Map<string, SSHTunnel> = new Map();
   private executeOptions: Map<string, ExecuteOptions> = new Map();
+  private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
 
   // Legacy single-connector support (for backward compatibility)
@@ -208,6 +209,9 @@ export class ConnectorManager {
     this.connectors.set(sourceId, connector);
     this.sourceIds.push(sourceId);
 
+    // Store source config (for API exposure)
+    this.sourceConfigs.set(sourceId, source);
+
     // Store execute options
     const options: ExecuteOptions = {};
     if (source.max_rows !== undefined) {
@@ -248,6 +252,7 @@ export class ConnectorManager {
     this.connectors.clear();
     this.sshTunnels.clear();
     this.executeOptions.clear();
+    this.sourceConfigs.clear();
     this.sourceIds = [];
 
     // Disconnect legacy single connector
@@ -373,7 +378,46 @@ export class ConnectorManager {
     }
     return managerInstance.getSourceIds();
   }
-  
+
+  /**
+   * Get source configuration by ID
+   * @param sourceId - Source ID. If not provided, returns default (first) source config
+   */
+  getSourceConfig(sourceId?: string): SourceConfig | null {
+    if (this.connectors.size === 0) {
+      return null;
+    }
+    const id = sourceId || this.sourceIds[0];
+    return this.sourceConfigs.get(id) || null;
+  }
+
+  /**
+   * Get all source configurations
+   */
+  getAllSourceConfigs(): SourceConfig[] {
+    return this.sourceIds.map(id => this.sourceConfigs.get(id)!).filter(Boolean);
+  }
+
+  /**
+   * Get source configuration by ID (static method for external access)
+   */
+  static getSourceConfig(sourceId?: string): SourceConfig | null {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.getSourceConfig(sourceId);
+  }
+
+  /**
+   * Get all source configurations (static method for external access)
+   */
+  static getAllSourceConfigs(): SourceConfig[] {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.getAllSourceConfigs();
+  }
+
   /**
    * Get default port for a database based on DSN protocol
    */
