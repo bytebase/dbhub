@@ -13,6 +13,14 @@ export async function fetchSources(): Promise<DataSource[]> {
 }
 
 export async function fetchSource(sourceId: string): Promise<DataSource> {
+  // Validate sourceId to prevent path traversal attacks
+  if (!sourceId || sourceId.trim() === '') {
+    throw new Error('Source ID cannot be empty');
+  }
+  if (sourceId.includes('/') || sourceId.includes('..')) {
+    throw new Error('Invalid source ID format');
+  }
+
   const response = await fetch(`${API_BASE}/sources/${sourceId}`);
 
   if (!response.ok) {
