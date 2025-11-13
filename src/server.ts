@@ -14,6 +14,7 @@ import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts/index.js";
+import { listSources, getSource } from "./api/sources.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -207,6 +208,10 @@ See documentation for more details on configuring database connections.
     app.get("/healthz", (req, res) => {
       res.status(200).send("OK");
     });
+
+    // Data sources API endpoints
+    app.get("/api/sources", listSources);
+    app.get("/api/sources/:sourceId", getSource);
 
     // Set up MCP endpoint if using HTTP transport
     if (transportData.type === "http") {
