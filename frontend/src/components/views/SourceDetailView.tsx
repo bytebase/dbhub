@@ -47,6 +47,12 @@ export default function SourceDetailView() {
   }
 
   if (error) {
+    // If source not found, redirect to 404 page
+    if (error.includes('not found') || error.includes('404')) {
+      return <Navigate to="/404" replace />;
+    }
+
+    // For other errors, show error message
     return (
       <div className="container mx-auto px-8 py-12">
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
