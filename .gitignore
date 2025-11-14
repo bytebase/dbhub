@@ -58,6 +58,7 @@ __pycache__/
 htmlcov/
 coverage/
 .nyc_output/
+*.tsbuildinfo
 
 # OS files
 .DS_Store
