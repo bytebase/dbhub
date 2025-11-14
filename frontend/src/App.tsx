@@ -1,11 +1,32 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import HomeView from './components/views/HomeView';
 import SourceDetailView from './components/views/SourceDetailView';
+import NotFoundView from './components/views/NotFoundView';
 import Toast from './components/Toast';
 import { fetchSources } from './api/sources';
 import type { DataSource } from './types/datasource';
+
+function RedirectToFirstSource({ sources, isLoading }: { sources: DataSource[]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-8 py-12">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (sources.length === 0) {
+    // This should never happen as backend validates at least one source
+    return (
+      <div className="container mx-auto px-8 py-12">
+        <div className="text-destructive">No data sources configured</div>
+      </div>
+    );
+  }
+
+  return <Navigate to={`/source/${sources[0].id}`} replace />;
+}
 
 function App() {
   const [sources, setSources] = useState<DataSource[]>([]);
@@ -29,8 +50,9 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout sources={sources} isLoading={isLoading} />}>
-          <Route index element={<HomeView />} />
+          <Route index element={<RedirectToFirstSource sources={sources} isLoading={isLoading} />} />
           <Route path="source/:sourceId" element={<SourceDetailView />} />
+          <Route path="*" element={<NotFoundView />} />
         </Route>
       </Routes>
       {error && <Toast message={error} type="error" onClose={() => setError(null)} />}
