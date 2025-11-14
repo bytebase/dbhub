@@ -4,7 +4,9 @@ import Layout from './components/Layout';
 import SourceDetailView from './components/views/SourceDetailView';
 import NotFoundView from './components/views/NotFoundView';
 import Toast from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import { fetchSources } from './api/sources';
+import { ApiError } from './api/errors';
 import type { DataSource } from './types/datasource';
 
 function RedirectToFirstSource({ sources, isLoading }: { sources: DataSource[]; isLoading: boolean }) {
@@ -39,24 +41,27 @@ function App() {
         setSources(data);
         setIsLoading(false);
       })
-      .catch((error) => {
-        console.error('Failed to fetch sources:', error);
-        setError(error instanceof Error ? error.message : 'Failed to load data sources');
+      .catch((err) => {
+        console.error('Failed to fetch sources:', err);
+        const message = err instanceof ApiError ? err.message : 'Failed to load data sources';
+        setError(message);
         setIsLoading(false);
       });
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout sources={sources} isLoading={isLoading} />}>
-          <Route index element={<RedirectToFirstSource sources={sources} isLoading={isLoading} />} />
-          <Route path="source/:sourceId" element={<SourceDetailView />} />
-          <Route path="*" element={<NotFoundView />} />
-        </Route>
-      </Routes>
-      {error && <Toast message={error} type="error" onClose={() => setError(null)} />}
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout sources={sources} isLoading={isLoading} />}>
+            <Route index element={<RedirectToFirstSource sources={sources} isLoading={isLoading} />} />
+            <Route path="source/:sourceId" element={<SourceDetailView />} />
+            <Route path="*" element={<NotFoundView />} />
+          </Route>
+        </Routes>
+        {error && <Toast message={error} type="error" onClose={() => setError(null)} />}
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
