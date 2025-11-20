@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ConnectorManager } from "../connectors/manager.js";
+import { getDatabaseTypeFromDSN } from "../utils/dsn-obfuscate.js";
 import type { SourceConfig } from "../types/config.js";
 import type { components } from "./openapi.js";
 
@@ -15,8 +16,14 @@ function transformSourceConfig(
   source: SourceConfig,
   isDefault: boolean
 ): DataSource {
-  // Type is guaranteed to be present for connected sources
-  // It's set during connection either from DSN parsing or explicit config
+  // Determine type from explicit config or infer from DSN
+  if (!source.type && source.dsn) {
+    const inferredType = getDatabaseTypeFromDSN(source.dsn);
+    if (inferredType) {
+      source.type = inferredType;
+    }
+  }
+
   if (!source.type) {
     throw new Error(`Source ${source.id} is missing required type field`);
   }
