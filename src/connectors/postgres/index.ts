@@ -100,6 +100,10 @@ export class PostgresConnector implements Connector {
 
   private pool: pg.Pool | null = null;
 
+  clone(): Connector {
+    return new PostgresConnector();
+  }
+
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
