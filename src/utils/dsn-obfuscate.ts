@@ -1,4 +1,5 @@
 import type { SSHTunnelConfig } from '../types/ssh.js';
+import type { ConnectorType } from '../connectors/interface.js';
 
 /**
  * Obfuscates the password in a DSN string for logging purposes
@@ -83,4 +84,27 @@ export function obfuscateSSHConfig(config: SSHTunnelConfig): Partial<SSHTunnelCo
   }
   
   return obfuscated;
+}
+
+/**
+ * Extracts the database type from a DSN string
+ * @param dsn The DSN string to analyze
+ * @returns The database type or undefined if cannot be determined
+ */
+export function getDatabaseTypeFromDSN(dsn: string): ConnectorType | undefined {
+  if (!dsn) {
+    return undefined;
+  }
+
+  const protocol = dsn.split(':')[0];
+  const protocolToType: Record<string, ConnectorType> = {
+    'postgres': 'postgres',
+    'postgresql': 'postgres',
+    'mysql': 'mysql',
+    'mariadb': 'mariadb',
+    'sqlserver': 'sqlserver',
+    'sqlite': 'sqlite'
+  };
+
+  return protocolToType[protocol];
 }
