@@ -101,6 +101,10 @@ export class MySQLConnector implements Connector {
 
   private pool: mysql.Pool | null = null;
 
+  clone(): Connector {
+    return new MySQLConnector();
+  }
+
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionOptions = await this.dsnParser.parse(dsn, config);

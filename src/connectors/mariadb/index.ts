@@ -98,6 +98,10 @@ export class MariaDBConnector implements Connector {
 
   private pool: mariadb.Pool | null = null;
 
+  clone(): Connector {
+    return new MariaDBConnector();
+  }
+
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionConfig = await this.dsnParser.parse(dsn, config);

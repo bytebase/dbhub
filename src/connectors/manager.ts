@@ -112,9 +112,8 @@ export class ConnectorManager {
     }
 
     // Create a new instance of the connector (clone) to avoid sharing state between sources
-    // Only SQLite currently supports cloning for multi-source configurations
-    // Other databases will reuse the singleton instance (not recommended for multi-source)
-    const connector = connectorPrototype.clone ? connectorPrototype.clone() : connectorPrototype;
+    // All connectors support cloning for multi-source configurations
+    const connector = connectorPrototype.clone();
 
     // Build config for database-specific options
     const config: ConnectorConfig = {};

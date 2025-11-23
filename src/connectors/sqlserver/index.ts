@@ -137,6 +137,10 @@ export class SQLServerConnector implements Connector {
   private connection?: sql.ConnectionPool;
   private config?: sql.config;
 
+  clone(): Connector {
+    return new SQLServerConnector();
+  }
+
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       this.config = await this.dsnParser.parse(dsn, config);
