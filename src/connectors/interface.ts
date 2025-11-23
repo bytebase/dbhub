@@ -97,7 +97,7 @@ export interface Connector {
   dsnParser: DSNParser;
 
   /** Create a new instance of this connector (for multi-source support) - optional, only implemented for tested connectors */
-  clone?(): Connector;
+  clone(): Connector;
 
   /** Connect to the database using DSN, with optional init script and database-specific configuration */
   connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void>;
