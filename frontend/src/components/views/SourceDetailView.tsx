@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
+import { ApiError } from '../../api/errors';
 import type { DataSource, DatabaseType } from '../../types/datasource';
 
 const DB_TYPE_DISPLAY_NAMES: Record<DatabaseType, string> = {
@@ -15,7 +16,7 @@ export default function SourceDetailView() {
   const { sourceId } = useParams<{ sourceId: string }>();
   const [source, setSource] = useState<DataSource | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     if (!sourceId) return;
@@ -28,8 +29,8 @@ export default function SourceDetailView() {
         setSource(data);
         setIsLoading(false);
       })
-      .catch((err) => {
-        setError(err.message);
+      .catch((err: ApiError) => {
+        setError(err);
         setIsLoading(false);
       });
   }, [sourceId]);
@@ -47,11 +48,17 @@ export default function SourceDetailView() {
   }
 
   if (error) {
+    // If source not found, redirect to 404 page
+    if (error.status === 404) {
+      return <Navigate to="/404" replace />;
+    }
+
+    // For other errors, show error message
     return (
       <div className="container mx-auto px-8 py-12">
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
           <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
-          <p className="text-destructive/90">{error}</p>
+          <p className="text-destructive/90">{error.message}</p>
         </div>
       </div>
     );
