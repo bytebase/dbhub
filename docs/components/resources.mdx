@@ -6,14 +6,25 @@ MCP Resources provide read-only access to database metadata and structure. These
 
 ## Supported Resources
 
-| Resource Name               | URI Format                                             | PostgreSQL | MySQL | MariaDB | SQL Server | SQLite |
-| --------------------------- | ------------------------------------------------------ | :--------: | :---: | :-----: | :--------: | :----: |
-| schemas                     | `db://schemas`                                         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| tables_in_schema            | `db://schemas/{schemaName}/tables`                     |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| table_structure_in_schema   | `db://schemas/{schemaName}/tables/{tableName}`         |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| indexes_in_table            | `db://schemas/{schemaName}/tables/{tableName}/indexes` |     ✅     |  ✅   |   ✅    |     ✅     |   ✅   |
-| procedures_in_schema        | `db://schemas/{schemaName}/procedures`                 |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
-| procedure_details_in_schema | `db://schemas/{schemaName}/procedures/{procedureName}` |     ✅     |  ✅   |   ✅    |     ✅     |   ❌   |
+To discover these resources, MCP clients should use two endpoints:
+
+- **`resources/list`** - Returns static resources (fixed URIs)
+- **`resources/templates/list`** - Returns resource templates (parameterized URI patterns)
+
+| Resource Name               | URI Format                                             | Template |
+| --------------------------- | ------------------------------------------------------ | :------: |
+| schemas                     | `db://schemas`                                         |          |
+| tables_in_schema            | `db://schemas/{schemaName}/tables`                     |    Y     |
+| table_structure_in_schema   | `db://schemas/{schemaName}/tables/{tableName}`         |    Y     |
+| indexes_in_table            | `db://schemas/{schemaName}/tables/{tableName}/indexes` |    Y     |
+| procedures_in_schema        | `db://schemas/{schemaName}/procedures`                 |    Y     |
+| procedure_details_in_schema | `db://schemas/{schemaName}/procedures/{procedureName}` |    Y     |
+
+<Note>
+**For MCP Client Developers:** To discover all available resources, call both `resources/list` and `resources/templates/list`. Once you have the template patterns, fill in the parameters (like `{schemaName}`, `{tableName}`) and use `resources/read` to access specific resources.
+
+SQLite does not support stored procedures, so `procedures_in_schema` and `procedure_details_in_schema` are not available for SQLite databases.
+</Note>
 
 ## Usage
 
