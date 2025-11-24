@@ -17,12 +17,24 @@ export { proceduresResourceHandler, procedureDetailResourceHandler } from "./pro
  */
 export function registerResources(server: McpServer): void {
   // Resource for listing all schemas
-  server.resource("schemas", "db://schemas", schemasResourceHandler);
+  server.resource(
+    "schemas",
+    "db://schemas",
+    {
+      description: "List all schemas/databases available in the connected database",
+      mimeType: "application/json",
+    },
+    schemasResourceHandler
+  );
 
   // Allow listing tables within a specific schema
   server.resource(
     "tables_in_schema",
     new ResourceTemplate("db://schemas/{schemaName}/tables", { list: undefined }),
+    {
+      description: "List all tables within a specific schema",
+      mimeType: "application/json",
+    },
     tablesResourceHandler
   );
 
@@ -30,6 +42,10 @@ export function registerResources(server: McpServer): void {
   server.resource(
     "table_structure_in_schema",
     new ResourceTemplate("db://schemas/{schemaName}/tables/{tableName}", { list: undefined }),
+    {
+      description: "Get detailed structure information for a specific table, including columns, data types, and constraints",
+      mimeType: "application/json",
+    },
     tableStructureResourceHandler
   );
 
@@ -39,6 +55,10 @@ export function registerResources(server: McpServer): void {
     new ResourceTemplate("db://schemas/{schemaName}/tables/{tableName}/indexes", {
       list: undefined,
     }),
+    {
+      description: "List all indexes defined on a specific table",
+      mimeType: "application/json",
+    },
     indexesResourceHandler
   );
 
@@ -46,6 +66,10 @@ export function registerResources(server: McpServer): void {
   server.resource(
     "procedures_in_schema",
     new ResourceTemplate("db://schemas/{schemaName}/procedures", { list: undefined }),
+    {
+      description: "List all stored procedures/functions in a schema (not supported by SQLite)",
+      mimeType: "application/json",
+    },
     proceduresResourceHandler
   );
 
@@ -55,6 +79,10 @@ export function registerResources(server: McpServer): void {
     new ResourceTemplate("db://schemas/{schemaName}/procedures/{procedureName}", {
       list: undefined,
     }),
+    {
+      description: "Get detailed information about a specific stored procedure, including parameters and definition (not supported by SQLite)",
+      mimeType: "application/json",
+    },
     procedureDetailResourceHandler
   );
 }
