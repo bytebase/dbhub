@@ -400,9 +400,118 @@ describe('SQLite Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return all users (at least the original 3 plus any added in previous tests)
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('DSN Path Parsing', () => {
+    it('should parse absolute paths correctly', async () => {
+      const connector = new SQLiteConnector();
+      const tempDir = os.tmpdir();
+      const fileName = `test_${Date.now()}.db`;
+      const dbPath = path.join(tempDir, fileName);
+
+      try {
+        // Test platform-native absolute paths
+        // On Unix: /tmp/test.db, On Windows: C:\Users\...\test.db
+        const dsn = `sqlite://${dbPath}`;
+
+        // Should successfully connect without errors
+        await connector.connect(dsn);
+
+        // Verify we can execute queries
+        await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
+        const result = await connector.executeSQL('SELECT * FROM test', {});
+        expect(result.rows).toEqual([]);
+
+        await connector.disconnect();
+      } finally {
+        // Cleanup
+        if (fs.existsSync(dbPath)) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            fs.unlinkSync(dbPath);
+          } catch (error) {
+            console.warn(`Failed to cleanup test database: ${error}`);
+          }
+        }
+      }
+    });
+
+    it('should parse relative paths correctly', async () => {
+      const connector = new SQLiteConnector();
+      // Use tmpdir to ensure the directory exists
+      const tempDir = os.tmpdir();
+      const fileName = `test_relative_${Date.now()}.db`;
+      const fullPath = path.join(tempDir, fileName);
+
+      // Create a relative path from current working directory
+      const relativePath = path.relative(process.cwd(), fullPath);
+
+      try {
+        const dsn = `sqlite://${relativePath}`;
+
+        // Should successfully connect without errors
+        await connector.connect(dsn);
+
+        // Verify we can execute queries
+        await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
+        const result = await connector.executeSQL('SELECT * FROM test', {});
+        expect(result.rows).toEqual([]);
+
+        await connector.disconnect();
+      } finally {
+        // Cleanup
+        if (fs.existsSync(fullPath)) {
+          try {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            fs.unlinkSync(fullPath);
+          } catch (error) {
+            console.warn(`Failed to cleanup test database: ${error}`);
+          }
+        }
+      }
+    });
+
+    it('should parse :memory: database correctly', async () => {
+      const connector = new SQLiteConnector();
+      const dsn = 'sqlite:///:memory:';
+
+      // Should successfully connect without errors
+      await connector.connect(dsn);
+
+      // Verify we can execute queries
+      await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
+      const result = await connector.executeSQL('SELECT * FROM test', {});
+      expect(result.rows).toEqual([]);
+
+      await connector.disconnect();
+    });
+
+    it('should parse Windows drive letter paths correctly', async () => {
+      const connector = new SQLiteConnector();
+      const parser = connector.dsnParser;
+
+      // This test explicitly validates Windows DSN format parsing
+      // It tests the fix for issue #137 by ensuring drive letter paths
+      // like C:/, D:/ are correctly parsed regardless of platform
+
+      // Test lowercase drive letter
+      const result1 = await parser.parse('sqlite:///c:/temp/test.db');
+      expect(result1.dbPath).toBe('c:/temp/test.db');
+
+      // Test uppercase drive letter
+      const result2 = await parser.parse('sqlite:///C:/temp/test.db');
+      expect(result2.dbPath).toBe('C:/temp/test.db');
+
+      // Test different drive letters
+      const result3 = await parser.parse('sqlite:///D:/path/to/db.db');
+      expect(result3.dbPath).toBe('D:/path/to/db.db');
+
+      const result4 = await parser.parse('sqlite:///E:/another/path.db');
+      expect(result4.dbPath).toBe('E:/another/path.db');
     });
   });
 });
