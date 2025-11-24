@@ -58,6 +58,10 @@ class SQLiteDSNParser implements DSNParser {
         if (url.pathname.startsWith("//")) {
           // Absolute path: sqlite:///path/to/db.sqlite
           dbPath = url.pathname.substring(2); // Remove leading //
+        } else if (url.pathname.startsWith("/") && url.pathname.length > 3 && url.pathname.charAt(2) === ":") {
+          // Windows absolute path: sqlite:///D:/path/to/db.sqlite
+          // URL parser converts D:/path to /D:/path, so we need to remove the leading /
+          dbPath = url.pathname.substring(1);
         } else {
           // Relative path: sqlite://./path/to/db.sqlite
           dbPath = url.pathname;
