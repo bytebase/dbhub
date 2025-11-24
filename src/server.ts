@@ -187,7 +187,7 @@ See documentation for more details on configuring database connections.
     });
 
     // Serve static frontend files
-    const frontendPath = path.join(__dirname, "..", "frontend", "dist");
+    const frontendPath = path.join(__dirname, "public");
     app.use(express.static(frontendPath));
 
     // Health check endpoint
