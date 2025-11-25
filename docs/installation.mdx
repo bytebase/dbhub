@@ -12,6 +12,9 @@ title: "Installation"
       --transport http \
       --port 8080 \
       --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+    # Or use demo mode for testing
+    npx @bytebase/dbhub --transport http --port 8080 --demo
     ```
   </Tab>
 
@@ -22,6 +25,9 @@ title: "Installation"
 
     # Run the server
     dbhub --transport http --port 8080 --dsn "postgres://..."
+
+    # Or use demo mode for testing
+    dbhub --transport http --port 8080 --demo
     ```
   </Tab>
 </Tabs>
@@ -38,6 +44,15 @@ title: "Installation"
       --transport http \
       --port 8080 \
       --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+    # Or use demo mode for testing
+    docker run --rm --init \
+      --name dbhub \
+      --publish 8080:8080 \
+      bytebase/dbhub \
+      --transport http \
+      --port 8080 \
+      --demo
     ```
 
     <Warning>
@@ -80,33 +95,13 @@ title: "Installation"
   </Tab>
 </Tabs>
 
-## Verifying Installation
+## Verification
 
-### Test with Demo Mode
-
-<Note>
-The demo mode includes a bundled SQLite sample "employee" database with tables for employees, departments, salaries, and more - perfect for testing!
-</Note>
+After starting DBHub, verify it's running correctly:
 
 ```bash
-# Start DBHub in demo mode
-npx @bytebase/dbhub --transport http --port 8080 --demo
-
-# In another terminal, test the MCP endpoint
-curl http://localhost:8080/mcp
+curl http://localhost:8080/healthz
 ```
 
-You should see a JSON response indicating the MCP server is running.
+You should see "OK" indicating the server is running.
 
-### Test with Your Database
-
-```bash
-# Start DBHub with your database
-npx @bytebase/dbhub \
-  --transport http \
-  --port 8080 \
-  --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
-
-# Test connection
-curl http://localhost:8080/mcp
-```
