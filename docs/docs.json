@@ -35,7 +35,8 @@
           "integrations/claude-desktop",
           "integrations/claude-code",
           "integrations/cursor",
-          "integrations/vscode"
+          "integrations/vscode",
+          "integrations/codex"
         ]
       },
       {

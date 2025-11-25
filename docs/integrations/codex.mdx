@@ -1,0 +1,47 @@
+---
+title: "Codex"
+---
+
+## Configuration
+
+### CLI
+
+```bash
+# Connect to your database
+codex mcp add dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+
+# Or use demo mode for testing
+codex mcp add dbhub -- npx @bytebase/dbhub --transport stdio --demo
+```
+
+### TOML
+
+```toml ~/.codex/config.toml
+# Connect to your database
+[mcp_servers.dbhub]
+command = "npx"
+args = ["@bytebase/dbhub", "--transport", "stdio", "--dsn", "postgres://user:password@localhost:5432/dbname"]
+
+# Or use demo mode for testing
+[mcp_servers.dbhub]
+command = "npx"
+args = ["@bytebase/dbhub", "--transport", "stdio", "--demo"]
+```
+
+## Verification
+
+```bash
+/mcp
+
+🔌  MCP Tools
+
+  • dbhub
+    • Status: enabled
+    • Auth: Unsupported
+    • Command: npx -y @bytebase/dbhub --demo
+    • Tools: execute_sql
+    • Resources: schemas (db://schemas)
+    • Resource templates: tables_in_schema (db://schemas/{schemaName}/tables), table_structure_in_schema (db://schemas/{schemaName}/
+tables/{tableName}), indexes_in_table (db://schemas/{schemaName}/tables/{tableName}/indexes), procedures_in_schema (db://schemas/
+{schemaName}/procedures), procedure_detail_in_schema (db://schemas/{schemaName}/procedures/{procedureName})
+```
