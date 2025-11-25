@@ -55,7 +55,8 @@ Key architectural patterns:
   - Location: `src/connectors/manager.ts`
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients)
   - HTTP transport endpoint: `/mcp` (aligns with official MCP SDK standard)
-  - Implemented in `src/server.ts` using `StreamableHTTPServerTransport`
+  - Implemented in `src/server.ts` using `StreamableHTTPServerTransport` with JSON responses
+  - Runs in stateless mode (no SSE support) - GET requests to `/mcp` return 405 Method Not Allowed
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
   - Tools accept optional `source_id` parameter for multi-database routing

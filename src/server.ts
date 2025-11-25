@@ -203,6 +203,15 @@ See documentation for more details on configuring database connections.
       app.get("/api/sources/:sourceId", getSource);
 
       // Main endpoint for streamable HTTP transport
+      // SSE streaming (GET requests) is not supported in stateless mode
+      // Return 405 Method Not Allowed for GET requests to indicate this
+      app.get("/mcp", (req, res) => {
+        res.status(405).json({
+          error: 'Method Not Allowed',
+          message: 'SSE streaming is not supported in stateless mode. Use POST requests with JSON responses.'
+        });
+      });
+
       app.post("/mcp", async (req, res) => {
         try {
           // In stateless mode, create a new instance of transport and server for each request
@@ -210,7 +219,7 @@ See documentation for more details on configuring database connections.
           // when multiple clients connect concurrently.
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined, // Disable session management for stateless mode
-            enableJsonResponse: false // Use SSE streaming
+            enableJsonResponse: true // Use JSON responses (SSE not supported in stateless mode)
           });
           const server = createServer();
 
