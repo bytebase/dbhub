@@ -147,19 +147,8 @@ describe('JSON RPC Integration Tests', () => {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    // Handle different response types
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('text/event-stream')) {
-      // Handle SSE response
-      const text = await response.text();
-      const lines = text.split('\n').filter(line => line.startsWith('data: '));
-      if (lines.length > 0) {
-        return JSON.parse(lines[0].substring(6)); // Remove 'data: ' prefix
-      }
-      throw new Error('No data in SSE response');
-    } else {
-      return await response.json();
-    }
+    // Server uses JSON responses in stateless mode (no SSE)
+    return await response.json();
   }
 
   describe('execute_sql JSON RPC calls', () => {
