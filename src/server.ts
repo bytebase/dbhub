@@ -233,10 +233,13 @@ See documentation for more details on configuring database connections.
         }
       });
 
-      // SPA fallback - serve index.html for all non-API routes
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(frontendPath, "index.html"));
-      });
+      // SPA fallback - serve index.html for all non-API routes (production only)
+      // In development, the frontend is served by Vite dev server
+      if (process.env.NODE_ENV !== 'development') {
+        app.get("*", (req, res) => {
+          res.sendFile(path.join(frontendPath, "index.html"));
+        });
+      }
 
       // Start the HTTP server
       app.listen(port, '0.0.0.0', () => {
