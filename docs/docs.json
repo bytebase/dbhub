@@ -36,7 +36,8 @@
           "integrations/claude-code",
           "integrations/cursor",
           "integrations/vscode",
-          "integrations/codex"
+          "integrations/codex",
+          "integrations/librechat"
         ]
       },
       {

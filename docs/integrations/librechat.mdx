@@ -1,0 +1,171 @@
+---
+title: "LibreChat"
+---
+
+{/* TODO: Add LibreChat screenshot - image should be placed at docs/images/librechat.webp */}
+
+DBHub can be integrated with [LibreChat](https://www.librechat.ai/) using the Streamable HTTP transport. This allows multiple users to share the same database connection or configure per-user credentials.
+
+## Prerequisites
+
+1. Start DBHub in HTTP mode:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+```
+
+Or use Docker:
+
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -e TRANSPORT=http \
+  -e PORT=8080 \
+  -e DSN="postgres://user:password@localhost:5432/dbname" \
+  bytebase/dbhub
+```
+
+## Basic Configuration
+
+Add to your LibreChat `librechat.yaml`:
+
+```yaml
+mcpServers:
+  dbhub:
+    type: streamable-http
+    url: http://localhost:8080/mcp
+```
+
+For Docker deployments, use the host gateway:
+
+```yaml
+mcpServers:
+  dbhub:
+    type: streamable-http
+    url: http://host.docker.internal:8080/mcp
+```
+
+## Demo Mode
+
+For testing with the built-in employee database:
+
+```yaml
+mcpServers:
+  dbhub-demo:
+    type: streamable-http
+    url: http://localhost:8080/mcp
+```
+
+Start DBHub with the `--demo` flag:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --demo
+```
+
+## Multiple Databases
+
+You can configure multiple DBHub instances for different databases:
+
+```yaml
+mcpServers:
+  production-db:
+    type: streamable-http
+    url: http://localhost:8080/mcp
+
+  staging-db:
+    type: streamable-http
+    url: http://localhost:8081/mcp
+```
+
+Start each instance on different ports:
+
+```bash
+# Production
+npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:pass@prod:5432/db"
+
+# Staging
+npx @bytebase/dbhub --transport http --port 8081 --dsn "postgres://user:pass@staging:5432/db"
+```
+
+## Per-User Credentials (Advanced)
+
+For multi-tenant scenarios where each LibreChat user needs their own database credentials:
+
+```yaml
+mcpServers:
+  dbhub:
+    type: streamable-http
+    url: http://localhost:8080/mcp
+    headers:
+      X-User-ID: "{{LIBRECHAT_USER_ID}}"
+    customUserVars:
+      DB_PASSWORD:
+        title: "Database Password"
+        description: "Your personal database password"
+    startup: false
+```
+
+This requires implementing custom authentication middleware in DBHub (not currently built-in).
+
+## Configuration Options
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `type` | Must be `streamable-http` | Required |
+| `url` | DBHub HTTP endpoint URL | Required |
+| `timeout` | Request timeout (ms) | 30000 |
+| `initTimeout` | Initialization timeout (ms) | 10000 |
+| `startup` | Auto-connect on startup | true |
+
+## Troubleshooting
+
+### Connection Errors
+
+If you see "Failed to connect" errors:
+
+1. **Verify DBHub is running:**
+   ```bash
+   curl http://localhost:8080/healthz
+   ```
+
+2. **Check the MCP endpoint:**
+   ```bash
+   curl -X POST http://localhost:8080/mcp \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+   ```
+
+3. **For Docker deployments**, ensure you're using `host.docker.internal` instead of `localhost`
+
+### SSE Stream Errors
+
+If you see "Failed to open SSE stream" errors, make sure you're using DBHub v0.11.9 or later. Earlier versions had SSE compatibility issues that have been resolved.
+
+### Network Issues
+
+- Ensure firewall rules allow connections between LibreChat and DBHub
+- For production deployments, consider using HTTPS with proper TLS certificates
+- Check LibreChat logs: Review the container logs for connection details
+
+## Security Considerations
+
+<Warning>
+  DBHub HTTP mode exposes database access over the network. Use appropriate security measures:
+  - Run behind a reverse proxy with authentication
+  - Use read-only database credentials when possible
+  - Restrict network access with firewall rules
+  - Never expose DBHub HTTP port directly to the internet
+</Warning>
+
+## Next Steps
+
+- Configure [multiple databases](/configuration/multi-database) with TOML
+- Set up [SSH tunnels](/configuration/ssh-tunnels) for secure remote connections
+- Enable [read-only mode](/configuration/security#read-only-mode) for production
+
+## Resources
+
+- [LibreChat MCP Documentation](https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_servers)
+- [DBHub HTTP Transport Guide](/configuration/http-transport)
+- [MCP Protocol Specification](https://modelcontextprotocol.io/)
