@@ -2,65 +2,112 @@
 title: "LibreChat"
 ---
 
-{/* TODO: Add LibreChat screenshot - image should be placed at docs/images/librechat.webp */}
+DBHub can be integrated with [LibreChat](https://www.librechat.ai/) using either **stdio** or **Streamable HTTP** transport.
 
-DBHub can be integrated with [LibreChat](https://www.librechat.ai/) using the Streamable HTTP transport. This allows multiple users to share the same database connection or configure per-user credentials.
+## Configuration Options
 
-## Prerequisites
+LibreChat supports two ways to connect to DBHub:
 
-1. Start DBHub in HTTP mode:
+<Tabs>
+  <Tab title="stdio (Recommended)">
+    Best for single-user or local development. DBHub runs as a subprocess managed by LibreChat.
 
-```bash
-npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
-```
+    Add to your LibreChat `librechat.yaml`:
 
-Or use Docker:
+    ```yaml
+    mcpServers:
+      dbhub:
+        type: stdio
+        command: npx
+        args:
+          - -y
+          - "@bytebase/dbhub"
+          - "--dsn"
+          - "postgres://user:password@localhost:5432/dbname"
+        timeout: 60000
+    ```
 
-```bash
-docker run -d \
-  -p 8080:8080 \
-  -e TRANSPORT=http \
-  -e PORT=8080 \
-  -e DSN="postgres://user:password@localhost:5432/dbname" \
-  bytebase/dbhub
-```
+    For demo mode:
 
-## Basic Configuration
+    ```yaml
+    mcpServers:
+      dbhub:
+        type: stdio
+        command: npx
+        args:
+          - -y
+          - "@bytebase/dbhub"
+          - "--demo"
+        timeout: 60000
+    ```
+  </Tab>
 
-Add to your LibreChat `librechat.yaml`:
+  <Tab title="Streamable HTTP">
+    Best for multi-user deployments or when LibreChat runs in Docker.
+
+    **Step 1:** Start DBHub in HTTP mode:
+
+    ```bash
+    npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+    ```
+
+    Or with Docker:
+
+    ```bash
+    docker run -d \
+      -p 8080:8080 \
+      -e TRANSPORT=http \
+      -e PORT=8080 \
+      -e DSN="postgres://user:password@localhost:5432/dbname" \
+      bytebase/dbhub
+    ```
+
+    **Step 2:** Add to your LibreChat `librechat.yaml`:
+
+    ```yaml
+    mcpServers:
+      dbhub:
+        type: streamable-http
+        url: http://host.docker.internal:8080/mcp
+        timeout: 60000
+        serverInstructions: true
+    ```
+
+    <Note>
+      **Docker Networking:** When LibreChat runs in Docker (e.g., with docker-compose), use `host.docker.internal:8080` to connect to DBHub running on your host machine. This is Docker's special DNS name that resolves to the host's IP address.
+
+      For native installations, use `http://localhost:8080/mcp` instead.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Complete Example
+
+Here's a complete `librechat.yaml` configuration showing both transport options:
 
 ```yaml
 mcpServers:
-  dbhub:
-    type: streamable-http
-    url: http://localhost:8080/mcp
-```
+  # Option 1: stdio - DBHub runs as subprocess
+  dbhub-stdio:
+    type: stdio
+    command: npx
+    args:
+      - -y
+      - "@bytebase/dbhub"
+      - "--demo"
+    timeout: 60000
 
-For Docker deployments, use the host gateway:
-
-```yaml
-mcpServers:
-  dbhub:
+  # Option 2: Streamable HTTP - DBHub runs separately
+  dbhub-http:
     type: streamable-http
     url: http://host.docker.internal:8080/mcp
+    timeout: 60000
+    serverInstructions: true
 ```
 
-## Demo Mode
-
-For testing with the built-in employee database:
-
-```yaml
-mcpServers:
-  dbhub-demo:
-    type: streamable-http
-    url: http://localhost:8080/mcp
-```
-
-Start DBHub with the `--demo` flag:
-
-```bash
-npx @bytebase/dbhub --transport http --port 8080 --demo
-```
+<Note>
+  You can use both configurations simultaneously if you want to connect to different databases or test both transport methods.
+</Note>
 
 ## Multiple Databases
 
@@ -136,7 +183,16 @@ If you see "Failed to connect" errors:
      -d '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
    ```
 
-3. **For Docker deployments**, ensure you're using `host.docker.internal` instead of `localhost`
+3. **For LibreChat in Docker:** Use `host.docker.internal:8080` instead of `localhost:8080`
+
+   <Warning>
+     This is critical! When LibreChat runs via docker-compose, `localhost` refers to the container itself, not your host machine. Always use `host.docker.internal` to access services running on your host.
+   </Warning>
+
+   Test from inside the container:
+   ```bash
+   docker exec -it librechat curl http://host.docker.internal:8080/healthz
+   ```
 
 ### SSE Stream Errors
 
