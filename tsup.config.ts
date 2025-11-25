@@ -8,14 +8,14 @@ export default defineConfig({
   dts: true,
   clean: true,
   outDir: 'dist',
-  // Copy the employee-sqlite resources to dist
+  // Copy the employee-sqlite demo data to dist
   async onSuccess() {
     // Create target directory
-    const targetDir = path.join('dist', 'resources', 'employee-sqlite');
+    const targetDir = path.join('dist', 'demo', 'employee-sqlite');
     fs.mkdirSync(targetDir, { recursive: true });
 
-    // Copy all SQL files from resources/employee-sqlite to dist/resources/employee-sqlite
-    const sourceDir = path.join('resources', 'employee-sqlite');
+    // Copy all SQL files from demo/employee-sqlite to dist/demo/employee-sqlite
+    const sourceDir = path.join('demo', 'employee-sqlite');
     const files = fs.readdirSync(sourceDir);
 
     for (const file of files) {

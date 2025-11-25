@@ -473,13 +473,15 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
  * Returns array of source configs and the source of the configuration
  */
 export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; source: string } | null> {
-  // 1. Try loading from TOML configuration file (highest priority for multi-source)
-  const tomlConfig = loadTomlConfig();
-  if (tomlConfig) {
-    return tomlConfig;
+  // 1. Try loading from TOML configuration file (skip if --demo flag is set)
+  if (!isDemoMode()) {
+    const tomlConfig = loadTomlConfig();
+    if (tomlConfig) {
+      return tomlConfig;
+    }
   }
 
-  // 2. Fallback to single DSN configuration for backward compatibility
+  // 2. Fallback to single DSN configuration (including demo mode)
   const dsnResult = resolveDSN();
   if (dsnResult) {
     // Parse DSN to extract database type

@@ -16,8 +16,8 @@ const __dirname = path.dirname(__filename);
 // Try different paths to find the SQL files in development or production
 let DEMO_DATA_DIR: string;
 const projectRootPath = path.join(__dirname, "..", "..", "..");
-const projectResourcesPath = path.join(projectRootPath, "resources", "employee-sqlite");
-const distPath = path.join(__dirname, "resources", "employee-sqlite");
+const projectResourcesPath = path.join(projectRootPath, "demo", "employee-sqlite");
+const distPath = path.join(__dirname, "demo", "employee-sqlite");
 
 // First try the project root resources directory (for development)
 if (fs.existsSync(projectResourcesPath)) {
@@ -29,7 +29,7 @@ else if (fs.existsSync(distPath)) {
 }
 // Fallback to a relative path from the current directory
 else {
-  DEMO_DATA_DIR = path.join(process.cwd(), "resources", "employee-sqlite");
+  DEMO_DATA_DIR = path.join(process.cwd(), "demo", "employee-sqlite");
   if (!fs.existsSync(DEMO_DATA_DIR)) {
     throw new Error(`Could not find employee-sqlite resources in any of the expected locations: 
       - ${projectResourcesPath}
