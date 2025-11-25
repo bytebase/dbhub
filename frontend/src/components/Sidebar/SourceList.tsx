@@ -1,36 +1,32 @@
 import { Link, useParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import type { DataSource, DatabaseType } from '../../types/datasource';
+import PostgresLogo from '../../assets/logos/postgres.svg';
+import MySQLLogo from '../../assets/logos/mysql.svg';
+import MariaDBLogo from '../../assets/logos/mariadb.svg';
+import SQLServerLogo from '../../assets/logos/sqlserver.svg';
+import SQLiteLogo from '../../assets/logos/sqlite.svg';
 
 interface SourceListProps {
   sources: DataSource[];
   isLoading: boolean;
 }
 
-const DB_COLORS: Record<DatabaseType, string> = {
-  postgres: '#336791',
-  mysql: '#4479A1',
-  mariadb: '#003545',
-  sqlserver: '#CC2927',
-  sqlite: '#003B57',
-};
-
-const DB_ABBREVIATIONS: Record<DatabaseType, string> = {
-  postgres: 'PG',
-  mysql: 'MY',
-  mariadb: 'MB',
-  sqlserver: 'MS',
-  sqlite: 'SL',
+const DB_LOGOS: Record<DatabaseType, string> = {
+  postgres: PostgresLogo,
+  mysql: MySQLLogo,
+  mariadb: MariaDBLogo,
+  sqlserver: SQLServerLogo,
+  sqlite: SQLiteLogo,
 };
 
 function DatabaseIcon({ type }: { type: DatabaseType }) {
   return (
-    <div
-      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold"
-      style={{ backgroundColor: DB_COLORS[type] }}
-    >
-      {DB_ABBREVIATIONS[type]}
-    </div>
+    <img
+      src={DB_LOGOS[type]}
+      alt={`${type} logo`}
+      className="w-5 h-5"
+    />
   );
 }
 
