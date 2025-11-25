@@ -231,17 +231,14 @@ See documentation for more details on configuring database connections.
 
     // Start the HTTP server (always for frontend)
     app.listen(port, '0.0.0.0', () => {
-      console.error(`DBHub HTTP server listening at http://0.0.0.0:${port}`);
-
       // In development mode, suggest using the Vite dev server for hot reloading
       if (process.env.NODE_ENV === 'development') {
-        console.error('');
         console.error('🚀 Development mode detected!');
-        console.error('   Frontend dev server (with HMR): http://localhost:5173');
+        console.error('   Admin console dev server (with HMR): http://localhost:5173');
         console.error('   Backend API: http://localhost:8080');
         console.error('');
       } else {
-        console.error(`Frontend accessible at http://0.0.0.0:${port}/`);
+        console.error(`Admin console at http://0.0.0.0:${port}/`);
       }
 
       if (transportData.type === "http") {
