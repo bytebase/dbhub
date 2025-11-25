@@ -152,14 +152,23 @@ title: "Server Options"
   Transport protocol for MCP communication.
 
   **Options:**
-  - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor with stdio config)
-  - `http` - For browser and network clients, streamable HTTP transport
+  - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor). Pure MCP-over-stdio with no HTTP server.
+  - `http` - For browser and network clients. Starts HTTP server with MCP endpoint, admin console, and API.
+
+  | Feature | `stdio` | `http` |
+  |---------|:-------:|:------:|
+  | MCP communication | stdin/stdout | HTTP POST `/mcp` |
+  | Admin console | ❌ | ✅ `http://host:port/` |
+  | Health check | ❌ | ✅ `/healthz` |
+  | Sources API | ❌ | ✅ `/api/sources` |
+  | Multiple instances | ✅ No port conflicts | Requires different ports |
 
   ```bash
-  # stdio (default) - for Claude Desktop, Claude Code
+  # stdio (default) - for Claude Desktop, Claude Code, Cursor
+  # No HTTP server started, can run multiple instances simultaneously
   npx @bytebase/dbhub --transport stdio --dsn "..."
 
-  # http - for web clients and remote access
+  # http - for web clients, admin console, and remote access
   npx @bytebase/dbhub --transport http --port 8080 --dsn "..."
   ```
 </ParamField>
@@ -167,7 +176,7 @@ title: "Server Options"
 ### port
 
 <ParamField path="--port" type="number" env="PORT" default="8080">
-  HTTP server port. Only applicable when using `--transport=http`.
+  HTTP server port. Only used when `--transport=http`. Ignored for stdio transport.
 
   ```bash
   npx @bytebase/dbhub --transport http --port 3000 --dsn "..."
