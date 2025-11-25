@@ -247,7 +247,7 @@ See documentation for more details on configuring database connections.
       const server = createServer();
       const transport = new StdioServerTransport();
       await server.connect(transport);
-      console.error("MCP server running on stdio - connect via Claude Desktop, Cursor, or Claude Code");
+      console.error("MCP server running on stdio");
 
       // Listen for SIGINT to gracefully shut down
       process.on("SIGINT", async () => {

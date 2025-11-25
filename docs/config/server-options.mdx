@@ -160,12 +160,12 @@ title: "Server Options"
   | MCP communication | stdin/stdout | HTTP POST `/mcp` |
   | Admin console | ❌ | ✅ `http://host:port/` |
   | Health check | ❌ | ✅ `/healthz` |
-  | Sources API | ❌ | ✅ `/api/sources` |
+  | API | ❌ | ✅ `/api/xxx` |
   | Multiple instances | ✅ No port conflicts | Requires different ports |
 
   ```bash
   # stdio (default) - for Claude Desktop, Claude Code, Cursor
-  # No HTTP server started, can run multiple instances simultaneously
+  # No HTTP server started
   npx @bytebase/dbhub --transport stdio --dsn "..."
 
   # http - for web clients, admin console, and remote access
