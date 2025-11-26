@@ -196,6 +196,10 @@ title: "Server Options"
   ```
 
   Result: `execute_sql_prod` and `execute_sql_staging` tools
+
+  <Note>
+  Cannot be used with `--config` (TOML configuration). TOML config defines source IDs directly in the configuration file. Use command-line DSN configuration instead if you need the `--id` flag.
+  </Note>
 </ParamField>
 
 ### config
@@ -320,8 +324,14 @@ DBHub follows this priority order for configuration:
 3. **Environment variables**
 4. **`.env` files** (`.env.local` in development, `.env` in production)
 
+### Mutually Exclusive Options
+
 <Note>
-`--config` (TOML) and `--dsn` (CLI) are mutually exclusive. If `--config` is provided, TOML configuration takes precedence. You cannot combine `--dsn` with TOML configuration.
+**`--config` (TOML) is mutually exclusive with:**
+- `--dsn` - TOML configuration defines database connections directly
+- `--id` - TOML configuration defines source IDs directly in the file
+
+If using TOML config, remove these flags. If you need `--id` or `--dsn`, use command-line/environment configuration instead.
 </Note>
 
 ## Quick Reference

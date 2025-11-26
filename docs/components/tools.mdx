@@ -6,9 +6,41 @@ MCP Tools enable executable operations on the database. DBHub provides SQL execu
 
 ## Supported Tools
 
-| Tool        | Command Name  | Description                                                         | 
+| Tool        | Command Name  | Description                                                         |
 | ----------- | ------------- | ------------------------------------------------------------------- |
-| Execute SQL | `execute_sql` | Execute single or multiple SQL statements (separated by semicolons) |
+| Execute SQL | `execute_sql` or `execute_sql_{id}` | Execute single or multiple SQL statements (separated by semicolons) |
+
+### Tool Naming
+
+The tool name varies based on your configuration:
+
+**Single database without `--id`:**
+```bash
+npx @bytebase/dbhub --dsn "postgres://..."
+```
+Tool name: `execute_sql`
+
+**Single database with `--id`:**
+```bash
+npx @bytebase/dbhub --id prod --dsn "postgres://..."
+```
+Tool name: `execute_sql_prod`
+
+**Multiple databases via TOML config:**
+```toml
+[[sources]]
+id = "prod-pg"
+dsn = "postgres://..."
+
+[[sources]]
+id = "staging.mysql"
+dsn = "mysql://..."
+```
+Tool names: `execute_sql_prod_pg` and `execute_sql_staging_mysql`
+
+<Note>
+Special characters in source IDs (hyphens, dots, etc.) are converted to underscores in tool names. For example, `prod-pg` becomes `execute_sql_prod_pg`.
+</Note>
 
 ## Execute SQL
 
