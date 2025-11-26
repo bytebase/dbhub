@@ -99,6 +99,7 @@ components:
         - id
         - type
         - is_default
+        - tools
       properties:
         id:
           type: string
@@ -140,6 +141,11 @@ components:
           example: 1000
         ssh_tunnel:
           $ref: '#/components/schemas/SSHTunnel'
+        tools:
+          type: array
+          description: Available MCP tools for this data source
+          items:
+            $ref: '#/components/schemas/Tool'
 
     SSHTunnel:
       type: object
@@ -163,6 +169,54 @@ components:
           type: string
           description: SSH username
           example: deploy
+
+    Tool:
+      type: object
+      description: MCP tool available for a data source
+      required:
+        - name
+        - description
+        - parameters
+      properties:
+        name:
+          type: string
+          description: Tool name
+          example: execute_sql_prod_pg
+        description:
+          type: string
+          description: Tool description
+          example: Execute a SQL query on the 'prod_pg' postgres database (default)
+        parameters:
+          type: array
+          description: Tool input parameters
+          items:
+            $ref: '#/components/schemas/ToolParameter'
+
+    ToolParameter:
+      type: object
+      description: Parameter definition for a tool
+      required:
+        - name
+        - type
+        - required
+        - description
+      properties:
+        name:
+          type: string
+          description: Parameter name
+          example: sql
+        type:
+          type: string
+          description: Parameter type
+          example: string
+        required:
+          type: boolean
+          description: Whether the parameter is required
+          example: true
+        description:
+          type: string
+          description: Parameter description
+          example: SQL query or multiple SQL statements to execute (separated by semicolons)
 
     Error:
       type: object

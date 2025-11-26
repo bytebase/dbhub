@@ -208,6 +208,58 @@ export default function SourceDetailView() {
             </dl>
           </div>
         )}
+
+        <div className="bg-card border border-border rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-foreground mb-4">
+            Available Tools
+          </h2>
+          {source.tools.length > 0 ? (
+            <div className="space-y-6">
+              {source.tools.map((tool) => (
+                <div key={tool.name} className="space-y-3">
+                  <div>
+                    <div className="text-sm font-medium text-foreground font-mono">
+                      {tool.name}
+                    </div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {tool.description}
+                    </div>
+                  </div>
+
+                  {tool.parameters.length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium text-muted-foreground mb-2">
+                        Parameters:
+                      </div>
+                      <ul className="space-y-2">
+                        {tool.parameters.map((param) => (
+                          <li key={param.name} className="text-sm">
+                            <span className="font-mono text-foreground">
+                              {param.name}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {' '}({param.type}
+                              {param.required && ', required'})
+                            </span>
+                            {param.description && (
+                              <div className="mt-1 text-muted-foreground ml-4">
+                                {param.description}
+                              </div>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No tools available for this source
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

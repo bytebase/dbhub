@@ -523,9 +523,9 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     }
 
     // Get --id flag value (if specified) to use as source ID
-    // If not specified, use empty string (which will result in no tool name suffix)
+    // If not specified, use "default" (which will result in no tool name suffix)
     const idData = resolveId();
-    const sourceId = idData?.id || "";
+    const sourceId = idData?.id || "default";
 
     // Create a single source config from the resolved DSN
     const source: SourceConfig = {
