@@ -132,6 +132,94 @@ describe('Data Sources API Integration Tests', () => {
         expect(source).not.toHaveProperty('ssh_passphrase');
       });
     });
+
+    it('should include tools array for all sources', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      sources.forEach((source) => {
+        expect(source.tools).toBeDefined();
+        expect(Array.isArray(source.tools)).toBe(true);
+        expect(source.tools.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('should include correct tool metadata structure', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      sources.forEach((source) => {
+        source.tools.forEach((tool) => {
+          // Verify tool has required fields
+          expect(tool.name).toBeDefined();
+          expect(typeof tool.name).toBe('string');
+          expect(tool.description).toBeDefined();
+          expect(typeof tool.description).toBe('string');
+          expect(tool.parameters).toBeDefined();
+          expect(Array.isArray(tool.parameters)).toBe(true);
+
+          // Verify parameter structure
+          tool.parameters.forEach((param) => {
+            expect(param.name).toBeDefined();
+            expect(typeof param.name).toBe('string');
+            expect(param.type).toBeDefined();
+            expect(typeof param.type).toBe('string');
+            expect(param.required).toBeDefined();
+            expect(typeof param.required).toBe('boolean');
+            expect(param.description).toBeDefined();
+            expect(typeof param.description).toBe('string');
+          });
+        });
+      });
+    });
+
+    it('should include execute_sql tools with correct naming', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      // All sources should have execute_sql tool with source-specific name
+      expect(sources[0].tools[0].name).toBe('execute_sql_readonly_limited');
+      expect(sources[1].tools[0].name).toBe('execute_sql_writable_limited');
+      expect(sources[2].tools[0].name).toBe('execute_sql_writable_unlimited');
+    });
+
+    it('should include source ID and type in tool descriptions', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      sources.forEach((source) => {
+        const tool = source.tools[0];
+        expect(tool.description).toContain(source.id);
+        expect(tool.description).toContain(source.type);
+      });
+    });
+
+    it('should mark default source in tool description', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      // First source is default
+      expect(sources[0].tools[0].description).toContain('(default)');
+
+      // Other sources should not have (default) marker
+      expect(sources[1].tools[0].description).not.toContain('(default)');
+      expect(sources[2].tools[0].description).not.toContain('(default)');
+    });
+
+    it('should include sql parameter in execute_sql tool', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      sources.forEach((source) => {
+        const tool = source.tools[0];
+        const sqlParam = tool.parameters.find((p) => p.name === 'sql');
+
+        expect(sqlParam).toBeDefined();
+        expect(sqlParam!.type).toBe('string');
+        expect(sqlParam!.required).toBe(true);
+        expect(sqlParam!.description).toContain('SQL');
+      });
+    });
   });
 
   describe('GET /api/sources/{source-id}', () => {
@@ -184,6 +272,41 @@ describe('Data Sources API Integration Tests', () => {
 
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('readonly_limited');
+    });
+
+    it('should include tools array in single source response', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
+      const source = (await response.json()) as DataSource;
+
+      expect(source.tools).toBeDefined();
+      expect(Array.isArray(source.tools)).toBe(true);
+      expect(source.tools.length).toBeGreaterThan(0);
+    });
+
+    it('should include correct tool name for specific source', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources/writable_limited`);
+      const source = (await response.json()) as DataSource;
+
+      expect(source.tools[0].name).toBe('execute_sql_writable_limited');
+      expect(source.tools[0].description).toContain('writable_limited');
+      expect(source.tools[0].description).toContain('sqlite');
+    });
+
+    it('should include complete tool metadata in single source response', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
+      const source = (await response.json()) as DataSource;
+
+      const tool = source.tools[0];
+      expect(tool.name).toBe('execute_sql_readonly_limited');
+      expect(tool.description).toBeDefined();
+      expect(tool.parameters).toBeDefined();
+      expect(Array.isArray(tool.parameters)).toBe(true);
+
+      // Verify sql parameter exists
+      const sqlParam = tool.parameters.find((p) => p.name === 'sql');
+      expect(sqlParam).toBeDefined();
+      expect(sqlParam!.type).toBe('string');
+      expect(sqlParam!.required).toBe(true);
     });
   });
 
