@@ -44,7 +44,7 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
     const description = zodType.description || "";
 
     // Determine if required (Zod types are required by default unless optional)
-    const required = !zodType.isOptional();
+    const required = !(zodType instanceof z.ZodOptional);
 
     // Determine type from Zod type
     let type = "string"; // default
