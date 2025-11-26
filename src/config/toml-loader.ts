@@ -234,7 +234,7 @@ function processSourceConfigs(
         if (!processed.host && connectionInfo.host) {
           processed.host = connectionInfo.host;
         }
-        if (processed.port === undefined && connectionInfo.port) {
+        if (processed.port === undefined && connectionInfo.port !== undefined) {
           processed.port = connectionInfo.port;
         }
         if (!processed.database && connectionInfo.database) {
