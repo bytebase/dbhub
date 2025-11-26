@@ -36,7 +36,7 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
       // For absolute paths: sqlite:///path/to/db -> /path/to/db
       // For relative paths: sqlite:///./relative.db -> ./relative.db
       // For memory: sqlite:///:memory: -> :memory:
-      const pathMatch = dsn.match(/^sqlite:\/\/\/(.+)$/);
+      const pathMatch = dsn.match(/^sqlite:\/\/\/(.*)$/);
       if (pathMatch) {
         let dbPath = pathMatch[1];
         // If path doesn't start with special chars (: for memory, . for relative),
