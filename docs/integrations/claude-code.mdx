@@ -17,7 +17,7 @@ it will load DBHub.
 
 For project-specific database connections shared with your team, create `.mcp.json` in your project root:
 
-```json
+```json .mcp.json
 {
   "mcpServers": {
     "dbhub": {
@@ -36,7 +36,7 @@ For project-specific database connections shared with your team, create `.mcp.js
 
 <Tip>
 Use environment variable expansion for sensitive values:
-```json
+```json .mcp.json
 {
   "mcpServers": {
     "dbhub": {
@@ -88,3 +88,7 @@ Verify DBHub is loaded:
 ```bash
 /mcp
 ```
+
+## References
+
+- [Claude Code MCP Documentation](https://code.claude.com/docs/en/mcp)

@@ -20,7 +20,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
   <Tab title="MacOS/Linux">
     Edit `~/.cursor/mcp.json`:
 
-    ```json
+    ```json ~/.cursor/mcp.json
     {
       "mcpServers": {
         "dbhub": {
@@ -41,7 +41,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
   <Tab title="Windows">
     Edit `%USERPROFILE%\.cursor\mcp.json`:
 
-    ```json
+    ```json %USERPROFILE%\.cursor\mcp.json
     {
       "mcpServers": {
         "dbhub": {
@@ -64,7 +64,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
 
 For project-specific database connections, create `.cursor/mcp.json` in your project root:
 
-```json
+```json .cursor/mcp.json
 {
   "mcpServers": {
     "project-db": {
@@ -80,3 +80,7 @@ For project-specific database connections, create `.cursor/mcp.json` in your pro
   }
 }
 ```
+
+## References
+
+- [Cursor MCP Documentation](https://cursor.com/docs/context/mcp)

@@ -2,90 +2,80 @@
 title: "VS Code"
 ---
 
-<Tabs>
-  <Tab title="Cline">
-    [Cline](https://github.com/cline/cline) is a VS Code extension that supports MCP servers.
+VS Code has native MCP support through GitHub Copilot.
 
-    **Installation**
+Create `.vscode/mcp.json` in your project root:
 
-    1. Install the Cline extension from the VS Code marketplace
-    2. Configure MCP settings in Cline's settings UI or edit the config file
-
-    **Configuration**
-
-    Edit `~/.cline/mcp_servers.json`:
-
-    ```json
-    {
-      "mcpServers": {
-        "dbhub": {
-          "command": "npx",
-          "args": [
-            "@bytebase/dbhub",
-            "--transport",
-            "stdio",
-            "--dsn",
-            "postgres://user:password@localhost:5432/dbname"
-          ]
-        }
-      }
-    }
-    ```
-  </Tab>
-
-  <Tab title="Continue">
-    [Continue](https://continue.dev) is another VS Code extension with MCP support.
-
-    **Installation**
-
-    1. Install Continue from the VS Code marketplace
-    2. Configure MCP in Continue's settings
-
-    **Configuration**
-
-    Edit `~/.continue/config.json`:
-
-    ```json
-    {
-      "mcpServers": {
-        "dbhub": {
-          "command": "npx",
-          "args": [
-            "@bytebase/dbhub",
-            "--transport",
-            "stdio",
-            "--dsn",
-            "postgres://user:password@localhost:5432/dbname"
-          ]
-        }
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
-
-## Workspace Configuration
-
-For workspace-specific database connections, create `.vscode/mcp_config.json`:
-
-```json
+```json .vscode/mcp.json
 {
-  "mcpServers": {
-    "workspace-db": {
+  "servers": {
+    "dbhub": {
+      "type": "stdio",
       "command": "npx",
       "args": [
         "@bytebase/dbhub",
-        "--config",
-        "./dbhub.toml"
+        "--transport",
+        "stdio",
+        "--dsn",
+        "postgres://user:password@localhost:5432/dbname"
       ]
     }
   }
 }
 ```
 
-## Troubleshooting
+## Using Input Variables
 
-1. Check the extension's output panel for errors
-1. Verify DBHub is installed: `npx @bytebase/dbhub --help`
-1. Test the DSN connection outside VS Code
-1. Restart VS Code after configuration changes
+For sensitive data like passwords, use input variables:
+
+```json .vscode/mcp.json
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "db-dsn",
+      "description": "Database connection string",
+      "password": true
+    }
+  ],
+  "servers": {
+    "dbhub": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--transport",
+        "stdio",
+        "--dsn",
+        "${input:db-dsn}"
+      ]
+    }
+  }
+}
+```
+
+## Using Config File
+
+For multi-database setups, use a config file:
+
+```json .vscode/mcp.json
+{
+  "servers": {
+    "dbhub": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@bytebase/dbhub",
+        "--transport",
+        "stdio",
+        "--config",
+        "${workspaceFolder}/dbhub.toml"
+      ]
+    }
+  }
+}
+```
+
+## References
+
+- [VS Code MCP Documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
