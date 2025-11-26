@@ -1,43 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ConnectorManager } from '../manager.js';
-import type { SourceConfig } from '../../types/config.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { setupManagerWithFixture, FIXTURES } from '../../__fixtures__/helpers.js';
+import type { ConnectorManager } from '../manager.js';
 
 // Import SQLite connector to ensure it's registered
 import '../sqlite/index.js';
 
 describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
   let manager: ConnectorManager;
-  let dbPathA: string;
-  let dbPathB: string;
 
   beforeAll(async () => {
-    // Create two separate temporary database files
-    const tempDir = os.tmpdir();
-    dbPathA = path.join(tempDir, `database_a_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
-    dbPathB = path.join(tempDir, `database_b_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
-
-    // Create the database files
-    fs.writeFileSync(dbPathA, '');
-    fs.writeFileSync(dbPathB, '');
-
-    // Configure two SQLite sources
-    const sources: SourceConfig[] = [
-      {
-        id: 'database_a',
-        dsn: `sqlite://${dbPathA}`,
-      },
-      {
-        id: 'database_b',
-        dsn: `sqlite://${dbPathB}`,
-      },
-    ];
-
-    // Initialize ConnectorManager with multiple sources
-    manager = new ConnectorManager();
-    await manager.connectWithSources(sources);
+    // Initialize ConnectorManager with multi-sqlite fixture
+    // This fixture provides 3 in-memory SQLite databases: database_a, database_b, database_c
+    manager = await setupManagerWithFixture(FIXTURES.MULTI_SQLITE);
 
     // Setup test data in database_a
     const connectorA = manager.getConnector('database_a');
@@ -65,33 +39,15 @@ describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
   }, 30000);
 
   afterAll(async () => {
-    // Cleanup
+    // Cleanup: disconnect from in-memory databases
     if (manager) {
       await manager.disconnect();
-    }
-
-    // Clean up temporary database files
-    if (fs.existsSync(dbPathA)) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        fs.unlinkSync(dbPathA);
-      } catch (error) {
-        console.warn(`Failed to cleanup ${dbPathA}:`, error);
-      }
-    }
-    if (fs.existsSync(dbPathB)) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        fs.unlinkSync(dbPathB);
-      } catch (error) {
-        console.warn(`Failed to cleanup ${dbPathB}:`, error);
-      }
     }
   });
 
   it('should connect to multiple SQLite databases independently', async () => {
     const sourceIds = manager.getSourceIds();
-    expect(sourceIds).toEqual(['database_a', 'database_b']);
+    expect(sourceIds).toEqual(['database_a', 'database_b', 'database_c']);
   });
 
   it('should maintain separate table structures for each database', async () => {

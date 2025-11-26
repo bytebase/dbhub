@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { Application } from 'express';
-import { ConnectorManager } from '../../connectors/manager.js';
-import type { SourceConfig } from '../../types/config.js';
+import { setupManagerWithFixture, FIXTURES } from '../../__fixtures__/helpers.js';
+import type { ConnectorManager } from '../../connectors/manager.js';
 import { listSources, getSource } from '../sources.js';
 import type { components } from '../openapi.js';
 import { Server } from 'http';
@@ -20,32 +20,12 @@ describe('Data Sources API Integration Tests', () => {
   const BASE_URL = `http://localhost:${TEST_PORT}`;
 
   beforeAll(async () => {
-    // Configure multiple test sources
-    const sources: SourceConfig[] = [
-      {
-        id: 'test_sqlite_main',
-        type: 'sqlite',
-        database: ':memory:',
-        readonly: true,
-        max_rows: 100,
-      },
-      {
-        id: 'test_sqlite_secondary',
-        type: 'sqlite',
-        database: ':memory:',
-        readonly: false,
-        max_rows: 500,
-      },
-      {
-        id: 'test_sqlite_third',
-        type: 'sqlite',
-        database: ':memory:',
-      },
-    ];
-
-    // Initialize ConnectorManager with multiple sources
-    manager = new ConnectorManager();
-    await manager.connectWithSources(sources);
+    // Initialize ConnectorManager with readonly-maxrows fixture
+    // This fixture provides 3 SQLite sources with different execution options:
+    // - readonly_limited: readonly=true, max_rows=100
+    // - writable_limited: readonly=false, max_rows=500
+    // - writable_unlimited: readonly=false, no max_rows
+    manager = await setupManagerWithFixture(FIXTURES.READONLY_MAXROWS);
 
     // Set up Express app with API routes
     app = express();
@@ -92,7 +72,7 @@ describe('Data Sources API Integration Tests', () => {
       const sources = (await response.json()) as DataSource[];
 
       const ids = sources.map((s) => s.id);
-      expect(ids).toEqual(['test_sqlite_main', 'test_sqlite_secondary', 'test_sqlite_third']);
+      expect(ids).toEqual(['readonly_limited', 'writable_limited', 'writable_unlimited']);
     });
 
     it('should mark first source as default', async () => {
@@ -156,11 +136,11 @@ describe('Data Sources API Integration Tests', () => {
 
   describe('GET /api/sources/{source-id}', () => {
     it('should return specific source by ID', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources/test_sqlite_main`);
+      const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
       expect(response.status).toBe(200);
 
       const source = (await response.json()) as DataSource;
-      expect(source.id).toBe('test_sqlite_main');
+      expect(source.id).toBe('readonly_limited');
       expect(source.type).toBe('sqlite');
       expect(source.is_default).toBe(true);
       expect(source.readonly).toBe(true);
@@ -168,11 +148,11 @@ describe('Data Sources API Integration Tests', () => {
     });
 
     it('should return correct data for non-default source', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources/test_sqlite_secondary`);
+      const response = await fetch(`${BASE_URL}/api/sources/writable_limited`);
       expect(response.status).toBe(200);
 
       const source = (await response.json()) as DataSource;
-      expect(source.id).toBe('test_sqlite_secondary');
+      expect(source.id).toBe('writable_limited');
       expect(source.is_default).toBe(false);
       expect(source.readonly).toBe(false);
       expect(source.max_rows).toBe(500);
@@ -188,7 +168,7 @@ describe('Data Sources API Integration Tests', () => {
     });
 
     it('should not include sensitive fields in single source response', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources/test_sqlite_main`);
+      const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
       const source = (await response.json()) as DataSource;
 
       expect(source).not.toHaveProperty('password');
@@ -198,12 +178,12 @@ describe('Data Sources API Integration Tests', () => {
     });
 
     it('should handle URL-encoded source IDs', async () => {
-      // Test with spaces in ID (though not recommended)
-      const response = await fetch(`${BASE_URL}/api/sources/${encodeURIComponent('test_sqlite_main')}`);
+      // Test with underscores in ID
+      const response = await fetch(`${BASE_URL}/api/sources/${encodeURIComponent('readonly_limited')}`);
       expect(response.status).toBe(200);
 
       const source = (await response.json()) as DataSource;
-      expect(source.id).toBe('test_sqlite_main');
+      expect(source.id).toBe('readonly_limited');
     });
   });
 
