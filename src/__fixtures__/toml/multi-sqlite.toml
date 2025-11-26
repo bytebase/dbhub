@@ -1,0 +1,17 @@
+# Multiple in-memory SQLite databases
+# Used for testing multi-database scenarios and source routing
+
+[[sources]]
+id = "database_a"
+type = "sqlite"
+database = ":memory:"
+
+[[sources]]
+id = "database_b"
+type = "sqlite"
+database = ":memory:"
+
+[[sources]]
+id = "database_c"
+type = "sqlite"
+database = ":memory:"

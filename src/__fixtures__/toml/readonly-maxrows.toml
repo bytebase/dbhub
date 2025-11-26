@@ -1,0 +1,21 @@
+# Sources with execution options (readonly, max_rows)
+# Used for testing query execution constraints
+
+[[sources]]
+id = "readonly_limited"
+type = "sqlite"
+database = ":memory:"
+readonly = true
+max_rows = 100
+
+[[sources]]
+id = "writable_limited"
+type = "sqlite"
+database = ":memory:"
+readonly = false
+max_rows = 500
+
+[[sources]]
+id = "writable_unlimited"
+type = "sqlite"
+database = ":memory:"
