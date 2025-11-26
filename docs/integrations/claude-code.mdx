@@ -4,55 +4,91 @@ title: "Claude Code"
 
 ## CLI
 
-The easiest way to add DBHub to Claude Code:
+<Tabs>
+  <Tab title="Stdio">
+  For local database connections, use stdio transport:
 
-```bash
-claude mcp add dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
-```
+  ```bash
+  claude mcp add --transport stdio dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+  ```
 
-This adds DBHub to your user-level configuration. If you start Claude code in the current directory,
-it will load DBHub.
+  <Note>
+  The `--` separates Claude's flags from DBHub's arguments. Everything after `--` is the DBHub command.
+  </Note>
+  </Tab>
+  <Tab title="HTTP">
+  For remote or shared database servers, use HTTP transport:
+
+  ```bash
+  claude mcp add --transport http dbhub http://localhost:8080/mcp
+  ```
+
+  This connects to a DBHub server running with HTTP transport:
+
+  ```bash
+  npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+  ```
+  </Tab>
+</Tabs>
 
 ## Project Configuration
 
-For project-specific database connections shared with your team, create `.mcp.json` in your project root:
+For project-specific database connections shared with your team, create `.mcp.json` in your project root.
 
-```json .mcp.json
-{
-  "mcpServers": {
-    "dbhub": {
-      "command": "npx",
-      "args": [
-        "@bytebase/dbhub",
-        "--transport",
-        "stdio",
-        "--dsn",
-        "postgres://user:password@localhost:5432/dbname"
-      ]
+<Tabs>
+  <Tab title="Stdio">
+  ```json .mcp.json
+  {
+    "mcpServers": {
+      "dbhub": {
+        "type": "stdio",
+        "command": "npx",
+        "args": [
+          "@bytebase/dbhub",
+          "--transport",
+          "stdio",
+          "--dsn",
+          "postgres://user:password@localhost:5432/dbname"
+        ]
+      }
     }
   }
-}
-```
+  ```
 
-<Tip>
-Use environment variable expansion for sensitive values:
-```json .mcp.json
-{
-  "mcpServers": {
-    "dbhub": {
-      "command": "npx",
-      "args": [
-        "@bytebase/dbhub",
-        "--transport",
-        "stdio",
-        "--dsn",
-        "${DATABASE_URL}"
-      ]
+  <Tip>
+  Use environment variable expansion for sensitive values:
+  ```json .mcp.json
+  {
+    "mcpServers": {
+      "dbhub": {
+        "type": "stdio",
+        "command": "npx",
+        "args": [
+          "@bytebase/dbhub",
+          "--transport",
+          "stdio",
+          "--dsn",
+          "${DATABASE_URL}"
+        ]
+      }
     }
   }
-}
-```
-</Tip>
+  ```
+  </Tip>
+  </Tab>
+  <Tab title="HTTP">
+  ```json .mcp.json
+  {
+    "mcpServers": {
+      "dbhub": {
+        "type": "http",
+        "url": "http://localhost:8080/mcp"
+      }
+    }
+  }
+  ```
+  </Tab>
+</Tabs>
 
 ## User Configuration
 
