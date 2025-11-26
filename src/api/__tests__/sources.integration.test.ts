@@ -177,10 +177,14 @@ describe('Data Sources API Integration Tests', () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
-      // All sources should have execute_sql tool with source-specific name
-      expect(sources[0].tools[0].name).toBe('execute_sql_readonly_limited');
-      expect(sources[1].tools[0].name).toBe('execute_sql_writable_limited');
-      expect(sources[2].tools[0].name).toBe('execute_sql_writable_unlimited');
+      // Find sources by ID to avoid relying on array order
+      const readonlySource = sources.find(s => s.id === 'readonly_limited');
+      const writableSource = sources.find(s => s.id === 'writable_limited');
+      const unlimitedSource = sources.find(s => s.id === 'writable_unlimited');
+
+      expect(readonlySource?.tools[0].name).toBe('execute_sql_readonly_limited');
+      expect(writableSource?.tools[0].name).toBe('execute_sql_writable_limited');
+      expect(unlimitedSource?.tools[0].name).toBe('execute_sql_writable_unlimited');
     });
 
     it('should include source ID and type in tool descriptions', async () => {
