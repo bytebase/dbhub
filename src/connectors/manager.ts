@@ -3,6 +3,7 @@ import { SSHTunnel } from "../utils/ssh-tunnel.js";
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
+import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -304,16 +305,10 @@ export class ConnectorManager {
    * Get default port for a database based on DSN protocol
    */
   private getDefaultPort(dsn: string): number {
-    if (dsn.startsWith('postgres://') || dsn.startsWith('postgresql://')) {
-      return 5432;
-    } else if (dsn.startsWith('mysql://')) {
-      return 3306;
-    } else if (dsn.startsWith('mariadb://')) {
-      return 3306;
-    } else if (dsn.startsWith('sqlserver://')) {
-      return 1433;
+    const type = getDatabaseTypeFromDSN(dsn);
+    if (!type) {
+      return 0;
     }
-    // SQLite doesn't use ports
-    return 0;
+    return getDefaultPortForType(type) ?? 0;
   }
 }

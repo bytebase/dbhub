@@ -1,5 +1,85 @@
 import type { SSHTunnelConfig } from '../types/ssh.js';
 import type { ConnectorType } from '../connectors/interface.js';
+import { SafeURL } from './safe-url.js';
+
+/**
+ * Parsed connection information from a DSN string
+ * Used to populate SourceConfig fields when DSN is provided
+ */
+export interface ParsedConnectionInfo {
+  type?: ConnectorType;
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+}
+
+/**
+ * Parse connection information from a DSN string
+ * Extracts host, port, database, user, and type without exposing password
+ *
+ * @param dsn - Database connection string
+ * @returns Parsed connection info or null if parsing fails
+ */
+export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | null {
+  if (!dsn) {
+    return null;
+  }
+
+  try {
+    const type = getDatabaseTypeFromDSN(dsn);
+
+    // Handle SQLite specially - it only has a database path
+    if (type === 'sqlite') {
+      // SQLite DSN format: sqlite:///path/to/db or sqlite:///:memory:
+      // The path after sqlite:/// is the database path
+      // For absolute paths: sqlite:///path/to/db -> /path/to/db
+      // For relative paths: sqlite:///./relative.db -> ./relative.db
+      // For memory: sqlite:///:memory: -> :memory:
+      const pathMatch = dsn.match(/^sqlite:\/\/\/(.+)$/);
+      if (pathMatch) {
+        let dbPath = pathMatch[1];
+        // If path doesn't start with special chars (: for memory, . for relative),
+        // it's an absolute path and needs leading /
+        if (!dbPath.startsWith(':') && !dbPath.startsWith('.')) {
+          dbPath = '/' + dbPath;
+        }
+        return {
+          type,
+          database: dbPath,
+        };
+      }
+      return { type };
+    }
+
+    // Parse other database DSNs using SafeURL
+    const url = new SafeURL(dsn);
+
+    const info: ParsedConnectionInfo = { type };
+
+    if (url.hostname) {
+      info.host = url.hostname;
+    }
+
+    if (url.port) {
+      info.port = parseInt(url.port, 10);
+    }
+
+    if (url.pathname && url.pathname.length > 1) {
+      // Remove leading '/' from pathname
+      info.database = url.pathname.substring(1);
+    }
+
+    if (url.username) {
+      info.user = url.username;
+    }
+
+    return info;
+  } catch {
+    // If parsing fails, return null
+    return null;
+  }
+}
 
 /**
  * Obfuscates the password in a DSN string for logging purposes
@@ -12,49 +92,43 @@ export function obfuscateDSNPassword(dsn: string): string {
   }
 
   try {
-    // Handle different DSN formats
-    const protocolMatch = dsn.match(/^([^:]+):/);
-    if (!protocolMatch) {
-      return dsn; // Not a recognizable DSN format
-    }
+    const type = getDatabaseTypeFromDSN(dsn);
 
-    const protocol = protocolMatch[1];
-
-    // For SQLite file paths, don't obfuscate
-    if (protocol === 'sqlite') {
+    // SQLite has no password to obfuscate
+    if (type === 'sqlite') {
       return dsn;
     }
 
-    // For other databases, look for password pattern: ://user:password@host
-    // We need to be careful with @ in passwords, so we'll find the last @ that separates password from host
-    const protocolPart = dsn.split('://')[1];
-    if (!protocolPart) {
+    // Parse DSN using SafeURL
+    const url = new SafeURL(dsn);
+
+    // No password to obfuscate
+    if (!url.password) {
       return dsn;
     }
-    
-    // Find the last @ to separate credentials from host
-    const lastAtIndex = protocolPart.lastIndexOf('@');
-    if (lastAtIndex === -1) {
-      return dsn; // No @ found, no password to obfuscate
+
+    // Reconstruct DSN with obfuscated password
+    const obfuscatedPassword = '*'.repeat(Math.min(url.password.length, 8));
+    const protocol = dsn.split(':')[0];
+
+    let result = `${protocol}://${url.username}:${obfuscatedPassword}@${url.hostname}`;
+    if (url.port) {
+      result += `:${url.port}`;
     }
-    
-    const credentialsPart = protocolPart.substring(0, lastAtIndex);
-    const hostPart = protocolPart.substring(lastAtIndex + 1);
-    
-    // Check if there's a colon in credentials (user:password format)
-    const colonIndex = credentialsPart.indexOf(':');
-    if (colonIndex === -1) {
-      return dsn; // No colon found, no password to obfuscate
+    result += url.pathname;
+
+    // Preserve query parameters
+    if (url.searchParams.size > 0) {
+      const params: string[] = [];
+      url.forEachSearchParam((value, key) => {
+        params.push(`${key}=${encodeURIComponent(value)}`);
+      });
+      result += `?${params.join('&')}`;
     }
-    
-    const username = credentialsPart.substring(0, colonIndex);
-    const password = credentialsPart.substring(colonIndex + 1);
-    const obfuscatedPassword = '*'.repeat(Math.min(password.length, 8));
-    
-    return `${protocol}://${username}:${obfuscatedPassword}@${hostPart}`;
-  } catch (error) {
-    // If any error occurs during obfuscation, return the original DSN
-    // This ensures we don't break functionality due to obfuscation issues
+
+    return result;
+  } catch {
+    // If parsing fails, return original DSN
     return dsn;
   }
 }
@@ -97,7 +171,14 @@ export function getDatabaseTypeFromDSN(dsn: string): ConnectorType | undefined {
   }
 
   const protocol = dsn.split(':')[0];
-  const protocolToType: Record<string, ConnectorType> = {
+  return protocolToConnectorType(protocol);
+}
+
+/**
+ * Maps a protocol string to a ConnectorType
+ */
+function protocolToConnectorType(protocol: string): ConnectorType | undefined {
+  const mapping: Record<string, ConnectorType> = {
     'postgres': 'postgres',
     'postgresql': 'postgres',
     'mysql': 'mysql',
@@ -105,6 +186,21 @@ export function getDatabaseTypeFromDSN(dsn: string): ConnectorType | undefined {
     'sqlserver': 'sqlserver',
     'sqlite': 'sqlite'
   };
+  return mapping[protocol];
+}
 
-  return protocolToType[protocol];
+/**
+ * Get the default port for a database type
+ * @param type The database connector type
+ * @returns The default port or undefined for SQLite
+ */
+export function getDefaultPortForType(type: ConnectorType): number | undefined {
+  const ports: Record<ConnectorType, number | undefined> = {
+    'postgres': 5432,
+    'mysql': 3306,
+    'mariadb': 3306,
+    'sqlserver': 1433,
+    'sqlite': undefined,
+  };
+  return ports[type];
 }
