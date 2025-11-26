@@ -34,22 +34,21 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
 
     // Handle SQLite specially - it only has a database path
     if (type === 'sqlite') {
-      // SQLite DSN format: sqlite:///path/to/db or sqlite:///:memory:
-      // The path after sqlite:/// is the database path
-      // For absolute paths: sqlite:///path/to/db -> /path/to/db
-      // For relative paths: sqlite:///./relative.db -> ./relative.db
-      // For memory: sqlite:///:memory: -> :memory:
-      const pathMatch = dsn.match(/^sqlite:\/\/\/(.*)$/);
-      if (pathMatch) {
-        let dbPath = pathMatch[1];
-        // If path doesn't start with special chars (: for memory, . for relative),
-        // it's an absolute path and needs leading /
-        if (!dbPath.startsWith(':') && !dbPath.startsWith('.')) {
-          dbPath = '/' + dbPath;
-        }
+      // SQLite DSN format: sqlite:///path
+      const prefix = 'sqlite:///';
+      if (dsn.length > prefix.length) {
+        const rawPath = dsn.substring(prefix.length);
+        // Add leading '/' for Unix absolute paths only
+        // Don't add '/' for:
+        // - Memory database: starts with ':'
+        // - Relative paths: starts with '.' or '~'
+        // - Windows absolute: second char is ':' (e.g., C:/path)
+        const firstChar = rawPath[0];
+        const isWindowsDrive = rawPath.length > 1 && rawPath[1] === ':';
+        const isSpecialPath = firstChar === ':' || firstChar === '.' || firstChar === '~' || isWindowsDrive;
         return {
           type,
-          database: dbPath,
+          database: isSpecialPath ? rawPath : '/' + rawPath,
         };
       }
       return { type };
