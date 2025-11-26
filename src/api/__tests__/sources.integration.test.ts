@@ -202,12 +202,14 @@ describe('Data Sources API Integration Tests', () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
-      // First source is default
-      expect(sources[0].tools[0].description).toContain('(default)');
+      const defaultSource = sources.find(s => s.is_default);
+      expect(defaultSource).toBeDefined();
+      expect(defaultSource?.tools[0].description).toContain('(default)');
 
-      // Other sources should not have (default) marker
-      expect(sources[1].tools[0].description).not.toContain('(default)');
-      expect(sources[2].tools[0].description).not.toContain('(default)');
+      const nonDefaultSources = sources.filter(s => !s.is_default);
+      nonDefaultSources.forEach((source) => {
+        expect(source.tools[0].description).not.toContain('(default)');
+      });
     });
 
     it('should include sql parameter in execute_sql tool', async () => {
