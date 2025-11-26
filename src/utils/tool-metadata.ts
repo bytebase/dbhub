@@ -84,11 +84,11 @@ export function getToolMetadataForSource(sourceId: string): ToolMetadata {
   // Determine tool name based on single vs multi-source configuration
   let toolName: string;
   if (sourceIds.length === 1) {
-    // Single source: use "execute_sql" if ID is empty, otherwise suffix with ID
-    toolName = sourceId === "" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
+    // Single source: use "execute_sql" if ID is "default", otherwise suffix with ID
+    toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
   } else {
-    // Multiple sources: always suffix with source ID
-    toolName = `execute_sql_${normalizeSourceId(sourceId)}`;
+    // Multiple sources: always suffix with source ID (unless it's "default")
+    toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
   }
 
   // Determine description
