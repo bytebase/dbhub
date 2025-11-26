@@ -43,6 +43,30 @@ describe('DSN Obfuscation Utilities', () => {
       const result = obfuscateDSNPassword(dsn);
       expect(result).toBe('postgres://user:****@localhost:5432/db?sslmode=require&connect_timeout=10');
     });
+
+    it('should obfuscate DSN without database path', () => {
+      const dsn = 'postgres://user:pass@localhost:5432';
+      const result = obfuscateDSNPassword(dsn);
+      expect(result).toBe('postgres://user:****@localhost:5432');
+    });
+
+    it('should obfuscate DSN without username but with password', () => {
+      const dsn = 'postgres://:pass@localhost:5432/db';
+      const result = obfuscateDSNPassword(dsn);
+      expect(result).toBe('postgres://****@localhost:5432/db');
+    });
+
+    it('should obfuscate DSN without username and without database path', () => {
+      const dsn = 'postgres://:pass@localhost:5432';
+      const result = obfuscateDSNPassword(dsn);
+      expect(result).toBe('postgres://****@localhost:5432');
+    });
+
+    it('should obfuscate DSN without database path but with query parameters', () => {
+      const dsn = 'postgres://user:pass@localhost:5432?sslmode=require';
+      const result = obfuscateDSNPassword(dsn);
+      expect(result).toBe('postgres://user:****@localhost:5432?sslmode=require');
+    });
   });
 
   describe('obfuscateSSHConfig', () => {
