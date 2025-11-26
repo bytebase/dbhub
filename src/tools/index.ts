@@ -7,9 +7,8 @@ import { normalizeSourceId } from "../utils/normalize-id.js";
  * Register all tool handlers with the MCP server
  * Creates one execute_sql tool per configured database source
  * @param server - The MCP server instance
- * @param id - Optional ID to suffix tool names (for Cursor multi-instance support)
  */
-export function registerTools(server: McpServer, id?: string): void {
+export function registerTools(server: McpServer): void {
   // Get all configured source IDs
   const sourceIds = ConnectorManager.getAvailableSourceIds();
 
@@ -17,13 +16,17 @@ export function registerTools(server: McpServer, id?: string): void {
     throw new Error("No database sources configured");
   }
 
-  // For single source: register as "execute_sql" (backward compatible)
+  // For single source with empty ID: register as "execute_sql" (no suffix)
+  // For single source with non-empty ID: register as "execute_sql_{id}"
   // For multiple sources: register as "execute_sql_{source_id}" for each source
   if (sourceIds.length === 1) {
     const sourceId = sourceIds[0];
-    const toolName = id ? `execute_sql_${id}` : "execute_sql";
     const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
     const dbType = sourceConfig?.type || "database";
+
+    // If source ID is empty string, use "execute_sql" for backward compatibility
+    // Otherwise, suffix with the source ID
+    const toolName = sourceId === "" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
 
     server.tool(
       toolName,
@@ -35,7 +38,7 @@ export function registerTools(server: McpServer, id?: string): void {
     // Multiple sources: create one tool per source
     for (const sourceId of sourceIds) {
       const normalizedId = normalizeSourceId(sourceId);
-      const toolName = id ? `execute_sql_${normalizedId}_${id}` : `execute_sql_${normalizedId}`;
+      const toolName = `execute_sql_${normalizedId}`;
       const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
       const dbType = sourceConfig?.type || "database";
       const isDefault = sourceIds[0] === sourceId;

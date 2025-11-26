@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, redactDSN, resolveId, resolveSourceConfigs, isReadOnlyMode, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, redactDSN, resolveSourceConfigs, isReadOnlyMode, isDemoMode } from "./config/env.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
@@ -51,10 +51,6 @@ v${version}${modeText} - Universal Database MCP Server
  */
 export async function main(): Promise<void> {
   try {
-    // Resolve ID from command line args (for Cursor multi-instance support)
-    const idData = resolveId();
-    const id = idData?.id;
-
     // Resolve source configurations from TOML or fallback to single DSN
     const sourceConfigsData = await resolveSourceConfigs();
 
@@ -96,7 +92,7 @@ See documentation for more details on configuring database connections.
 
       // Register resources, tools, and prompts
       registerResources(server);
-      registerTools(server, id);
+      registerTools(server);
       registerPrompts(server);
 
       return server;
@@ -109,9 +105,6 @@ See documentation for more details on configuring database connections.
     const sources = sourceConfigsData.sources;
 
     console.error(`Configuration source: ${sourceConfigsData.source}`);
-    if (idData) {
-      console.error(`ID: ${idData.id} (from ${idData.source})`);
-    }
 
     // Connect to database(s) - works uniformly for all modes (demo, single DSN, multi-source TOML)
     console.error(`Connecting to ${sources.length} database source(s)...`);
