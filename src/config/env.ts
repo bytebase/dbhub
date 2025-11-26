@@ -478,6 +478,15 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
   if (!isDemoMode()) {
     const tomlConfig = loadTomlConfig();
     if (tomlConfig) {
+      // Validate that --id flag is not used with TOML config
+      const idData = resolveId();
+      if (idData) {
+        throw new Error(
+          "The --id flag cannot be used with TOML configuration. " +
+          "TOML config defines source IDs directly. " +
+          "Either remove the --id flag or use command-line DSN configuration instead."
+        );
+      }
       return tomlConfig;
     }
   }
@@ -513,10 +522,14 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       throw new Error(`Unsupported database type in DSN: ${protocol}`);
     }
 
+    // Get --id flag value (if specified) to use as source ID
+    // If not specified, use empty string (which will result in no tool name suffix)
+    const idData = resolveId();
+    const sourceId = idData?.id || "";
+
     // Create a single source config from the resolved DSN
-    // Use "default" as ID so it appears in the API sources list
     const source: SourceConfig = {
-      id: "default",
+      id: sourceId,
       type: dbType,
       dsn: dsnResult.dsn,
     };
