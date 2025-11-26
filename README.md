@@ -55,6 +55,7 @@ See the full [Installation Guide](https://dbhub.ai/installation) for detailed in
 ### Quick Start
 
 **Docker:**
+
 ```bash
 docker run --rm --init \
    --name dbhub \
@@ -66,13 +67,15 @@ docker run --rm --init \
 ```
 
 **NPM:**
+
 ```bash
 npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 ```
 
 **Demo Mode:**
+
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable" --demo
+npx @bytebase/dbhub --transport http --port 8080 --demo
 ```
 
 See [Server Options](https://dbhub.ai/config/server-options) for all available parameters.
@@ -107,7 +110,7 @@ See [Multi-Database Configuration](https://dbhub.ai/config/multi-database) for c
 
 See [TESTING.md](.claude/skills/testing/SKILL.md).
 
-### Debug 
+### Debug
 
 See [Debug](https://dbhub.ai/config/debug).
 
