@@ -4,9 +4,21 @@ title: "Cursor"
 
 <img src="/images/cursor.webp" alt="Cursor with DBHub" />
 
+## One-Click Install
+
+Click the link below to install DBHub in Cursor:
+
+<a href="cursor://anysphere.cursor-deeplink/mcp/install?name=dbhub&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAYnl0ZWJhc2UvZGJodWIiLCItLXRyYW5zcG9ydCIsInN0ZGlvIiwiLS1kc24iLCJwb3N0Z3JlczovL3VzZXI6cGFzc3dvcmRAbG9jYWxob3N0OjU0MzIvZGJuYW1lIl19">
+  <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install DBHub MCP server in Cursor" height="32" />
+</a>
+
+After installing, edit the DSN in your Cursor MCP settings to point to your database.
+
+## Manual Configuration
+
 <Tabs>
   <Tab title="MacOS/Linux">
-    Edit `~/.cursor/mcp_config.json`:
+    Edit `~/.cursor/mcp.json`:
 
     ```json
     {
@@ -27,7 +39,7 @@ title: "Cursor"
   </Tab>
 
   <Tab title="Windows">
-    Edit `%USERPROFILE%\.cursor\mcp_config.json`:
+    Edit `%USERPROFILE%\.cursor\mcp.json`:
 
     ```json
     {
@@ -50,7 +62,7 @@ title: "Cursor"
 
 ## Project-Specific Configuration
 
-For project-specific database connections, create `.cursor/mcp_config.json` in your project root:
+For project-specific database connections, create `.cursor/mcp.json` in your project root:
 
 ```json
 {
@@ -62,7 +74,7 @@ For project-specific database connections, create `.cursor/mcp_config.json` in y
         "--transport",
         "stdio",
         "--config",
-        "./dbhub.toml"
+        "${workspaceFolder}/dbhub.toml"
       ]
     }
   }
