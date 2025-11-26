@@ -15,38 +15,26 @@
     "groups": [
       {
         "group": "Getting Started",
-        "pages": [
-          "index",
-          "installation",
-          "quickstart"
-        ]
+        "pages": ["index", "installation", "quickstart"]
       },
       {
         "group": "MCP Components",
-        "pages": [
-          "components/resources",
-          "components/tools",
-          "components/prompts"
-        ]
+        "pages": ["components/resources", "components/tools", "components/prompts"]
       },
       {
         "group": "Integrations",
         "pages": [
-          "integrations/claude-desktop",
           "integrations/claude-code",
-          "integrations/cursor",
-          "integrations/vscode",
+          "integrations/claude-desktop",
           "integrations/codex",
-          "integrations/librechat"
+          "integrations/cursor",
+          "integrations/librechat",
+          "integrations/vscode"
         ]
       },
       {
         "group": "Configuration",
-        "pages": [
-          "config/server-options",
-          "config/multi-database",
-          "config/debug"
-        ]
+        "pages": ["config/server-options", "config/multi-database", "config/debug"]
       }
     ]
   },
@@ -81,7 +69,7 @@
   },
   "integrations": {
     "plausible": {
-        "domain": "dbhub.ai"
+      "domain": "dbhub.ai"
     }
   }
 }
