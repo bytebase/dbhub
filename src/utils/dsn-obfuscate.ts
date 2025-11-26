@@ -28,6 +28,9 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
 
   try {
     const type = getDatabaseTypeFromDSN(dsn);
+    if (typeof type === 'undefined') {
+      return null;
+    }
 
     // Handle SQLite specially - it only has a database path
     if (type === 'sqlite') {
