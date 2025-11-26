@@ -128,7 +128,7 @@ export function obfuscateDSNPassword(dsn: string): string {
     if (url.searchParams.size > 0) {
       const params: string[] = [];
       url.forEachSearchParam((value, key) => {
-        params.push(`${key}=${encodeURIComponent(value)}`);
+        params.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
       });
       result += `?${params.join('&')}`;
     }
