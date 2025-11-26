@@ -527,7 +527,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       if (connectionInfo.host) {
         source.host = connectionInfo.host;
       }
-      if (connectionInfo.port) {
+      if (connectionInfo.port !== undefined) {
         source.port = connectionInfo.port;
       }
       if (connectionInfo.database) {
