@@ -4,6 +4,7 @@ import { homedir } from "os";
 import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
+import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 
 /**
  * Load and parse TOML configuration file
@@ -197,7 +198,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 }
 
 /**
- * Process source configurations (expand paths, etc.)
+ * Process source configurations (expand paths, populate fields from DSN)
  */
 function processSourceConfigs(
   sources: SourceConfig[],
@@ -219,6 +220,30 @@ function processSourceConfigs(
     // Expand ~ in DSN for SQLite
     if (processed.dsn && processed.dsn.startsWith("sqlite:///~")) {
       processed.dsn = `sqlite:///${expandHomeDir(processed.dsn.substring(11))}`;
+    }
+
+    // Parse DSN to populate connection info fields (if not already set)
+    // This ensures API responses include host/port/database/user even when DSN is used
+    if (processed.dsn) {
+      const connectionInfo = parseConnectionInfoFromDSN(processed.dsn);
+      if (connectionInfo) {
+        // Only set fields that aren't already explicitly configured
+        if (!processed.type && connectionInfo.type) {
+          processed.type = connectionInfo.type;
+        }
+        if (!processed.host && connectionInfo.host) {
+          processed.host = connectionInfo.host;
+        }
+        if (processed.port === undefined && connectionInfo.port !== undefined) {
+          processed.port = connectionInfo.port;
+        }
+        if (!processed.database && connectionInfo.database) {
+          processed.database = connectionInfo.database;
+        }
+        if (!processed.user && connectionInfo.user) {
+          processed.user = connectionInfo.user;
+        }
+      }
     }
 
     return processed;
@@ -271,15 +296,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   // Determine default port if not specified
-  const port =
-    source.port ||
-    (source.type === "postgres"
-      ? 5432
-      : source.type === "mysql" || source.type === "mariadb"
-        ? 3306
-        : source.type === "sqlserver"
-          ? 1433
-          : undefined);
+  const port = source.port || getDefaultPortForType(source.type);
 
   if (!port) {
     throw new Error(`Source '${source.id}': unable to determine port`);

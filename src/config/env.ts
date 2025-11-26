@@ -7,6 +7,7 @@ import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
+import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -519,6 +520,23 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       type: dbType,
       dsn: dsnResult.dsn,
     };
+
+    // Parse DSN to populate connection info fields for API responses
+    const connectionInfo = parseConnectionInfoFromDSN(dsnResult.dsn);
+    if (connectionInfo) {
+      if (connectionInfo.host) {
+        source.host = connectionInfo.host;
+      }
+      if (connectionInfo.port !== undefined) {
+        source.port = connectionInfo.port;
+      }
+      if (connectionInfo.database) {
+        source.database = connectionInfo.database;
+      }
+      if (connectionInfo.user) {
+        source.user = connectionInfo.user;
+      }
+    }
 
     // Add SSH config if available
     const sshResult = resolveSSHConfig();

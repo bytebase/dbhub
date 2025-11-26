@@ -44,13 +44,106 @@ max_rows = 1000
 
       expect(result).toBeTruthy();
       expect(result?.sources).toHaveLength(1);
+      // DSN should be parsed to populate connection fields
       expect(result?.sources[0]).toEqual({
         id: 'test_db',
         dsn: 'postgres://user:pass@localhost:5432/testdb',
+        type: 'postgres',
+        host: 'localhost',
+        port: 5432,
+        database: 'testdb',
+        user: 'user',
         readonly: false,
         max_rows: 1000,
       });
       expect(result?.source).toBe('dbhub.toml');
+    });
+
+    it('should parse DSN and populate connection fields for postgres', () => {
+      const tomlContent = `
+[[sources]]
+id = "pg_dsn"
+dsn = "postgres://pguser:secret@db.example.com:5433/mydb"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'pg_dsn',
+        type: 'postgres',
+        host: 'db.example.com',
+        port: 5433,
+        database: 'mydb',
+        user: 'pguser',
+      });
+    });
+
+    it('should parse DSN and populate connection fields for mysql', () => {
+      const tomlContent = `
+[[sources]]
+id = "mysql_dsn"
+dsn = "mysql://root:password@mysql.local:3307/appdb"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'mysql_dsn',
+        type: 'mysql',
+        host: 'mysql.local',
+        port: 3307,
+        database: 'appdb',
+        user: 'root',
+      });
+    });
+
+    it('should parse DSN and populate connection fields for sqlite', () => {
+      const tomlContent = `
+[[sources]]
+id = "sqlite_dsn"
+dsn = "sqlite:///path/to/database.db"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'sqlite_dsn',
+        type: 'sqlite',
+        database: '/path/to/database.db',
+      });
+      // SQLite should not have host/port/user
+      expect(result?.sources[0].host).toBeUndefined();
+      expect(result?.sources[0].port).toBeUndefined();
+      expect(result?.sources[0].user).toBeUndefined();
+    });
+
+    it('should not override explicit connection params with DSN values', () => {
+      const tomlContent = `
+[[sources]]
+id = "explicit_override"
+dsn = "postgres://dsn_user:pass@dsn_host:5432/dsn_db"
+type = "postgres"
+host = "explicit_host"
+port = 9999
+database = "explicit_db"
+user = "explicit_user"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      // Explicit values should be preserved, not overwritten by DSN
+      expect(result?.sources[0]).toMatchObject({
+        id: 'explicit_override',
+        type: 'postgres',
+        host: 'explicit_host',
+        port: 9999,
+        database: 'explicit_db',
+        user: 'explicit_user',
+      });
     });
 
     it('should load config from custom path with --config flag', () => {
@@ -571,10 +664,15 @@ readonly = false
       expect(result).toBeTruthy();
       expect(result?.sources).toHaveLength(3);
 
-      // Verify first source (with SSH)
+      // Verify first source (with SSH) - DSN fields should be parsed
       expect(result?.sources[0]).toMatchObject({
         id: 'prod_pg',
         dsn: 'postgres://user:pass@10.0.0.5:5432/production',
+        type: 'postgres',
+        host: '10.0.0.5',
+        port: 5432,
+        database: 'production',
+        user: 'user',
         readonly: true,
         max_rows: 1000,
         ssh_host: 'bastion.example.com',
