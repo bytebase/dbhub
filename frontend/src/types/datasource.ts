@@ -7,6 +7,19 @@ export interface SSHTunnel {
   ssh_user?: string;
 }
 
+export interface ToolParameter {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+}
+
+export interface Tool {
+  name: string;
+  description: string;
+  parameters: ToolParameter[];
+}
+
 export interface DataSource {
   id: string;
   type: DatabaseType;
@@ -18,4 +31,5 @@ export interface DataSource {
   readonly?: boolean;
   max_rows?: number | null;
   ssh_tunnel?: SSHTunnel;
+  tools: Tool[];
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ConnectorManager } from "../connectors/manager.js";
 import { getDatabaseTypeFromDSN } from "../utils/dsn-obfuscate.js";
+import { getToolsForSource } from "../utils/tool-metadata.js";
 import type { SourceConfig } from "../types/config.js";
 import type { components } from "./openapi.js";
 
@@ -72,6 +73,9 @@ function transformSourceConfig(
 
     dataSource.ssh_tunnel = sshTunnel;
   }
+
+  // Add tools for this source
+  dataSource.tools = getToolsForSource(source.id);
 
   return dataSource;
 }

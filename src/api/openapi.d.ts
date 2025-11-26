@@ -96,6 +96,8 @@ export interface components {
              */
             max_rows?: number | null;
             ssh_tunnel?: components["schemas"]["SSHTunnel"];
+            /** @description Available MCP tools for this data source */
+            tools: components["schemas"]["Tool"][];
         };
         /** @description SSH tunnel configuration (credentials excluded for security) */
         SSHTunnel: {
@@ -119,6 +121,44 @@ export interface components {
              * @example deploy
              */
             ssh_user?: string;
+        };
+        /** @description MCP tool available for a data source */
+        Tool: {
+            /**
+             * @description Tool name
+             * @example execute_sql_prod_pg
+             */
+            name: string;
+            /**
+             * @description Tool description
+             * @example Execute a SQL query on the 'prod_pg' postgres database (default)
+             */
+            description: string;
+            /** @description Tool input parameters */
+            parameters: components["schemas"]["ToolParameter"][];
+        };
+        /** @description Parameter definition for a tool */
+        ToolParameter: {
+            /**
+             * @description Parameter name
+             * @example sql
+             */
+            name: string;
+            /**
+             * @description Parameter type
+             * @example string
+             */
+            type: string;
+            /**
+             * @description Whether the parameter is required
+             * @example true
+             */
+            required: boolean;
+            /**
+             * @description Parameter description
+             * @example SQL query or multiple SQL statements to execute (separated by semicolons)
+             */
+            description: string;
         };
         Error: {
             /**
