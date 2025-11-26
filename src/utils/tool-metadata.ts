@@ -82,14 +82,7 @@ export function getToolMetadataForSource(sourceId: string): ToolMetadata {
   const dbType = sourceConfig?.type || "database";
 
   // Determine tool name based on single vs multi-source configuration
-  let toolName: string;
-  if (sourceIds.length === 1) {
-    // Single source: use "execute_sql" if ID is "default", otherwise suffix with ID
-    toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
-  } else {
-    // Multiple sources: always suffix with source ID (unless it's "default")
-    toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
-  }
+  const toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
 
   // Determine description
   const isDefault = sourceIds[0] === sourceId;
