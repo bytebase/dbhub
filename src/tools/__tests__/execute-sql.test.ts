@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { executeSqlToolHandler } from '../execute-sql.js';
+import { createExecuteSqlToolHandler } from '../execute-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
 import { isReadOnlyMode } from '../../config/env.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
@@ -52,7 +52,8 @@ describe('execute-sql tool', () => {
       const mockResult: SQLResult = { rows: [{ id: 1, name: 'test' }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
-      const result = await executeSqlToolHandler({ sql: 'SELECT * FROM users' }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM users' }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -64,7 +65,8 @@ describe('execute-sql tool', () => {
     it('should handle execution errors', async () => {
       vi.mocked(mockConnector.executeSQL).mockRejectedValue(new Error('Database error'));
 
-      const result = await executeSqlToolHandler({ sql: 'SELECT * FROM invalid_table' }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM invalid_table' }, null);
 
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
@@ -80,7 +82,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT * FROM users; SELECT * FROM roles;';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -97,7 +100,8 @@ describe('execute-sql tool', () => {
       const mockResult: SQLResult = { rows: [{ id: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
-      const result = await executeSqlToolHandler({ sql: 'SELECT * FROM users' }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM users' }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -109,7 +113,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT * FROM users; SELECT * FROM roles;';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -117,7 +122,8 @@ describe('execute-sql tool', () => {
     });
 
     it('should reject single INSERT statement in read-only mode', async () => {
-      const result = await executeSqlToolHandler({ sql: "INSERT INTO users (name) VALUES ('test')" }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: "INSERT INTO users (name) VALUES ('test')" }, null);
 
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
@@ -129,7 +135,8 @@ describe('execute-sql tool', () => {
 
     it('should reject multi-statement with any write operation in read-only mode', async () => {
       const sql = "SELECT * FROM users; INSERT INTO users (name) VALUES ('test'); SELECT COUNT(*) FROM users;";
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
 
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
@@ -148,7 +155,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = '-- Fetch active users\nSELECT * FROM users WHERE active = TRUE';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -161,7 +169,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = '/* This query fetches\n   all products */\nSELECT * FROM products';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -174,7 +183,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = '-- First query\nSELECT * FROM users;\n/* Second query */\nSELECT * FROM roles;';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -185,7 +195,8 @@ describe('execute-sql tool', () => {
       mockIsReadOnlyMode.mockReturnValue(true);
 
       const sql = '-- Insert new user\nINSERT INTO users (name) VALUES (\'test\')';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
 
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
@@ -200,7 +211,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = '-- Just a comment\n/* Another comment */';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -213,7 +225,8 @@ describe('execute-sql tool', () => {
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT id, -- user id\n       name -- user name\nFROM users';
-      const result = await executeSqlToolHandler({ sql }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -227,7 +240,8 @@ describe('execute-sql tool', () => {
       const mockResult: SQLResult = { rows: [] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
-      const result = await executeSqlToolHandler({ sql: '' }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: '' }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
@@ -238,7 +252,8 @@ describe('execute-sql tool', () => {
       const mockResult: SQLResult = { rows: [] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
-      const result = await executeSqlToolHandler({ sql: '   ;  ;  ; ' }, null);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: '   ;  ;  ; ' }, null);
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
