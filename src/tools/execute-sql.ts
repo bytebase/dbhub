@@ -8,7 +8,6 @@ import { ConnectorType } from "../connectors/interface.js";
 // Schema for execute_sql tool
 export const executeSqlSchema = {
   sql: z.string().describe("SQL query or multiple SQL statements to execute (separated by semicolons)"),
-  source_id: z.string().optional().describe("Database source ID to execute the query against (optional, defaults to first configured source)"),
 };
 
 /**
@@ -76,35 +75,38 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
 }
 
 /**
- * execute_sql tool handler
- * Executes a SQL query and returns the results
+ * Create an execute_sql tool handler for a specific source
+ * @param sourceId - The source ID this handler is bound to (undefined for single-source mode)
+ * @returns A handler function bound to the specified source
  */
-export async function executeSqlToolHandler({ sql, source_id }: { sql: string; source_id?: string }, _extra: any) {
-  try {
-    // Get connector and execute options for the specified source (or default)
-    const connector = ConnectorManager.getCurrentConnector(source_id);
-    const executeOptions = ConnectorManager.getCurrentExecuteOptions(source_id);
+export function createExecuteSqlToolHandler(sourceId?: string) {
+  return async ({ sql }: { sql: string }, _extra: any) => {
+    try {
+      // Get connector and execute options for the specified source (or default)
+      const connector = ConnectorManager.getCurrentConnector(sourceId);
+      const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
 
-    // Check if SQL is allowed based on readonly mode
-    if (isReadOnlyMode() && !areAllStatementsReadOnly(sql, connector.id)) {
-      return createToolErrorResponse(
-        `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`,
-        "READONLY_VIOLATION"
-      );
+      // Check if SQL is allowed based on readonly mode
+      if (isReadOnlyMode() && !areAllStatementsReadOnly(sql, connector.id)) {
+        return createToolErrorResponse(
+          `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`,
+          "READONLY_VIOLATION"
+        );
+      }
+
+      // Execute the SQL (single or multiple statements) if validation passed
+      const result = await connector.executeSQL(sql, executeOptions);
+
+      // Build response data
+      const responseData = {
+        rows: result.rows,
+        count: result.rows.length,
+        source_id: sourceId || "(default)", // Include source_id in response for clarity
+      };
+
+      return createToolSuccessResponse(responseData);
+    } catch (error) {
+      return createToolErrorResponse((error as Error).message, "EXECUTION_ERROR");
     }
-
-    // Execute the SQL (single or multiple statements) if validation passed
-    const result = await connector.executeSQL(sql, executeOptions);
-
-    // Build response data
-    const responseData = {
-      rows: result.rows,
-      count: result.rows.length,
-      source_id: source_id || "(default)", // Include source_id in response for clarity
-    };
-
-    return createToolSuccessResponse(responseData);
-  } catch (error) {
-    return createToolErrorResponse((error as Error).message, "EXECUTION_ERROR");
-  }
+  };
 }
