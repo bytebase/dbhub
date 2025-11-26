@@ -111,7 +111,12 @@ export function obfuscateDSNPassword(dsn: string): string {
     const obfuscatedPassword = '*'.repeat(Math.min(url.password.length, 8));
     const protocol = dsn.split(':')[0];
 
-    let result = `${protocol}://${url.username}:${obfuscatedPassword}@${url.hostname}`;
+    let result;
+    if (url.username) {
+      result = `${protocol}://${url.username}:${obfuscatedPassword}@${url.hostname}`;
+    } else {
+      result = `${protocol}://${obfuscatedPassword}@${url.hostname}`;
+    }
     if (url.port) {
       result += `:${url.port}`;
     }
