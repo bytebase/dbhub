@@ -28,6 +28,7 @@
           "integrations/claude-desktop",
           "integrations/codex",
           "integrations/cursor",
+          "integrations/dify",
           "integrations/librechat",
           "integrations/vscode"
         ]

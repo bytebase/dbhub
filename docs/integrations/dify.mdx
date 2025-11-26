@@ -1,0 +1,54 @@
+---
+title: "Dify"
+---
+
+## Prerequisites
+
+DBHub must be running as an HTTP server for Dify to connect. Start DBHub with HTTP transport:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+```
+
+## Configuration
+
+1. In Dify, navigate to **Tools → MCP**
+2. Click **Add MCP Server (HTTP)**
+3. Configure the server:
+   - **Server URL**: `http://localhost:8080/mcp` (or your DBHub host)
+   - **Name**: `DBHub`
+   - **Server Identifier**: `dbhub` (permanent, max 24 characters)
+
+4. Click save. Dify will automatically discover DBHub's tools.
+
+## Using DBHub Tools
+
+Once connected, DBHub tools are available in:
+
+- **Agents**: Tools appear alongside built-in tools, use "Add All" to enable all DBHub tools
+- **Workflows**: Tools appear as available node types
+
+## Multi-Database Setup
+
+For multiple databases, use a config file:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --config /path/to/dbhub.toml
+```
+
+## Demo Mode
+
+For testing, use the built-in demo database:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --demo
+```
+
+## Limitations
+
+- Dify only supports HTTP transport (not stdio)
+- DBHub must be network-accessible from Dify
+
+## References
+
+- [Dify MCP Documentation](https://docs.dify.ai/en/guides/tools/mcp)
