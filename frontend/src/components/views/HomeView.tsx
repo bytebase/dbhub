@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { fetchRequests } from '../../api/requests';
 import { ApiError } from '../../api/errors';
 import type { Request } from '../../types/request';
@@ -28,40 +29,50 @@ function formatDate(timestamp: string): string {
   });
 }
 
-function truncateSql(sql: string, maxLength: number = 60): string {
-  const normalized = sql.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return normalized.substring(0, maxLength) + '...';
+function SqlTooltip({ sql, children }: { sql: string; children: React.ReactNode }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        {children}
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
+          sideOffset={5}
+        >
+          {sql}
+          <Tooltip.Arrow className="fill-popover" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
 }
 
-function Tooltip({ content, children, position = 'top' }: { content: string; children: React.ReactNode; position?: 'top' | 'top-right' }) {
-  const positionClasses = position === 'top-right'
-    ? 'bottom-full right-0 mb-2'
-    : 'bottom-full left-0 mb-2';
-
-  const arrowClasses = position === 'top-right'
-    ? 'absolute top-full right-4 border-4 border-transparent border-t-popover'
-    : 'absolute top-full left-4 border-4 border-transparent border-t-popover';
-
+function ErrorTooltip({ error, children }: { error: string; children: React.ReactNode }) {
   return (
-    <div className="relative group inline-flex">
-      {children}
-      <div className={`absolute z-[100] invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-max max-w-md ${positionClasses}`}>
-        <div className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all">
-          {content}
-        </div>
-        <div className={arrowClasses}></div>
-      </div>
-    </div>
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        {children}
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
+          sideOffset={5}
+          side="top"
+          align="end"
+        >
+          {error}
+          <Tooltip.Arrow className="fill-popover" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
 function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   if (success) {
     return (
-      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+      <span className="inline-flex items-center justify-center w-4 h-4 text-green-600 dark:text-green-400">
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
@@ -70,7 +81,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   }
 
   const errorIcon = (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 cursor-help">
+    <span className="inline-flex items-center justify-center w-4 h-4 text-red-600 dark:text-red-400 cursor-help">
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
@@ -78,7 +89,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   );
 
   if (error) {
-    return <Tooltip content={error} position="top-right">{errorIcon}</Tooltip>;
+    return <ErrorTooltip error={error}>{errorIcon}</ErrorTooltip>;
   }
 
   return errorIcon;
@@ -88,6 +99,7 @@ export default function HomeView() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRequests()
@@ -102,6 +114,14 @@ export default function HomeView() {
         setIsLoading(false);
       });
   }, []);
+
+  // Get unique source IDs from requests
+  const sourceIds = [...new Set(requests.map((r) => r.sourceId))].sort();
+
+  // Filter requests based on selected source
+  const filteredRequests = selectedSource
+    ? requests.filter((r) => r.sourceId === selectedSource)
+    : requests;
 
   if (isLoading) {
     return (
@@ -123,72 +143,97 @@ export default function HomeView() {
   }
 
   return (
+    <Tooltip.Provider delayDuration={300}>
     <div className="container mx-auto px-8 py-12 max-w-6xl">
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Recent Requests</h1>
-          <p className="text-muted-foreground">
-            {requests.length === 0
-              ? 'No requests yet'
-              : `${requests.length} request${requests.length === 1 ? '' : 's'}`}
-            <span className="text-xs ml-2">(up to 100 per source)</span>
+          <p className="text-muted-foreground text-sm">
+            Up to 100 requests per source
           </p>
         </div>
 
         {requests.length > 0 && (
-          <div className="bg-card border border-border rounded-lg overflow-visible">
-            <table className="w-full">
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedSource(null)}
+                className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                  selectedSource === null
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                All ({requests.length})
+              </button>
+              {sourceIds.map((sourceId) => {
+                const count = requests.filter((r) => r.sourceId === sourceId).length;
+                return (
+                  <button
+                    key={sourceId}
+                    onClick={() => setSelectedSource(sourceId)}
+                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                      selectedSource === sourceId
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    }`}
+                  >
+                    {sourceId} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bg-card border border-border rounded-lg overflow-x-auto">
+              <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                     Time
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Source
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Tool
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-full">
                     SQL
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Duration
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Status
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Result
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {requests.map((request) => (
+                {filteredRequests.map((request) => (
                   <tr key={request.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
                       {formatDate(request.timestamp)} {formatTime(request.timestamp)}
                     </td>
-                    <td className="px-4 py-2 text-sm">
+                    <td className="px-4 py-2 text-sm whitespace-nowrap">
                       <Link
                         to={`/source/${request.sourceId}`}
-                        className="text-primary hover:underline font-medium"
+                        className="text-primary hover:underline"
                       >
-                        {request.sourceId}
+                        {request.sourceId}/{request.toolName}
                       </Link>
                     </td>
-                    <td className="px-4 py-2 text-sm font-mono text-foreground">
-                      <Tooltip content={request.sql}>
-                        <span className="cursor-help">
-                          {truncateSql(request.sql)}
+                    <td className="px-4 py-2 text-sm font-mono text-foreground max-w-0">
+                      <SqlTooltip sql={request.sql}>
+                        <span className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help">
+                          {request.sql}
                         </span>
-                      </Tooltip>
+                      </SqlTooltip>
                     </td>
-                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
-                      {request.durationMs}ms
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <StatusBadge success={request.success} error={request.error} />
+                    <td className="px-4 py-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <StatusBadge success={request.success} error={request.error} />
+                        <span className="text-muted-foreground">{request.durationMs}ms</span>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         {requests.length === 0 && (
@@ -200,5 +245,6 @@ export default function HomeView() {
         )}
       </div>
     </div>
+    </Tooltip.Provider>
   );
 }
