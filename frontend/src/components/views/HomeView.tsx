@@ -159,11 +159,10 @@ export default function HomeView() {
               <tbody className="divide-y divide-border">
                 {requests.map((request) => (
                   <tr key={request.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
-                      <div>{formatTime(request.timestamp)}</div>
-                      <div className="text-xs">{formatDate(request.timestamp)}</div>
+                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                      {formatDate(request.timestamp)} {formatTime(request.timestamp)}
                     </td>
-                    <td className="px-4 py-3 text-sm">
+                    <td className="px-4 py-2 text-sm">
                       <Link
                         to={`/source/${request.sourceId}`}
                         className="text-primary hover:underline font-medium"
@@ -171,17 +170,17 @@ export default function HomeView() {
                         {request.sourceId}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm font-mono text-foreground">
+                    <td className="px-4 py-2 text-sm font-mono text-foreground">
                       <Tooltip content={request.sql}>
                         <span className="cursor-help">
                           {truncateSql(request.sql)}
                         </span>
                       </Tooltip>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
                       {request.durationMs}ms
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-2 text-center">
                       <StatusBadge success={request.success} error={request.error} />
                     </td>
                   </tr>
