@@ -131,6 +131,7 @@ export default function HomeView() {
             {requests.length === 0
               ? 'No requests yet'
               : `${requests.length} request${requests.length === 1 ? '' : 's'}`}
+            <span className="text-xs ml-2">(up to 100 per source)</span>
           </p>
         </div>
 
