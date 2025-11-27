@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { isReadOnlyMode } from "../config/env.js";
 import { allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { requestStore } from "../requests/index.js";
@@ -108,9 +107,10 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       const connector = ConnectorManager.getCurrentConnector(sourceId);
       const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
 
-      // Check if SQL is allowed based on readonly mode
-      if (isReadOnlyMode() && !areAllStatementsReadOnly(sql, connector.id)) {
-        errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+      // Check if SQL is allowed based on readonly mode (per-source)
+      const isReadonly = executeOptions.readonly === true;
+      if (isReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
+        errorMessage = `Read-only mode is enabled for source '${effectiveSourceId}'. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }

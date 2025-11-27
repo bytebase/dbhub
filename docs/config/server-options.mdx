@@ -330,8 +330,9 @@ DBHub follows this priority order for configuration:
 **`--config` (TOML) is mutually exclusive with:**
 - `--dsn` - TOML configuration defines database connections directly
 - `--id` - TOML configuration defines source IDs directly in the file
+- `--readonly` - TOML configuration defines readonly mode per-source using `readonly = true`
 
-If using TOML config, remove these flags. If you need `--id` or `--dsn`, use command-line/environment configuration instead.
+If using TOML config, remove these flags. If you need `--id`, `--dsn`, or `--readonly`, use command-line/environment configuration instead.
 </Note>
 
 ## Quick Reference
