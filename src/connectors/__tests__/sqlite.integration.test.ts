@@ -514,4 +514,54 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result4.dbPath).toBe('E:/another/path.db');
     });
   });
+
+  describe('SDK-Level Readonly Mode Tests', () => {
+    it('should open file-based database in readonly mode', async () => {
+      // Now open the same database in readonly mode using ConnectorConfig
+      const readonlyConnector = new SQLiteConnector();
+      await readonlyConnector.connect(sqliteTest.connectionString, undefined, { readonly: true });
+
+      try {
+        // Should be able to read from the main tables
+        const result = await readonlyConnector.executeSQL('SELECT * FROM users LIMIT 1', {});
+        expect(result.rows).toHaveLength(1);
+
+        // Should NOT be able to write data (SDK-level enforcement)
+        await expect(
+          readonlyConnector.executeSQL("INSERT INTO users (name, email) VALUES ('fail', 'fail@test.com')", {})
+        ).rejects.toThrow(/readonly/);
+      } finally {
+        await readonlyConnector.disconnect();
+      }
+    });
+
+    it('should allow writes to :memory: database even with readonly flag', async () => {
+      const connector = new SQLiteConnector();
+
+      // Connect to :memory: with readonly flag
+      // Should succeed because we skip readonly for :memory: databases
+      await connector.connect('sqlite:///:memory:', undefined, { readonly: true });
+
+      // Should be able to create tables and insert data
+      await connector.executeSQL('CREATE TABLE test (id INTEGER)', {});
+      await connector.executeSQL('INSERT INTO test VALUES (1)', {});
+
+      const result = await connector.executeSQL('SELECT * FROM test', {});
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].id).toBe(1);
+
+      await connector.disconnect();
+    });
+
+    it('should fail to open non-existent file in readonly mode', async () => {
+      const connector = new SQLiteConnector();
+      const nonExistentPath = `/tmp/nonexistent_${Date.now()}.db`;
+      const dsn = `sqlite:///${nonExistentPath}`;
+
+      // Should fail because file doesn't exist and we're in readonly mode
+      await expect(
+        connector.connect(dsn, undefined, { readonly: true })
+      ).rejects.toThrow();
+    });
+  });
 });

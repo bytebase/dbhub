@@ -42,7 +42,11 @@ export interface StoredProcedure {
 export interface ExecuteOptions {
   /** Maximum number of rows to return (applied via database-native LIMIT) */
   maxRows?: number;
-  /** Restrict to read-only SQL operations */
+  /**
+   * Restrict to read-only SQL operations (application-level enforcement)
+   * Validates SQL keywords before execution to prevent write operations.
+   * Note: SDK-level readonly enforcement is set via ConnectorConfig.readonly
+   */
   readonly?: boolean;
 }
 
@@ -55,6 +59,13 @@ export interface ConnectorConfig {
   connectionTimeoutSeconds?: number;
   /** Request/query timeout in seconds (SQL Server only) */
   requestTimeoutSeconds?: number;
+  /**
+   * Read-only mode for SDK-level enforcement (PostgreSQL, SQLite)
+   * - PostgreSQL: Sets default_transaction_read_only at connection level
+   * - SQLite: Opens database in readonly mode (not supported for :memory: databases)
+   * Note: Application-level validation is done via ExecuteOptions.readonly
+   */
+  readonly?: boolean;
   // Future database-specific options can be added here as optional fields
 }
 

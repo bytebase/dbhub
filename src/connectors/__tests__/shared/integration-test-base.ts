@@ -21,7 +21,7 @@ export interface TestContainer {
 export abstract class IntegrationTestBase<TContainer extends TestContainer> {
   protected container!: TContainer;
   public connector!: Connector;
-  protected connectionString!: string;
+  public connectionString!: string;
   public config: DatabaseTestConfig;
 
   constructor(config: DatabaseTestConfig) {

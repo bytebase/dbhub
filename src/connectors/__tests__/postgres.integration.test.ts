@@ -455,10 +455,114 @@ describe('PostgreSQL Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return at least the original 3 users plus any added in previous tests
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
     });
 
+  });
+
+  describe('SDK-Level Readonly Mode Tests', () => {
+    it('should set default_transaction_read_only at connection level', async () => {
+      const readonlyConnector = new PostgresConnector();
+
+      try {
+        // Connect with readonly flag
+        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
+
+        // Verify the connection has default_transaction_read_only set to 'on'
+        const result = await readonlyConnector.executeSQL(
+          'SHOW default_transaction_read_only',
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].default_transaction_read_only).toBe('on');
+      } finally {
+        await readonlyConnector.disconnect();
+      }
+    });
+
+    it('should allow reads in readonly mode', async () => {
+      const readonlyConnector = new PostgresConnector();
+
+      try {
+        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
+
+        // Should be able to read data
+        const result = await readonlyConnector.executeSQL(
+          'SELECT * FROM users ORDER BY id LIMIT 1',
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].name).toBe('John Doe');
+      } finally {
+        await readonlyConnector.disconnect();
+      }
+    });
+
+    it('should reject writes in readonly mode', async () => {
+      const readonlyConnector = new PostgresConnector();
+
+      try {
+        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
+
+        // Should NOT be able to write data (SDK-level enforcement)
+        await expect(
+          readonlyConnector.executeSQL(
+            "INSERT INTO users (name, email) VALUES ('fail', 'fail@test.com')",
+            {}
+          )
+        ).rejects.toThrow(/read-only/);
+      } finally {
+        await readonlyConnector.disconnect();
+      }
+    });
+
+    it('should reject DDL operations in readonly mode', async () => {
+      const readonlyConnector = new PostgresConnector();
+
+      try {
+        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
+
+        // Should NOT be able to create tables
+        await expect(
+          readonlyConnector.executeSQL(
+            'CREATE TABLE should_fail (id INTEGER)',
+            {}
+          )
+        ).rejects.toThrow(/read-only/);
+      } finally {
+        await readonlyConnector.disconnect();
+      }
+    });
+
+    it('should work normally without readonly flag', async () => {
+      const normalConnector = new PostgresConnector();
+
+      try {
+        // Connect WITHOUT readonly flag
+        await normalConnector.connect(postgresTest.connectionString);
+
+        // Verify default_transaction_read_only is off
+        const showResult = await normalConnector.executeSQL(
+          'SHOW default_transaction_read_only',
+          {}
+        );
+        expect(showResult.rows[0].default_transaction_read_only).toBe('off');
+
+        // Should be able to write data
+        const insertResult = await normalConnector.executeSQL(
+          "INSERT INTO users (name, email) VALUES ('ReadonlyTest', 'test@readonly.com') RETURNING id",
+          {}
+        );
+
+        expect(insertResult.rows).toHaveLength(1);
+        expect(insertResult.rows[0].id).toBeDefined();
+      } finally {
+        await normalConnector.disconnect();
+      }
+    });
   });
 });
