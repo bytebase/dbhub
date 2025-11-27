@@ -22,7 +22,7 @@
     "build:frontend": "cd frontend && pnpm run build",
     "start": "node dist/index.js",
     "dev": "concurrently --kill-others \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
-    "dev:backend": "NODE_ENV=development tsx src/index.ts --demo --transport=http",
+    "dev:backend": "NODE_ENV=development tsx src/index.ts --transport=http",
     "dev:frontend": "cd frontend && pnpm run dev",
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
     "generate:api-types": "openapi-typescript src/api/openapi.yaml -o src/api/openapi.d.ts",
@@ -37,7 +37,7 @@
   "dependencies": {
     "@azure/identity": "^4.8.0",
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.23.0",
     "better-sqlite3": "^11.9.0",
     "dotenv": "^16.4.7",
     "express": "^4.18.2",

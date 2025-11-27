@@ -8,29 +8,13 @@ import { requestStore } from "../requests/index.js";
 
 /**
  * Extract client identifier from request context
- * Priority: X-DBHub-Client-Id header > User-Agent > IP > "stdio"
+ * Returns User-Agent for HTTP transport, "stdio" for STDIO transport
  */
 function getClientIdentifier(extra: any): string {
-  // Try to get headers from the extra context
-  // MCP SDK passes request info in extra.requestContext or similar
-  const headers = extra?.requestContext?.headers || extra?.headers || {};
-
-  // Priority 1: Custom header
-  const customHeader = headers["x-dbhub-client-id"] || headers["X-DBHub-Client-Id"];
-  if (customHeader) {
-    return customHeader;
-  }
-
-  // Priority 2: User-Agent
-  const userAgent = headers["user-agent"] || headers["User-Agent"];
+  // MCP SDK 1.23+ passes requestInfo in extra.requestInfo for HTTP transport
+  const userAgent = extra?.requestInfo?.headers?.["user-agent"];
   if (userAgent) {
     return userAgent;
-  }
-
-  // Priority 3: IP address
-  const ip = extra?.requestContext?.ip || extra?.ip;
-  if (ip) {
-    return ip;
   }
 
   // Default for STDIO mode
