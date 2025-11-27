@@ -36,6 +36,20 @@ function truncateSql(sql: string, maxLength: number = 60): string {
   return normalized.substring(0, maxLength) + '...';
 }
 
+function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+  return (
+    <div className="relative group">
+      {children}
+      <div className="absolute z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full left-0 mb-2 w-max max-w-md">
+        <div className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all">
+          {content}
+        </div>
+        <div className="absolute top-full left-4 border-4 border-transparent border-t-popover"></div>
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   if (success) {
     return (
@@ -47,16 +61,19 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
     );
   }
 
-  return (
-    <span
-      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 cursor-help"
-      title={error || 'Failed'}
-    >
+  const errorIcon = (
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 cursor-help">
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
     </span>
   );
+
+  if (error) {
+    return <Tooltip content={error}>{errorIcon}</Tooltip>;
+  }
+
+  return errorIcon;
 }
 
 export default function HomeView() {
@@ -147,9 +164,11 @@ export default function HomeView() {
                       </Link>
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-foreground">
-                      <span title={request.sql} className="cursor-help">
-                        {truncateSql(request.sql)}
-                      </span>
+                      <Tooltip content={request.sql}>
+                        <span className="cursor-help">
+                          {truncateSql(request.sql)}
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
                       {request.durationMs}ms
