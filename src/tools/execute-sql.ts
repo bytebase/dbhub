@@ -152,7 +152,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         sourceId: effectiveSourceId,
-        toolName: `execute_sql_${effectiveSourceId}`,
+        toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
         sql,
         durationMs: Date.now() - startTime,
         client: getClientIdentifier(extra),
