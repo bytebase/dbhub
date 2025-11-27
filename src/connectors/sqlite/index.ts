@@ -123,7 +123,14 @@ export class SQLiteConnector implements Connector {
     this.dbPath = parsedConfig.dbPath;
 
     try {
-      this.db = new Database(this.dbPath);
+      // SDK-level readonly enforcement: Pass readonly option to better-sqlite3
+      // Note: In-memory databases (:memory:) cannot be opened in readonly mode
+      const dbOptions: any = {};
+      if (config?.readonly && this.dbPath !== ':memory:') {
+        dbOptions.readonly = true;
+      }
+
+      this.db = new Database(this.dbPath, dbOptions);
       console.error("Successfully connected to SQLite database");
 
       // If an initialization script is provided, run it

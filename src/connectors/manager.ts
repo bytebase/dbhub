@@ -124,6 +124,10 @@ export class ConnectorManager {
     if (connector.id === 'sqlserver' && source.request_timeout !== undefined) {
       config.requestTimeoutSeconds = source.request_timeout;
     }
+    // Pass readonly flag for SDK-level enforcement (PostgreSQL, SQLite)
+    if (source.readonly !== undefined) {
+      config.readonly = source.readonly;
+    }
 
     // Connect to the database with config and optional init script
     await connector.connect(actualDSN, source.init_script, config);

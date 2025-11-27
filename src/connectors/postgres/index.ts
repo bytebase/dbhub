@@ -107,6 +107,12 @@ export class PostgresConnector implements Connector {
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
+
+      // SDK-level readonly enforcement: Set default_transaction_read_only for the entire connection
+      if (config?.readonly) {
+        poolConfig.options = (poolConfig.options || '') + ' -c default_transaction_read_only=on';
+      }
+
       this.pool = new Pool(poolConfig);
 
       // Test the connection
@@ -423,19 +429,18 @@ export class PostgresConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - apply maxRows if applicable
         const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
-        
         return await client.query(processedStatement);
       } else {
         // Multiple statements - execute all in same session for transaction consistency
         let allRows: any[] = [];
-        
+
         // Execute within a transaction to ensure session consistency
         await client.query('BEGIN');
         try {
           for (let statement of statements) {
             // Apply maxRows limit to SELECT queries if specified
             const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
-            
+
             const result = await client.query(processedStatement);
             // Collect rows from SELECT/WITH/EXPLAIN statements
             if (result.rows && result.rows.length > 0) {
