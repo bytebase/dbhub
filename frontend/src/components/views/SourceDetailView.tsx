@@ -3,6 +3,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { ApiError } from '../../api/errors';
 import type { DataSource, DatabaseType } from '../../types/datasource';
+import LockIcon from '../icons/LockIcon';
 
 const DB_TYPE_DISPLAY_NAMES: Record<DatabaseType, string> = {
   postgres: 'PostgreSQL',
@@ -146,7 +147,8 @@ export default function SourceDetailView() {
               <dt className="text-sm font-medium text-muted-foreground">Read-Only Mode</dt>
               <dd className="mt-1 text-sm text-foreground">
                 {source.readonly ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                    <LockIcon className="w-3 h-3" />
                     Enabled
                   </span>
                 ) : (
