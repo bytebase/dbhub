@@ -218,7 +218,7 @@ export default function HomeView() {
                         to={`/source/${request.sourceId}`}
                         className="text-primary hover:underline"
                       >
-                        {request.sourceId}/{request.toolName}
+                        {request.toolName}
                       </Link>
                     </td>
                     <td className="px-4 py-2 text-sm font-mono text-foreground max-w-0">
