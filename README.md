@@ -11,30 +11,32 @@
 </a>
 </p>
 
-![Star History Chart](https://api.star-history.com/svg?repos=bytebase/dbhub&type=Date)
-
-</p>
-
-DBHub is a Universal Database MCP Server implementing the Model Context Protocol (MCP) server interface. This gateway allows MCP-compatible clients to connect to and explore different databases.
-
 ```bash
- +------------------+    +--------------+    +------------------+
- |                  |    |              |    |                  |
- |                  |    |              |    |                  |
- |  Claude Desktop  +--->+              +--->+    PostgreSQL    |
- |                  |    |              |    |                  |
- |  Claude Code     +--->+              +--->+    SQL Server    |
- |                  |    |              |    |                  |
- |  Cursor          +--->+    DBHub     +--->+    SQLite        |
- |                  |    |              |    |                  |
- |  VS Code         +--->+              +--->+    MySQL         |
- |                  |    |              |    |                  |
- |  Other Clients   +--->+              +--->+    MariaDB       |
- |                  |    |              |    |                  |
- |                  |    |              |    |                  |
- +------------------+    +--------------+    +------------------+
-      MCP Clients           MCP Server             Databases
+            +------------------+    +--------------+    +------------------+
+            |                  |    |              |    |                  |
+            |                  |    |              |    |                  |
+            |  Claude Desktop  +--->+              +--->+    PostgreSQL    |
+            |                  |    |              |    |                  |
+            |  Claude Code     +--->+              +--->+    SQL Server    |
+            |                  |    |              |    |                  |
+            |  Cursor          +--->+    DBHub     +--->+    SQLite        |
+            |                  |    |              |    |                  |
+            |  VS Code         +--->+              +--->+    MySQL         |
+            |                  |    |              |    |                  |
+            |  Other Clients   +--->+              +--->+    MariaDB       |
+            |                  |    |              |    |                  |
+            |                  |    |              |    |                  |
+            +------------------+    +--------------+    +------------------+
+                 MCP Clients           MCP Server             Databases
 ```
+
+DBHub is a Universal Database MCP Server implementing the Model Context Protocol (MCP) server interface. This gateway allows MCP-compatible clients to connect to and explore different databases:
+
+- **Universal Gateway**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
+- **Secure Access**: Read-only mode, SSH tunneling, and SSL/TLS encryption support
+- **Multi-Database**: Connect to multiple databases simultaneously with TOML configuration
+- **Production-Ready**: Row limiting, lock timeout control, and connection pooling
+- **MCP Native**: Full implementation of Model Context Protocol with resources, tools, and prompts
 
 ## Supported Databases
 
@@ -119,3 +121,7 @@ See [Debug](https://dbhub.ai/config/debug).
 <a href="https://github.com/bytebase/dbhub/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=bytebase/dbhub" />
 </a>
+
+## Star History
+
+![Star History Chart](https://api.star-history.com/svg?repos=bytebase/dbhub&type=Date)
