@@ -4,6 +4,22 @@ import { createToolSuccessResponse, createToolErrorResponse } from "../utils/res
 import { isReadOnlyMode } from "../config/env.js";
 import { allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
+import { requestStore } from "../requests/index.js";
+
+/**
+ * Extract client identifier from request context
+ * Returns User-Agent for HTTP transport, "stdio" for STDIO transport
+ */
+function getClientIdentifier(extra: any): string {
+  // MCP SDK 1.23+ passes requestInfo in extra.requestInfo for HTTP transport
+  const userAgent = extra?.requestInfo?.headers?.["user-agent"];
+  if (userAgent) {
+    return userAgent;
+  }
+
+  // Default for STDIO mode
+  return "stdio";
+}
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
@@ -80,7 +96,13 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  * @returns A handler function bound to the specified source
  */
 export function createExecuteSqlToolHandler(sourceId?: string) {
-  return async ({ sql }: { sql: string }, _extra: any) => {
+  return async ({ sql }: { sql: string }, extra: any) => {
+    const startTime = Date.now();
+    const effectiveSourceId = sourceId || "default";
+    let success = true;
+    let errorMessage: string | undefined;
+    let result: any;
+
     try {
       // Get connector and execute options for the specified source (or default)
       const connector = ConnectorManager.getCurrentConnector(sourceId);
@@ -88,25 +110,39 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
 
       // Check if SQL is allowed based on readonly mode
       if (isReadOnlyMode() && !areAllStatementsReadOnly(sql, connector.id)) {
-        return createToolErrorResponse(
-          `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`,
-          "READONLY_VIOLATION"
-        );
+        errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+        success = false;
+        return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
 
       // Execute the SQL (single or multiple statements) if validation passed
-      const result = await connector.executeSQL(sql, executeOptions);
+      result = await connector.executeSQL(sql, executeOptions);
 
       // Build response data
       const responseData = {
         rows: result.rows,
         count: result.rows.length,
-        source_id: sourceId || "(default)", // Include source_id in response for clarity
+        source_id: effectiveSourceId,
       };
 
       return createToolSuccessResponse(responseData);
     } catch (error) {
-      return createToolErrorResponse((error as Error).message, "EXECUTION_ERROR");
+      success = false;
+      errorMessage = (error as Error).message;
+      return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
+    } finally {
+      // Track the request
+      requestStore.add({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        sourceId: effectiveSourceId,
+        toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
+        sql,
+        durationMs: Date.now() - startTime,
+        client: getClientIdentifier(extra),
+        success,
+        error: errorMessage,
+      });
     }
   };
 }

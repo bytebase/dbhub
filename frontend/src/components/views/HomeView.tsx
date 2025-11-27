@@ -1,0 +1,256 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { fetchRequests } from '../../api/requests';
+import { ApiError } from '../../api/errors';
+import type { Request } from '../../types/request';
+
+function formatTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function formatDate(timestamp: string): string {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+
+  if (isToday) {
+    return 'Today';
+  }
+
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function SqlTooltip({ sql, children }: { sql: string; children: React.ReactNode }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        {children}
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
+          sideOffset={5}
+        >
+          {sql}
+          <Tooltip.Arrow className="fill-popover" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+function ErrorTooltip({ error, children }: { error: string; children: React.ReactNode }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        {children}
+      </Tooltip.Trigger>
+      <Tooltip.Portal>
+        <Tooltip.Content
+          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
+          sideOffset={5}
+          side="top"
+          align="end"
+        >
+          {error}
+          <Tooltip.Arrow className="fill-popover" />
+        </Tooltip.Content>
+      </Tooltip.Portal>
+    </Tooltip.Root>
+  );
+}
+
+function StatusBadge({ success, error }: { success: boolean; error?: string }) {
+  if (success) {
+    return (
+      <span className="inline-flex items-center justify-center w-4 h-4 text-green-600 dark:text-green-400">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  const errorIcon = (
+    <span className="inline-flex items-center justify-center w-4 h-4 text-red-600 dark:text-red-400 cursor-help">
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </span>
+  );
+
+  if (error) {
+    return <ErrorTooltip error={error}>{errorIcon}</ErrorTooltip>;
+  }
+
+  return errorIcon;
+}
+
+export default function HomeView() {
+  const [requests, setRequests] = useState<Request[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSource, setSelectedSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRequests()
+      .then((data) => {
+        setRequests(data.requests);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch requests:', err);
+        const message = err instanceof ApiError ? err.message : 'Failed to load requests';
+        setError(message);
+        setIsLoading(false);
+      });
+  }, []);
+
+  // Get unique source IDs from requests
+  const sourceIds = [...new Set(requests.map((r) => r.sourceId))].sort();
+
+  // Filter requests based on selected source
+  const filteredRequests = selectedSource
+    ? requests.filter((r) => r.sourceId === selectedSource)
+    : requests;
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-8 py-12">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-8 py-12">
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
+          <p className="text-destructive/90">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Tooltip.Provider delayDuration={300}>
+    <div className="container mx-auto px-8 py-12 max-w-6xl">
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Recent Requests</h1>
+          <p className="text-muted-foreground text-sm">
+            Up to 100 requests per source
+          </p>
+        </div>
+
+        {requests.length > 0 && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedSource(null)}
+                className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                  selectedSource === null
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                All ({requests.length})
+              </button>
+              {sourceIds.map((sourceId) => {
+                const count = requests.filter((r) => r.sourceId === sourceId).length;
+                return (
+                  <button
+                    key={sourceId}
+                    onClick={() => setSelectedSource(sourceId)}
+                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                      selectedSource === sourceId
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    }`}
+                  >
+                    {sourceId} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="bg-card border border-border rounded-lg overflow-x-auto">
+              <table className="w-full">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Time
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Client
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Tool
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-full">
+                    SQL
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Result
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredRequests.map((request) => (
+                  <tr key={request.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                      {formatDate(request.timestamp)} {formatTime(request.timestamp)}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                      {request.client}
+                    </td>
+                    <td className="px-4 py-2 text-sm whitespace-nowrap">
+                      <Link
+                        to={`/source/${request.sourceId}`}
+                        className="text-primary hover:underline"
+                      >
+                        {request.toolName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2 text-sm font-mono text-foreground max-w-0">
+                      <SqlTooltip sql={request.sql}>
+                        <span className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help">
+                          {request.sql}
+                        </span>
+                      </SqlTooltip>
+                    </td>
+                    <td className="px-4 py-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <StatusBadge success={request.success} error={request.error} />
+                        <span className="text-muted-foreground">{request.durationMs}ms</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </>
+        )}
+
+        {requests.length === 0 && (
+          <div className="bg-card border border-border rounded-lg p-12 text-center">
+            <p className="text-muted-foreground">
+              No requests have been made yet. Execute some SQL queries via the MCP endpoint to see them here.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+    </Tooltip.Provider>
+  );
+}

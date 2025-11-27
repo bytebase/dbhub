@@ -14,6 +14,7 @@ import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
 import { registerPrompts } from "./prompts/index.js";
 import { listSources, getSource } from "./api/sources.js";
+import { listRequests } from "./api/requests.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -194,6 +195,7 @@ See documentation for more details on configuring database connections.
       // Data sources API endpoints
       app.get("/api/sources", listSources);
       app.get("/api/sources/:sourceId", getSource);
+      app.get("/api/requests", listRequests);
 
       // Main endpoint for streamable HTTP transport
       // SSE streaming (GET requests) is not supported in stateless mode
