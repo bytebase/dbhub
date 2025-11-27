@@ -107,7 +107,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       const connector = ConnectorManager.getCurrentConnector(sourceId);
       const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
 
-      // Check if SQL is allowed based on readonly mode (per-source or global)
+      // Check if SQL is allowed based on readonly mode (per-source)
       const isSourceReadonly = executeOptions.readonly === true;
       if (isSourceReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
         errorMessage = `Read-only mode is enabled for source '${effectiveSourceId}'. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
