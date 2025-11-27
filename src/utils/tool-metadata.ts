@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
@@ -29,6 +30,7 @@ export interface ToolMetadata {
   name: string;
   description: string;
   schema: Record<string, z.ZodType<any>>;
+  annotations: ToolAnnotations;
 }
 
 /**
@@ -79,19 +81,42 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
 export function getToolMetadataForSource(sourceId: string): ToolMetadata {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
+  const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
   const dbType = sourceConfig?.type || "database";
 
   // Determine tool name based on single vs multi-source configuration
   const toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
 
-  // Determine description
+  // Determine title (human-readable display name)
   const isDefault = sourceIds[0] === sourceId;
-  const description = `Execute a SQL query on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}`;
+  const title = isDefault
+    ? `Execute SQL (${dbType})`
+    : `Execute SQL on ${sourceId} (${dbType})`;
+
+  // Determine description with more context
+  const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
+  const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
+  const description = `Execute SQL queries on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}${readonlyNote}${maxRowsNote}`;
+
+  // Build annotations object with all standard MCP hints
+  const isReadonly = executeOptions.readonly === true;
+  const annotations = {
+    title,
+    readOnlyHint: isReadonly,
+    destructiveHint: !isReadonly, // Can be destructive if not readonly
+    // In readonly mode, queries are more predictable (though still not strictly idempotent due to data changes)
+    // In write mode, queries are definitely not idempotent
+    idempotentHint: false,
+    // In readonly mode, it's safer to operate on arbitrary tables (just reading)
+    // In write mode, operating on arbitrary tables is more dangerous
+    openWorldHint: isReadonly,
+  };
 
   return {
     name: toolName,
     description,
     schema: executeSqlSchema,
+    annotations,
   };
 }
 

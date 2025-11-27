@@ -20,10 +20,13 @@ export function registerTools(server: McpServer): void {
   for (const sourceId of sourceIds) {
     const metadata = getToolMetadataForSource(sourceId);
 
-    server.tool(
+    server.registerTool(
       metadata.name,
-      metadata.description,
-      metadata.schema,
+      {
+        description: metadata.description,
+        inputSchema: metadata.schema,
+        annotations: metadata.annotations,
+      },
       createExecuteSqlToolHandler(sourceId)
     );
   }

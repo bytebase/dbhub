@@ -95,7 +95,8 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  * @returns A handler function bound to the specified source
  */
 export function createExecuteSqlToolHandler(sourceId?: string) {
-  return async ({ sql }: { sql: string }, extra: any) => {
+  return async (args: any, extra: any) => {
+    const { sql } = args as { sql: string };
     const startTime = Date.now();
     const effectiveSourceId = sourceId || "default";
     let success = true;
