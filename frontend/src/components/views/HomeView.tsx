@@ -36,15 +36,23 @@ function truncateSql(sql: string, maxLength: number = 60): string {
   return normalized.substring(0, maxLength) + '...';
 }
 
-function Tooltip({ content, children }: { content: string; children: React.ReactNode }) {
+function Tooltip({ content, children, position = 'top' }: { content: string; children: React.ReactNode; position?: 'top' | 'top-right' }) {
+  const positionClasses = position === 'top-right'
+    ? 'bottom-full right-0 mb-2'
+    : 'bottom-full left-0 mb-2';
+
+  const arrowClasses = position === 'top-right'
+    ? 'absolute top-full right-4 border-4 border-transparent border-t-popover'
+    : 'absolute top-full left-4 border-4 border-transparent border-t-popover';
+
   return (
-    <div className="relative group">
+    <div className="relative group inline-flex">
       {children}
-      <div className="absolute z-50 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 bottom-full left-0 mb-2 w-max max-w-md">
+      <div className={`absolute z-[100] invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-max max-w-md ${positionClasses}`}>
         <div className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all">
           {content}
         </div>
-        <div className="absolute top-full left-4 border-4 border-transparent border-t-popover"></div>
+        <div className={arrowClasses}></div>
       </div>
     </div>
   );
@@ -70,7 +78,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   );
 
   if (error) {
-    return <Tooltip content={error}>{errorIcon}</Tooltip>;
+    return <Tooltip content={error} position="top-right">{errorIcon}</Tooltip>;
   }
 
   return errorIcon;
@@ -127,7 +135,7 @@ export default function HomeView() {
         </div>
 
         {requests.length > 0 && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="bg-card border border-border rounded-lg overflow-visible">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
