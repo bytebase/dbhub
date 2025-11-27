@@ -1,4 +1,5 @@
-export { Request, RequestStore } from "./store.js";
+export type { Request } from "./store.js";
+export { RequestStore } from "./store.js";
 import { RequestStore } from "./store.js";
 
 /**
