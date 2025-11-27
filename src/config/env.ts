@@ -487,6 +487,14 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
           "Either remove the --id flag or use command-line DSN configuration instead."
         );
       }
+      // Validate that --readonly flag is not used with TOML config
+      if (isReadOnlyMode()) {
+        throw new Error(
+          "The --readonly flag cannot be used with TOML configuration. " +
+          "TOML config defines readonly mode per-source using 'readonly = true'. " +
+          "Either remove the --readonly flag or use command-line DSN configuration instead."
+        );
+      }
       return tomlConfig;
     }
   }
