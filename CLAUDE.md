@@ -33,7 +33,8 @@ src/
 │   ├── indexes.ts       # Index information
 │   └── procedures.ts    # Stored procedures
 ├── tools/               # MCP tool handlers
-│   └── execute-sql.ts   # SQL execution handler
+│   ├── execute-sql.ts   # SQL execution handler
+│   └── search-objects.ts  # Unified search/list with progressive disclosure
 ├── prompts/             # AI prompt handlers
 │   ├── generate-sql.ts  # SQL generation
 │   └── explain-db.ts    # Database explanation
@@ -61,6 +62,12 @@ Key architectural patterns:
 - **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
   - Tools accept optional `source_id` parameter for multi-database routing
   - Resources use default (first) database only
+- **Token-Efficient Schema Exploration**: Unified search/list tool with progressive disclosure
+  - `search_objects`: Single tool for both pattern-based search and listing all objects
+  - Pattern parameter defaults to `%` (match all) - optional for listing use cases
+  - Detail levels: `names` (minimal), `summary` (with metadata), `full` (complete structure)
+  - Supports: schemas, tables, columns, procedures, indexes
+  - Inspired by Anthropic's MCP code execution patterns for reducing token usage
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
 ## Configuration

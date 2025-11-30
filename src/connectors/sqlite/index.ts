@@ -18,6 +18,7 @@ import {
   ConnectorConfig,
 } from "../interface.js";
 import Database from "better-sqlite3";
+import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -252,8 +253,10 @@ export class SQLiteConnector implements Connector {
         .all(tableName) as { index_name: string; is_unique: number }[];
 
       // Get unique info from PRAGMA index_list which provides the unique flag
+      // Note: PRAGMA commands require proper identifier quoting for special characters
+      const quotedTableName = quoteIdentifier(tableName, "sqlite");
       const indexListRows = this.db
-        .prepare(`PRAGMA index_list(${tableName})`)
+        .prepare(`PRAGMA index_list(${quotedTableName})`)
         .all() as { name: string; unique: number }[];
       
       // Create a map of index names to unique status
@@ -264,7 +267,7 @@ export class SQLiteConnector implements Connector {
 
       // Get the primary key info
       const tableInfo = this.db
-        .prepare(`PRAGMA table_info(${tableName})`)
+        .prepare(`PRAGMA table_info(${quotedTableName})`)
         .all() as SQLiteTableInfo[];
 
       // Find primary key columns
@@ -275,8 +278,9 @@ export class SQLiteConnector implements Connector {
       // Add regular indexes
       for (const indexInfo of indexInfoRows) {
         // Get the columns for this index
+        const quotedIndexName = quoteIdentifier(indexInfo.index_name, "sqlite");
         const indexDetailRows = this.db
-          .prepare(`PRAGMA index_info(${indexInfo.index_name})`)
+          .prepare(`PRAGMA index_info(${quotedIndexName})`)
           .all() as {
           name: string;
         }[];
@@ -316,7 +320,8 @@ export class SQLiteConnector implements Connector {
     // 2. Each SQLite database file is its own separate namespace
     // 3. The PRAGMA commands operate on the current database connection
     try {
-      const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as SQLiteTableInfo[];
+      const quotedTableName = quoteIdentifier(tableName, "sqlite");
+      const rows = this.db.prepare(`PRAGMA table_info(${quotedTableName})`).all() as SQLiteTableInfo[];
 
       // Convert SQLite schema format to our standard TableColumn format
       const columns = rows.map((row) => ({
