@@ -1,0 +1,53 @@
+---
+title: "Overview"
+---
+
+## Available Tools
+
+| Tool        | Command Name  | Description                                                         |
+| ----------- | ------------- | ------------------------------------------------------------------- |
+| Execute SQL | `execute_sql` or `execute_sql_{id}` | Execute single or multiple SQL statements (separated by semicolons) |
+| Search Objects | `search_objects` or `search_objects_{id}` | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
+
+## Tool Naming
+
+The tool name varies based on your configuration:
+
+**Single database without `--id`:**
+```bash
+npx @bytebase/dbhub --dsn "postgres://..."
+```
+Tool name: `execute_sql`
+
+**Single database with `--id`:**
+```bash
+npx @bytebase/dbhub --id prod --dsn "postgres://..."
+```
+Tool name: `execute_sql_prod`
+
+**Multiple databases via TOML config:**
+```toml
+[[sources]]
+id = "prod-pg"
+dsn = "postgres://..."
+
+[[sources]]
+id = "staging.mysql"
+dsn = "mysql://..."
+```
+Tool names: `execute_sql_prod_pg` and `execute_sql_staging_mysql`
+
+<Note>
+Special characters in source IDs (hyphens, dots, etc.) are converted to underscores in tool names. For example, `prod-pg` becomes `execute_sql_prod_pg`.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Execute SQL" icon="play" href="/tools/execute-sql">
+    Execute SQL queries and statements on your database
+  </Card>
+  <Card title="Search Objects" icon="magnifying-glass" href="/tools/search-objects">
+    Search and explore database schemas, tables, and objects
+  </Card>
+</CardGroup>

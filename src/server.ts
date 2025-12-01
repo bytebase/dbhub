@@ -10,9 +10,7 @@ import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
 import { resolveTransport, resolvePort, redactDSN, resolveSourceConfigs, isReadOnlyMode, isDemoMode } from "./config/env.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
-import { registerResources } from "./resources/index.js";
 import { registerTools } from "./tools/index.js";
-import { registerPrompts } from "./prompts/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 
@@ -91,10 +89,8 @@ See documentation for more details on configuring database connections.
         version: SERVER_VERSION,
       });
 
-      // Register resources, tools, and prompts
-      registerResources(server);
+      // Register tools
       registerTools(server);
-      registerPrompts(server);
 
       return server;
     };

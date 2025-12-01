@@ -1,0 +1,176 @@
+---
+title: "search_objects"
+---
+
+Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching. This unified tool supports both targeted searches and browsing all objects, implementing progressive disclosure to minimize token usage.
+
+## Parameters
+
+- `object_type` (required): Type of object to search - `"schema"`, `"table"`, `"column"`, `"procedure"`, or `"index"`
+- `pattern` (optional): Search pattern using SQL LIKE syntax (`%` for wildcard, `_` for single character). Defaults to `"%"` (match all)
+- `schema` (optional): Filter results to a specific schema
+- `detail_level` (optional): Level of detail - `"names"` (default), `"summary"`, or `"full"`
+- `limit` (optional): Maximum results to return (default: 100, max: 1000)
+
+## Detail Levels
+
+<CodeGroup>
+```json names (minimal tokens)
+{
+  "object_type": "table",
+  "pattern": "user%",
+  "detail_level": "names"
+}
+
+// Returns:
+{
+  "count": 3,
+  "results": [
+    { "name": "users", "schema": "public" },
+    { "name": "user_profiles", "schema": "public" },
+    { "name": "user_sessions", "schema": "public" }
+  ]
+}
+```
+
+```json summary (with metadata)
+{
+  "object_type": "table",
+  "pattern": "users",
+  "detail_level": "summary"
+}
+
+// Returns:
+{
+  "count": 1,
+  "results": [
+    {
+      "name": "users",
+      "schema": "public",
+      "column_count": 8,
+      "row_count": 1523
+    }
+  ]
+}
+```
+
+```json full (complete structure)
+{
+  "object_type": "table",
+  "pattern": "users",
+  "detail_level": "full"
+}
+
+// Returns complete table structure with all columns and indexes
+```
+</CodeGroup>
+
+## Examples
+
+<CodeGroup>
+```json Search for user tables
+{
+  "object_type": "table",
+  "pattern": "user%",
+  "detail_level": "names",
+  "limit": 10
+}
+```
+
+```json List all tables (omit pattern)
+{
+  "object_type": "table",
+  "schema": "public",
+  "detail_level": "names"
+}
+```
+
+```json Find ID columns
+{
+  "object_type": "column",
+  "pattern": "%_id",
+  "detail_level": "summary"
+}
+```
+
+```json List all schemas with metadata
+{
+  "object_type": "schema",
+  "detail_level": "summary"
+}
+```
+</CodeGroup>
+
+## Pattern Syntax
+
+Use SQL LIKE pattern syntax for flexible matching:
+
+- `%` - Matches any sequence of characters
+- `_` - Matches exactly one character
+- Case-insensitive matching
+
+**Examples:**
+- `user%` → Matches "users", "user_profiles", "user_sessions"
+- `%_id` → Matches "user_id", "order_id", "product_id"
+- `test_` → Matches "test_1", "test_a" (but not "test_10")
+- `%user%` → Matches "users", "user_profiles", "app_users"
+
+## Token Efficiency
+
+This tool can reduce token usage by 90-99% compared to listing all objects:
+
+| Scenario | Traditional Approach | Search Approach | Token Savings |
+|----------|---------------------|-----------------|---------------|
+| Find "users" table in 500 tables | List all (full) | Search (names) | 99% |
+| Explore table structure | List all tables first | Search + drill down | 95% |
+| Find ID columns | Load all schemas | Search columns | 85% |
+
+<Tip>
+Always start with `detail_level: "names"` and only request `"summary"` or `"full"` when you need additional information. This minimizes token usage while exploring the database.
+</Tip>
+
+## Usage Patterns
+
+<CodeGroup>
+```json Targeted Search
+// Find specific tables by pattern
+{
+  "object_type": "table",
+  "pattern": "user%",
+  "detail_level": "names"
+}
+```
+
+```json Browse All
+// List all tables (pattern defaults to "%")
+{
+  "object_type": "table",
+  "schema": "public",
+  "detail_level": "summary"
+}
+```
+
+```json Progressive Disclosure
+// Step 1: List table names
+{
+  "object_type": "table",
+  "schema": "public",
+  "detail_level": "names"
+}
+
+// Step 2: Get full details for specific table
+{
+  "object_type": "table",
+  "pattern": "users",
+  "detail_level": "full"
+}
+```
+</CodeGroup>
+
+<Tip>
+**Pattern defaults to `"%"`** - You can omit the `pattern` parameter entirely to list all objects of the specified type. This unified tool replaces both search and list operations with a single, consistent interface.
+</Tip>
+
+<Note>
+The tool supports all three detail levels (`names`, `summary`, `full`) and works seamlessly with multi-database configurations. Results are limited by the `limit` parameter (default: 100, max: 1000) to prevent excessive token usage.
+</Note>
