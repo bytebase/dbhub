@@ -27,17 +27,9 @@ src/
 │   ├── mariadb/         # MariaDB connector
 │   ├── sqlserver/       # SQL Server connector
 │   └── sqlite/          # SQLite connector
-├── resources/           # MCP resource handlers (DB exploration)
-│   ├── schemas.ts       # Schema listing
-│   ├── tables.ts        # Table exploration
-│   ├── indexes.ts       # Index information
-│   └── procedures.ts    # Stored procedures
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
 │   └── search-objects.ts  # Unified search/list with progressive disclosure
-├── prompts/             # AI prompt handlers
-│   ├── generate-sql.ts  # SQL generation
-│   └── explain-db.ts    # Database explanation
 ├── utils/               # Shared utilities
 │   ├── dsn-obfuscator.ts# DSN security
 │   ├── response-formatter.ts # Output formatting
@@ -51,7 +43,7 @@ Key architectural patterns:
   - Supports multi-database configuration via TOML
   - Maintains `Map<id, Connector>` for named connections
   - `getConnector(sourceId?)` returns connector by ID or default (first)
-  - `getCurrentConnector(sourceId?)` static method for tool/resource handlers
+  - `getCurrentConnector(sourceId?)` static method for tool handlers
   - Backward compatible with single-connection mode
   - Location: `src/connectors/manager.ts`
 - **Transport Abstraction**: Support for both stdio (desktop tools) and HTTP (network clients)
@@ -59,9 +51,8 @@ Key architectural patterns:
   - Implemented in `src/server.ts` using `StreamableHTTPServerTransport` with JSON responses
   - Runs in stateless mode (no SSE support) - GET requests to `/mcp` return 405 Method Not Allowed
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
-- **Resource/Tool/Prompt Handlers**: Clean separation of MCP protocol concerns
+- **Tool Handlers**: Clean separation of MCP protocol concerns
   - Tools accept optional `source_id` parameter for multi-database routing
-  - Resources use default (first) database only
 - **Token-Efficient Schema Exploration**: Unified search/list tool with progressive disclosure
   - `search_objects`: Single tool for both pattern-based search and listing all objects
   - Pattern parameter defaults to `%` (match all) - optional for listing use cases

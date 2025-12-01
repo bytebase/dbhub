@@ -36,19 +36,18 @@ DBHub is a Universal Database MCP Server implementing the Model Context Protocol
 - **Secure Access**: Read-only mode, SSH tunneling, and SSL/TLS encryption support
 - **Multi-Database**: Connect to multiple databases simultaneously with TOML configuration
 - **Production-Ready**: Row limiting, lock timeout control, and connection pooling
-- **MCP Native**: Full implementation of Model Context Protocol with resources, tools, and prompts
+- **MCP Native**: Full implementation of Model Context Protocol with comprehensive tools
 
 ## Supported Databases
 
 PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite.
 
-## MCP Components
+## MCP Tools
 
-DBHub implements MCP Resources, Tools, and Prompts for database operations:
+DBHub implements MCP tools for database operations:
 
-- **[Resources](https://dbhub.ai/components/resources)**: Database schema exploration (schemas, tables, indexes, procedures)
-- **[Tools](https://dbhub.ai/components/tools)**: SQL execution with transaction support
-- **[Prompts](https://dbhub.ai/components/prompts)**: AI-assisted SQL generation and database explanation
+- **[execute_sql](https://dbhub.ai/tools/execute-sql)**: Execute SQL queries with transaction support and safety controls
+- **[search_objects](https://dbhub.ai/tools/search-objects)**: Search and explore database schemas, tables, columns, indexes, and procedures with progressive disclosure
 
 ## Installation
 

@@ -18,8 +18,8 @@
         "pages": ["index", "installation", "quickstart"]
       },
       {
-        "group": "MCP Components",
-        "pages": ["components/resources", "components/tools", "components/prompts"]
+        "group": "Tools",
+        "pages": ["tools/overview", "tools/execute-sql", "tools/search-objects"]
       },
       {
         "group": "Integrations",
