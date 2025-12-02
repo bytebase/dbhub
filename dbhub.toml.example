@@ -117,7 +117,119 @@ dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
 # 4. Passwords in DSN strings will be redacted in logs automatically
 # 5. For security, consider using environment variables for sensitive data
 
-# Future: Custom Tools
-# ---------------------
+# Custom Tools
+# ------------
+# Define custom SQL-based tools that are automatically registered as MCP tools.
+# Each tool wraps a parameterized SQL query with validation and type checking.
+
+## Example 1: Simple query with single parameter
+[[tools]]
+name = "get_user_by_email"
+description = "Retrieve user details by email address from the production database"
+source = "prod_pg"  # Required: must reference a valid source ID
+statement = "SELECT id, name, email, created_at FROM users WHERE email = $1"
+
+[[tools.parameters]]
+name = "email"
+type = "string"
+description = "The email address to search for"
+required = true
+
+## Example 2: Query with multiple parameters and default value
+[[tools]]
+name = "search_orders"
+description = "Search orders by customer ID and optional status filter"
+source = "prod_pg"
+statement = "SELECT * FROM orders WHERE customer_id = $1 AND ($2::text IS NULL OR status = $2) ORDER BY created_at DESC"
+
+[[tools.parameters]]
+name = "customer_id"
+type = "integer"
+description = "The customer ID to search orders for"
+required = true
+
+[[tools.parameters]]
+name = "status"
+type = "string"
+description = "Optional order status filter (pending, completed, cancelled)"
+required = false
+allowed_values = ["pending", "completed", "cancelled"]
+
+## Example 3: MySQL tool with positional parameters
 # [[tools]]
-# # Custom tool definitions will be supported in future releases
+# name = "get_product_inventory"
+# description = "Get current inventory level for a product"
+# source = "staging_mysql"  # References a MySQL source
+# statement = "SELECT product_id, quantity, last_updated FROM inventory WHERE product_id = ?"
+#
+# [[tools.parameters]]
+# name = "product_id"
+# type = "integer"
+# description = "The product ID to check inventory for"
+# required = true
+
+## Example 4: Analytics query with multiple integer parameters
+# [[tools]]
+# name = "daily_revenue"
+# description = "Get total revenue for a specific date range"
+# source = "analytics_db"
+# statement = "SELECT DATE(created_at) as date, SUM(amount) as revenue FROM orders WHERE DATE(created_at) BETWEEN $1 AND $2 GROUP BY DATE(created_at)"
+#
+# [[tools.parameters]]
+# name = "start_date"
+# type = "string"
+# description = "Start date in YYYY-MM-DD format"
+# required = true
+#
+# [[tools.parameters]]
+# name = "end_date"
+# type = "string"
+# description = "End date in YYYY-MM-DD format"
+# required = true
+
+# Custom Tool Field Reference:
+# ----------------------------
+#
+# REQUIRED FIELDS:
+# ----------------
+#   - name: Unique tool identifier (string)
+#   - description: Natural language description of what the tool does
+#   - source: ID of the database source to execute against (must exist in [[sources]])
+#   - statement: SQL query with parameter placeholders
+#     * PostgreSQL: Use $1, $2, $3 for parameters
+#     * MySQL/MariaDB: Use ?, ?, ? for parameters
+#     * SQL Server: Use @p1, @p2, @p3 for parameters
+#     * SQLite: Use ?, ?, ? for parameters
+#
+# PARAMETER FIELDS (for [[tools.parameters]]):
+# ---------------------------------------------
+#   - name: Parameter identifier (string)
+#   - type: Parameter type (string, integer, float, boolean, array)
+#   - description: Natural language description for the AI agent
+#   - required: Whether parameter is required (default: true)
+#   - default: Default value if not provided (makes parameter optional)
+#   - allowed_values: Array of valid values (creates enum validation)
+#
+# VALIDATION RULES:
+# -----------------
+#   1. Tool names cannot conflict with built-in tools (execute_sql, search_objects)
+#   2. Tool names must be unique across all custom tools
+#   3. Source ID must reference an existing [[sources]] entry
+#   4. Parameter count in SQL must match number of [[tools.parameters]] entries
+#   5. Parameter syntax must match the connector type:
+#      - PostgreSQL requires $1, $2, etc.
+#      - MySQL/MariaDB/SQLite require ?, ?, etc.
+#      - SQL Server requires @p1, @p2, etc.
+#
+# SECURITY:
+# ---------
+#   - Custom tools inherit the source's readonly and max_rows settings
+#   - Only parameterized queries are supported (no template interpolation)
+#   - All parameters are validated with Zod schemas at runtime
+#   - SQL injection prevention through native DB parameter binding
+#
+# USAGE:
+# ------
+#   After defining tools in this file, they are automatically registered
+#   when the server starts. They appear in the MCP client's tool list alongside
+#   built-in tools like execute_sql and search_objects.

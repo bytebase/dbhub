@@ -19,7 +19,7 @@
       },
       {
         "group": "Tools",
-        "pages": ["tools/overview", "tools/execute-sql", "tools/search-objects"]
+        "pages": ["tools/overview", "tools/execute-sql", "tools/search-objects", "tools/custom-tools"]
       },
       {
         "group": "Integrations",

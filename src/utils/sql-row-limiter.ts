@@ -15,8 +15,8 @@ export class SQLRowLimiter {
    * Check if a SQL statement already has a LIMIT clause
    */
   static hasLimitClause(sql: string): boolean {
-    // Simple regex to detect LIMIT clause - handles most common cases
-    const limitRegex = /\blimit\s+\d+/i;
+    // Detect LIMIT clause - handles literal numbers and parameter placeholders ($1, ?, @p1)
+    const limitRegex = /\blimit\s+(?:\d+|\$\d+|\?|@p\d+)/i;
     return limitRegex.test(sql);
   }
 
@@ -89,12 +89,40 @@ export class SQLRowLimiter {
   }
 
   /**
+   * Check if a LIMIT clause uses a parameter placeholder (not a literal number)
+   */
+  static hasParameterizedLimit(sql: string): boolean {
+    // Check for parameterized LIMIT (excluding literal numbers)
+    const parameterizedLimitRegex = /\blimit\s+(?:\$\d+|\?|@p\d+)/i;
+    return parameterizedLimitRegex.test(sql);
+  }
+
+  /**
    * Apply maxRows limit to a SELECT query only
+   *
+   * This method is used by PostgreSQL, MySQL, MariaDB, and SQLite connectors which all support
+   * the LIMIT clause syntax. SQL Server uses applyMaxRowsForSQLServer() instead with TOP syntax.
+   *
+   * For parameterized LIMIT clauses (e.g., LIMIT $1 or LIMIT ?), we wrap the query in a subquery
+   * to enforce max_rows as a hard cap, since the parameter value is not known until runtime.
    */
   static applyMaxRows(sql: string, maxRows: number | undefined): string {
     if (!maxRows || !this.isSelectQuery(sql)) {
       return sql;
     }
+
+    // If query has a parameterized LIMIT, wrap it in a subquery with maxRows
+    // This ensures max_rows is respected even when user provides a large parameter value
+    if (this.hasParameterizedLimit(sql)) {
+      // Wrap the query: SELECT * FROM (original_query) AS subq LIMIT max_rows
+      // Note: Subquery wrapping is safe for PostgreSQL, MySQL, MariaDB, and SQLite
+      const trimmed = sql.trim();
+      const hasSemicolon = trimmed.endsWith(';');
+      const sqlWithoutSemicolon = hasSemicolon ? trimmed.slice(0, -1) : trimmed;
+      return `SELECT * FROM (${sqlWithoutSemicolon}) AS subq LIMIT ${maxRows}${hasSemicolon ? ';' : ''}`;
+    }
+
+    // For literal LIMIT values, apply the minimum logic
     return this.applyLimitToQuery(sql, maxRows);
   }
 

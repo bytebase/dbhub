@@ -216,43 +216,63 @@ export default function SourceDetailView() {
             Available Tools
           </h2>
           {source.tools.length > 0 ? (
-            <div className="space-y-6">
-              {source.tools.map((tool) => (
-                <div key={tool.name} className="space-y-3">
-                  <div>
-                    <div className="text-sm font-medium text-foreground font-mono">
-                      {tool.name}
-                    </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {tool.description}
-                    </div>
-                  </div>
-
-                  {tool.parameters.length > 0 && (
-                    <div>
-                      <div className="text-sm font-medium text-muted-foreground mb-2">
-                        Parameters:
-                      </div>
-                      <ul className="space-y-2">
-                        {tool.parameters.map((param) => (
-                          <li key={param.name} className="text-sm">
-                            <span className="font-mono text-foreground">
-                              {param.name}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {' '}({param.type}
-                              {param.required && ', required'})
-                            </span>
-                            {param.description && (
-                              <div className="mt-1 text-muted-foreground ml-4">
-                                {param.description}
-                              </div>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+            <div className="space-y-4">
+              {source.tools.map((tool, index) => (
+                <div key={tool.name}>
+                  {index > 0 && (
+                    <div className="border-t border-border mb-4"></div>
                   )}
+                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                    <div>
+                      <div className="flex items-baseline gap-2">
+                        <div className="text-sm font-semibold text-foreground font-mono">
+                          {tool.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          ({tool.parameters.length} {tool.parameters.length === 1 ? 'parameter' : 'parameters'})
+                        </div>
+                      </div>
+                      <div className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                        {tool.description}
+                      </div>
+                    </div>
+
+                    {tool.parameters.length > 0 && (
+                      <div className="pt-2 border-t border-border/50">
+                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
+                          Parameters
+                        </div>
+                        <ul className="space-y-3">
+                          {tool.parameters.map((param) => (
+                            <li key={param.name} className="text-sm bg-background/50 rounded p-2.5">
+                              <div className="flex items-baseline gap-2 flex-wrap">
+                                <span className="font-mono text-foreground font-medium">
+                                  {param.name}
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                                  {param.type}
+                                </span>
+                                {param.required ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive">
+                                    required
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                                    optional
+                                  </span>
+                                )}
+                              </div>
+                              {param.description && (
+                                <div className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                                  {param.description}
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

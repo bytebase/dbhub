@@ -1,0 +1,256 @@
+---
+title: "Custom Tools"
+---
+
+Custom tools allow you to define reusable, parameterized SQL operations that are automatically registered as MCP tools. They provide type-safe interfaces for common database queries without writing repetitive code.
+
+## Defining a Custom Tool
+
+Tools are defined in your `dbhub.toml` configuration file. Here's a complete example:
+
+```toml
+[[tools]]
+name = "get_user_by_id"
+description = "Retrieve user details by their unique ID"
+source = "prod_pg"
+statement = "SELECT id, name, email, created_at FROM users WHERE id = $1"
+
+[[tools.parameters]]
+name = "user_id"
+type = "integer"
+description = "The unique user ID"
+```
+
+## Tool Configuration
+
+Each tool requires the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique identifier for the tool |
+| `description` | string | Yes | Human-readable description of the tool's purpose |
+| `source` | string | Yes | Database source ID (must match a configured source) |
+| `statement` | string | Yes | SQL query with parameter placeholders |
+
+<Note>
+Tool names must be unique and cannot conflict with built-in tools (`execute_sql`, `search_objects`).
+</Note>
+
+## Specifying Parameters
+
+Parameters are defined as a list of parameter objects under `[[tools.parameters]]`. Each parameter defines a typed input that will be validated before execution.
+
+### Basic Parameters
+
+```toml
+[[tools.parameters]]
+name = "user_id"
+type = "integer"
+description = "The unique user ID"
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Parameter name (must match SQL placeholder order) |
+| `type` | string | Yes | Data type: `string`, `integer`, `float`, `boolean`, `array` |
+| `description` | string | Yes | Description of the parameter's purpose |
+
+### Optional Parameters
+
+Parameters can be made optional by setting `required = false` or providing a `default` value:
+
+```toml
+[[tools.parameters]]
+name = "limit"
+type = "integer"
+description = "Maximum number of results to return"
+default = 10
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `required` | boolean | No | Whether the parameter is required (default: `true`) |
+| `default` | any | No | Default value if parameter not provided |
+
+<Tip>
+Use optional parameters with SQL `COALESCE` to create flexible filters:
+```sql
+WHERE status = COALESCE($1, status)
+```
+</Tip>
+
+### Constrained Parameters
+
+Use `allowed_values` to restrict parameters to specific values:
+
+```toml
+[[tools.parameters]]
+name = "status"
+type = "string"
+description = "Order status"
+allowed_values = ["pending", "completed", "cancelled"]
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `allowed_values` | array | No | List of allowed values (creates enum validation) |
+
+## Parameter Placeholders
+
+Different databases use different parameter placeholder syntax in SQL statements:
+
+| Database | Syntax | Example |
+|----------|--------|---------|
+| PostgreSQL | `$1`, `$2`, `$3` | `WHERE id = $1 AND status = $2` |
+| MySQL | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
+| MariaDB | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
+| SQLite | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
+| SQL Server | `@p1`, `@p2`, `@p3` | `WHERE id = @p1 AND status = @p2` |
+
+<Warning>
+The number of parameters must match the number of placeholders in your SQL statement. Validation occurs at server startup.
+</Warning>
+
+## Examples
+
+### Search with Limit
+
+```toml
+[[tools]]
+name = "search_employees"
+description = "Search employees by name with configurable result limit"
+source = "prod_pg"
+statement = "SELECT emp_no, first_name, last_name FROM employee WHERE first_name ILIKE '%' || $1 || '%' LIMIT $2"
+
+[[tools.parameters]]
+name = "search_term"
+type = "string"
+description = "Name to search for (case-insensitive partial match)"
+
+[[tools.parameters]]
+name = "limit"
+type = "integer"
+description = "Maximum number of results"
+default = 10
+```
+
+### Optional Filter
+
+```toml
+[[tools]]
+name = "list_orders"
+description = "List orders with optional status filter"
+source = "prod_pg"
+statement = "SELECT * FROM orders WHERE customer_id = $1 AND ($2::text IS NULL OR status = $2)"
+
+[[tools.parameters]]
+name = "customer_id"
+type = "integer"
+description = "Customer ID"
+
+[[tools.parameters]]
+name = "status"
+type = "string"
+description = "Optional status filter"
+required = false
+allowed_values = ["pending", "processing", "shipped", "delivered"]
+```
+
+## Security & Validation
+
+### Readonly Mode
+
+When a source is configured with `readonly = true`, tools targeting that source are restricted to read-only SQL operations. Only statements beginning with `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`, or `WITH` are allowed.
+
+```toml
+[[sources]]
+id = "prod_pg"
+readonly = true  # Restricts all tools to read-only operations
+```
+
+### Max Rows Enforcement
+
+The `max_rows` configuration is always enforced as a hard limit. Even if a tool accepts a LIMIT parameter, the configured `max_rows` serves as a cap:
+
+```toml
+[[sources]]
+id = "prod_pg"
+max_rows = 1000  # Users cannot exceed this limit
+```
+
+For tools with parameterized LIMIT clauses, the query is automatically wrapped to enforce the limit:
+
+```sql
+-- Original query
+SELECT * FROM users WHERE active = $1 LIMIT $2
+
+-- Executed as (when max_rows = 1000)
+SELECT * FROM (
+  SELECT * FROM users WHERE active = $1 LIMIT $2
+) AS subq LIMIT 1000
+```
+
+### SQL Injection Protection
+
+Custom tools use parameterized queries, which provide automatic protection against SQL injection attacks. Parameter values are never interpolated directly into SQL strings.
+
+<Warning>
+Always use parameter placeholders. Never concatenate user input into SQL statements.
+</Warning>
+
+### Startup Validation
+
+Tools are validated when the server starts:
+
+- All required fields must be present
+- The specified source must exist
+- Tool names must be unique
+- Parameter count must match SQL placeholders
+- Parameter types must be valid
+
+If validation fails, the server will not start and will display detailed error messages.
+
+## Tool Response
+
+Custom tools return the same response format as `execute_sql`:
+
+```json
+{
+  "success": true,
+  "rows": [
+    {
+      "id": 12345,
+      "name": "Alice Johnson",
+      "email": "alice@example.com",
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "count": 1,
+  "source_id": "prod_pg"
+}
+```
+
+Errors are returned with the following format:
+
+```json
+{
+  "success": false,
+  "error": "Parameter validation failed: user_id: Required",
+  "code": "EXECUTION_ERROR"
+}
+```
+
+## Best Practices
+
+- **Use descriptive names**: Tool names should clearly indicate their purpose (e.g., `get_active_users_by_department` rather than `query1`)
+- **Write detailed descriptions**: Help AI models understand when to use the tool by providing clear, complete descriptions
+- **Document parameter constraints**: Include units, ranges, and format expectations in parameter descriptions
+- **Leverage enums**: Use `allowed_values` for parameters with a fixed set of valid options
+- **Provide defaults**: Make tools easier to use by providing sensible defaults for optional parameters
+- **Keep tools focused**: Each tool should perform a single, well-defined operation
+- **Test parameter combinations**: Ensure optional parameters work correctly in all combinations
+
+## See Also
+
+- [execute_sql](/tools/execute-sql) - Direct SQL execution tool
+- [search_objects](/tools/search-objects) - Database schema exploration tool

@@ -50,9 +50,32 @@ export interface SourceConfig
 }
 
 /**
+ * Custom tool parameter configuration
+ */
+export interface ParameterConfig {
+  name: string;
+  type: "string" | "integer" | "float" | "boolean" | "array";
+  description: string;
+  required?: boolean; // Defaults to true
+  default?: any; // Makes parameter optional if set
+  allowed_values?: any[]; // Enum constraint
+}
+
+/**
+ * Custom tool definition
+ */
+export interface ToolConfig {
+  name: string;
+  description: string;
+  source: string; // Required: references a source ID
+  statement: string; // SQL query with parameters
+  parameters?: ParameterConfig[];
+}
+
+/**
  * Complete TOML configuration file structure
  */
 export interface TomlConfig {
   sources: SourceConfig[];
-  tools?: unknown[]; // Reserved for future custom tools
+  tools?: ToolConfig[];
 }

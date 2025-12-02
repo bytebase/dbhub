@@ -8,9 +8,9 @@ import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-
 
 /**
  * Load and parse TOML configuration file
- * Returns the parsed sources array and the source of the config file
+ * Returns the parsed sources array, tools array, and the source of the config file
  */
-export function loadTomlConfig(): { sources: SourceConfig[]; source: string } | null {
+export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig['tools']; source: string } | null {
   const configPath = resolveTomlConfigPath();
   if (!configPath) {
     return null;
@@ -26,6 +26,7 @@ export function loadTomlConfig(): { sources: SourceConfig[]; source: string } | 
 
     return {
       sources,
+      tools: parsedToml.tools,
       source: path.basename(configPath),
     };
   } catch (error) {

@@ -479,7 +479,7 @@ export class MySQLConnector implements Connector {
     return rows[0].DB;
   }
 
-  async executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -507,7 +507,20 @@ export class MySQLConnector implements Connector {
       }
 
       // Use dedicated connection with multipleStatements: true support
-      const results = await conn.query(processedSQL) as any;
+      // Pass parameters if provided
+      let results: any;
+      if (parameters && parameters.length > 0) {
+        try {
+          results = await conn.query(processedSQL, parameters);
+        } catch (error) {
+          console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
+          console.error(`[MySQL executeSQL] SQL: ${processedSQL}`);
+          console.error(`[MySQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+          throw error;
+        }
+      } else {
+        results = await conn.query(processedSQL);
+      }
 
       // MySQL2 returns results in format [rows, fields]
       // Extract the first element which contains the actual row data

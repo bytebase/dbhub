@@ -474,19 +474,59 @@ export class SQLServerConnector implements Connector {
     }
   }
 
-  async executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult> {
+  async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.connection) {
       throw new Error("Not connected to SQL Server database");
     }
 
     try {
       // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sql;
+      let processedSQL = sqlQuery;
       if (options.maxRows) {
-        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sql, options.maxRows);
+        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
       }
 
-      const result = await this.connection.request().query(processedSQL);
+      // Create request and add parameters if provided
+      const request = this.connection.request();
+      if (parameters && parameters.length > 0) {
+        // SQL Server uses @p1, @p2, etc. for parameters
+        parameters.forEach((param, index) => {
+          const paramName = `p${index + 1}`;
+          // Infer SQL Server type from JavaScript type
+          if (typeof param === 'string') {
+            request.input(paramName, sql.VarChar, param);
+          } else if (typeof param === 'number') {
+            if (Number.isInteger(param)) {
+              request.input(paramName, sql.Int, param);
+            } else {
+              request.input(paramName, sql.Float, param);
+            }
+          } else if (typeof param === 'boolean') {
+            request.input(paramName, sql.Bit, param);
+          } else if (param === null || param === undefined) {
+            request.input(paramName, sql.VarChar, param);
+          } else if (Array.isArray(param)) {
+            // For arrays, convert to JSON string
+            request.input(paramName, sql.VarChar, JSON.stringify(param));
+          } else {
+            // For objects, convert to JSON string
+            request.input(paramName, sql.VarChar, JSON.stringify(param));
+          }
+        });
+      }
+
+      let result;
+      try {
+        result = await request.query(processedSQL);
+      } catch (error) {
+        if (parameters && parameters.length > 0) {
+          console.error(`[SQL Server executeSQL] ERROR: ${(error as Error).message}`);
+          console.error(`[SQL Server executeSQL] SQL: ${processedSQL}`);
+          console.error(`[SQL Server executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+        }
+        throw error;
+      }
+
       return {
         rows: result.recordset || [],
         fields:

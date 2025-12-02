@@ -175,8 +175,8 @@ export interface Connector {
    */
   getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure>;
 
-  /** Execute a SQL query with execution options */
-  executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult>;
+  /** Execute a SQL query with execution options and optional parameters */
+  executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;
 }
 
 /**

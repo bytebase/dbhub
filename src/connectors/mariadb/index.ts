@@ -478,7 +478,7 @@ export class MariaDBConnector implements Connector {
     return rows[0].DB;
   }
 
-  async executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -506,7 +506,20 @@ export class MariaDBConnector implements Connector {
       }
 
       // Use dedicated connection - MariaDB driver returns rows directly for single statements
-      const results = await conn.query(processedSQL) as any;
+      // Pass parameters if provided
+      let results: any;
+      if (parameters && parameters.length > 0) {
+        try {
+          results = await conn.query(processedSQL, parameters);
+        } catch (error) {
+          console.error(`[MariaDB executeSQL] ERROR: ${(error as Error).message}`);
+          console.error(`[MariaDB executeSQL] SQL: ${processedSQL}`);
+          console.error(`[MariaDB executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+          throw error;
+        }
+      } else {
+        results = await conn.query(processedSQL);
+      }
 
       // Parse results using shared utility that handles both single and multi-statement queries
       const rows = parseQueryResults(results);

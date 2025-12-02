@@ -3,10 +3,14 @@ import { createExecuteSqlToolHandler } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsSchema } from "./search-objects.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { getToolMetadataForSource } from "../utils/tool-metadata.js";
+import { normalizeSourceId } from "../utils/normalize-id.js";
+import { customToolRegistry } from "./custom-tool-registry.js";
+import { createCustomToolHandler, buildZodSchemaFromParameters } from "./custom-tool-handler.js";
+import type { ToolConfig } from "../types/config.js";
 
 /**
  * Register all tool handlers with the MCP server
- * Creates tools for each configured database source
+ * Creates tools for each configured database source, plus custom tools from TOML
  * @param server - The MCP server instance
  */
 export function registerTools(server: McpServer): void {
@@ -36,7 +40,7 @@ export function registerTools(server: McpServer): void {
     );
 
     // 2. search_objects tool (unified search and list)
-    const searchToolName = sourceId === "default" ? "search_objects" : `search_objects_${sourceId}`;
+    const searchToolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
     const searchToolTitle = isDefault
       ? `Search Database Objects (${dbType})`
       : `Search Database Objects on ${sourceId} (${dbType})`;
@@ -57,5 +61,46 @@ export function registerTools(server: McpServer): void {
       },
       createSearchDatabaseObjectsToolHandler(sourceId)
     );
+  }
+
+  // Register custom tools from TOML configuration
+  // The registry was already initialized and validated by server.ts
+  if (customToolRegistry.isInitialized()) {
+    const validatedTools = customToolRegistry.getTools();
+
+    console.error(`Registering ${validatedTools.length} custom tool(s) from configuration...`);
+
+    for (const toolConfig of validatedTools) {
+      const sourceConfig = ConnectorManager.getSourceConfig(toolConfig.source);
+      const dbType = sourceConfig?.type || "database";
+
+      // Determine if the tool is read-only based on its SQL statement
+      const isReadOnly = (() => {
+        const cleanedSQL = toolConfig.statement.trim().toLowerCase();
+        const firstWord = cleanedSQL.split(/\s+/)[0];
+        return ["select", "show", "describe", "explain", "with"].includes(firstWord);
+      })();
+
+      // Build Zod schema object (same format as built-in tools)
+      const zodSchema = buildZodSchemaFromParameters(toolConfig.parameters);
+
+      server.registerTool(
+        toolConfig.name,
+        {
+          description: toolConfig.description,
+          inputSchema: zodSchema,
+          annotations: {
+            title: `${toolConfig.name} (${dbType})`,
+            readOnlyHint: isReadOnly,
+            destructiveHint: !isReadOnly,
+            idempotentHint: isReadOnly,
+            openWorldHint: false,
+          },
+        },
+        createCustomToolHandler(toolConfig)
+      );
+
+      console.error(`  - ${toolConfig.name} → ${toolConfig.source} (${dbType})`);
+    }
   }
 }
