@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { isReadOnlySQL } from "../utils/allowed-keywords.js";
+import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { requestStore } from "../requests/index.js";
 

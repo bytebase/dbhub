@@ -11,7 +11,7 @@ import {
   createToolErrorResponse,
 } from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
-import { isReadOnlySQL } from "../utils/allowed-keywords.js";
+import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
 
 /**
