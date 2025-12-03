@@ -4,6 +4,15 @@ title: "Custom Tools"
 
 Custom tools allow you to define reusable, parameterized SQL operations that are automatically registered as MCP tools. They provide type-safe interfaces for common database queries without writing repetitive code.
 
+Custom tools are ideal for:
+
+- **Frequently used queries**: Define once, use everywhere without rewriting SQL
+- **Standardized data access**: Ensure consistent query patterns across your team
+- **Controlled database access**: Expose specific operations without granting broad SQL access
+- **AI-friendly interfaces**: Give AI models well-defined tools with clear parameters instead of open-ended SQL
+- **Complex queries**: Encapsulate JOINs, aggregations, or multi-step operations into simple tool calls
+- **Parameter validation**: Enforce type checking and allowed values before queries execute
+
 ## Defining a Custom Tool
 
 Tools are defined in your `dbhub.toml` configuration file. Here's a complete example:

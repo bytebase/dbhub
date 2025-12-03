@@ -8,6 +8,7 @@ title: "Overview"
 | ----------- | ------------- | ------------------------------------------------------------------- |
 | Execute SQL | `execute_sql` or `execute_sql_{id}` | Execute single or multiple SQL statements (separated by semicolons) |
 | Search Objects | `search_objects` or `search_objects_{id}` | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
+| Custom Tools | User-defined names | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
 
 ## Tool Naming
 
@@ -43,11 +44,14 @@ Special characters in source IDs (hyphens, dots, etc.) are converted to undersco
 
 ## Next Steps
 
-<CardGroup cols={2}>
+<CardGroup cols={3}>
   <Card title="Execute SQL" icon="play" href="/tools/execute-sql">
     Execute SQL queries and statements on your database
   </Card>
   <Card title="Search Objects" icon="magnifying-glass" href="/tools/search-objects">
     Search and explore database schemas, tables, and objects
+  </Card>
+  <Card title="Custom Tools" icon="wrench" href="/tools/custom-tools">
+    Create reusable parameterized SQL operations
   </Card>
 </CardGroup>
