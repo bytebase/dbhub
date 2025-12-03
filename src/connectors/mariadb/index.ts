@@ -109,9 +109,7 @@ export class MariaDBConnector implements Connector {
       this.pool = mariadb.createPool(connectionConfig);
 
       // Test the connection
-      console.error("Testing connection to MariaDB...");
       await this.pool.query("SELECT 1");
-      console.error("Successfully connected to MariaDB database");
     } catch (err) {
       console.error("Failed to connect to MariaDB database:", err);
       throw err;

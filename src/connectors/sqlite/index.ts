@@ -132,12 +132,10 @@ export class SQLiteConnector implements Connector {
       }
 
       this.db = new Database(this.dbPath, dbOptions);
-      console.error("Successfully connected to SQLite database");
 
       // If an initialization script is provided, run it
       if (initScript) {
         this.db.exec(initScript);
-        console.error("Successfully initialized database with script");
       }
     } catch (error) {
       console.error("Failed to connect to SQLite database:", error);

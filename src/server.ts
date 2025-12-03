@@ -13,6 +13,8 @@ import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
+import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
+import { getToolsForSource } from "./utils/tool-metadata.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -124,13 +126,9 @@ See documentation for more details on configuring database connections.
 
     // Resolve transport type (for MCP server)
     const transportData = resolveTransport();
-    console.error(`MCP transport: ${transportData.type}`);
 
     // Resolve port for HTTP server (only needed for http transport)
-    const portData = transportData.type === "http" ? resolvePort() : null;
-    if (portData) {
-      console.error(`HTTP server port: ${portData.port} (source: ${portData.source})`);
-    }
+    const port = transportData.type === "http" ? resolvePort().port : null;
 
     // Print ASCII art banner with version and slogan
     const readonly = isReadOnlyMode();
@@ -150,11 +148,6 @@ See documentation for more details on configuring database connections.
       modeDescriptions.push("only read only queries allowed");
     }
 
-    // Multi-source mode indicator
-    if (sources.length > 1) {
-      console.error(`Multi-source mode: ${sources.length} databases configured`);
-    }
-
     // Output mode information
     if (activeModes.length > 0) {
       console.error(`Running in ${activeModes.join(' and ')} mode - ${modeDescriptions.join(', ')}`);
@@ -162,10 +155,17 @@ See documentation for more details on configuring database connections.
 
     console.error(generateBanner(SERVER_VERSION, activeModes));
 
+    // Print sources and tools table
+    const sourceDisplayInfos = buildSourceDisplayInfo(
+      sources,
+      (sourceId) => getToolsForSource(sourceId).map((t) => t.name),
+      isDemo
+    );
+    console.error(generateStartupTable(sourceDisplayInfos));
+
     // Set up transport-specific server
     if (transportData.type === "http") {
       // HTTP transport: Start Express server with MCP endpoint and admin console
-      const port = portData!.port;
       const app = express();
 
       // Enable JSON parsing

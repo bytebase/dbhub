@@ -117,7 +117,6 @@ export class PostgresConnector implements Connector {
 
       // Test the connection
       const client = await this.pool.connect();
-      console.error("Successfully connected to PostgreSQL database");
       client.release();
     } catch (err) {
       console.error("Failed to connect to PostgreSQL database:", err);
