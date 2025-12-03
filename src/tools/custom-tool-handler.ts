@@ -11,7 +11,7 @@ import {
   createToolErrorResponse,
 } from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
-import { allowedKeywords } from "../utils/allowed-keywords.js";
+import { isReadOnlySQL } from "../utils/allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
 
 /**
@@ -24,41 +24,6 @@ function getClientIdentifier(extra: any): string {
     return userAgent;
   }
   return "stdio";
-}
-
-/**
- * Remove SQL comments from a query
- */
-function stripSQLComments(sql: string): string {
-  // Remove single-line comments (-- comment)
-  let cleaned = sql
-    .split("\n")
-    .map((line) => {
-      const commentIndex = line.indexOf("--");
-      return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
-    })
-    .join("\n");
-
-  // Remove multi-line comments (/* comment */)
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, " ");
-
-  return cleaned.trim();
-}
-
-/**
- * Check if a SQL statement is read-only
- */
-function isReadOnlySQL(sql: string, connectorType: string): boolean {
-  const cleanedSQL = stripSQLComments(sql).toLowerCase();
-
-  if (!cleanedSQL) {
-    return true;
-  }
-
-  const firstWord = cleanedSQL.split(/\s+/)[0];
-  const keywordList = allowedKeywords[connectorType] || allowedKeywords.default || [];
-
-  return keywordList.includes(firstWord);
 }
 
 /**

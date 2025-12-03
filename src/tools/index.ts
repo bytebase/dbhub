@@ -4,6 +4,7 @@ import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsSchema } f
 import { ConnectorManager } from "../connectors/manager.js";
 import { getToolMetadataForSource } from "../utils/tool-metadata.js";
 import { normalizeSourceId } from "../utils/normalize-id.js";
+import { isReadOnlySQL } from "../utils/allowed-keywords.js";
 import { customToolRegistry } from "./custom-tool-registry.js";
 import { createCustomToolHandler, buildZodSchemaFromParameters } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
@@ -75,11 +76,8 @@ export function registerTools(server: McpServer): void {
       const dbType = sourceConfig?.type || "database";
 
       // Determine if the tool is read-only based on its SQL statement
-      const isReadOnly = (() => {
-        const cleanedSQL = toolConfig.statement.trim().toLowerCase();
-        const firstWord = cleanedSQL.split(/\s+/)[0];
-        return ["select", "show", "describe", "explain", "with"].includes(firstWord);
-      })();
+      // Use the shared isReadOnlySQL function for consistent behavior with execute-sql
+      const isReadOnly = isReadOnlySQL(toolConfig.statement, dbType);
 
       // Build Zod schema object (same format as built-in tools)
       const zodSchema = buildZodSchemaFromParameters(toolConfig.parameters);
