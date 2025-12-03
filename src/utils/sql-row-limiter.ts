@@ -3,6 +3,78 @@
  */
 export class SQLRowLimiter {
   /**
+   * Strip SQL comments and string literals to avoid false positives when detecting clauses.
+   * This prevents matching LIMIT/TOP keywords inside comments or quoted strings.
+   */
+  private static stripCommentsAndStrings(sql: string): string {
+    let result = "";
+    let i = 0;
+
+    while (i < sql.length) {
+      // Check for single-line comment (--)
+      if (sql[i] === "-" && sql[i + 1] === "-") {
+        // Skip until end of line
+        while (i < sql.length && sql[i] !== "\n") {
+          i++;
+        }
+        result += " ";
+        continue;
+      }
+
+      // Check for multi-line comment (/* */)
+      if (sql[i] === "/" && sql[i + 1] === "*") {
+        i += 2;
+        while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) {
+          i++;
+        }
+        i += 2; // Skip closing */
+        result += " ";
+        continue;
+      }
+
+      // Check for single-quoted string
+      if (sql[i] === "'") {
+        i++;
+        while (i < sql.length) {
+          if (sql[i] === "'" && sql[i + 1] === "'") {
+            // Escaped single quote
+            i += 2;
+          } else if (sql[i] === "'") {
+            i++;
+            break;
+          } else {
+            i++;
+          }
+        }
+        result += " ";
+        continue;
+      }
+
+      // Check for double-quoted identifier (standard SQL) or string (MySQL with ANSI_QUOTES off)
+      if (sql[i] === '"') {
+        i++;
+        while (i < sql.length) {
+          if (sql[i] === '"' && sql[i + 1] === '"') {
+            // Escaped double quote
+            i += 2;
+          } else if (sql[i] === '"') {
+            i++;
+            break;
+          } else {
+            i++;
+          }
+        }
+        result += " ";
+        continue;
+      }
+
+      result += sql[i];
+      i++;
+    }
+
+    return result;
+  }
+  /**
    * Check if a SQL statement is a SELECT query that can benefit from row limiting
    * Only handles SELECT queries
    */
@@ -12,28 +84,37 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Check if a SQL statement already has a LIMIT clause
+   * Check if a SQL statement already has a LIMIT clause.
+   * Strips comments and string literals first to avoid false positives.
    */
   static hasLimitClause(sql: string): boolean {
+    // Strip comments and strings to avoid matching LIMIT inside them
+    const cleanedSQL = this.stripCommentsAndStrings(sql);
     // Detect LIMIT clause - handles literal numbers and parameter placeholders ($1, ?, @p1)
     const limitRegex = /\blimit\s+(?:\d+|\$\d+|\?|@p\d+)/i;
-    return limitRegex.test(sql);
+    return limitRegex.test(cleanedSQL);
   }
 
   /**
-   * Check if a SQL statement already has a TOP clause (SQL Server)
+   * Check if a SQL statement already has a TOP clause (SQL Server).
+   * Strips comments and string literals first to avoid false positives.
    */
   static hasTopClause(sql: string): boolean {
+    // Strip comments and strings to avoid matching TOP inside them
+    const cleanedSQL = this.stripCommentsAndStrings(sql);
     // Simple regex to detect TOP clause - handles most common cases
     const topRegex = /\bselect\s+top\s+\d+/i;
-    return topRegex.test(sql);
+    return topRegex.test(cleanedSQL);
   }
 
   /**
-   * Extract existing LIMIT value from SQL if present
+   * Extract existing LIMIT value from SQL if present.
+   * Strips comments and string literals first to avoid false positives.
    */
   static extractLimitValue(sql: string): number | null {
-    const limitMatch = sql.match(/\blimit\s+(\d+)/i);
+    // Strip comments and strings to avoid matching LIMIT inside them
+    const cleanedSQL = this.stripCommentsAndStrings(sql);
+    const limitMatch = cleanedSQL.match(/\blimit\s+(\d+)/i);
     if (limitMatch) {
       return parseInt(limitMatch[1], 10);
     }
@@ -41,10 +122,13 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Extract existing TOP value from SQL if present (SQL Server)
+   * Extract existing TOP value from SQL if present (SQL Server).
+   * Strips comments and string literals first to avoid false positives.
    */
   static extractTopValue(sql: string): number | null {
-    const topMatch = sql.match(/\bselect\s+top\s+(\d+)/i);
+    // Strip comments and strings to avoid matching TOP inside them
+    const cleanedSQL = this.stripCommentsAndStrings(sql);
+    const topMatch = cleanedSQL.match(/\bselect\s+top\s+(\d+)/i);
     if (topMatch) {
       return parseInt(topMatch[1], 10);
     }
@@ -89,12 +173,15 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Check if a LIMIT clause uses a parameter placeholder (not a literal number)
+   * Check if a LIMIT clause uses a parameter placeholder (not a literal number).
+   * Strips comments and string literals first to avoid false positives.
    */
   static hasParameterizedLimit(sql: string): boolean {
+    // Strip comments and strings to avoid matching LIMIT inside them
+    const cleanedSQL = this.stripCommentsAndStrings(sql);
     // Check for parameterized LIMIT (excluding literal numbers)
     const parameterizedLimitRegex = /\blimit\s+(?:\$\d+|\?|@p\d+)/i;
-    return parameterizedLimitRegex.test(sql);
+    return parameterizedLimitRegex.test(cleanedSQL);
   }
 
   /**

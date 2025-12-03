@@ -2,6 +2,43 @@ import { describe, it, expect } from "vitest";
 import { SQLRowLimiter } from "../sql-row-limiter.js";
 
 describe("SQLRowLimiter", () => {
+  describe("hasLimitClause - edge cases with comments and strings", () => {
+    it("should not detect LIMIT inside single-quoted string", () => {
+      const sql = "SELECT 'show limit 10 records' AS msg FROM users";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    });
+
+    it("should not detect LIMIT inside double-quoted identifier", () => {
+      const sql = 'SELECT "limit 10" AS col FROM users';
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    });
+
+    it("should not detect LIMIT inside single-line comment", () => {
+      const sql = "SELECT * FROM users -- limit 10\nWHERE active = true";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    });
+
+    it("should not detect LIMIT inside multi-line comment", () => {
+      const sql = "SELECT * FROM users /* limit 10 */ WHERE active = true";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    });
+
+    it("should detect real LIMIT after string containing 'limit'", () => {
+      const sql = "SELECT 'limit' AS word FROM users LIMIT 10";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
+    });
+
+    it("should detect real LIMIT after comment containing 'limit'", () => {
+      const sql = "SELECT * FROM users /* show limit */ LIMIT 10";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
+    });
+
+    it("should handle escaped quotes in strings", () => {
+      const sql = "SELECT 'it''s limit 10' AS msg FROM users";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    });
+  });
+
   describe("hasLimitClause", () => {
     it("should detect LIMIT with literal number", () => {
       const sql = "SELECT * FROM users LIMIT 10";
@@ -106,6 +143,24 @@ describe("SQLRowLimiter", () => {
       const sql = "SELECT * FROM users WHERE name = @p1 LIMIT @p2;";
       const result = SQLRowLimiter.applyMaxRows(sql, 1000);
       expect(result).toBe("SELECT * FROM (SELECT * FROM users WHERE name = @p1 LIMIT @p2) AS subq LIMIT 1000;");
+    });
+
+    it("should add LIMIT when 'limit' only appears in string literal", () => {
+      const sql = "SELECT 'show limit 10 records' AS msg FROM users";
+      const result = SQLRowLimiter.applyMaxRows(sql, 100);
+      expect(result).toBe("SELECT 'show limit 10 records' AS msg FROM users LIMIT 100");
+    });
+
+    it("should add LIMIT when 'limit' only appears in comment", () => {
+      const sql = "SELECT * FROM users /* limit 10 */";
+      const result = SQLRowLimiter.applyMaxRows(sql, 100);
+      expect(result).toBe("SELECT * FROM users /* limit 10 */ LIMIT 100");
+    });
+
+    it("should add LIMIT when 'limit' only appears in single-line comment", () => {
+      const sql = "SELECT * FROM users -- limit 10";
+      const result = SQLRowLimiter.applyMaxRows(sql, 100);
+      expect(result).toBe("SELECT * FROM users -- limit 10 LIMIT 100");
     });
   });
 });
