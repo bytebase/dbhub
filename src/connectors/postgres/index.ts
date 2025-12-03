@@ -443,7 +443,12 @@ export class PostgresConnector implements Connector {
         }
         return await client.query(processedStatement);
       } else {
-        // Multiple statements - execute all in same session for transaction consistency
+        // Multiple statements - parameters not supported for multi-statement queries
+        if (parameters && parameters.length > 0) {
+          throw new Error("Parameters are not supported for multi-statement queries in PostgreSQL");
+        }
+
+        // Execute all in same session for transaction consistency
         let allRows: any[] = [];
 
         // Execute within a transaction to ensure session consistency
