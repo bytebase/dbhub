@@ -42,8 +42,11 @@ function parseHostAndDatabase(source: SourceConfig): { host: string; database: s
         return { host: "", database: parsed.database || ":memory:" };
       }
       // For other databases, construct host:port string
-      const port = parsed.port || getDefaultPortForType(parsed.type!);
-      const host = port ? `${parsed.host}:${port}` : parsed.host || "";
+      if (!parsed.host) {
+        return { host: "", database: parsed.database || "" };
+      }
+      const port = parsed.port ?? getDefaultPortForType(parsed.type!);
+      const host = port ? `${parsed.host}:${port}` : parsed.host;
       return { host, database: parsed.database || "" };
     }
     return { host: "unknown", database: "" };
