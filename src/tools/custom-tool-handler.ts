@@ -13,18 +13,7 @@ import {
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
-
-/**
- * Extract client identifier from request context
- * Returns User-Agent for HTTP transport, "stdio" for STDIO transport
- */
-function getClientIdentifier(extra: any): string {
-  const userAgent = extra?.requestInfo?.headers?.["user-agent"];
-  if (userAgent) {
-    return userAgent;
-  }
-  return "stdio";
-}
+import { getClientIdentifier } from "../utils/client-identifier.js";
 
 /**
  * Build a Zod schema from parameter definitions

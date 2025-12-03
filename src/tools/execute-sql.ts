@@ -4,21 +4,7 @@ import { createToolSuccessResponse, createToolErrorResponse } from "../utils/res
 import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { requestStore } from "../requests/index.js";
-
-/**
- * Extract client identifier from request context
- * Returns User-Agent for HTTP transport, "stdio" for STDIO transport
- */
-function getClientIdentifier(extra: any): string {
-  // MCP SDK 1.23+ passes requestInfo in extra.requestInfo for HTTP transport
-  const userAgent = extra?.requestInfo?.headers?.["user-agent"];
-  if (userAgent) {
-    return userAgent;
-  }
-
-  // Default for STDIO mode
-  return "stdio";
-}
+import { getClientIdentifier } from "../utils/client-identifier.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
