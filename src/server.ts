@@ -82,21 +82,6 @@ See documentation for more details on configuring database connections.
       process.exit(1);
     }
 
-    // Create MCP server factory function for HTTP transport
-    const createServer = () => {
-      const server = new McpServer({
-        name: SERVER_NAME,
-        version: SERVER_VERSION,
-      });
-
-      // Register tools
-      registerTools(server);
-
-      return server;
-    };
-
-    // Create server factory function (will be used for both STDIO and HTTP transports)
-
     // Create connector manager and connect to database(s)
     const connectorManager = new ConnectorManager();
     const sources = sourceConfigsData.sources;
@@ -110,6 +95,32 @@ See documentation for more details on configuring database connections.
       console.error(`  - ${source.id}: ${redactDSN(dsn)}`);
     }
     await connectorManager.connectWithSources(sources);
+
+    // Initialize custom tool registry early (needed for API routes)
+    // This must happen AFTER ConnectorManager is initialized so source validation works
+    // Only initialize once (idempotent - safe for multiple MCP client connections)
+    if (sourceConfigsData.tools && sourceConfigsData.tools.length > 0) {
+      const { customToolRegistry } = await import("./tools/custom-tool-registry.js");
+      if (!customToolRegistry.isInitialized()) {
+        customToolRegistry.initialize(sourceConfigsData.tools);
+        console.error(`Custom tool registry initialized with ${sourceConfigsData.tools.length} tool(s)`);
+      }
+    }
+
+    // Create MCP server factory function for HTTP transport
+    // Note: This must be created AFTER ConnectorManager is initialized
+    const createServer = () => {
+      const server = new McpServer({
+        name: SERVER_NAME,
+        version: SERVER_VERSION,
+      });
+
+      // Register tools (both built-in and custom)
+      // Custom tools are already initialized in customToolRegistry by the code above
+      registerTools(server);
+
+      return server;
+    };
 
     // Resolve transport type (for MCP server)
     const transportData = resolveTransport();

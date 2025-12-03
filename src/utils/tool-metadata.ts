@@ -3,6 +3,8 @@ import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
+import { customToolRegistry } from "../tools/custom-tool-registry.js";
+import type { ParameterConfig } from "../types/config.js";
 
 /**
  * Tool parameter definition for API responses
@@ -121,19 +123,98 @@ export function getToolMetadataForSource(sourceId: string): ToolMetadata {
 }
 
 /**
+ * Convert custom tool parameter configs to Tool parameter format
+ * @param params - Parameter configurations from custom tool
+ * @returns Array of tool parameters
+ */
+function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolParameter[] {
+  if (!params || params.length === 0) {
+    return [];
+  }
+
+  return params.map((param) => ({
+    name: param.name,
+    type: param.type,
+    required: param.required !== false && param.default === undefined,
+    description: param.description,
+  }));
+}
+
+/**
  * Get tools for a specific source (API response format)
+ * Includes both built-in tools (execute_sql, search_objects) and custom tools
  * @param sourceId - The source ID to get tools for
  * @returns Array of tools with simplified parameters
  */
 export function getToolsForSource(sourceId: string): Tool[] {
-  const metadata = getToolMetadataForSource(sourceId);
-  const parameters = zodToParameters(metadata.schema);
+  const tools: Tool[] = [];
 
-  return [
-    {
-      name: metadata.name,
-      description: metadata.description,
-      parameters,
-    },
-  ];
+  // 1. Add built-in execute_sql tool
+  const executeSqlMetadata = getToolMetadataForSource(sourceId);
+  const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
+  tools.push({
+    name: executeSqlMetadata.name,
+    description: executeSqlMetadata.description,
+    parameters: executeSqlParameters,
+  });
+
+  // 2. Add built-in search_objects tool
+  const searchToolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
+  const dbType = sourceConfig?.type || "database";
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const isDefault = sourceIds[0] === sourceId;
+
+  tools.push({
+    name: searchToolName,
+    description: `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}`,
+    parameters: [
+      {
+        name: "object_type",
+        type: "string",
+        required: true,
+        description: "Type of database object to search for (schema, table, column, procedure, index)",
+      },
+      {
+        name: "pattern",
+        type: "string",
+        required: false,
+        description: "Search pattern (SQL LIKE syntax: % for wildcard, _ for single char). Case-insensitive. Defaults to '%' (match all).",
+      },
+      {
+        name: "schema",
+        type: "string",
+        required: false,
+        description: "Filter results to a specific schema/database",
+      },
+      {
+        name: "detail_level",
+        type: "string",
+        required: false,
+        description: "Level of detail to return: names (minimal), summary (with metadata), full (complete structure). Defaults to 'names'.",
+      },
+      {
+        name: "limit",
+        type: "integer",
+        required: false,
+        description: "Maximum number of results to return (default: 100, max: 1000)",
+      },
+    ],
+  });
+
+  // 3. Add custom tools for this source
+  if (customToolRegistry.isInitialized()) {
+    const customTools = customToolRegistry.getTools();
+    const sourceCustomTools = customTools.filter((tool) => tool.source === sourceId);
+
+    for (const customTool of sourceCustomTools) {
+      tools.push({
+        name: customTool.name,
+        description: customTool.description,
+        parameters: customParamsToToolParams(customTool.parameters),
+      });
+    }
+  }
+
+  return tools;
 }

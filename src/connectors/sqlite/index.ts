@@ -373,7 +373,7 @@ export class SQLiteConnector implements Connector {
   }
 
 
-  async executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");
     }
@@ -388,12 +388,12 @@ export class SQLiteConnector implements Connector {
         // Single statement - determine if it returns data
         let processedStatement = statements[0];
         const trimmedStatement = statements[0].toLowerCase().trim();
-        const isReadStatement = trimmedStatement.startsWith('select') || 
-                               trimmedStatement.startsWith('with') || 
+        const isReadStatement = trimmedStatement.startsWith('select') ||
+                               trimmedStatement.startsWith('with') ||
                                trimmedStatement.startsWith('explain') ||
                                trimmedStatement.startsWith('analyze') ||
-                               (trimmedStatement.startsWith('pragma') && 
-                                (trimmedStatement.includes('table_info') || 
+                               (trimmedStatement.startsWith('pragma') &&
+                                (trimmedStatement.includes('table_info') ||
                                  trimmedStatement.includes('index_info') ||
                                  trimmedStatement.includes('index_list') ||
                                  trimmedStatement.includes('foreign_key_list')));
@@ -404,28 +404,57 @@ export class SQLiteConnector implements Connector {
         }
 
         if (isReadStatement) {
-          const rows = this.db.prepare(processedStatement).all();
-          return { rows };
+          // Pass parameters if provided
+          if (parameters && parameters.length > 0) {
+            try {
+              const rows = this.db.prepare(processedStatement).all(...parameters);
+              return { rows };
+            } catch (error) {
+              console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
+              console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
+              console.error(`[SQLite executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+              throw error;
+            }
+          } else {
+            const rows = this.db.prepare(processedStatement).all();
+            return { rows };
+          }
         } else {
           // Use run() for statements that don't return data
-          this.db.prepare(processedStatement).run();
+          if (parameters && parameters.length > 0) {
+            try {
+              this.db.prepare(processedStatement).run(...parameters);
+            } catch (error) {
+              console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
+              console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
+              console.error(`[SQLite executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+              throw error;
+            }
+          } else {
+            this.db.prepare(processedStatement).run();
+          }
           return { rows: [] };
         }
       } else {
-        // Multiple statements - use native .exec() for optimal performance
+        // Multiple statements - parameters not supported for multi-statement queries
+        if (parameters && parameters.length > 0) {
+          throw new Error("Parameters are not supported for multi-statement queries in SQLite");
+        }
+
+        // Use native .exec() for optimal performance
         // Note: .exec() doesn't return results, so we need to handle SELECT statements differently
         const readStatements = [];
         const writeStatements = [];
-        
+
         // Separate read and write operations
         for (const statement of statements) {
           const trimmedStatement = statement.toLowerCase().trim();
-          if (trimmedStatement.startsWith('select') || 
-              trimmedStatement.startsWith('with') || 
+          if (trimmedStatement.startsWith('select') ||
+              trimmedStatement.startsWith('with') ||
               trimmedStatement.startsWith('explain') ||
               trimmedStatement.startsWith('analyze') ||
-              (trimmedStatement.startsWith('pragma') && 
-               (trimmedStatement.includes('table_info') || 
+              (trimmedStatement.startsWith('pragma') &&
+               (trimmedStatement.includes('table_info') ||
                 trimmedStatement.includes('index_info') ||
                 trimmedStatement.includes('index_list') ||
                 trimmedStatement.includes('foreign_key_list')))) {

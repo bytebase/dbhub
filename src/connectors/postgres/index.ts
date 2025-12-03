@@ -414,7 +414,7 @@ export class PostgresConnector implements Connector {
   }
 
 
-  async executeSQL(sql: string, options: ExecuteOptions): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -429,9 +429,26 @@ export class PostgresConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - apply maxRows if applicable
         const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
+
+        // Use parameters if provided
+        if (parameters && parameters.length > 0) {
+          try {
+            return await client.query(processedStatement, parameters);
+          } catch (error) {
+            console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
+            console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
+            console.error(`[PostgreSQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+            throw error;
+          }
+        }
         return await client.query(processedStatement);
       } else {
-        // Multiple statements - execute all in same session for transaction consistency
+        // Multiple statements - parameters not supported for multi-statement queries
+        if (parameters && parameters.length > 0) {
+          throw new Error("Parameters are not supported for multi-statement queries in PostgreSQL");
+        }
+
+        // Execute all in same session for transaction consistency
         let allRows: any[] = [];
 
         // Execute within a transaction to ensure session consistency

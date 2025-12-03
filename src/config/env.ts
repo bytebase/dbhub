@@ -473,7 +473,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
  * Priority: TOML config (--config flag or ./dbhub.toml) > single DSN/env vars
  * Returns array of source configs and the source of the configuration
  */
-export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; source: string } | null> {
+export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; tools?: import("../types/config.js").ToolConfig[]; source: string } | null> {
   // 1. Try loading from TOML configuration file (skip if --demo flag is set)
   if (!isDemoMode()) {
     const tomlConfig = loadTomlConfig();

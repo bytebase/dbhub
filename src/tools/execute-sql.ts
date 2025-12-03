@@ -1,24 +1,10 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { allowedKeywords } from "../utils/allowed-keywords.js";
+import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { requestStore } from "../requests/index.js";
-
-/**
- * Extract client identifier from request context
- * Returns User-Agent for HTTP transport, "stdio" for STDIO transport
- */
-function getClientIdentifier(extra: any): string {
-  // MCP SDK 1.23+ passes requestInfo in extra.requestInfo for HTTP transport
-  const userAgent = extra?.requestInfo?.headers?.["user-agent"];
-  if (userAgent) {
-    return userAgent;
-  }
-
-  // Default for STDIO mode
-  return "stdio";
-}
+import { getClientIdentifier } from "../utils/client-identifier.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
@@ -35,47 +21,6 @@ function splitSQLStatements(sql: string): string[] {
   return sql.split(';')
     .map(statement => statement.trim())
     .filter(statement => statement.length > 0);
-}
-
-/**
- * Remove SQL comments from a query
- * @param sql The SQL query to clean
- * @returns The SQL query without comments
- */
-function stripSQLComments(sql: string): string {
-  // Remove single-line comments (-- comment)
-  let cleaned = sql.split('\n').map(line => {
-    const commentIndex = line.indexOf('--');
-    return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
-  }).join('\n');
-  
-  // Remove multi-line comments (/* comment */)
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, ' ');
-  
-  return cleaned.trim();
-}
-
-/**
- * Check if a SQL query is read-only based on its first keyword
- * @param sql The SQL query to check
- * @param connectorType The database type to check against
- * @returns True if the query is read-only (starts with allowed keywords)
- */
-function isReadOnlySQL(sql: string, connectorType: ConnectorType): boolean {
-  // Strip comments before analyzing
-  const cleanedSQL = stripSQLComments(sql).toLowerCase();
-  
-  // If the statement is empty after removing comments, consider it read-only
-  if (!cleanedSQL) {
-    return true;
-  }
-  
-  const firstWord = cleanedSQL.split(/\s+/)[0];
-  
-  // Get the appropriate allowed keywords list for this database type
-  const keywordList = allowedKeywords[connectorType] || allowedKeywords.default || [];
-  
-  return keywordList.includes(firstWord);
 }
 
 /**
