@@ -1,22 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripSQLComments, isReadOnlySQL } from "../allowed-keywords.js";
-
-describe("stripSQLComments", () => {
-  it("should remove single-line comments", () => {
-    const sql = "SELECT * FROM users -- this is a comment\nWHERE active = true";
-    expect(stripSQLComments(sql)).toBe("SELECT * FROM users \nWHERE active = true");
-  });
-
-  it("should remove multi-line comments", () => {
-    const sql = "SELECT * FROM users /* this is\na multi-line comment */ WHERE active = true";
-    expect(stripSQLComments(sql)).toBe("SELECT * FROM users   WHERE active = true");
-  });
-
-  it("should handle both comment types", () => {
-    const sql = "SELECT * /* inline */ FROM users -- end comment";
-    expect(stripSQLComments(sql)).toBe("SELECT *   FROM users");
-  });
-});
+import { isReadOnlySQL } from "../allowed-keywords.js";
 
 describe("isReadOnlySQL", () => {
   describe("basic read-only detection", () => {

@@ -5,6 +5,7 @@
 
 import { ConnectorType } from "../connectors/interface.js";
 import { ParameterConfig } from "../types/config.js";
+import { stripCommentsAndStrings } from "./sql-parser.js";
 
 /**
  * Parameter placeholder styles for different database connectors
@@ -18,25 +19,29 @@ export const PARAMETER_STYLES = {
 } as const;
 
 /**
- * Detect the parameter style used in a SQL statement
+ * Detect the parameter style used in a SQL statement.
+ * Strips comments and string literals first to avoid false positives.
  * @param statement SQL statement to analyze
  * @returns The detected parameter style
  */
 export function detectParameterStyle(
   statement: string
 ): "numbered" | "positional" | "named" | "none" {
+  // Strip comments and strings to avoid matching parameters inside them
+  const cleanedSQL = stripCommentsAndStrings(statement);
+
   // Check for PostgreSQL-style numbered parameters ($1, $2, etc.)
-  if (/\$\d+/.test(statement)) {
+  if (/\$\d+/.test(cleanedSQL)) {
     return "numbered";
   }
 
   // Check for SQL Server-style named parameters (@p1, @p2, etc.)
-  if (/@p\d+/.test(statement)) {
+  if (/@p\d+/.test(cleanedSQL)) {
     return "named";
   }
 
   // Check for positional parameters (?)
-  if (/\?/.test(statement)) {
+  if (/\?/.test(cleanedSQL)) {
     return "positional";
   }
 
@@ -77,18 +82,21 @@ export function validateParameterStyle(
 }
 
 /**
- * Count the number of parameters in a SQL statement and validate they are sequential
+ * Count the number of parameters in a SQL statement and validate they are sequential.
+ * Strips comments and string literals first to avoid false positives.
  * @param statement SQL statement
  * @returns Number of parameter placeholders required (highest index for numbered/named)
  * @throws Error if numbered/named parameters are not sequential starting from 1
  */
 export function countParameters(statement: string): number {
   const style = detectParameterStyle(statement);
+  // Strip comments and strings to avoid matching parameters inside them
+  const cleanedSQL = stripCommentsAndStrings(statement);
 
   switch (style) {
     case "numbered": {
       // Extract all $N parameters and get unique indices
-      const matches = statement.match(/\$\d+/g);
+      const matches = cleanedSQL.match(/\$\d+/g);
       if (!matches) return 0;
       const numbers = matches.map((m) => parseInt(m.slice(1), 10));
       const uniqueIndices = Array.from(new Set(numbers)).sort((a, b) => a - b);
@@ -108,7 +116,7 @@ export function countParameters(statement: string): number {
     }
     case "named": {
       // Extract all @pN parameters and get unique indices
-      const matches = statement.match(/@p\d+/g);
+      const matches = cleanedSQL.match(/@p\d+/g);
       if (!matches) return 0;
       const numbers = matches.map((m) => parseInt(m.slice(2), 10));
       const uniqueIndices = Array.from(new Set(numbers)).sort((a, b) => a - b);
@@ -128,7 +136,7 @@ export function countParameters(statement: string): number {
     }
     case "positional": {
       // Count question marks (positional parameters don't have this issue)
-      return (statement.match(/\?/g) || []).length;
+      return (cleanedSQL.match(/\?/g) || []).length;
     }
     default:
       return 0;

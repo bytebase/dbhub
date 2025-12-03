@@ -9,6 +9,70 @@ import {
 import type { ParameterConfig } from "../../types/config.js";
 
 describe("Parameter Mapper", () => {
+  describe("detectParameterStyle - edge cases with comments and strings", () => {
+    it("should not detect parameters inside single-quoted strings", () => {
+      const sql = "SELECT 'price is $1' AS msg FROM products";
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+
+    it("should not detect parameters inside double-quoted identifiers", () => {
+      const sql = 'SELECT * FROM "table$1" WHERE active = true';
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+
+    it("should not detect parameters inside single-line comments", () => {
+      const sql = "SELECT * FROM users -- use $1 for filtering";
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+
+    it("should not detect parameters inside multi-line comments", () => {
+      const sql = "SELECT * FROM users /* parameter $1 */";
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+
+    it("should detect real parameter after string containing $1", () => {
+      const sql = "SELECT 'cost is $1' AS label, * FROM products WHERE id = $1";
+      expect(detectParameterStyle(sql)).toBe("numbered");
+    });
+
+    it("should not detect question mark inside string", () => {
+      const sql = "SELECT 'what?' AS question FROM faq";
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+
+    it("should not detect @p1 inside string", () => {
+      const sql = "SELECT 'contact @p1 for info' AS msg FROM users";
+      expect(detectParameterStyle(sql)).toBe("none");
+    });
+  });
+
+  describe("countParameters - edge cases with comments and strings", () => {
+    it("should not count parameters inside strings", () => {
+      const sql = "SELECT '$1 $2 $3' AS text FROM test WHERE id = $1";
+      expect(countParameters(sql)).toBe(1);
+    });
+
+    it("should not count parameters inside comments", () => {
+      const sql = "SELECT * FROM users WHERE id = $1 /* also filter by $2 $3 */";
+      expect(countParameters(sql)).toBe(1);
+    });
+
+    it("should not count question marks inside strings", () => {
+      const sql = "SELECT 'Is this ok?' AS question FROM faq WHERE id = ?";
+      expect(countParameters(sql)).toBe(1);
+    });
+
+    it("should not count question marks inside comments", () => {
+      const sql = "SELECT * FROM faq WHERE id = ? -- filter by ? later";
+      expect(countParameters(sql)).toBe(1);
+    });
+
+    it("should handle escaped quotes in strings", () => {
+      const sql = "SELECT 'it''s $1 value' AS text FROM test WHERE id = $1";
+      expect(countParameters(sql)).toBe(1);
+    });
+  });
+
   describe("detectParameterStyle", () => {
     it("should detect numbered parameters ($1, $2)", () => {
       const sql = "SELECT * FROM users WHERE id = $1 AND status = $2";

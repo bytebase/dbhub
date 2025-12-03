@@ -1,4 +1,5 @@
 import { ConnectorType } from "../connectors/interface.js";
+import { stripCommentsAndStrings } from "./sql-parser.js";
 
 /**
  * List of allowed keywords for SQL queries
@@ -14,37 +15,15 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
 };
 
 /**
- * Remove SQL comments from a query.
- * Handles single-line (--) and multi-line comments.
- * @param sql The SQL query to clean
- * @returns The SQL query without comments
- */
-export function stripSQLComments(sql: string): string {
-  // Remove single-line comments (-- comment)
-  let cleaned = sql
-    .split("\n")
-    .map((line) => {
-      const commentIndex = line.indexOf("--");
-      return commentIndex >= 0 ? line.substring(0, commentIndex) : line;
-    })
-    .join("\n");
-
-  // Remove multi-line comments (/* comment */)
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, " ");
-
-  return cleaned.trim();
-}
-
-/**
  * Check if a SQL query is read-only based on its first keyword.
- * Strips comments before analyzing to avoid false positives from commented-out statements.
+ * Strips comments and strings before analyzing to avoid false positives.
  * @param sql The SQL query to check
  * @param connectorType The database type to check against
  * @returns True if the query is read-only (starts with allowed keywords)
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
-  // Strip comments before analyzing
-  const cleanedSQL = stripSQLComments(sql).toLowerCase();
+  // Strip comments and strings before analyzing
+  const cleanedSQL = stripCommentsAndStrings(sql).trim().toLowerCase();
 
   // If the statement is empty after removing comments, consider it read-only
   if (!cleanedSQL) {
