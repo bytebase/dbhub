@@ -1,4 +1,5 @@
 import type { SourceConfig } from "../types/config.js";
+import { parseConnectionInfoFromDSN, getDefaultPortForType } from "./dsn-obfuscate.js";
 
 /**
  * Information about a source and its tools for display
@@ -32,16 +33,20 @@ const BOX = {
  * Parse host and database from source config
  */
 function parseHostAndDatabase(source: SourceConfig): { host: string; database: string } {
-  // If DSN is provided, parse it
+  // If DSN is provided, use the proper DSN parser
   if (source.dsn) {
-    try {
-      const url = new URL(source.dsn);
-      const host = url.port ? `${url.hostname}:${url.port}` : url.hostname;
-      const database = url.pathname.replace(/^\//, "") || "";
-      return { host, database };
-    } catch {
-      return { host: "unknown", database: "" };
+    const parsed = parseConnectionInfoFromDSN(source.dsn);
+    if (parsed) {
+      // For SQLite, there's no host - just show the database path
+      if (parsed.type === "sqlite") {
+        return { host: "", database: parsed.database || ":memory:" };
+      }
+      // For other databases, construct host:port string
+      const port = parsed.port || getDefaultPortForType(parsed.type!);
+      const host = port ? `${parsed.host}:${port}` : parsed.host || "";
+      return { host, database: parsed.database || "" };
     }
+    return { host: "unknown", database: "" };
   }
 
   // Otherwise use individual connection params
@@ -49,7 +54,7 @@ function parseHostAndDatabase(source: SourceConfig): { host: string; database: s
     ? source.port
       ? `${source.host}:${source.port}`
       : source.host
-    : "localhost";
+    : "";
   const database = source.database || "";
 
   return { host, database };
@@ -88,7 +93,9 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
   const hostDbWidth = Math.max(
     24,
     ...sources.map((s) => {
-      const hostDb = s.database ? `${s.host}/${s.database}` : s.host;
+      const hostDb = s.host
+        ? s.database ? `${s.host}/${s.database}` : s.host
+        : s.database || "";
       return hostDb.length;
     })
   );
@@ -120,7 +127,9 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
     // Source header row
     const idType = fitString(`${source.id} (${source.type})`, idTypeWidth);
     const hostDb = fitString(
-      source.database ? `${source.host}/${source.database}` : source.host,
+      source.host
+        ? source.database ? `${source.host}/${source.database}` : source.host
+        : source.database || "",
       hostDbWidth
     );
 
