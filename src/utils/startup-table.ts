@@ -92,7 +92,15 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
       return hostDb.length;
     })
   );
-  const modeWidth = 10;
+  const modeWidth = Math.max(
+    10,
+    ...sources.map((s) => {
+      const modes: string[] = [];
+      if (s.isDemo) modes.push("DEMO");
+      if (s.readonly) modes.push("READ-ONLY");
+      return modes.join(" ").length;
+    })
+  );
 
   // Total width: 2 for borders + content + 2 spaces padding per column + 2 separators
   const totalWidth = 2 + idTypeWidth + 3 + hostDbWidth + 3 + modeWidth + 2;
