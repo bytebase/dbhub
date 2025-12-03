@@ -55,7 +55,9 @@ describe("SQLRowLimiter", () => {
       expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
     });
 
-    it("should detect LIMIT with SQL Server parameter (@p1, @p2, etc.)", () => {
+    it("should detect LIMIT with named parameter (@p1, @p2, etc.)", () => {
+      // Note: @p style parameters with LIMIT is not valid SQL Server syntax
+      // (SQL Server uses TOP, not LIMIT). This tests the regex pattern only.
       const sql = "SELECT * FROM users WHERE name = @p1 LIMIT @p2";
       expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
     });
@@ -96,7 +98,9 @@ describe("SQLRowLimiter", () => {
       expect(result).toBe("SELECT * FROM (SELECT * FROM users WHERE name = ? LIMIT ?) AS subq LIMIT 1000");
     });
 
-    it("should wrap parameterized LIMIT in subquery to enforce max_rows (SQL Server)", () => {
+    it("should wrap parameterized LIMIT in subquery to enforce max_rows (named parameters)", () => {
+      // Note: @p style parameters with LIMIT is not valid SQL Server syntax
+      // (SQL Server uses TOP, not LIMIT). This tests the regex pattern only.
       const sql = "SELECT * FROM users WHERE name = @p1 LIMIT @p2";
       const result = SQLRowLimiter.applyMaxRows(sql, 1000);
       expect(result).toBe("SELECT * FROM (SELECT * FROM users WHERE name = @p1 LIMIT @p2) AS subq LIMIT 1000");
@@ -139,7 +143,9 @@ describe("SQLRowLimiter", () => {
       expect(result).toBe("SELECT * FROM (SELECT * FROM users WHERE name = ? LIMIT ?) AS subq LIMIT 1000;");
     });
 
-    it("should preserve semicolon when wrapping parameterized LIMIT (SQL Server)", () => {
+    it("should preserve semicolon when wrapping parameterized LIMIT (named parameters)", () => {
+      // Note: @p style parameters with LIMIT is not valid SQL Server syntax
+      // (SQL Server uses TOP, not LIMIT). This tests the regex pattern only.
       const sql = "SELECT * FROM users WHERE name = @p1 LIMIT @p2;";
       const result = SQLRowLimiter.applyMaxRows(sql, 1000);
       expect(result).toBe("SELECT * FROM (SELECT * FROM users WHERE name = @p1 LIMIT @p2) AS subq LIMIT 1000;");
