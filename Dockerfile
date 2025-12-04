@@ -18,21 +18,18 @@ COPY . .
 # Build the application
 RUN pnpm run build
 
+# Use pnpm deploy to create a clean production node_modules
+# This removes the .pnpm store and creates a flat node_modules structure
+RUN pnpm deploy --filter=dbhub --prod --legacy /prod/dbhub
+
 # Production stage
 FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy workspace configuration and package files
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
-
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Install production dependencies only
-# The --prod flag ensures only dependencies (not devDependencies) are installed
-# better-sqlite3 is already in dependencies and will be built during this step
-RUN pnpm install --prod --frozen-lockfile
+# Copy deployed production files (includes node_modules without pnpm overhead)
+COPY --from=builder /prod/dbhub/node_modules ./node_modules
+COPY --from=builder /prod/dbhub/package.json ./
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
