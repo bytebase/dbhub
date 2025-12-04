@@ -23,18 +23,16 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy only production files
-COPY --from=builder /app/package.json /app/pnpm-lock.yaml ./
+# Copy workspace configuration and package files
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-RUN pnpm pkg set pnpm.onlyBuiltDependencies[0]=better-sqlite3
-RUN pnpm add better-sqlite3
-RUN node -e 'new require("better-sqlite3")(":memory:")'
-
 # Install production dependencies only
-RUN pnpm install --prod
+# The --prod flag ensures only dependencies (not devDependencies) are installed
+# better-sqlite3 is already in dependencies and will be built during this step
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
