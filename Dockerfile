@@ -2,13 +2,14 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy package.json and pnpm-lock.yaml
-COPY package.json pnpm-lock.yaml ./
+# Copy workspace configuration and all package.json files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY frontend/package.json ./frontend/
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Install dependencies
+# Install dependencies (including frontend workspace)
 RUN pnpm install
 
 # Copy source code
