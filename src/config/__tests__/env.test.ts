@@ -331,6 +331,21 @@ describe('Environment Configuration Tests', () => {
     });
   });
 
+  describe('resolveSourceConfigs with special character passwords', () => {
+    it('should parse DSN with special characters via SafeURL', async () => {
+      // Test that command line DSN with special characters in password is parsed correctly
+      // This verifies that SafeURL is used instead of native URL() constructor
+      process.argv = ['node', 'script.js', '--dsn=postgres://user:my@pass:word@localhost:5432/testdb'];
+
+      const result = await import('../env.js').then(m => m.resolveSourceConfigs());
+
+      expect(result).not.toBeNull();
+      expect(result!.sources).toHaveLength(1);
+      expect(result!.sources[0].type).toBe('postgres');
+      expect(result!.sources[0].dsn).toBe('postgres://user:my@pass:word@localhost:5432/testdb');
+    });
+  });
+
   describe('resolveId', () => {
     it('should return null when ID is not provided', () => {
       const result = resolveId();
