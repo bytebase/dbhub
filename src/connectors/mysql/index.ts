@@ -112,7 +112,6 @@ export class MySQLConnector implements Connector {
 
       // Test the connection
       const [rows] = await this.pool.query("SELECT 1");
-      console.error("Successfully connected to MySQL database");
     } catch (err) {
       console.error("Failed to connect to MySQL database:", err);
       throw err;

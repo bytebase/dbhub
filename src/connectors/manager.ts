@@ -39,8 +39,6 @@ export class ConnectorManager {
     for (const source of sources) {
       await this.connectSource(source);
     }
-
-    console.error(`Successfully connected to ${sources.length} database source(s)`);
   }
 
   /**
@@ -48,8 +46,6 @@ export class ConnectorManager {
    */
   private async connectSource(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
-    console.error(`Connecting to source '${sourceId || "(default)"}' ...`);
-
     // Build DSN from source config
     const dsn = buildDSNFromSource(source);
 
@@ -148,8 +144,6 @@ export class ConnectorManager {
       options.readonly = source.readonly;
     }
     this.executeOptions.set(sourceId, options);
-
-    console.error(`  Connected successfully`);
   }
 
   /**
