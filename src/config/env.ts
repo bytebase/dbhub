@@ -8,6 +8,7 @@ import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
+import { SafeURL } from "../utils/safe-url.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -22,7 +23,9 @@ export function parseCommandLineArgs() {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith("--")) {
-      const [key, value] = arg.substring(2).split("=");
+      const parts = arg.substring(2).split("=");
+      const key = parts[0];
+      const value = parts.length > 1 ? parts.slice(1).join("=") : undefined;
       if (value) {
         // Handle --key=value format
         parsedManually[key] = value;
@@ -503,9 +506,9 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
   const dsnResult = resolveDSN();
   if (dsnResult) {
     // Parse DSN to extract database type
-    let dsnUrl: URL;
+    let dsnUrl: SafeURL;
     try {
-      dsnUrl = new URL(dsnResult.dsn);
+      dsnUrl = new SafeURL(dsnResult.dsn);
     } catch (error) {
       throw new Error(
         `Invalid DSN format: ${dsnResult.dsn}. Expected format: protocol://[user[:password]@]host[:port]/database`
