@@ -116,7 +116,8 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
     })
   );
 
-  // Total width: 2 for borders + content + 2 spaces padding per column + 2 separators
+  // Total width: left border (1) + space + idTypeWidth + space + separator (1) + space + hostDbWidth + space + separator (1) + space + modeWidth + space + right border (1)
+  // = idTypeWidth + hostDbWidth + modeWidth + 10
   const totalWidth = 2 + idTypeWidth + 3 + hostDbWidth + 3 + modeWidth + 2;
 
   const lines: string[] = [];
