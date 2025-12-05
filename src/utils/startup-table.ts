@@ -81,6 +81,15 @@ function fitString(str: string, width: number): string {
 }
 
 /**
+ * Format host and database into a single string
+ */
+export function formatHostDatabase(host: string, database: string): string {
+  return host
+    ? database ? `${host}/${database}` : host
+    : database || "";
+}
+
+/**
  * Generate the startup table showing sources and their tools
  */
 export function generateStartupTable(sources: SourceDisplayInfo[]): string {
@@ -95,12 +104,7 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
   );
   const hostDbWidth = Math.max(
     24,
-    ...sources.map((s) => {
-      const hostDb = s.host
-        ? s.database ? `${s.host}/${s.database}` : s.host
-        : s.database || "";
-      return hostDb.length;
-    })
+    ...sources.map((s) => formatHostDatabase(s.host, s.database).length)
   );
   const modeWidth = Math.max(
     10,
@@ -130,9 +134,7 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
     // Source header row
     const idType = fitString(`${source.id} (${source.type})`, idTypeWidth);
     const hostDb = fitString(
-      source.host
-        ? source.database ? `${source.host}/${source.database}` : source.host
-        : source.database || "",
+      formatHostDatabase(source.host, source.database),
       hostDbWidth
     );
 
