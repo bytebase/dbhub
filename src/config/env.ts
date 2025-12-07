@@ -25,6 +25,36 @@ export function parseCommandLineArgs() {
     if (arg.startsWith("--")) {
       const parts = arg.substring(2).split("=");
       const key = parts[0];
+
+      // Fail immediately on deprecated flags
+      if (key === "readonly") {
+        console.error("\nERROR: --readonly flag is no longer supported.");
+        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+        console.error("  [[sources]]");
+        console.error("  id = \"default\"");
+        console.error("  dsn = \"...\"\n");
+        console.error("  [[tools]]");
+        console.error("  name = \"execute_sql\"");
+        console.error("  source = \"default\"");
+        console.error("  readonly = true\n");
+        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
+        process.exit(1);
+      }
+
+      if (key === "max-rows") {
+        console.error("\nERROR: --max-rows flag is no longer supported.");
+        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+        console.error("  [[sources]]");
+        console.error("  id = \"default\"");
+        console.error("  dsn = \"...\"\n");
+        console.error("  [[tools]]");
+        console.error("  name = \"execute_sql\"");
+        console.error("  source = \"default\"");
+        console.error("  max_rows = 1000\n");
+        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
+        process.exit(1);
+      }
+
       const value = parts.length > 1 ? parts.slice(1).join("=") : undefined;
       if (value) {
         // Handle --key=value format
@@ -72,6 +102,36 @@ export function loadEnvFiles(): string | null {
     console.error(`Checking for env file: ${envPath}`);
     if (fs.existsSync(envPath)) {
       dotenv.config({ path: envPath });
+
+      // Check for deprecated environment variables
+      if (process.env.READONLY !== undefined) {
+        console.error("\nERROR: READONLY environment variable is no longer supported.");
+        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+        console.error("  [[sources]]");
+        console.error("  id = \"default\"");
+        console.error("  dsn = \"...\"\n");
+        console.error("  [[tools]]");
+        console.error("  name = \"execute_sql\"");
+        console.error("  source = \"default\"");
+        console.error("  readonly = true\n");
+        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
+        process.exit(1);
+      }
+
+      if (process.env.MAX_ROWS !== undefined) {
+        console.error("\nERROR: MAX_ROWS environment variable is no longer supported.");
+        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+        console.error("  [[sources]]");
+        console.error("  id = \"default\"");
+        console.error("  dsn = \"...\"\n");
+        console.error("  [[tools]]");
+        console.error("  name = \"execute_sql\"");
+        console.error("  source = \"default\"");
+        console.error("  max_rows = 1000\n");
+        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
+        process.exit(1);
+      }
+
       // Return the name of the file that was loaded
       return path.basename(envPath);
     }
@@ -89,26 +149,6 @@ export function isDemoMode(): boolean {
   return args.demo === "true";
 }
 
-/**
- * Check if readonly mode is enabled from command line args or environment
- * Returns true if --readonly flag is provided
- */
-export function isReadOnlyMode(): boolean {
-  const args = parseCommandLineArgs();
-  
-  // Check command line args first
-  if (args.readonly !== undefined) {
-    return args.readonly === "true";
-  }
-  
-  // Check environment variable
-  if (process.env.READONLY !== undefined) {
-    return process.env.READONLY === "true";
-  }
-  
-  // Default to false
-  return false;
-}
 
 /**
  * Build DSN from individual environment variables
@@ -265,25 +305,6 @@ export function resolveTransport(): { type: "stdio" | "http"; source: string } {
   return { type: "stdio", source: "default" };
 }
 
-/**
- * Resolve max rows from command line args
- * Returns max rows value or null if not specified
- */
-export function resolveMaxRows(): { maxRows: number; source: string } | null {
-  // Get command line arguments
-  const args = parseCommandLineArgs();
-
-  // Check command line arguments
-  if (args["max-rows"]) {
-    const maxRows = parseInt(args["max-rows"], 10);
-    if (isNaN(maxRows) || maxRows <= 0) {
-      throw new Error(`Invalid --max-rows value: ${args["max-rows"]}. Must be a positive integer.`);
-    }
-    return { maxRows, source: "command line argument" };
-  }
-
-  return null;
-}
 
 /**
  * Resolve port from command line args or environment variables
@@ -490,14 +511,8 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
           "Either remove the --id flag or use command-line DSN configuration instead."
         );
       }
-      // Validate that --readonly flag is not used with TOML config
-      if (isReadOnlyMode()) {
-        throw new Error(
-          "The --readonly flag cannot be used with TOML configuration. " +
-          "TOML config defines readonly mode per-source using 'readonly = true'. " +
-          "Either remove the --readonly flag or use command-line DSN configuration instead."
-        );
-      }
+      // Note: --readonly flag is deprecated but no longer blocks TOML usage
+      // The warning is shown in isReadOnlyMode() function
       return tomlConfig;
     }
   }
@@ -573,13 +588,6 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.ssh_passphrase = sshResult.config.passphrase;
     }
 
-    // Add execution options
-    source.readonly = isReadOnlyMode();
-    const maxRowsResult = resolveMaxRows();
-    if (maxRowsResult) {
-      source.max_rows = maxRowsResult.maxRows;
-    }
-
     // Add init script for demo mode
     if (dsnResult.isDemo) {
       const { getSqliteInMemorySetupSql } = await import('./demo-loader.js');
@@ -588,6 +596,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
 
     return {
       sources: [source],
+      tools: [],
       source: dsnResult.isDemo ? "demo mode" : dsnResult.source,
     };
   }

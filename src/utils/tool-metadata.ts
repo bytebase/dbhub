@@ -76,15 +76,15 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
 }
 
 /**
- * Get tool metadata for a specific source
+ * Get execute_sql tool metadata for a specific source
  * @param sourceId - The source ID to get tool metadata for
  * @returns Tool metadata with name, description, and Zod schema
  */
-export function getToolMetadataForSource(sourceId: string): ToolMetadata {
+export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
-  const dbType = sourceConfig?.type || "database";
+  const dbType = sourceConfig.type;
 
   // Determine tool name based on single vs multi-source configuration
   const toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
@@ -123,6 +123,31 @@ export function getToolMetadataForSource(sourceId: string): ToolMetadata {
 }
 
 /**
+ * Get search_objects tool metadata for a specific source
+ * @param sourceId - The source ID to get tool metadata for
+ * @param dbType - Database type
+ * @param isDefault - Whether this is the default source
+ * @returns Tool name, description, and annotations
+ */
+export function getSearchObjectsMetadata(
+  sourceId: string,
+  dbType: string,
+  isDefault: boolean
+): { name: string; description: string; title: string } {
+  const toolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
+  const title = isDefault
+    ? `Search Database Objects (${dbType})`
+    : `Search Database Objects on ${sourceId} (${dbType})`;
+  const description = `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}. Supports SQL LIKE patterns (default: '%' for all), filtering, and token-efficient progressive disclosure.`;
+
+  return {
+    name: toolName,
+    description,
+    title,
+  };
+}
+
+/**
  * Convert custom tool parameter configs to Tool parameter format
  * @param params - Parameter configurations from custom tool
  * @returns Array of tool parameters
@@ -148,9 +173,13 @@ function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolPa
  */
 export function getToolsForSource(sourceId: string): Tool[] {
   const tools: Tool[] = [];
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const dbType = sourceConfig.type;
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const isDefault = sourceIds[0] === sourceId;
 
   // 1. Add built-in execute_sql tool
-  const executeSqlMetadata = getToolMetadataForSource(sourceId);
+  const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
   const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
   tools.push({
     name: executeSqlMetadata.name,
@@ -159,15 +188,10 @@ export function getToolsForSource(sourceId: string): Tool[] {
   });
 
   // 2. Add built-in search_objects tool
-  const searchToolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
-  const dbType = sourceConfig?.type || "database";
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const isDefault = sourceIds[0] === sourceId;
-
+  const searchMetadata = getSearchObjectsMetadata(sourceId, dbType, isDefault);
   tools.push({
-    name: searchToolName,
-    description: `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}`,
+    name: searchMetadata.name,
+    description: searchMetadata.description,
     parameters: [
       {
         name: "object_type",

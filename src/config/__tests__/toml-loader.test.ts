@@ -299,6 +299,10 @@ host = "localhost"
 [[sources]]
 id = "test"
 dsn = "postgres://user:pass@localhost:5432/db"
+
+[[tools]]
+name = "execute_sql"
+source = "test"
 max_rows = -100
 `;
       fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);

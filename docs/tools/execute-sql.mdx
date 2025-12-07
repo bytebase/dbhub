@@ -97,11 +97,25 @@ DROP TABLE IF EXISTS temp_data;
 
 ## Read-Only Mode
 
-Enable read-only mode to restrict SQL execution to safe, read-only operations:
+Restrict SQL execution to safe, read-only operations by configuring the `execute_sql` tool with `readonly = true`:
 
-```bash
+<CodeGroup>
+```toml TOML Configuration
+[[sources]]
+id = "production"
+dsn = "postgres://user:pass@localhost:5432/mydb"
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+```
+
+```bash Command Line (Deprecated)
+# This flag is deprecated - use TOML configuration instead
 npx @bytebase/dbhub --readonly --dsn "postgres://user:pass@localhost:5432/mydb"
 ```
+</CodeGroup>
 
 In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are permitted, including:
 
@@ -115,10 +129,67 @@ In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub
 
 Limit the number of rows returned from SELECT queries to prevent accidentally retrieving too much data:
 
-```bash
+<CodeGroup>
+```toml TOML Configuration
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+max_rows = 1000
+```
+
+```bash Command Line (Deprecated)
+# This flag is deprecated - use TOML configuration instead
 npx @bytebase/dbhub --max-rows 1000 --dsn "..."
 ```
+</CodeGroup>
 
 - Only applied to SELECT statements, not INSERT/UPDATE/DELETE
 - If your query already has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
-- Can be configured per-database in [multi-database TOML configuration](/config/multi-database)
+- Can be configured per-tool in [multi-database TOML configuration](/config/multi-database)
+
+## Selective Tool Exposure
+
+Control which tools are available for each database source. By default, both `execute_sql` and `search_objects` are enabled. You can:
+
+- Disable built-in tools entirely
+- Configure specific tools with custom settings
+- Expose only custom tools for restricted access
+
+**Example: Disable execute_sql, keep search_objects:**
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+# Only enable search_objects - execute_sql will not be available
+[[tools]]
+name = "search_objects"
+source = "production"
+```
+
+**Example: Read-only execute_sql with row limit:**
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+max_rows = 100
+
+[[tools]]
+name = "search_objects"
+source = "production"
+```
+
+<Note>
+If no `[[tools]]` entries are defined for a source, both `execute_sql` and `search_objects` are enabled by default for backward compatibility.
+</Note>

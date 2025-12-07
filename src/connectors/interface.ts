@@ -107,6 +107,9 @@ export interface Connector {
   /** DSN parser for this connector */
   dsnParser: DSNParser;
 
+  /** Get the source ID for this connector instance (set by ConnectorManager) */
+  getId(): string;
+
   /** Create a new instance of this connector (for multi-source support). This method is required for all connectors. */
   clone(): Connector;
 

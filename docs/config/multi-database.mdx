@@ -12,21 +12,43 @@ Connect to multiple databases from a single DBHub instance using TOML configurat
 Create a `dbhub.toml` file:
 
 ```toml dbhub.toml
+# Database sources
 [[sources]]
 id = "production"
 dsn = "postgres://user:password@prod.example.com:5432/myapp"
-readonly = true
-max_rows = 1000
 
 [[sources]]
 id = "staging"
 dsn = "mysql://root:password@localhost:3306/myapp_staging"
-readonly = false
-max_rows = 5000
 
 [[sources]]
 id = "local"
 dsn = "sqlite:///./dev.db"
+
+# Tool configuration
+# Production: read-only execute_sql with row limit, plus search_objects
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+max_rows = 1000
+
+[[tools]]
+name = "search_objects"
+source = "production"
+
+# Staging: full access with higher row limit
+[[tools]]
+name = "execute_sql"
+source = "staging"
+max_rows = 5000
+
+[[tools]]
+name = "search_objects"
+source = "staging"
+
+# Local: default tools (both execute_sql and search_objects)
+# No [[tools]] entries = both tools enabled by default
 ```
 
 Start DBHub:
@@ -39,7 +61,7 @@ npx @bytebase/dbhub --transport http --port 8080
 npx @bytebase/dbhub --config=/path/to/config.toml
 ```
 
-See [Server Options](/config/server-options) for detailed option descriptions.
+See [Server Options](/config/server-options) for detailed option descriptions and [Tool Configuration](/tools/overview#tool-configuration) for controlling which tools are available per source.
 
 ## Examples
 
@@ -49,12 +71,24 @@ See [Server Options](/config/server-options) for detailed option descriptions.
     [[sources]]
     id = "production"
     dsn = "postgres://user:pass@prod.example.com:5432/myapp"
-    readonly = true
-    max_rows = 1000
 
     [[sources]]
     id = "staging"
     dsn = "mysql://root:pass@localhost:3306/myapp_staging"
+
+    # Production: read-only with row limit
+    [[tools]]
+    name = "execute_sql"
+    source = "production"
+    readonly = true
+    max_rows = 1000
+
+    [[tools]]
+    name = "search_objects"
+    source = "production"
+
+    # Staging: full access (default tools)
+    # No [[tools]] for staging = both tools enabled
     ```
   </Tab>
 
@@ -68,6 +102,10 @@ See [Server Options](/config/server-options) for detailed option descriptions.
     database = "myapp"
     user = "app_user"
     password = "p@ss:word"  # No URL encoding needed
+
+    [[tools]]
+    name = "execute_sql"
+    source = "production"
     readonly = true
     ```
   </Tab>
@@ -80,7 +118,15 @@ See [Server Options](/config/server-options) for detailed option descriptions.
     ssh_host = "bastion.example.com"
     ssh_user = "deploy"
     ssh_key = "~/.ssh/id_rsa"
+
+    [[tools]]
+    name = "execute_sql"
+    source = "production"
     readonly = true
+
+    [[tools]]
+    name = "search_objects"
+    source = "production"
     ```
   </Tab>
 </Tabs>

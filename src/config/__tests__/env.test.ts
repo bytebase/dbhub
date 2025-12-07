@@ -1,5 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { buildDSNFromEnvParams, resolveDSN, resolveId } from '../env.js';
+
+// Mock toml-loader to prevent it from loading dbhub.toml during tests
+vi.mock('../toml-loader.js', () => ({
+  loadTomlConfig: vi.fn(() => null),
+}));
 
 describe('Environment Configuration Tests', () => {
   // Store original env values to restore after tests

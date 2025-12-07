@@ -112,6 +112,9 @@ export class ConnectorManager {
     // All connectors support cloning for multi-source configurations
     const connector = connectorPrototype.clone();
 
+    // Attach source ID to connector instance for tool handlers
+    (connector as any).sourceId = sourceId;
+
     // Build config for database-specific options
     const config: ConnectorConfig = {};
     if (source.connection_timeout !== undefined) {
