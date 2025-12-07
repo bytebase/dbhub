@@ -32,7 +32,7 @@ description = "The unique user ID"
 
 ## Tool Configuration
 
-Each tool requires the following fields:
+Each custom tool requires the following fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -42,7 +42,7 @@ Each tool requires the following fields:
 | `statement` | string | Yes | SQL query with parameter placeholders |
 
 <Note>
-Tool names must be unique and cannot conflict with built-in tools (`execute_sql`, `search_objects`).
+Tool names must be unique and cannot conflict with built-in tools (`execute_sql`, `search_objects`). Custom tools cannot be named with these reserved names or their prefixed variants (e.g., `execute_sql_prod`).
 </Note>
 
 ## Specifying Parameters
@@ -169,25 +169,51 @@ allowed_values = ["pending", "processing", "shipped", "delivered"]
 
 ### Readonly Mode
 
-When a source is configured with `readonly = true`, tools targeting that source are restricted to read-only SQL operations. Only statements beginning with `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`, or `WITH` are allowed.
+Configure `readonly = true` on the `execute_sql` tool to restrict SQL execution to read-only operations:
 
 ```toml
 [[sources]]
 id = "prod_pg"
-readonly = true  # Restricts all tools to read-only operations
+dsn = "postgres://..."
+
+# Configure execute_sql as read-only
+[[tools]]
+name = "execute_sql"
+source = "prod_pg"
+readonly = true
+
+# Custom tools are unaffected by readonly setting
+[[tools]]
+name = "get_user_by_id"
+source = "prod_pg"
+description = "Get user details"
+statement = "SELECT * FROM users WHERE id = $1"
+[[tools.parameters]]
+name = "user_id"
+type = "integer"
+description = "User ID"
 ```
+
+<Note>
+The `readonly` setting only applies to the `execute_sql` tool. Custom tools are controlled by their SQL statement - DBHub analyzes the statement to determine if it's read-only.
+</Note>
 
 ### Max Rows Enforcement
 
-The `max_rows` configuration is always enforced as a hard limit. Even if a tool accepts a LIMIT parameter, the configured `max_rows` serves as a cap:
+Configure `max_rows` on the `execute_sql` tool to limit SELECT query results:
 
 ```toml
 [[sources]]
 id = "prod_pg"
-max_rows = 1000  # Users cannot exceed this limit
+dsn = "postgres://..."
+
+[[tools]]
+name = "execute_sql"
+source = "prod_pg"
+max_rows = 1000  # Hard limit on SELECT results
 ```
 
-For tools with parameterized LIMIT clauses, the query is automatically wrapped to enforce the limit:
+For custom tools with parameterized LIMIT clauses, the connector's row limiting still applies:
 
 ```sql
 -- Original query

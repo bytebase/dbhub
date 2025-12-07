@@ -2,9 +2,10 @@ import fs from "fs";
 import path from "path";
 import { homedir } from "os";
 import toml from "@iarna/toml";
-import type { SourceConfig, TomlConfig } from "../types/config.js";
+import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
+import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
@@ -124,6 +125,98 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
   for (const source of config.sources) {
     validateSourceConfig(source, configPath);
   }
+
+  // Validate tools configuration
+  if (config.tools) {
+    validateToolsConfig(config.tools, config.sources, configPath);
+  }
+}
+
+/**
+ * Validate tools configuration
+ */
+function validateToolsConfig(
+  tools: ToolConfig[],
+  sources: SourceConfig[],
+  configPath: string
+): void {
+  // Check for duplicate tool+source combinations
+  const toolSourcePairs = new Set<string>();
+
+  for (const tool of tools) {
+    if (!tool.name) {
+      throw new Error(
+        `Configuration file ${configPath}: all tools must have a 'name' field`
+      );
+    }
+
+    if (!tool.source) {
+      throw new Error(
+        `Configuration file ${configPath}: tool '${tool.name}' must have a 'source' field`
+      );
+    }
+
+    // Check for duplicate tool+source combination
+    const pairKey = `${tool.name}:${tool.source}`;
+    if (toolSourcePairs.has(pairKey)) {
+      throw new Error(
+        `Configuration file ${configPath}: duplicate tool configuration found for '${tool.name}' on source '${tool.source}'`
+      );
+    }
+    toolSourcePairs.add(pairKey);
+
+    // Validate source reference exists
+    if (!sources.some((s) => s.id === tool.source)) {
+      throw new Error(
+        `Configuration file ${configPath}: tool '${tool.name}' references unknown source '${tool.source}'`
+      );
+    }
+
+    // Validate based on tool type (built-in vs custom)
+    const isBuiltin = (BUILTIN_TOOLS as readonly string[]).includes(tool.name);
+    const isExecuteSql = tool.name === BUILTIN_TOOL_EXECUTE_SQL;
+
+    if (isBuiltin) {
+      // Built-in tools should NOT have custom tool fields
+      if (tool.description || tool.statement || tool.parameters) {
+        throw new Error(
+          `Configuration file ${configPath}: built-in tool '${tool.name}' cannot have description, statement, or parameters fields`
+        );
+      }
+
+      // Only execute_sql can have readonly and max_rows
+      if (!isExecuteSql && (tool.readonly !== undefined || tool.max_rows !== undefined)) {
+        throw new Error(
+          `Configuration file ${configPath}: tool '${tool.name}' cannot have readonly or max_rows fields ` +
+            `(these are only valid for ${BUILTIN_TOOL_EXECUTE_SQL} tool)`
+        );
+      }
+    } else {
+      // Custom tools MUST have description and statement
+      if (!tool.description || !tool.statement) {
+        throw new Error(
+          `Configuration file ${configPath}: custom tool '${tool.name}' must have 'description' and 'statement' fields`
+        );
+      }
+
+      // Custom tools should NOT have builtin-specific fields
+      if (tool.readonly !== undefined || tool.max_rows !== undefined) {
+        throw new Error(
+          `Configuration file ${configPath}: custom tool '${tool.name}' cannot have readonly or max_rows fields ` +
+            `(these are only valid for ${BUILTIN_TOOL_EXECUTE_SQL} tool)`
+        );
+      }
+    }
+
+    // Validate max_rows if provided (only for execute_sql)
+    if (tool.max_rows !== undefined) {
+      if (typeof tool.max_rows !== "number" || tool.max_rows <= 0) {
+        throw new Error(
+          `Configuration file ${configPath}: tool '${tool.name}' has invalid max_rows. Must be a positive integer.`
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -149,16 +242,6 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
           `Valid types: ${validTypes.join(", ")}`
-      );
-    }
-  }
-
-  // Validate max_rows if provided
-  if (source.max_rows !== undefined) {
-    if (typeof source.max_rows !== "number" || source.max_rows <= 0) {
-      throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has invalid max_rows. ` +
-          `Must be a positive integer.`
       );
     }
   }

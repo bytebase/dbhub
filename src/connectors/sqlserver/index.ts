@@ -136,6 +136,12 @@ export class SQLServerConnector implements Connector {
 
   private connection?: sql.ConnectionPool;
   private config?: sql.config;
+  // Source ID is set by ConnectorManager after cloning
+  private sourceId: string = "default";
+
+  getId(): string {
+    return this.sourceId;
+  }
 
   clone(): Connector {
     return new SQLServerConnector();

@@ -10,6 +10,118 @@ title: "Overview"
 | Search Objects | `search_objects` or `search_objects_{id}` | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
 | Custom Tools | User-defined names | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
 
+## Tool Configuration
+
+By default, both `execute_sql` and `search_objects` are enabled for each database source. You can customize which tools are available using `[[tools]]` entries in your `dbhub.toml`:
+
+### Default Behavior
+
+If no `[[tools]]` entries are defined for a source, both `execute_sql` and `search_objects` are enabled by default:
+
+```toml
+[[sources]]
+id = "dev"
+dsn = "sqlite:///dev.db"
+# No [[tools]] entries = both execute_sql and search_objects enabled
+```
+
+### Selective Tool Exposure
+
+Control which tools are exposed for each database source:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+# Only enable search_objects - execute_sql will NOT be available
+[[tools]]
+name = "search_objects"
+source = "production"
+```
+
+This is useful when you want to restrict AI models to read-only schema exploration without allowing SQL execution.
+
+### Per-Tool Settings
+
+Configure built-in tools with specific settings like `readonly` and `max_rows`:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true    # Only allow SELECT, SHOW, DESCRIBE, EXPLAIN
+max_rows = 100     # Limit query results
+
+[[tools]]
+name = "search_objects"
+source = "production"
+```
+
+See [execute_sql documentation](/tools/execute-sql) for details on `readonly` and `max_rows` settings.
+
+### Mixed Configuration
+
+Different sources can have different tool configurations:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+[[sources]]
+id = "analytics"
+dsn = "postgres://..."
+
+# Production: only search_objects (no SQL execution)
+[[tools]]
+name = "search_objects"
+source = "production"
+
+# Analytics: full access with no row limit
+[[tools]]
+name = "execute_sql"
+source = "analytics"
+
+[[tools]]
+name = "search_objects"
+source = "analytics"
+```
+
+### Custom Tools
+
+You can also define custom tools alongside built-in tools:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://..."
+
+# Built-in tools
+[[tools]]
+name = "search_objects"
+source = "production"
+
+# Custom tool - no execute_sql for unrestricted queries
+[[tools]]
+name = "get_active_users"
+source = "production"
+description = "Get list of active users"
+statement = "SELECT id, name, email FROM users WHERE status = 'active' LIMIT $1"
+
+[[tools.parameters]]
+name = "limit"
+type = "integer"
+description = "Maximum number of users to return"
+default = 10
+```
+
+This approach gives you fine-grained control: disable general SQL execution while providing specific, safe operations through custom tools.
+
 ## Tool Naming
 
 The tool name varies based on your configuration:

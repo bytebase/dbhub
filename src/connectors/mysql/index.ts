@@ -100,6 +100,12 @@ export class MySQLConnector implements Connector {
   dsnParser = new MySQLDSNParser();
 
   private pool: mysql.Pool | null = null;
+  // Source ID is set by ConnectorManager after cloning
+  private sourceId: string = "default";
+
+  getId(): string {
+    return this.sourceId;
+  }
 
   clone(): Connector {
     return new MySQLConnector();

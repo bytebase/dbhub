@@ -110,6 +110,13 @@ export class SQLiteConnector implements Connector {
   private db: Database.Database | null = null;
   private dbPath: string = ":memory:"; // Default to in-memory database
 
+  // Source ID is set by ConnectorManager after cloning
+  private sourceId: string = "default";
+
+  getId(): string {
+    return this.sourceId;
+  }
+
   clone(): Connector {
     return new SQLiteConnector();
   }

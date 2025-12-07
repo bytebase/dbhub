@@ -9,8 +9,6 @@
 [[sources]]
 id = "prod_pg"  # Required: Unique identifier
 dsn = "postgres://user:password@localhost:5432/production?sslmode=require"  # Required: Connection string
-readonly = false  # Optional: Limit to read-only operations (default: false)
-max_rows = 1000  # Optional: Maximum rows to return per query (default: unlimited)
 connection_timeout = 30  # Optional: Connection timeout in seconds (default: driver-specific)
 
 ## Example 2: MySQL with individual parameters
@@ -22,8 +20,6 @@ port = 3306  # Optional: Uses default if not specified (MySQL default: 3306)
 database = "staging"  # Required: Database name
 user = "root"  # Required: Database username
 password = "secret"  # Required: Database password
-readonly = false  # Optional: Limit to read-only operations (default: false)
-max_rows = 500  # Optional: Maximum rows to return per query (default: unlimited)
 connection_timeout = 60  # Optional: Connection timeout in seconds (useful for high-latency connections)
 
 ## Example 3: MariaDB with SSH tunnel
@@ -46,7 +42,6 @@ port = 1433  # Optional: Uses default if not specified (SQL Server default: 1433
 database = "analytics"  # Required: Database name
 user = "sa"  # Required: Database username
 password = "YourStrong@Passw0rd"  # Required: Database password
-max_rows = 2000  # Optional: Maximum rows to return per query (default: unlimited)
 connection_timeout = 30  # Optional: Connection establishment timeout in seconds (default: 15s)
 request_timeout = 120    # Optional: Query execution timeout in seconds (SQL Server only, default: 15s)
 # instanceName = "INSTANCE1"  # Optional: SQL Server named instance (e.g., SERVER\INSTANCE1)
@@ -56,7 +51,6 @@ request_timeout = 120    # Optional: Query execution timeout in seconds (SQL Ser
 id = "local_sqlite"  # Required: Unique identifier
 type = "sqlite"  # Required when using individual parameters
 database = "/path/to/database.db"  # Required: Path to SQLite database file
-readonly = true  # Optional: Limit to read-only operations (default: false)
 
 ## Example 6: SQLite in-memory (for testing)
 [[sources]]
@@ -88,10 +82,6 @@ dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
 # Connection parameters:
 #   - port: Database port (default: 5432 for postgres, 3306 for mysql/mariadb, 1433 for sqlserver)
 #   - instanceName: SQL Server named instance (sqlserver only, e.g., "INSTANCE1")
-#
-# Execution options:
-#   - readonly: Limit to read-only operations (default: false)
-#   - max_rows: Maximum rows to return per query (default: unlimited, e.g., 1000)
 #   - connection_timeout: Connection timeout in seconds (default: driver-specific, e.g., 30, 60)
 #   - request_timeout: Query execution timeout in seconds (SQL Server only, default: 15, e.g., 120)
 #
@@ -102,13 +92,13 @@ dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
 #   - ssh_key: Path to private key file (use ssh_key OR ssh_password, not both)
 #   - ssh_password: SSH password (use instead of ssh_key for password authentication)
 #   - ssh_passphrase: Passphrase for encrypted private key
-
+#
 # Default Port Numbers:
 # - PostgreSQL: 5432
 # - MySQL/MariaDB: 3306
 # - SQL Server: 1433
 # - SQLite: N/A (file-based)
-
+#
 # Usage Notes:
 # ------------
 # 1. The first [[sources]] entry is the default database
@@ -116,6 +106,44 @@ dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
 # 3. Paths starting with ~/ will be expanded to your home directory
 # 4. Passwords in DSN strings will be redacted in logs automatically
 # 5. For security, consider using environment variables for sensitive data
+
+# Built-in Tools Configuration
+# -----------------------------
+# Built-in tools (execute_sql, search_objects) are automatically enabled for all sources
+# unless explicitly configured here. Use [[tools]] entries to customize their behavior.
+#
+# Tool-Specific Options:
+# - execute_sql: Supports 'readonly' (boolean) and 'max_rows' (integer) options
+# - search_objects: No additional options available
+
+## Example: Restrict execute_sql to read-only with row limit on production
+[[tools]]
+name = "execute_sql"
+source = "prod_pg"
+readonly = true      # Only allow SELECT, SHOW, DESCRIBE, EXPLAIN (execute_sql only)
+max_rows = 1000      # Limit results to 1000 rows (execute_sql only)
+
+## Example: Enable search_objects for production (optional - enabled by default)
+[[tools]]
+name = "search_objects"
+source = "prod_pg"
+# Note: search_objects has no additional configuration options
+
+## Example: Unrestricted execute_sql for staging
+[[tools]]
+name = "execute_sql"
+source = "staging_mysql"
+# No readonly or max_rows = full access
+
+## Example: Enable both tools for analytics database
+[[tools]]
+name = "execute_sql"
+source = "analytics_sqlserver"
+max_rows = 2000  # Limit to 2000 rows, but allow writes
+
+[[tools]]
+name = "search_objects"
+source = "analytics_sqlserver"
 
 # Custom Tools
 # ------------
@@ -172,7 +200,7 @@ allowed_values = ["pending", "completed", "cancelled"]
 # [[tools]]
 # name = "daily_revenue"
 # description = "Get total revenue for a specific date range"
-# source = "analytics_db"
+# source = "analytics_sqlserver"
 # statement = "SELECT DATE(created_at) as date, SUM(amount) as revenue FROM orders WHERE DATE(created_at) BETWEEN $1 AND $2 GROUP BY DATE(created_at)"
 #
 # [[tools.parameters]]
@@ -187,15 +215,27 @@ allowed_values = ["pending", "completed", "cancelled"]
 # description = "End date in YYYY-MM-DD format"
 # required = true
 
-# Custom Tool Field Reference:
-# ----------------------------
+# Tool Configuration Reference:
+# -----------------------------
 #
-# REQUIRED FIELDS:
-# ----------------
-#   - name: Unique tool identifier (string)
-#   - description: Natural language description of what the tool does
-#   - source: ID of the database source to execute against (must exist in [[sources]])
-#   - statement: SQL query with parameter placeholders
+# BUILT-IN TOOLS (execute_sql, search_objects):
+# ----------------------------------------------
+# Convention: Detected by name
+#   - name: Tool name (must be "execute_sql" or "search_objects")
+#   - source: ID of the database source (must exist in [[sources]])
+#   - readonly: Limit execute_sql to read-only operations (default: false)
+#   - max_rows: Maximum rows to return from execute_sql (default: unlimited)
+#
+# Note: If no [[tools]] entries are defined for a source, both built-in tools
+# are automatically enabled with default settings (no readonly, no row limit).
+#
+# CUSTOM TOOLS:
+# -------------
+# Convention: Any name except "execute_sql" or "search_objects"
+#   - name: Unique tool identifier (cannot be "execute_sql" or "search_objects")
+#   - description: Natural language description of what the tool does [REQUIRED]
+#   - source: ID of the database source to execute against [REQUIRED]
+#   - statement: SQL query with parameter placeholders [REQUIRED]
 #     * PostgreSQL: Use $1, $2, $3 for parameters
 #     * MySQL/MariaDB: Use ?, ?, ? for parameters
 #     * SQL Server: Use @p1, @p2, @p3 for parameters
@@ -212,24 +252,23 @@ allowed_values = ["pending", "completed", "cancelled"]
 #
 # VALIDATION RULES:
 # -----------------
-#   1. Tool names cannot conflict with built-in tools (execute_sql, search_objects)
-#   2. Tool names must be unique across all custom tools
-#   3. Source ID must reference an existing [[sources]] entry
-#   4. Parameter count in SQL must match number of [[tools.parameters]] entries
-#   5. Parameter syntax must match the connector type:
-#      - PostgreSQL requires $1, $2, etc.
-#      - MySQL/MariaDB/SQLite require ?, ?, etc.
-#      - SQL Server requires @p1, @p2, etc.
+#   1. Built-in tools cannot have description, statement, or parameters fields
+#   2. Custom tools must have description and statement fields
+#   3. Custom tools cannot have readonly or max_rows fields
+#   4. Tool names must be unique per source (can reuse name for different sources)
+#   5. Source ID must reference an existing [[sources]] entry
+#   6. Parameter count in SQL must match number of [[tools.parameters]] entries
+#   7. Parameter syntax must match the connector type
 #
 # SECURITY:
 # ---------
-#   - Custom tools inherit the source's readonly and max_rows settings
 #   - Only parameterized queries are supported (no template interpolation)
 #   - All parameters are validated with Zod schemas at runtime
 #   - SQL injection prevention through native DB parameter binding
+#   - Built-in tool readonly mode enforced at SQL keyword level
 #
 # USAGE:
 # ------
 #   After defining tools in this file, they are automatically registered
-#   when the server starts. They appear in the MCP client's tool list alongside
-#   built-in tools like execute_sql and search_objects.
+#   when the server starts. They appear in the MCP client's tool list.
+#   Sources without [[tools]] entries get both built-in tools by default.

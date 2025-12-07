@@ -18,7 +18,7 @@ export interface SSHConfig {
  * Database connection parameters (alternative to DSN)
  */
 export interface ConnectionParams {
-  type?: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+  type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
   host?: string;
   port?: number;
   database?: string;
@@ -28,20 +28,9 @@ export interface ConnectionParams {
 }
 
 /**
- * Execution options per source
- */
-export interface ExecutionOptions {
-  readonly?: boolean;
-  max_rows?: number;
-}
-
-/**
  * Source configuration from [[sources]] array in TOML
  */
-export interface SourceConfig
-  extends ConnectionParams,
-    SSHConfig,
-    ExecutionOptions {
+export interface SourceConfig extends ConnectionParams, SSHConfig {
   id: string;
   dsn?: string;
   connection_timeout?: number; // Connection timeout in seconds
@@ -62,15 +51,38 @@ export interface ParameterConfig {
 }
 
 /**
- * Custom tool definition
+ * Built-in tool configuration for execute_sql
  */
-export interface ToolConfig {
-  name: string;
+export interface ExecuteSqlToolConfig {
+  name: "execute_sql"; // Must match BUILTIN_TOOL_EXECUTE_SQL from builtin-tools.ts
+  source: string;
+  readonly?: boolean;
+  max_rows?: number;
+}
+
+/**
+ * Built-in tool configuration for search_objects
+ */
+export interface SearchObjectsToolConfig {
+  name: "search_objects"; // Must match BUILTIN_TOOL_SEARCH_OBJECTS from builtin-tools.ts
+  source: string;
+}
+
+/**
+ * Custom tool configuration
+ */
+export interface CustomToolConfig {
+  name: string; // Must not be "execute_sql" or "search_objects"
+  source: string;
   description: string;
-  source: string; // Required: references a source ID
-  statement: string; // SQL query with parameters
+  statement: string;
   parameters?: ParameterConfig[];
 }
+
+/**
+ * Unified tool configuration (discriminated union)
+ */
+export type ToolConfig = ExecuteSqlToolConfig | SearchObjectsToolConfig | CustomToolConfig;
 
 /**
  * Complete TOML configuration file structure

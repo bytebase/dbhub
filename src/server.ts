@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, redactDSN, resolveSourceConfigs, isReadOnlyMode, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, redactDSN, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { buildDSNFromSource } from "./config/toml-loader.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
@@ -98,14 +98,31 @@ See documentation for more details on configuring database connections.
     }
     await connectorManager.connectWithSources(sources);
 
-    // Initialize custom tool registry early (needed for API routes)
+    // Initialize tool registry (manages both built-in and custom tools)
     // This must happen AFTER ConnectorManager is initialized so source validation works
+    const { initializeToolRegistry } = await import("./tools/registry.js");
+    initializeToolRegistry({
+      sources: sourceConfigsData.sources,
+      tools: sourceConfigsData.tools,
+    });
+    console.error("Tool registry initialized");
+
+    // Initialize custom tool registry early (needed for API routes)
     // Only initialize once (idempotent - safe for multiple MCP client connections)
     if (sourceConfigsData.tools && sourceConfigsData.tools.length > 0) {
       const { customToolRegistry } = await import("./tools/custom-tool-registry.js");
+      const { BUILTIN_TOOLS } = await import("./tools/builtin-tools.js");
+
       if (!customToolRegistry.isInitialized()) {
-        customToolRegistry.initialize(sourceConfigsData.tools);
-        console.error(`Custom tool registry initialized with ${sourceConfigsData.tools.length} tool(s)`);
+        // Filter out built-in tools - custom tool registry only handles custom tools
+        const customTools = sourceConfigsData.tools.filter(
+          (tool) => !(BUILTIN_TOOLS as readonly string[]).includes(tool.name)
+        );
+
+        if (customTools.length > 0) {
+          customToolRegistry.initialize(customTools);
+          console.error(`Custom tool registry initialized with ${customTools.length} tool(s)`);
+        }
       }
     }
 
@@ -131,8 +148,6 @@ See documentation for more details on configuring database connections.
     const port = transportData.type === "http" ? resolvePort().port : null;
 
     // Print ASCII art banner with version and slogan
-    const readonly = isReadOnlyMode();
-
     // Collect active modes
     const activeModes: string[] = [];
     const modeDescriptions: string[] = [];
@@ -141,11 +156,6 @@ See documentation for more details on configuring database connections.
     if (isDemo) {
       activeModes.push("DEMO");
       modeDescriptions.push("using sample employee database");
-    }
-
-    if (readonly) {
-      activeModes.push("READ-ONLY");
-      modeDescriptions.push("only read only queries allowed");
     }
 
     // Output mode information

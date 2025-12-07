@@ -97,6 +97,12 @@ export class MariaDBConnector implements Connector {
   dsnParser = new MariadbDSNParser();
 
   private pool: mariadb.Pool | null = null;
+  // Source ID is set by ConnectorManager after cloning
+  private sourceId: string = "default";
+
+  getId(): string {
+    return this.sourceId;
+  }
 
   clone(): Connector {
     return new MariaDBConnector();

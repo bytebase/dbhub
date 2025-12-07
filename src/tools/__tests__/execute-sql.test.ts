@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExecuteSqlToolHandler } from '../execute-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
+import { getToolRegistry } from '../registry.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
 
 // Mock dependencies
 vi.mock('../../connectors/manager.js');
+vi.mock('../registry.js');
 
 // Mock connector for testing
-const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
+const createMockConnector = (id: ConnectorType = 'sqlite', sourceId: string = 'default'): Connector => ({
   id,
   name: 'Mock Connector',
+  getId: () => sourceId,
   dsnParser: {} as any,
   connect: vi.fn(),
   disconnect: vi.fn(),
+  clone: vi.fn(),
   getSchemas: vi.fn(),
   getTables: vi.fn(),
   tableExists: vi.fn(),
@@ -32,11 +36,17 @@ describe('execute-sql tool', () => {
   let mockConnector: Connector;
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
   const mockGetCurrentExecuteOptions = vi.mocked(ConnectorManager.getCurrentExecuteOptions);
+  const mockGetToolRegistry = vi.mocked(getToolRegistry);
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
     mockGetCurrentConnector.mockReturnValue(mockConnector);
     mockGetCurrentExecuteOptions.mockReturnValue({});
+
+    // Mock tool registry to return empty config (no readonly, no max_rows)
+    mockGetToolRegistry.mockReturnValue({
+      getBuiltinToolConfig: vi.fn().mockReturnValue({}),
+    } as any);
   });
 
   afterEach(() => {
@@ -55,7 +65,7 @@ describe('execute-sql tool', () => {
       expect(parsedResult.success).toBe(true);
       expect(parsedResult.data.rows).toEqual([{ id: 1, name: 'test' }]);
       expect(parsedResult.data.count).toBe(1);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', {});
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: false, max_rows: undefined });
     });
 
     it('should pass multi-statement SQL directly to connector', async () => {
@@ -68,7 +78,7 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, {});
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: false, max_rows: undefined });
     });
 
     it('should handle execution errors', async () => {
@@ -87,8 +97,10 @@ describe('execute-sql tool', () => {
 
   describe('read-only mode enforcement', () => {
     beforeEach(() => {
-      // Set per-source readonly mode via executeOptions (simulates TOML config)
-      mockGetCurrentExecuteOptions.mockReturnValue({ readonly: true });
+      // Set per-source readonly mode via tool registry (simulates TOML config)
+      mockGetToolRegistry.mockReturnValue({
+        getBuiltinToolConfig: vi.fn().mockReturnValue({ readonly: true }),
+      } as any);
     });
 
     it('should allow SELECT statements', async () => {
@@ -100,7 +112,7 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: true });
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: true, max_rows: undefined });
     });
 
     it('should allow multiple read-only statements', async () => {
@@ -142,6 +154,10 @@ describe('execute-sql tool', () => {
     });
 
     it('should include source_id in error message', async () => {
+      // Create connector with source ID 'prod_db'
+      const prodConnector = createMockConnector('sqlite', 'prod_db');
+      mockGetCurrentConnector.mockReturnValue(prodConnector);
+
       const handler = createExecuteSqlToolHandler('prod_db');
       const result = await handler({ sql: "DROP TABLE users" }, null);
 
@@ -150,13 +166,15 @@ describe('execute-sql tool', () => {
   });
 
   describe('readonly per-source isolation', () => {
-    // Verifies readonly is enforced per-source from executeOptions, not globally
+    // Verifies readonly is enforced per-source from tool registry, not globally
 
     it.each([
       ['readonly: false', { readonly: false }],
       ['readonly: undefined', {}],
-    ])('should allow writes when %s', async (_, options) => {
-      mockGetCurrentExecuteOptions.mockReturnValue(options);
+    ])('should allow writes when %s', async (_, toolConfig) => {
+      mockGetToolRegistry.mockReturnValue({
+        getBuiltinToolConfig: vi.fn().mockReturnValue(toolConfig),
+      } as any);
       const mockResult: SQLResult = { rows: [] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
@@ -168,7 +186,9 @@ describe('execute-sql tool', () => {
     });
 
     it('should enforce readonly even with other options set', async () => {
-      mockGetCurrentExecuteOptions.mockReturnValue({ readonly: true, maxRows: 100 });
+      mockGetToolRegistry.mockReturnValue({
+        getBuiltinToolConfig: vi.fn().mockReturnValue({ readonly: true, max_rows: 100 }),
+      } as any);
 
       const handler = createExecuteSqlToolHandler('limited_source');
       const result = await handler({ sql: "DELETE FROM users" }, null);
@@ -179,7 +199,9 @@ describe('execute-sql tool', () => {
 
   describe('SQL comments handling in readonly mode', () => {
     beforeEach(() => {
-      mockGetCurrentExecuteOptions.mockReturnValue({ readonly: true });
+      mockGetToolRegistry.mockReturnValue({
+        getBuiltinToolConfig: vi.fn().mockReturnValue({ readonly: true }),
+      } as any);
     });
 
     it.each([

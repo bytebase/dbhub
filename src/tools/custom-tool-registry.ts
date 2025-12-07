@@ -6,6 +6,7 @@
 import { ToolConfig } from "../types/config.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { validateParameters } from "../utils/parameter-mapper.js";
+import { BUILTIN_TOOLS } from "./builtin-tools.js";
 
 /**
  * Global registry of custom tools loaded from TOML configuration
@@ -78,15 +79,14 @@ class CustomToolRegistry {
     }
 
     // 3. Validate tool name doesn't conflict with built-in tools
-    const builtInToolPrefixes = ["execute_sql", "search_objects"];
-    for (const prefix of builtInToolPrefixes) {
+    for (const builtinName of BUILTIN_TOOLS) {
       if (
-        toolConfig.name === prefix ||
-        toolConfig.name.startsWith(`${prefix}_`)
+        toolConfig.name === builtinName ||
+        toolConfig.name.startsWith(`${builtinName}_`)
       ) {
         throw new Error(
           `Tool name '${toolConfig.name}' conflicts with built-in tool naming pattern. ` +
-            `Custom tools cannot use names starting with: ${builtInToolPrefixes.join(", ")}`
+            `Custom tools cannot use names starting with: ${BUILTIN_TOOLS.join(", ")}`
         );
       }
     }
@@ -99,8 +99,8 @@ class CustomToolRegistry {
     }
 
     // 5. Validate parameters match SQL statement
-    const sourceConfig = ConnectorManager.getSourceConfig(toolConfig.source);
-    const connectorType = sourceConfig?.type || "postgres"; // Default to postgres if type not specified
+    const sourceConfig = ConnectorManager.getSourceConfig(toolConfig.source)!;
+    const connectorType = sourceConfig.type;
 
     try {
       validateParameters(

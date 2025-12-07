@@ -5,6 +5,8 @@ import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "../utils/client-identifier.js";
+import { getToolRegistry } from "./registry.js";
+import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
@@ -49,19 +51,28 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
     let result: any;
 
     try {
-      // Get connector and execute options for the specified source (or default)
+      // Get connector for the specified source (or default)
       const connector = ConnectorManager.getCurrentConnector(sourceId);
-      const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
+      const actualSourceId = connector.getId();
 
-      // Check if SQL is allowed based on readonly mode (per-source)
-      const isReadonly = executeOptions.readonly === true;
+      // Get tool-specific configuration (tool is already registered, so it's enabled)
+      const registry = getToolRegistry();
+      const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, actualSourceId);
+
+      // Check if SQL is allowed based on readonly mode (per-tool)
+      const isReadonly = toolConfig?.readonly === true;
       if (isReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
-        errorMessage = `Read-only mode is enabled for source '${effectiveSourceId}'. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+        errorMessage = `Read-only mode is enabled for source '${actualSourceId}'. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
 
       // Execute the SQL (single or multiple statements) if validation passed
+      // Pass max_rows from tool config (if set)
+      const executeOptions = {
+        readonly: isReadonly,
+        max_rows: toolConfig?.max_rows,
+      };
       result = await connector.executeSQL(sql, executeOptions);
 
       // Build response data

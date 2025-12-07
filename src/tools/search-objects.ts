@@ -450,6 +450,8 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
     try {
       const connector = ConnectorManager.getCurrentConnector(sourceId);
 
+      // Tool is already registered, so it's enabled (no need to check)
+
       // Validate schema if provided
       if (schema) {
         const schemas = await connector.getSchemas();

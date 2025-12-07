@@ -100,6 +100,13 @@ export class PostgresConnector implements Connector {
 
   private pool: pg.Pool | null = null;
 
+  // Source ID is set by ConnectorManager after cloning
+  private sourceId: string = "default";
+
+  getId(): string {
+    return this.sourceId;
+  }
+
   clone(): Connector {
     return new PostgresConnector();
   }

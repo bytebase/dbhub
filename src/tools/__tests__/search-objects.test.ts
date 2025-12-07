@@ -10,6 +10,7 @@ vi.mock('../../connectors/manager.js');
 const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
   id,
   name: 'Mock Connector',
+  getId: () => 'default',
   dsnParser: {} as any,
   connect: vi.fn(),
   disconnect: vi.fn(),
