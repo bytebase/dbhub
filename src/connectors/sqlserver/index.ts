@@ -480,6 +480,98 @@ export class SQLServerConnector implements Connector {
     }
   }
 
+  async getFunctions(schema?: string): Promise<string[]> {
+    if (!this.connection) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    try {
+      const schemaToUse = schema || "dbo";
+
+      const result = await this.connection
+        .request()
+        .input("schema", sql.NVarChar, schemaToUse)
+        .query(`
+          SELECT ROUTINE_NAME
+          FROM INFORMATION_SCHEMA.ROUTINES
+          WHERE ROUTINE_SCHEMA = @schema
+          AND ROUTINE_TYPE = N'FUNCTION'
+          ORDER BY ROUTINE_NAME
+        `);
+
+      return result.recordset.map((row: { ROUTINE_NAME: any }) => row.ROUTINE_NAME);
+    } catch (error) {
+      console.error("Error getting functions:", error);
+      throw error;
+    }
+  }
+
+  async getFunctionDetail(functionName: string, schema?: string): Promise<StoredProcedure> {
+    if (!this.connection) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    try {
+      const schemaToUse = schema || "dbo";
+
+      const result = await this.connection
+        .request()
+        .input("schema", sql.NVarChar, schemaToUse)
+        .input("name", sql.NVarChar, functionName)
+        .query(`
+          SELECT
+            ROUTINE_NAME as procedure_name,
+            ROUTINE_TYPE,
+            'function' as procedure_type,
+            ROUTINE_DEFINITION as definition,
+            DATA_TYPE as return_type
+          FROM INFORMATION_SCHEMA.ROUTINES
+          WHERE ROUTINE_SCHEMA = @schema
+          AND ROUTINE_NAME = @name
+          AND ROUTINE_TYPE = N'FUNCTION'
+        `);
+
+      if (result.recordset.length === 0) {
+        throw new Error(`Function '${functionName}' not found in schema '${schemaToUse}'`);
+      }
+
+      const func = result.recordset[0];
+
+      // Get parameter information
+      const paramResult = await this.connection
+        .request()
+        .input("schema", sql.NVarChar, schemaToUse)
+        .input("name", sql.NVarChar, functionName)
+        .query(`
+          SELECT
+            PARAMETER_NAME,
+            DATA_TYPE,
+            PARAMETER_MODE
+          FROM INFORMATION_SCHEMA.PARAMETERS
+          WHERE SPECIFIC_SCHEMA = @schema
+          AND SPECIFIC_NAME = @name
+          ORDER BY ORDINAL_POSITION
+        `);
+
+      const parameterList = paramResult.recordset
+        .filter((p: any) => p.PARAMETER_NAME)
+        .map((p: any) => `${p.PARAMETER_NAME} ${p.PARAMETER_MODE || ""} ${p.DATA_TYPE}`.trim())
+        .join(", ");
+
+      return {
+        procedure_name: func.procedure_name,
+        procedure_type: "function",
+        language: "t-sql",
+        parameter_list: parameterList,
+        return_type: func.return_type,
+        definition: func.definition,
+      };
+    } catch (error) {
+      console.error("Error getting function detail:", error);
+      throw error;
+    }
+  }
+
   async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.connection) {
       throw new Error("Not connected to SQL Server database");

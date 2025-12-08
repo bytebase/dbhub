@@ -554,9 +554,44 @@ describe('SQL Server Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return all users (at least the original 3 plus any added in previous tests)
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe("getFunctions", () => {
+    it("should return list of function names", async () => {
+      // Create a test function
+      await sqlServerTest.connector.executeSQL(
+        `CREATE FUNCTION test_get_date() RETURNS DATETIME AS
+         BEGIN RETURN GETDATE(); END`,
+        { maxRows: 1 }
+      );
+
+      const functions = await sqlServerTest.connector.getFunctions("dbo");
+      expect(functions).toContain("test_get_date");
+
+      // Clean up
+      await sqlServerTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_get_date", { maxRows: 1 });
+    });
+  });
+
+  describe("getFunctionDetail", () => {
+    it("should return function details with return type", async () => {
+      // Create a test function
+      await sqlServerTest.connector.executeSQL(
+        `CREATE FUNCTION test_add(@a INT, @b INT) RETURNS INT AS
+         BEGIN RETURN @a + @b; END`,
+        { maxRows: 1 }
+      );
+
+      const detail = await sqlServerTest.connector.getFunctionDetail("test_add", "dbo");
+      expect(detail.procedure_name).toBe("test_add");
+      expect(detail.procedure_type).toBe("function");
+
+      // Clean up
+      await sqlServerTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_add", { maxRows: 1 });
     });
   });
 });
