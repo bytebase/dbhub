@@ -109,9 +109,8 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     // In readonly mode, queries are more predictable (though still not strictly idempotent due to data changes)
     // In write mode, queries are definitely not idempotent
     idempotentHint: false,
-    // In readonly mode, it's safer to operate on arbitrary tables (just reading)
-    // In write mode, operating on arbitrary tables is more dangerous
-    openWorldHint: isReadonly,
+    // Database operations are always against internal/closed systems, not open-world
+    openWorldHint: false,
   };
 
   return {

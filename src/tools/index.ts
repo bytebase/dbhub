@@ -85,7 +85,7 @@ function registerSearchObjectsTool(
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
-        openWorldHint: true,
+        openWorldHint: false,
       },
     },
     createSearchDatabaseObjectsToolHandler(sourceId)
