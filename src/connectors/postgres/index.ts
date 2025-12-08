@@ -409,7 +409,7 @@ export class PostgresConnector implements Connector {
       return {
         procedure_name: procedure.procedure_name,
         procedure_type: procedure.procedure_type,
-        language: procedure.language || "sql",
+        language: procedure.language?.toLowerCase() || "sql",
         parameter_list: procedure.parameter_list || "",
         return_type: procedure.return_type !== "void" ? procedure.return_type : undefined,
         definition: definition || undefined,
