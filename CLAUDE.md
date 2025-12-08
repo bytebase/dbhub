@@ -57,7 +57,7 @@ Key architectural patterns:
   - `search_objects`: Single tool for both pattern-based search and listing all objects
   - Pattern parameter defaults to `%` (match all) - optional for listing use cases
   - Detail levels: `names` (minimal), `summary` (with metadata), `full` (complete structure)
-  - Supports: schemas, tables, columns, procedures, indexes
+  - Supports: schemas, tables, columns, procedures, functions, indexes
   - Inspired by Anthropic's MCP code execution patterns for reducing token usage
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
