@@ -340,7 +340,7 @@ export class PostgresConnector implements Connector {
       // Get stored procedure details from PostgreSQL
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           routine_name as procedure_name,
           routine_type,
           CASE WHEN routine_type = 'PROCEDURE' THEN 'procedure' ELSE 'function' END as procedure_type,
@@ -349,8 +349,8 @@ export class PostgresConnector implements Connector {
           routine_definition as definition,
           (
             SELECT string_agg(
-              parameter_name || ' ' || 
-              parameter_mode || ' ' || 
+              parameter_name || ' ' ||
+              parameter_mode || ' ' ||
               data_type,
               ', '
             )
@@ -412,6 +412,124 @@ export class PostgresConnector implements Connector {
         language: procedure.language || "sql",
         parameter_list: procedure.parameter_list || "",
         return_type: procedure.return_type !== "void" ? procedure.return_type : undefined,
+        definition: definition || undefined,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFunctions(schema?: string): Promise<string[]> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    const client = await this.pool.connect();
+    try {
+      // In PostgreSQL, use 'public' as the default schema if none specified
+      const schemaToUse = schema || "public";
+
+      // Get functions from PostgreSQL (exclude procedures)
+      const result = await client.query(
+        `
+        SELECT
+          routine_name
+        FROM information_schema.routines
+        WHERE routine_schema = $1
+        AND routine_type = 'FUNCTION'
+        ORDER BY routine_name
+      `,
+        [schemaToUse]
+      );
+
+      return result.rows.map((row) => row.routine_name);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getFunctionDetail(functionName: string, schema?: string): Promise<StoredProcedure> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    const client = await this.pool.connect();
+    try {
+      // In PostgreSQL, use 'public' as the default schema if none specified
+      const schemaToUse = schema || "public";
+
+      // Get function details from PostgreSQL
+      const result = await client.query(
+        `
+        SELECT
+          routine_name as procedure_name,
+          routine_type,
+          'function' as procedure_type,
+          external_language as language,
+          data_type as return_type,
+          routine_definition as definition,
+          (
+            SELECT string_agg(
+              parameter_name || ' ' ||
+              parameter_mode || ' ' ||
+              data_type,
+              ', '
+            )
+            FROM information_schema.parameters
+            WHERE specific_schema = $1
+            AND specific_name = $2
+            AND parameter_name IS NOT NULL
+          ) as parameter_list
+        FROM information_schema.routines
+        WHERE routine_schema = $1
+        AND routine_name = $2
+        AND routine_type = 'FUNCTION'
+      `,
+        [schemaToUse, functionName]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error(`Function '${functionName}' not found in schema '${schemaToUse}'`);
+      }
+
+      const func = result.rows[0];
+
+      // If routine_definition is NULL, try to get the function body with pg_get_functiondef
+      let definition = func.definition;
+
+      try {
+        const oidResult = await client.query(
+          `
+          SELECT p.oid, p.prosrc
+          FROM pg_proc p
+          JOIN pg_namespace n ON p.pronamespace = n.oid
+          WHERE p.proname = $1
+          AND n.nspname = $2
+        `,
+          [functionName, schemaToUse]
+        );
+
+        if (oidResult.rows.length > 0) {
+          if (!definition) {
+            const oid = oidResult.rows[0].oid;
+            const defResult = await client.query(`SELECT pg_get_functiondef($1)`, [oid]);
+            if (defResult.rows.length > 0) {
+              definition = defResult.rows[0].pg_get_functiondef;
+            } else {
+              definition = oidResult.rows[0].prosrc;
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`Error getting function definition: ${err}`);
+      }
+
+      return {
+        procedure_name: func.procedure_name,
+        procedure_type: "function",
+        language: func.language?.toLowerCase() || "sql",
+        parameter_list: func.parameter_list || "",
+        return_type: func.return_type !== "void" ? func.return_type : undefined,
         definition: definition || undefined,
       };
     } finally {
