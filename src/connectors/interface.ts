@@ -178,6 +178,21 @@ export interface Connector {
    */
   getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure>;
 
+  /**
+   * Get functions in the database or in a specific schema
+   * @param schema Optional schema name. If not provided, implementation should use the default schema
+   * @returns Promise with array of function names
+   */
+  getFunctions(schema?: string): Promise<string[]>;
+
+  /**
+   * Get details for a specific function
+   * @param functionName The name of the function to get details for
+   * @param schema Optional schema name. If not provided, implementation should use the default schema
+   * @returns Promise with function details (uses StoredProcedure type with procedure_type='function')
+   */
+  getFunctionDetail(functionName: string, schema?: string): Promise<StoredProcedure>;
+
   /** Execute a SQL query with execution options and optional parameters */
   executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;
 }
