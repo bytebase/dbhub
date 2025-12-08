@@ -450,9 +450,62 @@ describe('MariaDB Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return all users (at least the original 3 plus any added in previous tests)
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe("getFunctions", () => {
+    it("should return list of function names", async () => {
+      // Create a test function
+      await mariadbTest.connector.executeSQL(
+        `CREATE FUNCTION test_get_current_time() RETURNS DATETIME
+         DETERMINISTIC
+         BEGIN RETURN NOW(); END`,
+        { maxRows: 1 }
+      );
+
+      const functions = await mariadbTest.connector.getFunctions();
+      expect(functions).toContain("test_get_current_time");
+
+      // Clean up
+      await mariadbTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_get_current_time", { maxRows: 1 });
+    });
+
+    it("should not return procedures in getFunctions", async () => {
+      // Create a test procedure
+      await mariadbTest.connector.executeSQL(
+        `CREATE PROCEDURE test_log_procedure(IN msg TEXT)
+         BEGIN SELECT msg; END`,
+        { maxRows: 1 }
+      );
+
+      const functions = await mariadbTest.connector.getFunctions();
+      expect(functions).not.toContain("test_log_procedure");
+
+      // Clean up
+      await mariadbTest.connector.executeSQL("DROP PROCEDURE IF EXISTS test_log_procedure", { maxRows: 1 });
+    });
+  });
+
+  describe("getFunctionDetail", () => {
+    it("should return function details with return type", async () => {
+      // Create a test function with parameters
+      await mariadbTest.connector.executeSQL(
+        `CREATE FUNCTION test_add_numbers(a INT, b INT) RETURNS INT
+         DETERMINISTIC
+         BEGIN RETURN a + b; END`,
+        { maxRows: 1 }
+      );
+
+      const detail = await mariadbTest.connector.getFunctionDetail("test_add_numbers");
+      expect(detail.procedure_name).toBe("test_add_numbers");
+      expect(detail.procedure_type).toBe("function");
+      expect(detail.return_type).toBeDefined();
+
+      // Clean up
+      await mariadbTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_add_numbers", { maxRows: 1 });
     });
   });
 });
