@@ -7,7 +7,7 @@ import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
 /**
  * Object types that can be searched
  */
-export type DatabaseObjectType = "schema" | "table" | "column" | "procedure" | "index";
+export type DatabaseObjectType = "schema" | "table" | "column" | "procedure" | "function" | "index";
 
 /**
  * Detail level for search results
@@ -20,7 +20,7 @@ export type DetailLevel = "names" | "summary" | "full";
 // Schema for search_objects tool (unified search and list)
 export const searchDatabaseObjectsSchema = {
   object_type: z
-    .enum(["schema", "table", "column", "procedure", "index"])
+    .enum(["schema", "table", "column", "procedure", "function", "index"])
     .describe("Type of database object to search for"),
   pattern: z
     .string()
