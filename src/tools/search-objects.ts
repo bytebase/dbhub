@@ -429,6 +429,74 @@ async function searchIndexes(
 }
 
 /**
+ * Search for functions
+ */
+async function searchFunctions(
+  connector: Connector,
+  pattern: string,
+  schemaFilter: string | undefined,
+  detailLevel: DetailLevel,
+  limit: number
+): Promise<any[]> {
+  const regex = likePatternToRegex(pattern);
+  const results: any[] = [];
+
+  // Get schemas to search
+  let schemasToSearch: string[];
+  if (schemaFilter) {
+    schemasToSearch = [schemaFilter];
+  } else {
+    schemasToSearch = await connector.getSchemas();
+  }
+
+  // Search functions in each schema
+  for (const schemaName of schemasToSearch) {
+    if (results.length >= limit) break;
+
+    try {
+      const functions = await connector.getFunctions(schemaName);
+      const matched = functions.filter((func: string) => regex.test(func));
+
+      for (const funcName of matched) {
+        if (results.length >= limit) break;
+
+        if (detailLevel === "names") {
+          results.push({
+            name: funcName,
+            schema: schemaName,
+          });
+        } else {
+          // summary and full - get function details
+          try {
+            const details = await connector.getFunctionDetail(funcName, schemaName);
+            results.push({
+              name: funcName,
+              schema: schemaName,
+              type: details.procedure_type,
+              language: details.language,
+              return_type: details.return_type,
+              parameters: detailLevel === "full" ? details.parameter_list : undefined,
+              definition: detailLevel === "full" ? details.definition : undefined,
+            });
+          } catch (error) {
+            results.push({
+              name: funcName,
+              schema: schemaName,
+              error: `Unable to fetch details: ${(error as Error).message}`,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      // Skip schemas we can't access or databases that don't support functions
+      continue;
+    }
+  }
+
+  return results;
+}
+
+/**
  * Create a search_database_objects tool handler
  */
 export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
@@ -478,6 +546,9 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
           break;
         case "procedure":
           results = await searchProcedures(connector, pattern, schema, detail_level, limit);
+          break;
+        case "function":
+          results = await searchFunctions(connector, pattern, schema, detail_level, limit);
           break;
         case "index":
           results = await searchIndexes(connector, pattern, schema, detail_level, limit);

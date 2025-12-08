@@ -22,6 +22,8 @@ const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
   getTableIndexes: vi.fn(),
   getStoredProcedures: vi.fn(),
   getStoredProcedureDetail: vi.fn(),
+  getFunctions: vi.fn(),
+  getFunctionDetail: vi.fn(),
   executeSQL: vi.fn(),
 });
 
@@ -390,6 +392,141 @@ describe('search_database_objects tool', () => {
         schema: 'public',
         type: 'function',
         return_type: 'TABLE',
+      });
+    });
+  });
+
+  describe('search functions', () => {
+    beforeEach(() => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      vi.mocked(mockConnector.getFunctions).mockResolvedValue([
+        'get_timestamp',
+        'add_numbers',
+        'get_user_count',
+      ]);
+    });
+
+    it('should search functions with pattern', async () => {
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'get%',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual([
+        'get_timestamp',
+        'get_user_count',
+      ]);
+    });
+
+    it('should return function details in summary level', async () => {
+      vi.mocked(mockConnector.getFunctionDetail).mockResolvedValue({
+        procedure_name: 'add_numbers',
+        procedure_type: 'function',
+        language: 'plpgsql',
+        parameter_list: 'a integer, b integer',
+        return_type: 'integer',
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'add_numbers',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'add_numbers',
+        schema: 'public',
+        type: 'function',
+        language: 'plpgsql',
+        return_type: 'integer',
+      });
+      expect(parsed.data.results[0].parameters).toBeUndefined();
+      expect(parsed.data.results[0].definition).toBeUndefined();
+    });
+
+    it('should return full function details with definition', async () => {
+      vi.mocked(mockConnector.getFunctionDetail).mockResolvedValue({
+        procedure_name: 'add_numbers',
+        procedure_type: 'function',
+        language: 'plpgsql',
+        parameter_list: 'a integer, b integer',
+        return_type: 'integer',
+        definition: 'BEGIN RETURN a + b; END;',
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'add_numbers',
+          detail_level: 'full',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'add_numbers',
+        schema: 'public',
+        type: 'function',
+        language: 'plpgsql',
+        return_type: 'integer',
+        parameters: 'a integer, b integer',
+        definition: 'BEGIN RETURN a + b; END;',
+      });
+    });
+
+    it('should filter functions by schema', async () => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public', 'custom']);
+      vi.mocked(mockConnector.getFunctions).mockResolvedValue(['my_function']);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: '%',
+          schema: 'custom',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(mockConnector.getFunctions).toHaveBeenCalledWith('custom');
+    });
+
+    it('should handle getFunctionDetail errors gracefully', async () => {
+      vi.mocked(mockConnector.getFunctionDetail).mockRejectedValue(
+        new Error('Function details not available')
+      );
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'get_timestamp',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'get_timestamp',
+        schema: 'public',
+        error: 'Unable to fetch details: Function details not available',
       });
     });
   });
