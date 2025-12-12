@@ -503,7 +503,6 @@ describe('search_database_objects tool', () => {
         null
       );
 
-      const parsed = parseToolResponse(result);
       expect(mockConnector.getFunctions).toHaveBeenCalledWith('custom');
     });
 
