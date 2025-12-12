@@ -565,4 +565,58 @@ describe('PostgreSQL Connector Integration Tests', () => {
       }
     });
   });
+
+  describe("getFunctions", () => {
+    it("should return list of function names", async () => {
+      // Create a test function using SQL language to avoid dollar quoting issues
+      await postgresTest.connector.executeSQL(`
+        CREATE OR REPLACE FUNCTION test_get_timestamp()
+        RETURNS timestamp
+        LANGUAGE SQL
+        AS 'SELECT NOW()'
+      `, {});
+
+      const functions = await postgresTest.connector.getFunctions("public");
+      expect(functions).toContain("test_get_timestamp");
+
+      // Clean up
+      await postgresTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_get_timestamp()", {});
+    });
+
+    it("should not return procedures in getFunctions", async () => {
+      // Create a test procedure - PostgreSQL 11+ supports procedures
+      await postgresTest.connector.executeSQL(`
+        CREATE OR REPLACE PROCEDURE test_log_procedure(msg TEXT)
+        LANGUAGE SQL
+        AS 'SELECT 1'
+      `, {});
+
+      const functions = await postgresTest.connector.getFunctions("public");
+      expect(functions).not.toContain("test_log_procedure");
+
+      // Clean up
+      await postgresTest.connector.executeSQL("DROP PROCEDURE IF EXISTS test_log_procedure(TEXT)", {});
+    });
+  });
+
+  describe("getFunctionDetail", () => {
+    it("should return function details with return type", async () => {
+      // Create a test function with parameters using SQL language
+      await postgresTest.connector.executeSQL(`
+        CREATE OR REPLACE FUNCTION test_add_numbers(a INT, b INT)
+        RETURNS INT
+        LANGUAGE SQL
+        AS 'SELECT $1 + $2'
+      `, {});
+
+      const detail = await postgresTest.connector.getFunctionDetail("test_add_numbers", "public");
+      expect(detail.procedure_name).toBe("test_add_numbers");
+      expect(detail.procedure_type).toBe("function");
+      expect(detail.return_type).toBe("integer");
+      expect(detail.language).toBe("sql");
+
+      // Clean up
+      await postgresTest.connector.executeSQL("DROP FUNCTION IF EXISTS test_add_numbers(INT, INT)", {});
+    });
+  });
 });

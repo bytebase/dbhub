@@ -377,6 +377,14 @@ export class SQLiteConnector implements Connector {
     );
   }
 
+  async getFunctions(schema?: string): Promise<string[]> {
+    // SQLite does not support stored functions
+    return [];
+  }
+
+  async getFunctionDetail(functionName: string, schema?: string): Promise<StoredProcedure> {
+    throw new Error("SQLite does not support stored functions");
+  }
 
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.db) {

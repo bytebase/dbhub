@@ -478,6 +478,109 @@ export class MySQLConnector implements Connector {
     }
   }
 
+  async getFunctions(schema?: string): Promise<string[]> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    try {
+      // In MySQL, if no schema is provided, use the current database context
+      const schemaClause = schema
+        ? "WHERE ROUTINE_SCHEMA = ?"
+        : "WHERE ROUTINE_SCHEMA = DATABASE()";
+
+      const queryParams = schema ? [schema] : [];
+
+      // Get functions only (exclude procedures)
+      const [rows] = (await this.pool.query(
+        `
+        SELECT ROUTINE_NAME
+        FROM INFORMATION_SCHEMA.ROUTINES
+        ${schemaClause}
+        AND ROUTINE_TYPE = 'FUNCTION'
+        ORDER BY ROUTINE_NAME
+      `,
+        queryParams
+      )) as [any[], any];
+
+      return rows.map((row) => row.ROUTINE_NAME);
+    } catch (error) {
+      console.error("Error getting functions:", error);
+      throw error;
+    }
+  }
+
+  async getFunctionDetail(functionName: string, schema?: string): Promise<StoredProcedure> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    try {
+      const schemaClause = schema
+        ? "WHERE ROUTINE_SCHEMA = ? AND ROUTINE_NAME = ?"
+        : "WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = ?";
+
+      const queryParams = schema ? [schema, functionName] : [functionName];
+
+      const [rows] = (await this.pool.query(
+        `
+        SELECT
+          ROUTINE_NAME as procedure_name,
+          ROUTINE_TYPE,
+          'function' as procedure_type,
+          ROUTINE_DEFINITION as definition,
+          DTD_IDENTIFIER as return_type,
+          EXTERNAL_LANGUAGE as language
+        FROM INFORMATION_SCHEMA.ROUTINES
+        ${schemaClause}
+        AND ROUTINE_TYPE = 'FUNCTION'
+      `,
+        queryParams
+      )) as [any[], any];
+
+      if (rows.length === 0) {
+        throw new Error(`Function '${functionName}' not found`);
+      }
+
+      const func = rows[0];
+
+      // Get parameter information
+      const paramSchemaClause = schema
+        ? "WHERE SPECIFIC_SCHEMA = ? AND SPECIFIC_NAME = ?"
+        : "WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ?";
+
+      const [paramRows] = (await this.pool.query(
+        `
+        SELECT
+          PARAMETER_NAME,
+          DATA_TYPE,
+          PARAMETER_MODE
+        FROM INFORMATION_SCHEMA.PARAMETERS
+        ${paramSchemaClause}
+        ORDER BY ORDINAL_POSITION
+      `,
+        queryParams
+      )) as [any[], any];
+
+      const parameterList = paramRows
+        .filter((p: any) => p.PARAMETER_NAME)
+        .map((p: any) => `${p.PARAMETER_NAME} ${p.PARAMETER_MODE || ""} ${p.DATA_TYPE}`.trim())
+        .join(", ");
+
+      return {
+        procedure_name: func.procedure_name,
+        procedure_type: "function",
+        language: (func.language || "SQL").toLowerCase(),
+        parameter_list: parameterList,
+        return_type: func.return_type,
+        definition: func.definition,
+      };
+    } catch (error) {
+      console.error("Error getting function detail:", error);
+      throw error;
+    }
+  }
+
   // Helper method to get current schema (database) name
   private async getCurrentSchema(): Promise<string> {
     const [rows] = (await this.pool!.query("SELECT DATABASE() AS DB")) as [any[], any];

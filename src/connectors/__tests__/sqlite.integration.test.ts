@@ -515,6 +515,21 @@ describe('SQLite Connector Integration Tests', () => {
     });
   });
 
+  describe('getFunctions', () => {
+    it('should return empty array (SQLite does not support functions)', async () => {
+      const functions = await sqliteTest.connector.getFunctions();
+      expect(functions).toEqual([]);
+    });
+  });
+
+  describe('getFunctionDetail', () => {
+    it('should throw error (SQLite does not support functions)', async () => {
+      await expect(sqliteTest.connector.getFunctionDetail('test_func')).rejects.toThrow(
+        'SQLite does not support stored functions'
+      );
+    });
+  });
+
   describe('SDK-Level Readonly Mode Tests', () => {
     it('should open file-based database in readonly mode', async () => {
       // Now open the same database in readonly mode using ConnectorConfig

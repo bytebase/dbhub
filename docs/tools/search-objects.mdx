@@ -2,15 +2,33 @@
 title: "search_objects"
 ---
 
-Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching. This unified tool supports both targeted searches and browsing all objects, implementing progressive disclosure to minimize token usage.
+Search and list database objects (schemas, tables, columns, procedures, functions, indexes) with pattern matching. This unified tool supports both targeted searches and browsing all objects, implementing progressive disclosure to minimize token usage.
 
 ## Parameters
 
-- `object_type` (required): Type of object to search - `"schema"`, `"table"`, `"column"`, `"procedure"`, or `"index"`
+- `object_type` (required): Type of object to search - `"schema"`, `"table"`, `"column"`, `"procedure"`, `"function"`, or `"index"`
 - `pattern` (optional): Search pattern using SQL LIKE syntax (`%` for wildcard, `_` for single character). Defaults to `"%"` (match all)
 - `schema` (optional): Filter results to a specific schema
 - `detail_level` (optional): Level of detail - `"names"` (default), `"summary"`, or `"full"`
 - `limit` (optional): Maximum results to return (default: 100, max: 1000)
+
+## Supported Object Types
+
+- `schema`: Database schemas/databases
+- `table`: Database tables
+- `column`: Table columns
+- `procedure`: Stored procedures
+- `function`: Stored functions (PostgreSQL, MySQL, MariaDB, SQL Server)
+- `index`: Table indexes
+
+## Database Compatibility
+
+Function search is supported on:
+- PostgreSQL ✓
+- MySQL ✓
+- MariaDB ✓
+- SQL Server ✓
+- SQLite ✗ (returns empty results)
 
 ## Detail Levels
 
@@ -97,6 +115,67 @@ Search and list database objects (schemas, tables, columns, procedures, indexes)
 {
   "object_type": "schema",
   "detail_level": "summary"
+}
+```
+
+```json Search for functions
+{
+  "object_type": "function",
+  "pattern": "get%",
+  "detail_level": "summary"
+}
+```
+</CodeGroup>
+
+## Function Examples
+
+<CodeGroup>
+```json Search for functions starting with "get"
+{
+  "object_type": "function",
+  "pattern": "get%",
+  "detail_level": "summary"
+}
+
+// Example response:
+{
+  "object_type": "function",
+  "pattern": "get%",
+  "count": 2,
+  "results": [
+    {
+      "name": "get_timestamp",
+      "schema": "public",
+      "type": "function",
+      "language": "plpgsql",
+      "return_type": "timestamp"
+    },
+    {
+      "name": "get_user_count",
+      "schema": "public",
+      "type": "function",
+      "language": "sql",
+      "return_type": "integer"
+    }
+  ]
+}
+```
+
+```json Get full function details
+{
+  "object_type": "function",
+  "pattern": "add_numbers",
+  "detail_level": "full"
+}
+
+// Returns complete function definition including parameters and body
+```
+
+```json List all functions in a schema
+{
+  "object_type": "function",
+  "schema": "public",
+  "detail_level": "names"
 }
 ```
 </CodeGroup>
