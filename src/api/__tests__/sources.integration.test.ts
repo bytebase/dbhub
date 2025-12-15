@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { Application } from 'express';
-import { setupManagerWithFixture, FIXTURES } from '../../__fixtures__/helpers.js';
+import { setupManagerWithFixture, FIXTURES, loadFixtureConfig } from '../../__fixtures__/helpers.js';
 import type { ConnectorManager } from '../../connectors/manager.js';
 import { listSources, getSource } from '../sources.js';
 import type { components } from '../openapi.js';
 import { Server } from 'http';
+import { initializeToolRegistry } from '../../tools/registry.js';
 
 // Import SQLite connector to ensure it's registered
 import '../../connectors/sqlite/index.js';
@@ -26,6 +27,10 @@ describe('Data Sources API Integration Tests', () => {
     // - writable_limited: readonly=false, max_rows=500
     // - writable_unlimited: readonly=false, no max_rows
     manager = await setupManagerWithFixture(FIXTURES.READONLY_MAXROWS);
+
+    // Initialize ToolRegistry with fixture config
+    const sources = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+    initializeToolRegistry({ sources, tools: [] });
 
     // Set up Express app with API routes
     app = express();
