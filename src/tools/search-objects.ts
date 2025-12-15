@@ -30,7 +30,11 @@ export const searchDatabaseObjectsSchema = {
   schema: z
     .string()
     .optional()
-    .describe("Filter results to a specific schema/database"),
+    .describe("Filter results to a specific schema/database (exact match)"),
+  table: z
+    .string()
+    .optional()
+    .describe("Filter to a specific table (exact match). Requires schema parameter. Only applies to columns and indexes."),
   detail_level: z
     .enum(["names", "summary", "full"])
     .default("names")
@@ -227,6 +231,7 @@ async function searchColumns(
   connector: Connector,
   pattern: string,
   schemaFilter: string | undefined,
+  tableFilter: string | undefined,
   detailLevel: DetailLevel,
   limit: number
 ): Promise<any[]> {
@@ -246,9 +251,17 @@ async function searchColumns(
     if (results.length >= limit) break;
 
     try {
-      const tables = await connector.getTables(schemaName);
+      // Get tables to search
+      let tablesToSearch: string[];
+      if (tableFilter) {
+        // If table filter is specified, only search that table
+        tablesToSearch = [tableFilter];
+      } else {
+        // Otherwise search all tables in the schema
+        tablesToSearch = await connector.getTables(schemaName);
+      }
 
-      for (const tableName of tables) {
+      for (const tableName of tablesToSearch) {
         if (results.length >= limit) break;
 
         try {
@@ -365,6 +378,7 @@ async function searchIndexes(
   connector: Connector,
   pattern: string,
   schemaFilter: string | undefined,
+  tableFilter: string | undefined,
   detailLevel: DetailLevel,
   limit: number
 ): Promise<any[]> {
@@ -384,9 +398,17 @@ async function searchIndexes(
     if (results.length >= limit) break;
 
     try {
-      const tables = await connector.getTables(schemaName);
+      // Get tables to search
+      let tablesToSearch: string[];
+      if (tableFilter) {
+        // If table filter is specified, only search that table
+        tablesToSearch = [tableFilter];
+      } else {
+        // Otherwise search all tables in the schema
+        tablesToSearch = await connector.getTables(schemaName);
+      }
 
-      for (const tableName of tables) {
+      for (const tableName of tablesToSearch) {
         if (results.length >= limit) break;
 
         try {
@@ -437,12 +459,14 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       object_type,
       pattern = "%",
       schema,
+      table,
       detail_level = "names",
       limit = 100,
     } = args as {
       object_type: DatabaseObjectType;
       pattern?: string;
       schema?: string;
+      table?: string;
       detail_level: DetailLevel;
       limit: number;
     };
@@ -451,6 +475,22 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       const connector = ConnectorManager.getCurrentConnector(sourceId);
 
       // Tool is already registered, so it's enabled (no need to check)
+
+      // Validate table parameter
+      if (table) {
+        if (!schema) {
+          return createToolErrorResponse(
+            "The 'table' parameter requires 'schema' to be specified",
+            "SCHEMA_REQUIRED"
+          );
+        }
+        if (!["column", "index"].includes(object_type)) {
+          return createToolErrorResponse(
+            `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`,
+            "INVALID_TABLE_FILTER"
+          );
+        }
+      }
 
       // Validate schema if provided
       if (schema) {
@@ -474,13 +514,13 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
           results = await searchTables(connector, pattern, schema, detail_level, limit);
           break;
         case "column":
-          results = await searchColumns(connector, pattern, schema, detail_level, limit);
+          results = await searchColumns(connector, pattern, schema, table, detail_level, limit);
           break;
         case "procedure":
           results = await searchProcedures(connector, pattern, schema, detail_level, limit);
           break;
         case "index":
-          results = await searchIndexes(connector, pattern, schema, detail_level, limit);
+          results = await searchIndexes(connector, pattern, schema, table, detail_level, limit);
           break;
         default:
           return createToolErrorResponse(
@@ -493,6 +533,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
         object_type,
         pattern,
         schema,
+        table,
         detail_level,
         count: results.length,
         results,

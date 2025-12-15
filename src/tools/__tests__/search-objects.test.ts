@@ -483,6 +483,220 @@ describe('search_database_objects tool', () => {
     });
   });
 
+  describe('table filter', () => {
+    describe('for columns', () => {
+      beforeEach(() => {
+        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      });
+
+      it('should filter columns by table when table parameter is provided', async () => {
+        const usersColumns: TableColumn[] = [
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+        ];
+
+        const ordersColumns: TableColumn[] = [
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+          { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+        ];
+
+        vi.mocked(mockConnector.getTableSchema).mockImplementation(async (table) => {
+          if (table === 'users') return usersColumns;
+          if (table === 'orders') return ordersColumns;
+          return [];
+        });
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'column',
+            pattern: '%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        const parsed = parseToolResponse(result);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data.count).toBe(2);
+        expect(parsed.data.results).toEqual([
+          { name: 'id', table: 'users', schema: 'public' },
+          { name: 'name', table: 'users', schema: 'public' },
+        ]);
+        // Verify only users table was queried
+        expect(mockConnector.getTableSchema).toHaveBeenCalledWith('users', 'public');
+        expect(mockConnector.getTableSchema).not.toHaveBeenCalledWith('orders', 'public');
+      });
+
+      it('should require schema when table is specified', async () => {
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'column',
+            pattern: '%',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        expect(result.isError).toBe(true);
+        const parsed = parseToolResponse(result);
+        expect(parsed.code).toBe('SCHEMA_REQUIRED');
+        expect(parsed.error).toContain("'table' parameter requires 'schema'");
+      });
+
+      it('should work with column pattern when table filter is applied', async () => {
+        const usersColumns: TableColumn[] = [
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+          { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+        ];
+
+        vi.mocked(mockConnector.getTableSchema).mockResolvedValue(usersColumns);
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'column',
+            pattern: '%e%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        const parsed = parseToolResponse(result);
+        expect(parsed.data.count).toBe(2);
+        expect(parsed.data.results.map((r: any) => r.name)).toEqual(['name', 'email']);
+      });
+    });
+
+    describe('for indexes', () => {
+      beforeEach(() => {
+        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      });
+
+      it('should filter indexes by table when table parameter is provided', async () => {
+        const usersIndexes: TableIndex[] = [
+          {
+            index_name: 'users_pkey',
+            column_names: ['id'],
+            is_unique: true,
+            is_primary: true,
+          },
+          {
+            index_name: 'users_email_idx',
+            column_names: ['email'],
+            is_unique: true,
+            is_primary: false,
+          },
+        ];
+
+        const ordersIndexes: TableIndex[] = [
+          {
+            index_name: 'orders_pkey',
+            column_names: ['id'],
+            is_unique: true,
+            is_primary: true,
+          },
+        ];
+
+        vi.mocked(mockConnector.getTableIndexes).mockImplementation(async (table) => {
+          if (table === 'users') return usersIndexes;
+          if (table === 'orders') return ordersIndexes;
+          return [];
+        });
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'index',
+            pattern: '%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        const parsed = parseToolResponse(result);
+        expect(parsed.success).toBe(true);
+        expect(parsed.data.count).toBe(2);
+        expect(parsed.data.results.map((r: any) => r.name)).toEqual(['users_pkey', 'users_email_idx']);
+        // Verify only users table was queried
+        expect(mockConnector.getTableIndexes).toHaveBeenCalledWith('users', 'public');
+        expect(mockConnector.getTableIndexes).not.toHaveBeenCalledWith('orders', 'public');
+      });
+    });
+
+    describe('validation', () => {
+      it('should reject table parameter for schema object type', async () => {
+        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'schema',
+            pattern: '%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        expect(result.isError).toBe(true);
+        const parsed = parseToolResponse(result);
+        expect(parsed.code).toBe('INVALID_TABLE_FILTER');
+        expect(parsed.error).toContain("only applies to object_type 'column' or 'index'");
+      });
+
+      it('should reject table parameter for table object type', async () => {
+        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'table',
+            pattern: '%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        expect(result.isError).toBe(true);
+        const parsed = parseToolResponse(result);
+        expect(parsed.code).toBe('INVALID_TABLE_FILTER');
+      });
+
+      it('should reject table parameter for procedure object type', async () => {
+        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+
+        const handler = createSearchDatabaseObjectsToolHandler();
+        const result = await handler(
+          {
+            object_type: 'procedure',
+            pattern: '%',
+            schema: 'public',
+            table: 'users',
+            detail_level: 'names',
+          },
+          null
+        );
+
+        expect(result.isError).toBe(true);
+        const parsed = parseToolResponse(result);
+        expect(parsed.code).toBe('INVALID_TABLE_FILTER');
+      });
+    });
+  });
+
   describe('error handling', () => {
     it('should validate schema exists', async () => {
       vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
