@@ -3,8 +3,8 @@ import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
-import { customToolRegistry } from "../tools/custom-tool-registry.js";
-import type { ParameterConfig } from "../types/config.js";
+import { getToolRegistry } from "../tools/registry.js";
+import type { ParameterConfig, ToolConfig } from "../types/config.js";
 
 /**
  * Tool parameter definition for API responses
@@ -165,30 +165,29 @@ function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolPa
 }
 
 /**
- * Get tools for a specific source (API response format)
- * Includes both built-in tools (execute_sql, search_objects) and custom tools
- * @param sourceId - The source ID to get tools for
- * @returns Array of tools with simplified parameters
+ * Build execute_sql tool metadata for API response
  */
-export function getToolsForSource(sourceId: string): Tool[] {
-  const tools: Tool[] = [];
+function buildExecuteSqlTool(sourceId: string): Tool {
+  const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
+  const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
+  return {
+    name: executeSqlMetadata.name,
+    description: executeSqlMetadata.description,
+    parameters: executeSqlParameters,
+  };
+}
+
+/**
+ * Build search_objects tool metadata for API response
+ */
+function buildSearchObjectsTool(sourceId: string): Tool {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
   const sourceIds = ConnectorManager.getAvailableSourceIds();
   const isDefault = sourceIds[0] === sourceId;
-
-  // 1. Add built-in execute_sql tool
-  const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
-  const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
-  tools.push({
-    name: executeSqlMetadata.name,
-    description: executeSqlMetadata.description,
-    parameters: executeSqlParameters,
-  });
-
-  // 2. Add built-in search_objects tool
   const searchMetadata = getSearchObjectsMetadata(sourceId, dbType, isDefault);
-  tools.push({
+
+  return {
     name: searchMetadata.name,
     description: searchMetadata.description,
     parameters: [
@@ -223,21 +222,41 @@ export function getToolsForSource(sourceId: string): Tool[] {
         description: "Maximum number of results to return (default: 100, max: 1000)",
       },
     ],
-  });
+  };
+}
 
-  // 3. Add custom tools for this source
-  if (customToolRegistry.isInitialized()) {
-    const customTools = customToolRegistry.getTools();
-    const sourceCustomTools = customTools.filter((tool) => tool.source === sourceId);
+/**
+ * Build custom tool metadata for API response
+ */
+function buildCustomTool(toolConfig: ToolConfig): Tool {
+  return {
+    name: toolConfig.name,
+    description: toolConfig.description!,
+    parameters: customParamsToToolParams(toolConfig.parameters),
+  };
+}
 
-    for (const customTool of sourceCustomTools) {
-      tools.push({
-        name: customTool.name,
-        description: customTool.description,
-        parameters: customParamsToToolParams(customTool.parameters),
-      });
+/**
+ * Get tools for a specific source (API response format)
+ * Only includes tools that are actually enabled in the ToolRegistry
+ * @param sourceId - The source ID to get tools for
+ * @returns Array of enabled tools with simplified parameters
+ */
+export function getToolsForSource(sourceId: string): Tool[] {
+  // Get enabled tools from registry
+  const registry = getToolRegistry();
+  const enabledToolConfigs = registry.getEnabledToolConfigs(sourceId);
+
+  // Uniform iteration: map each enabled tool config to its API representation
+  return enabledToolConfigs.map((toolConfig) => {
+    // Dispatch based on tool name
+    if (toolConfig.name === "execute_sql") {
+      return buildExecuteSqlTool(sourceId);
+    } else if (toolConfig.name === "search_objects") {
+      return buildSearchObjectsTool(sourceId);
+    } else {
+      // Custom tool
+      return buildCustomTool(toolConfig);
     }
-  }
-
-  return tools;
+  });
 }

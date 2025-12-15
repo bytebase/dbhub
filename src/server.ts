@@ -107,25 +107,6 @@ See documentation for more details on configuring database connections.
     });
     console.error("Tool registry initialized");
 
-    // Initialize custom tool registry early (needed for API routes)
-    // Only initialize once (idempotent - safe for multiple MCP client connections)
-    if (sourceConfigsData.tools && sourceConfigsData.tools.length > 0) {
-      const { customToolRegistry } = await import("./tools/custom-tool-registry.js");
-      const { BUILTIN_TOOLS } = await import("./tools/builtin-tools.js");
-
-      if (!customToolRegistry.isInitialized()) {
-        // Filter out built-in tools - custom tool registry only handles custom tools
-        const customTools = sourceConfigsData.tools.filter(
-          (tool) => !(BUILTIN_TOOLS as readonly string[]).includes(tool.name)
-        );
-
-        if (customTools.length > 0) {
-          customToolRegistry.initialize(customTools);
-          console.error(`Custom tool registry initialized with ${customTools.length} tool(s)`);
-        }
-      }
-    }
-
     // Create MCP server factory function for HTTP transport
     // Note: This must be created AFTER ConnectorManager is initialized
     const createServer = () => {
@@ -135,7 +116,7 @@ See documentation for more details on configuring database connections.
       });
 
       // Register tools (both built-in and custom)
-      // Custom tools are already initialized in customToolRegistry by the code above
+      // All tools are validated and managed by the ToolRegistry
       registerTools(server);
 
       return server;
