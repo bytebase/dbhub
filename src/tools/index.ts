@@ -25,7 +25,7 @@ export function registerTools(server: McpServer): void {
 
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
-    const enabledTools = registry.getToolsForSource(sourceId);
+    const enabledTools = registry.getEnabledToolConfigs(sourceId);
     const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
     const dbType = sourceConfig.type;
     const isDefault = sourceIds[0] === sourceId;
