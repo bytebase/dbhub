@@ -12,7 +12,7 @@ title: "Introduction"
   src="/images/logo/full-dark.svg"
 />
 
-DBHub is a universal database gateway that implements the MCP (Model Context Protocol) server interface. It enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
+DBHub is a minimal database MCP server that implements the Model Context Protocol server interface. This lightweight gateway enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
 
 ```
  +------------------+    +--------------+    +------------------+
@@ -41,7 +41,8 @@ PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite.
 
 DBHub brings powerful database capabilities to AI coding assistants:
 
-- **Universal Gateway**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
+- **Minimal Design**: Just two general MCP tools (execute_sql, search_objects) for token-efficient operations, plus support for custom tools
+- **Multi-Database Support**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
 - **Secure Access**: Read-only mode, SSH tunneling, and SSL/TLS encryption support
 - **Multi-Database**: Connect to multiple databases simultaneously with TOML configuration
 - **Production-Ready**: Row limiting, lock timeout control, and connection pooling

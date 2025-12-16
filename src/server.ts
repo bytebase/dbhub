@@ -43,7 +43,7 @@ export function generateBanner(version: string, modes: string[] = []): string {
 | |__| | |_) | | | | |_| | |_) |
 |_____/|____/|_| |_|\\__,_|_.__/ 
                                 
-v${version}${modeText} - Universal Database MCP Server
+v${version}${modeText} - Minimal Database MCP Server
 `;
 }
 
