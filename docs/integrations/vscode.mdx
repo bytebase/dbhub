@@ -4,25 +4,54 @@ title: "VS Code"
 
 VS Code has native MCP support through GitHub Copilot.
 
+## Configuration
+
 Create `.vscode/mcp.json` in your project root:
 
-```json .vscode/mcp.json
-{
-  "servers": {
-    "dbhub": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "@bytebase/dbhub",
-        "--transport",
-        "stdio",
-        "--dsn",
-        "postgres://user:password@localhost:5432/dbname"
-      ]
+<Tabs>
+  <Tab title="Stdio (Local)">
+    For local database connections, use stdio transport:
+
+    ```json .vscode/mcp.json
+    {
+      "servers": {
+        "dbhub": {
+          "type": "stdio",
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
     }
-  }
-}
-```
+    ```
+  </Tab>
+
+  <Tab title="HTTP (Remote)">
+    For remote or shared database servers, use HTTP transport:
+
+    ```json .vscode/mcp.json
+    {
+      "servers": {
+        "dbhub": {
+          "type": "http",
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+
+    This connects to a DBHub server running with HTTP transport:
+
+    ```bash
+    npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+    ```
+  </Tab>
+</Tabs>
 
 ## Using Input Variables
 

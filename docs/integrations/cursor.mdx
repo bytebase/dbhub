@@ -17,8 +17,10 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
 ## Manual Configuration
 
 <Tabs>
-  <Tab title="MacOS/Linux">
-    Edit `~/.cursor/mcp.json`:
+  <Tab title="Stdio (Local)">
+    For local database connections, use stdio transport:
+
+    **MacOS/Linux** - Edit `~/.cursor/mcp.json`:
 
     ```json ~/.cursor/mcp.json
     {
@@ -36,10 +38,8 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
       }
     }
     ```
-  </Tab>
 
-  <Tab title="Windows">
-    Edit `%USERPROFILE%\.cursor\mcp.json`:
+    **Windows** - Edit `%USERPROFILE%\.cursor\mcp.json`:
 
     ```json %USERPROFILE%\.cursor\mcp.json
     {
@@ -56,6 +56,40 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
         }
       }
     }
+    ```
+  </Tab>
+
+  <Tab title="HTTP (Remote)">
+    For remote or shared database servers, use HTTP transport:
+
+    **MacOS/Linux** - Edit `~/.cursor/mcp.json`:
+
+    ```json ~/.cursor/mcp.json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+
+    **Windows** - Edit `%USERPROFILE%\.cursor\mcp.json`:
+
+    ```json %USERPROFILE%\.cursor\mcp.json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+
+    This connects to a DBHub server running with HTTP transport:
+
+    ```bash
+    npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
     ```
   </Tab>
 </Tabs>
