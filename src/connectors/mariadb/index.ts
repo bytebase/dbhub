@@ -67,6 +67,17 @@ class MariadbDSNParser implements DSNParser {
         // Add other parameters as needed
       });
 
+      // Auto-detect AWS IAM authentication tokens and ensure SSL is enabled
+      // AWS RDS IAM tokens are ~800+ character strings containing "X-Amz-Credential"
+      // MariaDB connector includes mysql_clear_password in default permitted plugins,
+      // but AWS IAM authentication requires SSL
+      if (url.password && url.password.includes("X-Amz-Credential")) {
+        // AWS IAM authentication requires SSL, enable if not already configured
+        if (config.ssl === undefined) {
+          config.ssl = { rejectUnauthorized: false };
+        }
+      }
+
       return config;
     } catch (error) {
       throw new Error(
