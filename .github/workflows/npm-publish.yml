@@ -51,13 +51,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Set up Node.js with npm registry configuration
+      # Set up Node.js (no registry-url needed for OIDC trusted publishing)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: "https://registry.npmjs.org/" # Use the public npm registry
-          scope: "@bytebase"                          # Set the npm scope for publishing
+
+      # Upgrade npm to latest for OIDC trusted publishing support (requires npm 11.5+)
+      - name: Upgrade npm
+        run: |
+          npm install -g npm@latest
+          echo "npm version: $(npm --version)"
 
       # Install pnpm for faster and more reliable package management
       - name: Install pnpm
@@ -145,13 +149,15 @@ jobs:
           fi
 
       # Publish the package to npm using OIDC trusted publishing
+      # Note: Must use npm (not pnpm) for OIDC - feature is implemented in npm CLI 11.5+
       - name: Publish to npm
         if: env.SHOULD_PUBLISH == 'true'
         run: |
           echo "Publishing @bytebase/dbhub@${{ env.PACKAGE_VERSION }} with tag ${{ env.NPM_TAG }}..."
-          # --provenance generates signed provenance attestation via OIDC
+          echo "npm version: $(npm --version)"
+          # --provenance enables OIDC authentication and signed attestation
           # No NODE_AUTH_TOKEN needed - authentication via GitHub OIDC
-          pnpm publish --no-git-checks --access public --tag ${{ env.NPM_TAG }} --provenance
+          npm publish --access public --tag ${{ env.NPM_TAG }} --provenance
           echo "✅ Successfully published to npm with provenance!"
           
       # Display a message when skipping publication
