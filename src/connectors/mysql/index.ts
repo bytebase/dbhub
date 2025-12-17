@@ -70,6 +70,20 @@ class MySQLDSNParser implements DSNParser {
         config.connectTimeout = connectionTimeoutSeconds * 1000;
       }
 
+      // Auto-detect AWS IAM authentication tokens and configure cleartext plugin
+      // AWS RDS IAM tokens are ~800+ character strings containing "X-Amz-Credential"
+      if (url.password && url.password.includes("X-Amz-Credential")) {
+        config.authPlugins = {
+          mysql_clear_password: () => () => {
+            return Buffer.from(url.password + "\0");
+          }
+        };
+        // AWS IAM authentication requires SSL, enable if not already configured
+        if (config.ssl === undefined) {
+          config.ssl = { rejectUnauthorized: false };
+        }
+      }
+
       return config;
     } catch (error) {
       throw new Error(
