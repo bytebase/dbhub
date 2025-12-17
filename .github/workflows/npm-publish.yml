@@ -30,7 +30,7 @@ on:
       tag:
         description: "NPM tag (e.g., latest, dev)"
         required: false
-        default: "dev"
+        default: "latest"
 
   # Automatic trigger when package.json changes in main branch
   push:
