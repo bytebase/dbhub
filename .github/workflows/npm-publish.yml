@@ -9,6 +9,13 @@
 #    - Detects if the version has changed
 #    - Automatically determines the appropriate npm tag based on version format
 #    - Skips publishing if the version already exists on npm
+#
+# Authentication: Uses OIDC trusted publishing (no npm tokens required)
+# Prerequisites: Configure trusted publisher at https://www.npmjs.com/package/@bytebase/dbhub/access
+#   - Organization/User: bytebase (or your npm org)
+#   - Repository: dbhub
+#   - Workflow filename: npm-publish.yml
+#   - Environment: (leave empty unless using GitHub environments)
 
 name: Publish to npm
 
@@ -24,7 +31,7 @@ on:
         description: "NPM tag (e.g., latest, dev)"
         required: false
         default: "dev"
-  
+
   # Automatic trigger when package.json changes in main branch
   push:
     branches:
@@ -35,6 +42,10 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    # Required permissions for OIDC trusted publishing
+    permissions:
+      contents: read
+      id-token: write
     steps:
       # Checkout the repository to get access to the code
       - name: Checkout repository
@@ -133,16 +144,15 @@ jobs:
             echo "Skipping package.json modifications as we won't be publishing"
           fi
 
-      # Publish the package to npm if conditions are met
+      # Publish the package to npm using OIDC trusted publishing
       - name: Publish to npm
         if: env.SHOULD_PUBLISH == 'true'
         run: |
           echo "Publishing @bytebase/dbhub@${{ env.PACKAGE_VERSION }} with tag ${{ env.NPM_TAG }}..."
-          pnpm publish --no-git-checks --access public --tag ${{ env.NPM_TAG }}
-          echo "✅ Successfully published to npm!"
-        env:
-          # Uses NPM_TOKEN from repository secrets for authentication
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # --provenance generates signed provenance attestation via OIDC
+          # No NODE_AUTH_TOKEN needed - authentication via GitHub OIDC
+          pnpm publish --no-git-checks --access public --tag ${{ env.NPM_TAG }} --provenance
+          echo "✅ Successfully published to npm with provenance!"
           
       # Display a message when skipping publication
       - name: Skip publishing
