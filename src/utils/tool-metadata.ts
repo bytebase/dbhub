@@ -5,6 +5,7 @@ import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
 import { getToolRegistry } from "../tools/registry.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
+import { isMinimalDescriptionsMode } from "../config/env.js";
 
 /**
  * Tool parameter definition for API responses
@@ -85,20 +86,33 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
   const dbType = sourceConfig.type;
+  const isMinimal = isMinimalDescriptionsMode();
 
-  // Determine tool name based on single vs multi-source configuration
-  const toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
+  // In minimal mode, always use consolidated tool name
+  // Otherwise, use source-specific names for multi-source setups
+  const toolName = isMinimal
+    ? "execute_sql"
+    : sourceId === "default"
+      ? "execute_sql"
+      : `execute_sql_${normalizeSourceId(sourceId)}`;
 
   // Determine title (human-readable display name)
   const isDefault = sourceIds[0] === sourceId;
-  const title = isDefault
-    ? `Execute SQL (${dbType})`
-    : `Execute SQL on ${sourceId} (${dbType})`;
+  const title = isMinimal
+    ? "Execute SQL"
+    : isDefault
+      ? `Execute SQL (${dbType})`
+      : `Execute SQL on ${sourceId} (${dbType})`;
 
-  // Determine description with more context
-  const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
-  const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
-  const description = `Execute SQL queries on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}${readonlyNote}${maxRowsNote}`;
+  // Determine description - minimal or full
+  let description: string;
+  if (isMinimal) {
+    description = "Execute SQL queries on a database";
+  } else {
+    const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
+    const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
+    description = `Execute SQL queries on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}${readonlyNote}${maxRowsNote}`;
+  }
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -113,10 +127,18 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     openWorldHint: false,
   };
 
+  // In minimal mode with multiple sources, add database parameter to schema
+  const schema = isMinimal && sourceIds.length > 1
+    ? {
+        ...executeSqlSchema,
+        database: z.enum(sourceIds as [string, ...string[]]).describe("Database to execute the query on"),
+      }
+    : executeSqlSchema;
+
   return {
     name: toolName,
     description,
-    schema: executeSqlSchema,
+    schema,
     annotations,
   };
 }
@@ -126,23 +148,44 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
  * @param sourceId - The source ID to get tool metadata for
  * @param dbType - Database type
  * @param isDefault - Whether this is the default source
- * @returns Tool name, description, and annotations
+ * @returns Tool name, description, title, and optional database schema
  */
 export function getSearchObjectsMetadata(
   sourceId: string,
   dbType: string,
   isDefault: boolean
-): { name: string; description: string; title: string } {
-  const toolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
-  const title = isDefault
-    ? `Search Database Objects (${dbType})`
-    : `Search Database Objects on ${sourceId} (${dbType})`;
-  const description = `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}. Supports SQL LIKE patterns (default: '%' for all), filtering, and token-efficient progressive disclosure.`;
+): { name: string; description: string; title: string; databaseSchema?: z.ZodEnum<[string, ...string[]]> } {
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const isMinimal = isMinimalDescriptionsMode();
+
+  // In minimal mode, always use consolidated tool name
+  const toolName = isMinimal
+    ? "search_objects"
+    : sourceId === "default"
+      ? "search_objects"
+      : `search_objects_${normalizeSourceId(sourceId)}`;
+
+  const title = isMinimal
+    ? "Search Database Objects"
+    : isDefault
+      ? `Search Database Objects (${dbType})`
+      : `Search Database Objects on ${sourceId} (${dbType})`;
+
+  // Minimal vs full description
+  const description = isMinimal
+    ? "Search and list database objects (schemas, tables, columns, procedures, indexes)"
+    : `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}. Supports SQL LIKE patterns (default: '%' for all), filtering, and token-efficient progressive disclosure.`;
+
+  // In minimal mode with multiple sources, provide database schema for the caller to add
+  const databaseSchema = isMinimal && sourceIds.length > 1
+    ? z.enum(sourceIds as [string, ...string[]]).describe("Database to search in")
+    : undefined;
 
   return {
     name: toolName,
     description,
     title,
+    databaseSchema,
   };
 }
 
