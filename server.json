@@ -6,12 +6,12 @@
     "url": "https://github.com/bytebase/dbhub",
     "source": "github"
   },
-  "version": "0.13.1",
+  "version": "0.13.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@bytebase/dbhub",
-      "version": "0.13.1",
+      "version": "0.13.2",
       "transport": {
         "type": "stdio"
       },
