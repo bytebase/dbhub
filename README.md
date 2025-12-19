@@ -90,31 +90,18 @@ See [Multi-Database Configuration](https://dbhub.ai/config/multi-database) for c
 
 ## Development
 
-1. Install dependencies:
+```bash
+# Install dependencies
+pnpm install
 
-   ```bash
-   pnpm install
-   ```
+# Run in development mode
+pnpm dev
 
-1. Run in development mode:
+# Build and run for production
+pnpm build && pnpm start --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+```
 
-   ```bash
-   pnpm dev
-   ```
-
-1. Build for production:
-   ```bash
-   pnpm build
-   pnpm start --transport stdio --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
-   ```
-
-### Testing
-
-See [TESTING.md](.claude/skills/testing/SKILL.md).
-
-### Debug
-
-See [Debug](https://dbhub.ai/config/debug).
+See [Testing](.claude/skills/testing/SKILL.md) and [Debug](https://dbhub.ai/config/debug).
 
 ## Contributors
 
