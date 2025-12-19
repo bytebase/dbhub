@@ -156,15 +156,6 @@ title: "Server Options"
   dsn = "postgres://user:pass@localhost:5432/mydb"
   query_timeout = 30  # 30 seconds
   ```
-
-  **Behavior by database:**
-  | Database | Implementation |
-  |----------|---------------|
-  | PostgreSQL | Client-side timeout via `query_timeout` option |
-  | MySQL | Per-query timeout via `timeout` option |
-  | MariaDB | Pool-level `queryTimeout` (requires MariaDB ≥10.1.2) |
-  | SQL Server | Request timeout via `requestTimeout` option |
-  | SQLite | Not supported (silently ignored) |
 </ParamField>
 
 ## General
