@@ -26,7 +26,7 @@ export const searchDatabaseObjectsSchema = {
     .string()
     .optional()
     .default("%")
-    .describe("LIKE pattern (% = any, _ = one char). Default: %"),
+    .describe("LIKE pattern (% = any chars, _ = one char). Default: %"),
   schema: z
     .string()
     .optional()
