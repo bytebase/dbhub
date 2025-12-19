@@ -116,6 +116,7 @@ export class MySQLConnector implements Connector {
   private pool: mysql.Pool | null = null;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
+  private queryTimeoutMs?: number;
 
   getId(): string {
     return this.sourceId;
@@ -129,6 +130,11 @@ export class MySQLConnector implements Connector {
     try {
       const connectionOptions = await this.dsnParser.parse(dsn, config);
       this.pool = mysql.createPool(connectionOptions);
+
+      // Store query timeout for per-query application
+      if (config?.queryTimeoutSeconds !== undefined) {
+        this.queryTimeoutMs = config.queryTimeoutSeconds * 1000;
+      }
 
       // Test the connection
       const [rows] = await this.pool.query("SELECT 1");
@@ -526,11 +532,11 @@ export class MySQLConnector implements Connector {
       }
 
       // Use dedicated connection with multipleStatements: true support
-      // Pass parameters if provided
+      // Pass parameters if provided, with optional query timeout
       let results: any;
       if (parameters && parameters.length > 0) {
         try {
-          results = await conn.query(processedSQL, parameters);
+          results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs }, parameters);
         } catch (error) {
           console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
           console.error(`[MySQL executeSQL] SQL: ${processedSQL}`);
@@ -538,7 +544,7 @@ export class MySQLConnector implements Connector {
           throw error;
         }
       } else {
-        results = await conn.query(processedSQL);
+        results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs });
       }
 
       // MySQL2 returns results in format [rows, fields]

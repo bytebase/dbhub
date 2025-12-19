@@ -120,8 +120,9 @@ export class ConnectorManager {
     if (source.connection_timeout !== undefined) {
       config.connectionTimeoutSeconds = source.connection_timeout;
     }
-    if (connector.id === 'sqlserver' && source.request_timeout !== undefined) {
-      config.requestTimeoutSeconds = source.request_timeout;
+    // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
+    if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
+      config.queryTimeoutSeconds = source.query_timeout;
     }
     // Pass readonly flag for SDK-level enforcement (PostgreSQL, SQLite)
     if (source.readonly !== undefined) {

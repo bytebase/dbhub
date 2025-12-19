@@ -401,53 +401,53 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       });
     });
 
-    describe('request_timeout validation', () => {
-      it('should accept valid request_timeout', () => {
+    describe('query_timeout validation', () => {
+      it('should accept valid query_timeout', () => {
         const tomlContent = `
 [[sources]]
 id = "test_db"
-dsn = "sqlserver://user:pass@localhost:1433/testdb"
-request_timeout = 120
+dsn = "postgres://user:pass@localhost:5432/testdb"
+query_timeout = 120
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
         const result = loadTomlConfig();
 
         expect(result).toBeTruthy();
-        expect(result?.sources[0].request_timeout).toBe(120);
+        expect(result?.sources[0].query_timeout).toBe(120);
       });
 
-      it('should throw error for negative request_timeout', () => {
+      it('should throw error for negative query_timeout', () => {
         const tomlContent = `
 [[sources]]
 id = "test_db"
-dsn = "sqlserver://user:pass@localhost:1433/testdb"
-request_timeout = -60
+dsn = "postgres://user:pass@localhost:5432/testdb"
+query_timeout = -60
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-        expect(() => loadTomlConfig()).toThrow('invalid request_timeout');
+        expect(() => loadTomlConfig()).toThrow('invalid query_timeout');
       });
 
-      it('should throw error for zero request_timeout', () => {
+      it('should throw error for zero query_timeout', () => {
         const tomlContent = `
 [[sources]]
 id = "test_db"
-dsn = "sqlserver://user:pass@localhost:1433/testdb"
-request_timeout = 0
+dsn = "postgres://user:pass@localhost:5432/testdb"
+query_timeout = 0
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-        expect(() => loadTomlConfig()).toThrow('invalid request_timeout');
+        expect(() => loadTomlConfig()).toThrow('invalid query_timeout');
       });
 
-      it('should accept both connection_timeout and request_timeout', () => {
+      it('should accept both connection_timeout and query_timeout', () => {
         const tomlContent = `
 [[sources]]
 id = "test_db"
-dsn = "sqlserver://user:pass@localhost:1433/testdb"
+dsn = "postgres://user:pass@localhost:5432/testdb"
 connection_timeout = 30
-request_timeout = 120
+query_timeout = 120
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -455,7 +455,7 @@ request_timeout = 120
 
         expect(result).toBeTruthy();
         expect(result?.sources[0].connection_timeout).toBe(30);
-        expect(result?.sources[0].request_timeout).toBe(120);
+        expect(result?.sources[0].query_timeout).toBe(120);
       });
     });
   });

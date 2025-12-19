@@ -23,7 +23,7 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 export class SQLServerDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<sql.config> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
-    const requestTimeoutSeconds = config?.requestTimeoutSeconds;
+    const queryTimeoutSeconds = config?.queryTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -76,8 +76,8 @@ export class SQLServerDSNParser implements DSNParser {
           ...(connectionTimeoutSeconds !== undefined && {
             connectTimeout: connectionTimeoutSeconds * 1000
           }),
-          ...(requestTimeoutSeconds !== undefined && {
-            requestTimeout: requestTimeoutSeconds * 1000
+          ...(queryTimeoutSeconds !== undefined && {
+            requestTimeout: queryTimeoutSeconds * 1000
           }),
           instanceName: options.instanceName, // Add named instance support
         },
