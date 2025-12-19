@@ -81,11 +81,6 @@ export interface components {
              */
             user?: string;
             /**
-             * @description Whether this is the default data source
-             * @example true
-             */
-            is_default: boolean;
-            /**
              * @description Whether the connection is restricted to read-only operations
              * @example true
              */
@@ -230,7 +225,6 @@ export interface operations {
                      *       "port": 5432,
                      *       "database": "production",
                      *       "user": "dbuser",
-                     *       "is_default": true,
                      *       "readonly": true,
                      *       "max_rows": 1000
                      *     }

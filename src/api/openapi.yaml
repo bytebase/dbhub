@@ -36,7 +36,6 @@ paths:
                       port: 5432
                       database: production
                       user: dbuser
-                      is_default: true
                       readonly: true
                       max_rows: 1000
                     - id: staging_mysql
@@ -45,7 +44,6 @@ paths:
                       port: 3306
                       database: staging
                       user: root
-                      is_default: false
                       readonly: false
                 emptySources:
                   summary: No sources configured
@@ -78,7 +76,6 @@ paths:
                 port: 5432
                 database: production
                 user: dbuser
-                is_default: true
                 readonly: true
                 max_rows: 1000
         '404':
@@ -98,7 +95,6 @@ components:
       required:
         - id
         - type
-        - is_default
         - tools
       properties:
         id:
@@ -126,10 +122,6 @@ components:
           type: string
           description: Database username (not present for SQLite)
           example: dbuser
-        is_default:
-          type: boolean
-          description: Whether this is the default data source
-          example: true
         readonly:
           type: boolean
           description: Whether the connection is restricted to read-only operations

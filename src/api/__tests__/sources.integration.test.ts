@@ -80,15 +80,6 @@ describe('Data Sources API Integration Tests', () => {
       expect(ids).toEqual(['readonly_limited', 'writable_limited', 'writable_unlimited']);
     });
 
-    it('should mark first source as default', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources`);
-      const sources = (await response.json()) as DataSource[];
-
-      expect(sources[0].is_default).toBe(true);
-      expect(sources[1].is_default).toBe(false);
-      expect(sources[2].is_default).toBe(false);
-    });
-
     it('should include database type for all sources', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
@@ -203,20 +194,6 @@ describe('Data Sources API Integration Tests', () => {
       });
     });
 
-    it('should mark default source in tool description', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources`);
-      const sources = (await response.json()) as DataSource[];
-
-      const defaultSource = sources.find(s => s.is_default);
-      expect(defaultSource).toBeDefined();
-      expect(defaultSource?.tools[0].description).toContain('(default)');
-
-      const nonDefaultSources = sources.filter(s => !s.is_default);
-      nonDefaultSources.forEach((source) => {
-        expect(source.tools[0].description).not.toContain('(default)');
-      });
-    });
-
     it('should include sql parameter in execute_sql tool', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
@@ -241,18 +218,16 @@ describe('Data Sources API Integration Tests', () => {
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('readonly_limited');
       expect(source.type).toBe('sqlite');
-      expect(source.is_default).toBe(true);
       expect(source.readonly).toBe(true);
       expect(source.max_rows).toBe(100);
     });
 
-    it('should return correct data for non-default source', async () => {
+    it('should return correct data for another source', async () => {
       const response = await fetch(`${BASE_URL}/api/sources/writable_limited`);
       expect(response.status).toBe(200);
 
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('writable_limited');
-      expect(source.is_default).toBe(false);
       expect(source.readonly).toBe(false);
       expect(source.max_rows).toBe(500);
     });

@@ -26,19 +26,16 @@ export function registerTools(server: McpServer): void {
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
     const enabledTools = registry.getEnabledToolConfigs(sourceId);
-    const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-    const dbType = sourceConfig.type;
-    const isDefault = sourceIds[0] === sourceId;
 
     for (const toolConfig of enabledTools) {
       // Register based on tool name (built-in vs custom)
       if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
-        registerExecuteSqlTool(server, sourceId, dbType);
+        registerExecuteSqlTool(server, sourceId);
       } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
-        registerSearchObjectsTool(server, sourceId, dbType, isDefault);
+        registerSearchObjectsTool(server, sourceId);
       } else {
         // Custom tool
-        registerCustomTool(server, toolConfig, dbType);
+        registerCustomTool(server, sourceId, toolConfig);
       }
     }
   }
@@ -49,8 +46,7 @@ export function registerTools(server: McpServer): void {
  */
 function registerExecuteSqlTool(
   server: McpServer,
-  sourceId: string,
-  dbType: string
+  sourceId: string
 ): void {
   const metadata = getExecuteSqlMetadata(sourceId);
   server.registerTool(
@@ -69,11 +65,9 @@ function registerExecuteSqlTool(
  */
 function registerSearchObjectsTool(
   server: McpServer,
-  sourceId: string,
-  dbType: string,
-  isDefault: boolean
+  sourceId: string
 ): void {
-  const metadata = getSearchObjectsMetadata(sourceId, dbType, isDefault);
+  const metadata = getSearchObjectsMetadata(sourceId);
 
   server.registerTool(
     metadata.name,
@@ -97,9 +91,12 @@ function registerSearchObjectsTool(
  */
 function registerCustomTool(
   server: McpServer,
-  toolConfig: ToolConfig,
-  dbType: string
+  sourceId: string,
+  toolConfig: ToolConfig
 ): void {
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const dbType = sourceConfig.type;
+
   const isReadOnly = isReadOnlySQL(toolConfig.statement!, dbType);
   const zodSchema = buildZodSchemaFromParameters(toolConfig.parameters);
 

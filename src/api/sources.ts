@@ -13,10 +13,7 @@ type ErrorResponse = components["schemas"]["Error"];
  * Transform a SourceConfig into an API DataSource response
  * Excludes sensitive fields like passwords and SSH credentials
  */
-function transformSourceConfig(
-  source: SourceConfig,
-  isDefault: boolean
-): DataSource {
+function transformSourceConfig(source: SourceConfig): DataSource {
   // Determine type from explicit config or infer from DSN
   if (!source.type && source.dsn) {
     const inferredType = getDatabaseTypeFromDSN(source.dsn);
@@ -32,7 +29,6 @@ function transformSourceConfig(
   const dataSource: DataSource = {
     id: source.id,
     type: source.type,
-    is_default: isDefault,
   };
 
   // Add connection details (excluding password)
@@ -89,9 +85,8 @@ export function listSources(req: Request, res: Response): void {
     const sourceConfigs = ConnectorManager.getAllSourceConfigs();
 
     // Transform configs to API response format
-    const sources: DataSource[] = sourceConfigs.map((config, index) => {
-      const isDefault = index === 0; // First source is default
-      return transformSourceConfig(config, isDefault);
+    const sources: DataSource[] = sourceConfigs.map((config) => {
+      return transformSourceConfig(config);
     });
 
     res.json(sources);
@@ -111,7 +106,6 @@ export function listSources(req: Request, res: Response): void {
 export function getSource(req: Request, res: Response): void {
   try {
     const sourceId = req.params.sourceId;
-    const sourceIds = ConnectorManager.getAvailableSourceIds();
 
     // Get source config - will be null if source doesn't exist
     const sourceConfig = ConnectorManager.getSourceConfig(sourceId);
@@ -124,11 +118,8 @@ export function getSource(req: Request, res: Response): void {
       return;
     }
 
-    // Check if this is the default source
-    const isDefault = sourceIds[0] === sourceId;
-
     // Transform and return
-    const dataSource = transformSourceConfig(sourceConfig, isDefault);
+    const dataSource = transformSourceConfig(sourceConfig);
     res.json(dataSource);
   } catch (error) {
     console.error(`Error getting source ${req.params.sourceId}:`, error);
