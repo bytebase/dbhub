@@ -122,7 +122,6 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   FROM dept_manager dm
 #   JOIN employee e ON dm.emp_no = e.emp_no
 #   JOIN department d ON dm.dept_no = d.dept_no
-#   WHERE dm.to_date = '9999-01-01'
 #   ORDER BY d.dept_name
 # """
 
@@ -137,7 +136,6 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   JOIN salary s ON e.emp_no = s.emp_no
 #   WHERE s.amount >= $1
 #     AND ($2::int IS NULL OR s.amount <= $2)
-#     AND s.to_date = '9999-01-01'
 #   ORDER BY s.amount DESC
 #   LIMIT 100
 # """
