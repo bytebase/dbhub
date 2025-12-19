@@ -243,9 +243,9 @@ See documentation for more details on configuring database connections.
           console.error('   Backend API: http://localhost:8080');
           console.error('');
         } else {
-          console.error(`Admin console at http://0.0.0.0:${port}/`);
+          console.error(`Admin console at http://localhost:${port}/`);
         }
-        console.error(`MCP server endpoint at http://0.0.0.0:${port}/mcp`);
+        console.error(`MCP server endpoint at http://localhost:${port}/mcp`);
       });
     } else {
       // STDIO transport: Pure MCP-over-stdio, no HTTP server
