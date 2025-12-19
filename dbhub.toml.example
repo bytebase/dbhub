@@ -1,274 +1,179 @@
-# DBHub Multi-Database Configuration Example
-# Save this file as 'dbhub.toml' in your project directory
-# Or use '--config=path/to/your/config.toml' to specify a custom location
+# DBHub Multi-Database Configuration
+#
+# Documentation: https://dbhub.ai/config/multi-database
+#
+# Quick Start:
+#   1. Copy this file to 'dbhub.toml' in your project directory
+#   2. Uncomment and edit the sources you need
+#   3. Delete or comment out sources you don't need
+#
+# Usage:
+#   pnpm run dev                         # Uses ./dbhub.toml
+#   pnpm run dev -- --config=/path/to/config.toml
 
-# Define multiple database sources using [[sources]] array syntax
-# Each source requires a unique 'id' field for identification
+# ============================================================================
+# POSTGRESQL EXAMPLES (Local → Dev → Prod progression)
+# ============================================================================
 
-## Example 1: PostgreSQL with DSN (recommended)
+# Local PostgreSQL - DSN format (typical Docker/local dev setup)
 [[sources]]
-id = "prod_pg"  # Required: Unique identifier
-dsn = "postgres://user:password@localhost:5432/production?sslmode=require"  # Required: Connection string
-connection_timeout = 30  # Optional: Connection timeout in seconds (default: driver-specific)
+id = "local_pg"
+dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 
-## Example 2: MySQL with individual parameters
-[[sources]]
-id = "staging_mysql"  # Required: Unique identifier
-type = "mysql"  # Required when using individual parameters (not DSN)
-host = "localhost"  # Required when using individual parameters
-port = 3306  # Optional: Uses default if not specified (MySQL default: 3306)
-database = "staging"  # Required: Database name
-user = "root"  # Required: Database username
-password = "secret"  # Required: Database password
-connection_timeout = 60  # Optional: Connection timeout in seconds (useful for high-latency connections)
+# Local PostgreSQL - Individual parameters (use when password contains special characters like @, :, /)
+# [[sources]]
+# id = "local_pg"
+# type = "postgres"
+# host = "localhost"
+# port = 5432
+# database = "myapp"
+# user = "postgres"
+# password = "p@ss:word/123"
 
-## Example 3: MariaDB with SSH tunnel
-[[sources]]
-id = "remote_mariadb"  # Required: Unique identifier
-dsn = "mariadb://dbuser:dbpass@10.0.0.5:3306/mydb"  # Required: Connection string (target DB behind SSH tunnel)
-ssh_host = "bastion.example.com"  # Optional: SSH server hostname (required if using SSH tunnel)
-ssh_port = 22  # Optional: SSH server port (default: 22)
-ssh_user = "ubuntu"  # Optional: SSH username (required if using SSH tunnel)
-ssh_key = "~/.ssh/id_rsa"  # Optional: Path to private key file (use ssh_key OR ssh_password)
-# ssh_passphrase = "key_passphrase"  # Optional: Passphrase for encrypted private key
-# ssh_password = "ssh_password"  # Optional: SSH password (use instead of ssh_key for password auth)
+# Development PostgreSQL (shared dev server)
+# [[sources]]
+# id = "dev_pg"
+# dsn = "postgres://dev_user:dev_password@dev-db.internal.company.com:5432/myapp_dev?sslmode=require"
+# connection_timeout = 30
 
-## Example 4: SQL Server with timeouts
-[[sources]]
-id = "analytics_sqlserver"  # Required: Unique identifier
-type = "sqlserver"  # Required when using individual parameters
-host = "sqlserver.example.com"  # Required when using individual parameters
-port = 1433  # Optional: Uses default if not specified (SQL Server default: 1433)
-database = "analytics"  # Required: Database name
-user = "sa"  # Required: Database username
-password = "YourStrong@Passw0rd"  # Required: Database password
-connection_timeout = 30  # Optional: Connection establishment timeout in seconds (default: 15s)
-request_timeout = 120    # Optional: Query execution timeout in seconds (SQL Server only, default: 15s)
-# instanceName = "INSTANCE1"  # Optional: SQL Server named instance (e.g., SERVER\INSTANCE1)
+# Production PostgreSQL (behind SSH bastion)
+# [[sources]]
+# id = "prod_pg"
+# dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
+# connection_timeout = 30
+# # SSH tunnel configuration
+# ssh_host = "bastion.company.com"
+# ssh_port = 22
+# ssh_user = "deploy"
+# ssh_key = "~/.ssh/id_ed25519"
+# # ssh_passphrase = "your_key_passphrase"  # If key is encrypted
 
-## Example 5: SQLite local file
-[[sources]]
-id = "local_sqlite"  # Required: Unique identifier
-type = "sqlite"  # Required when using individual parameters
-database = "/path/to/database.db"  # Required: Path to SQLite database file
+# ============================================================================
+# MYSQL (Local development)
+# ============================================================================
 
-## Example 6: SQLite in-memory (for testing)
-[[sources]]
-id = "test_db"  # Required: Unique identifier
-dsn = "sqlite:///:memory:"  # Required: Connection string (in-memory database)
+# [[sources]]
+# id = "local_mysql"
+# dsn = "mysql://root:mysql@localhost:3306/myapp"
 
-# Connection Parameters Reference:
-# -------------------------------
+# ============================================================================
+# MARIADB (Local development)
+# ============================================================================
+
+# [[sources]]
+# id = "local_mariadb"
+# dsn = "mariadb://root:mariadb@localhost:3306/myapp"
+
+# ============================================================================
+# SQL SERVER (Local development)
+# ============================================================================
+
+# [[sources]]
+# id = "local_sqlserver"
+# dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp"
+# # For named instances, use:
+# # dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp?instanceName=SQLEXPRESS"
+# request_timeout = 60  # SQL Server-specific: query timeout in seconds
+
+# ============================================================================
+# SQLITE (Local file or in-memory)
+# ============================================================================
+
+# File-based SQLite
+# [[sources]]
+# id = "local_sqlite"
+# dsn = "sqlite:///path/to/database.db"
+
+# In-memory SQLite (great for testing)
+# [[sources]]
+# id = "memory_sqlite"
+# dsn = "sqlite:///:memory:"
+
+# ============================================================================
+# TOOL CONFIGURATION (Optional)
+# ============================================================================
 #
-# REQUIRED FIELDS:
-# ----------------
-#   - id: Unique identifier for this database source (string)
-#
-#   AND one of:
-#     Option A: DSN (connection string)
-#       - dsn: Complete connection string (e.g., "postgres://user:pass@host:port/db")
-#
-#     Option B: Individual connection parameters
-#       - type: Database type (postgres, mysql, mariadb, sqlserver, sqlite) [REQUIRED]
-#       - database: Database name or file path [REQUIRED]
-#       For network databases (postgres, mysql, mariadb, sqlserver):
-#         - host: Database host [REQUIRED]
-#         - user: Database username [REQUIRED]
-#         - password: Database password [REQUIRED]
-#       For SQLite: only database path is needed
-#
-# OPTIONAL FIELDS:
-# ----------------
-# Connection parameters:
-#   - port: Database port (default: 5432 for postgres, 3306 for mysql/mariadb, 1433 for sqlserver)
-#   - instanceName: SQL Server named instance (sqlserver only, e.g., "INSTANCE1")
-#   - connection_timeout: Connection timeout in seconds (default: driver-specific, e.g., 30, 60)
-#   - request_timeout: Query execution timeout in seconds (SQL Server only, default: 15, e.g., 120)
-#
-# SSH tunnel options (all optional, but if using SSH tunnel, ssh_host, ssh_user required):
-#   - ssh_host: SSH server hostname or IP
-#   - ssh_port: SSH server port (default: 22)
-#   - ssh_user: SSH username
-#   - ssh_key: Path to private key file (use ssh_key OR ssh_password, not both)
-#   - ssh_password: SSH password (use instead of ssh_key for password authentication)
-#   - ssh_passphrase: Passphrase for encrypted private key
-#
-# Default Port Numbers:
-# - PostgreSQL: 5432
-# - MySQL/MariaDB: 3306
-# - SQL Server: 1433
-# - SQLite: N/A (file-based)
-#
-# Usage Notes:
-# ------------
-# 1. The first [[sources]] entry is the default database
-# 2. Access specific sources in MCP tools using the source_id parameter
-# 3. Paths starting with ~/ will be expanded to your home directory
-# 4. Passwords in DSN strings will be redacted in logs automatically
-# 5. For security, consider using environment variables for sensitive data
+# By default, all sources get 'execute_sql' and 'search_objects' tools enabled.
+# Use [[tools]] entries to customize behavior per source.
 
-# Built-in Tools Configuration
-# -----------------------------
-# Built-in tools (execute_sql, search_objects) are automatically enabled for all sources
-# unless explicitly configured here. Use [[tools]] entries to customize their behavior.
-#
-# Tool-Specific Options:
-# - execute_sql: Supports 'readonly' (boolean) and 'max_rows' (integer) options
-# - search_objects: No additional options available
-
-## Example: Restrict execute_sql to read-only with row limit on production
-[[tools]]
-name = "execute_sql"
-source = "prod_pg"
-readonly = true      # Only allow SELECT, SHOW, DESCRIBE, EXPLAIN (execute_sql only)
-max_rows = 1000      # Limit results to 1000 rows (execute_sql only)
-
-## Example: Enable search_objects for production (optional - enabled by default)
-[[tools]]
-name = "search_objects"
-source = "prod_pg"
-# Note: search_objects has no additional configuration options
-
-## Example: Unrestricted execute_sql for staging
-[[tools]]
-name = "execute_sql"
-source = "staging_mysql"
-# No readonly or max_rows = full access
-
-## Example: Enable both tools for analytics database
-[[tools]]
-name = "execute_sql"
-source = "analytics_sqlserver"
-max_rows = 2000  # Limit to 2000 rows, but allow writes
-
-[[tools]]
-name = "search_objects"
-source = "analytics_sqlserver"
-
-# Custom Tools
-# ------------
-# Define custom SQL-based tools that are automatically registered as MCP tools.
-# Each tool wraps a parameterized SQL query with validation and type checking.
-
-## Example 1: Simple query with single parameter
-[[tools]]
-name = "get_user_by_email"
-description = "Retrieve user details by email address from the production database"
-source = "prod_pg"  # Required: must reference a valid source ID
-statement = "SELECT id, name, email, created_at FROM users WHERE email = $1"
-
-[[tools.parameters]]
-name = "email"
-type = "string"
-description = "The email address to search for"
-required = true
-
-## Example 2: Query with multiple parameters and default value
-[[tools]]
-name = "search_orders"
-description = "Search orders by customer ID and optional status filter"
-source = "prod_pg"
-statement = "SELECT * FROM orders WHERE customer_id = $1 AND ($2::text IS NULL OR status = $2) ORDER BY created_at DESC"
-
-[[tools.parameters]]
-name = "customer_id"
-type = "integer"
-description = "The customer ID to search orders for"
-required = true
-
-[[tools.parameters]]
-name = "status"
-type = "string"
-description = "Optional order status filter (pending, completed, cancelled)"
-required = false
-allowed_values = ["pending", "completed", "cancelled"]
-
-## Example 3: MySQL tool with positional parameters
+# Production: read-only with row limits for safety
 # [[tools]]
-# name = "get_product_inventory"
-# description = "Get current inventory level for a product"
-# source = "staging_mysql"  # References a MySQL source
-# statement = "SELECT product_id, quantity, last_updated FROM inventory WHERE product_id = ?"
-#
-# [[tools.parameters]]
-# name = "product_id"
-# type = "integer"
-# description = "The product ID to check inventory for"
-# required = true
+# name = "execute_sql"
+# source = "prod_pg"
+# readonly = true
+# max_rows = 1000
 
-## Example 4: Analytics query with multiple integer parameters
+# Development: allow writes but limit rows
 # [[tools]]
-# name = "daily_revenue"
-# description = "Get total revenue for a specific date range"
-# source = "analytics_sqlserver"
-# statement = "SELECT DATE(created_at) as date, SUM(amount) as revenue FROM orders WHERE DATE(created_at) BETWEEN $1 AND $2 GROUP BY DATE(created_at)"
+# name = "execute_sql"
+# source = "dev_pg"
+# max_rows = 5000
+
+# ============================================================================
+# CUSTOM TOOLS (Optional)
+# ============================================================================
+#
+# Define reusable SQL queries as MCP tools. Great for common operations.
+
+# Example: Find user by email (PostgreSQL)
+# [[tools]]
+# name = "find_user_by_email"
+# description = "Look up a user by their email address"
+# source = "prod_pg"
+# statement = "SELECT id, name, email, created_at FROM users WHERE email = $1"
 #
 # [[tools.parameters]]
-# name = "start_date"
+# name = "email"
 # type = "string"
-# description = "Start date in YYYY-MM-DD format"
-# required = true
-#
-# [[tools.parameters]]
-# name = "end_date"
-# type = "string"
-# description = "End date in YYYY-MM-DD format"
+# description = "Email address to search for"
 # required = true
 
-# Tool Configuration Reference:
-# -----------------------------
+# Example: Recent orders with status filter (PostgreSQL)
+# [[tools]]
+# name = "recent_orders"
+# description = "Get recent orders, optionally filtered by status"
+# source = "prod_pg"
+# statement = """
+#   SELECT id, customer_id, status, total, created_at
+#   FROM orders
+#   WHERE created_at > NOW() - INTERVAL '7 days'
+#     AND ($1::text IS NULL OR status = $1)
+#   ORDER BY created_at DESC
+#   LIMIT 100
+# """
 #
-# BUILT-IN TOOLS (execute_sql, search_objects):
-# ----------------------------------------------
-# Convention: Detected by name
-#   - name: Tool name (must be "execute_sql" or "search_objects")
-#   - source: ID of the database source (must exist in [[sources]])
-#   - readonly: Limit execute_sql to read-only operations (default: false)
-#   - max_rows: Maximum rows to return from execute_sql (default: unlimited)
+# [[tools.parameters]]
+# name = "status"
+# type = "string"
+# description = "Filter by order status"
+# required = false
+# allowed_values = ["pending", "processing", "shipped", "delivered", "cancelled"]
+
+# ============================================================================
+# QUICK REFERENCE
+# ============================================================================
 #
-# Note: If no [[tools]] entries are defined for a source, both built-in tools
-# are automatically enabled with default settings (no readonly, no row limit).
+# DSN Formats:
+#   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require
+#   MySQL:       mysql://user:pass@host:3306/database
+#   MariaDB:     mariadb://user:pass@host:3306/database
+#   SQL Server:  sqlserver://user:pass@host:1433/database
+#   SQLite:      sqlite:///path/to/file.db  or  sqlite:///:memory:
 #
-# CUSTOM TOOLS:
-# -------------
-# Convention: Any name except "execute_sql" or "search_objects"
-#   - name: Unique tool identifier (cannot be "execute_sql" or "search_objects")
-#   - description: Natural language description of what the tool does [REQUIRED]
-#   - source: ID of the database source to execute against [REQUIRED]
-#   - statement: SQL query with parameter placeholders [REQUIRED]
-#     * PostgreSQL: Use $1, $2, $3 for parameters
-#     * MySQL/MariaDB: Use ?, ?, ? for parameters
-#     * SQL Server: Use @p1, @p2, @p3 for parameters
-#     * SQLite: Use ?, ?, ? for parameters
+# Default Ports:
+#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433
 #
-# PARAMETER FIELDS (for [[tools.parameters]]):
-# ---------------------------------------------
-#   - name: Parameter identifier (string)
-#   - type: Parameter type (string, integer, float, boolean, array)
-#   - description: Natural language description for the AI agent
-#   - required: Whether parameter is required (default: true)
-#   - default: Default value if not provided (makes parameter optional)
-#   - allowed_values: Array of valid values (creates enum validation)
+# SSH Tunnel Options:
+#   ssh_host, ssh_port (default: 22), ssh_user
+#   ssh_key (path to private key) OR ssh_password
+#   ssh_passphrase (if key is encrypted)
 #
-# VALIDATION RULES:
-# -----------------
-#   1. Built-in tools cannot have description, statement, or parameters fields
-#   2. Custom tools must have description and statement fields
-#   3. Custom tools cannot have readonly or max_rows fields
-#   4. Tool names must be unique per source (can reuse name for different sources)
-#   5. Source ID must reference an existing [[sources]] entry
-#   6. Parameter count in SQL must match number of [[tools.parameters]] entries
-#   7. Parameter syntax must match the connector type
+# Tool Options:
+#   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN
+#   max_rows = 1000    # Limit result set size
 #
-# SECURITY:
-# ---------
-#   - Only parameterized queries are supported (no template interpolation)
-#   - All parameters are validated with Zod schemas at runtime
-#   - SQL injection prevention through native DB parameter binding
-#   - Built-in tool readonly mode enforced at SQL keyword level
-#
-# USAGE:
-# ------
-#   After defining tools in this file, they are automatically registered
-#   when the server starts. They appear in the MCP client's tool list.
-#   Sources without [[tools]] entries get both built-in tools by default.
+# Parameter Placeholders by Database:
+#   PostgreSQL:     $1, $2, $3
+#   MySQL/MariaDB:  ?, ?, ?
+#   SQL Server:     @p1, @p2, @p3
+#   SQLite:         ?, ?, ?
