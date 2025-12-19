@@ -45,11 +45,19 @@
       },
       {
         "tab": "Blog",
+<<<<<<< HEAD
         "pages": [
           "blog/postgres-mcp-server-review-dbhub",
           "blog/postgres-mcp-server-review-supabase-mcp",
           "blog/postgres-mcp-server-review-mcp-toolbox"
         ]
+=======
+<<<<<<< HEAD
+        "pages": ["blog/postgres-mcp-server-review-mcp-toolbox"]
+=======
+        "pages": ["blog/state-of-postgres-mcp-servers-2025"]
+>>>>>>> 8d4421d (docs: blog)
+>>>>>>> d593d1a (docs: blog)
       }
     ]
   },
