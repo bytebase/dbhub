@@ -71,13 +71,13 @@ docker run --rm --init \
 **NPM:**
 
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 ```
 
 **Demo Mode:**
 
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --demo
+npx @bytebase/dbhub@latest --transport http --port 8080 --demo
 ```
 
 See [Server Options](https://dbhub.ai/config/server-options) for all available parameters.

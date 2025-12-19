@@ -114,7 +114,7 @@ title: "Server Options"
   export DB_USER=myuser
   export DB_PASSWORD='p@ss:word#123'
   export DB_NAME=mydb
-  npx @bytebase/dbhub
+  npx @bytebase/dbhub@latest
   ```
 </ParamField>
 
@@ -140,10 +140,10 @@ title: "Server Options"
   ```bash
   # stdio (default) - for Claude Desktop, Claude Code, Cursor
   # No HTTP server started
-  npx @bytebase/dbhub --transport stdio --dsn "..."
+  npx @bytebase/dbhub@latest --transport stdio --dsn "..."
 
   # http - for web clients, admin console, and remote access
-  npx @bytebase/dbhub --transport http --port 8080 --dsn "..."
+  npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "..."
   ```
 </ParamField>
 
@@ -153,7 +153,7 @@ title: "Server Options"
   HTTP server port. Only used when `--transport=http`. Ignored for stdio transport.
 
   ```bash
-  npx @bytebase/dbhub --transport http --port 3000 --dsn "..."
+  npx @bytebase/dbhub@latest --transport http --port 3000 --dsn "..."
   ```
 </ParamField>
 
@@ -165,8 +165,8 @@ title: "Server Options"
   Tools will be named `execute_sql_{id}` for each instance.
 
   ```bash
-  npx @bytebase/dbhub --id prod --dsn "postgres://user:pass@prod-host:5432/db"
-  npx @bytebase/dbhub --id staging --dsn "postgres://user:pass@staging-host:5432/db"
+  npx @bytebase/dbhub@latest --id prod --dsn "postgres://user:pass@prod-host:5432/db"
+  npx @bytebase/dbhub@latest --id staging --dsn "postgres://user:pass@staging-host:5432/db"
   ```
 
   Result: `execute_sql_prod` and `execute_sql_staging` tools
@@ -184,7 +184,7 @@ title: "Server Options"
   Automatically loads `./dbhub.toml` if it exists in the current directory.
 
   ```bash
-  npx @bytebase/dbhub --config ./dbhub.toml --transport http --port 8080
+  npx @bytebase/dbhub@latest --config ./dbhub.toml --transport http --port 8080
   ```
 
   See [Multi-Database Setup](/config/multi-database) for TOML configuration details.
@@ -198,7 +198,7 @@ title: "Server Options"
   The demo database includes tables for employees, departments, salaries, titles, and more.
 
   ```bash
-  npx @bytebase/dbhub --demo --transport http --port 8080
+  npx @bytebase/dbhub@latest --demo --transport http --port 8080
   ```
 </ParamField>
 
@@ -210,7 +210,7 @@ title: "Server Options"
   SSH server hostname for tunnel connection. Can also use SSH config host aliases from `~/.ssh/config`.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "postgres://user:pass@database.internal:5432/mydb" \
     --ssh-host bastion.example.com
   ```
@@ -224,7 +224,7 @@ title: "Server Options"
   SSH server port.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "..." \
     --ssh-host bastion.example.com \
     --ssh-port 2222
@@ -237,7 +237,7 @@ title: "Server Options"
   SSH username.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "..." \
     --ssh-host bastion.example.com \
     --ssh-user ubuntu
@@ -250,7 +250,7 @@ title: "Server Options"
   SSH password for password authentication.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "..." \
     --ssh-host bastion.example.com \
     --ssh-user ubuntu \
@@ -266,7 +266,7 @@ title: "Server Options"
   DBHub automatically tries common default locations (`~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.) if not specified.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "..." \
     --ssh-host bastion.example.com \
     --ssh-user ubuntu \
@@ -280,7 +280,7 @@ title: "Server Options"
   Passphrase for encrypted SSH private key.
 
   ```bash
-  npx @bytebase/dbhub \
+  npx @bytebase/dbhub@latest \
     --dsn "..." \
     --ssh-host bastion.example.com \
     --ssh-user ubuntu \

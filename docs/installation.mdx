@@ -8,20 +8,20 @@ title: "Installation"
   <Tab title="npx">
     ```bash
     # PostgreSQL example
-    npx @bytebase/dbhub \
+    npx @bytebase/dbhub@latest \
       --transport http \
       --port 8080 \
       --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 
     # Or use demo mode for testing
-    npx @bytebase/dbhub --transport http --port 8080 --demo
+    npx @bytebase/dbhub@latest --transport http --port 8080 --demo
     ```
   </Tab>
 
   <Tab title="Global Installation">
     ```bash
     # Install globally
-    npm install -g @bytebase/dbhub
+    npm install -g @bytebase/dbhub@latest
 
     # Run the server
     dbhub --transport http --port 8080 --dsn "postgres://..."

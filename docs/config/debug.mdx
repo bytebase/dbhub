@@ -15,7 +15,7 @@ Start DBHub with HTTP transport:
 
 ```bash
 # Start DBHub with HTTP transport
-npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/mydb"
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/mydb"
 
 # Start the MCP Inspector in another terminal
 npx @modelcontextprotocol/inspector
@@ -51,5 +51,5 @@ Enable verbose logging to troubleshoot issues:
 
 ```bash
 # Set log level to debug
-npx @bytebase/dbhub --transport http --port 8080 --dsn "your-dsn" --log-level debug
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "your-dsn" --log-level debug
 ```

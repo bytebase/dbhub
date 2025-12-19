@@ -9,7 +9,7 @@ title: "Claude Code"
   For local database connections, use stdio transport:
 
   ```bash
-  claude mcp add --transport stdio dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+  claude mcp add --transport stdio dbhub -- npx @bytebase/dbhub@latest --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
   ```
 
   <Note>
@@ -26,7 +26,7 @@ title: "Claude Code"
   This connects to a DBHub server running with HTTP transport:
 
   ```bash
-  npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+  npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
   ```
   </Tab>
 </Tabs>
@@ -44,7 +44,7 @@ For project-specific database connections shared with your team, create `.mcp.js
         "type": "stdio",
         "command": "npx",
         "args": [
-          "@bytebase/dbhub",
+          "@bytebase/dbhub@latest",
           "--transport",
           "stdio",
           "--dsn",
@@ -64,7 +64,7 @@ For project-specific database connections shared with your team, create `.mcp.js
         "type": "stdio",
         "command": "npx",
         "args": [
-          "@bytebase/dbhub",
+          "@bytebase/dbhub@latest",
           "--transport",
           "stdio",
           "--dsn",
@@ -95,7 +95,7 @@ For project-specific database connections shared with your team, create `.mcp.js
 For personal configuration across all projects, add to your user scope:
 
 ```bash
-claude mcp add --scope user dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+claude mcp add --scope user dbhub -- npx @bytebase/dbhub@latest --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
 ```
 
 Or manually edit the user configuration file:

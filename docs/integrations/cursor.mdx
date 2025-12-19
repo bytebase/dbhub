@@ -28,7 +28,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
         "dbhub": {
           "command": "npx",
           "args": [
-            "@bytebase/dbhub",
+            "@bytebase/dbhub@latest",
             "--transport",
             "stdio",
             "--dsn",
@@ -47,7 +47,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
         "dbhub": {
           "command": "npx",
           "args": [
-            "@bytebase/dbhub",
+            "@bytebase/dbhub@latest",
             "--transport",
             "stdio",
             "--dsn",
@@ -89,7 +89,7 @@ After installing, edit the DSN in your Cursor MCP settings to point to your data
     This connects to a DBHub server running with HTTP transport:
 
     ```bash
-    npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+    npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
     ```
   </Tab>
 </Tabs>
@@ -104,7 +104,7 @@ For project-specific database connections, create `.cursor/mcp.json` in your pro
     "project-db": {
       "command": "npx",
       "args": [
-        "@bytebase/dbhub",
+        "@bytebase/dbhub@latest",
         "--transport",
         "stdio",
         "--config",

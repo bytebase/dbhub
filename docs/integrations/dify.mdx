@@ -7,7 +7,7 @@ title: "Dify"
 DBHub must be running as an HTTP server for Dify to connect. Start DBHub with HTTP transport:
 
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname"
 ```
 
 ## Configuration
@@ -33,7 +33,7 @@ Once connected, DBHub tools are available in:
 For multiple databases, use a config file:
 
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --config /path/to/dbhub.toml
+npx @bytebase/dbhub@latest --transport http --port 8080 --config /path/to/dbhub.toml
 ```
 
 ## Demo Mode
@@ -41,7 +41,7 @@ npx @bytebase/dbhub --transport http --port 8080 --config /path/to/dbhub.toml
 For testing, use the built-in demo database:
 
 ```bash
-npx @bytebase/dbhub --transport http --port 8080 --demo
+npx @bytebase/dbhub@latest --transport http --port 8080 --demo
 ```
 
 ## Limitations

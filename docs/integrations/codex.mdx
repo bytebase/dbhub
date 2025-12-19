@@ -8,10 +8,10 @@ title: "Codex"
 
 ```bash
 # Connect to your database
-codex mcp add dbhub -- npx @bytebase/dbhub --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+codex mcp add dbhub -- npx @bytebase/dbhub@latest --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
 
 # Or use demo mode for testing
-codex mcp add dbhub -- npx @bytebase/dbhub --transport stdio --demo
+codex mcp add dbhub -- npx @bytebase/dbhub@latest --transport stdio --demo
 ```
 
 ### TOML
@@ -20,12 +20,12 @@ codex mcp add dbhub -- npx @bytebase/dbhub --transport stdio --demo
 # Connect to your database
 [mcp_servers.dbhub]
 command = "npx"
-args = ["@bytebase/dbhub", "--transport", "stdio", "--dsn", "postgres://user:password@localhost:5432/dbname"]
+args = ["@bytebase/dbhub@latest", "--transport", "stdio", "--dsn", "postgres://user:password@localhost:5432/dbname"]
 
 # Or use demo mode for testing
 [mcp_servers.dbhub]
 command = "npx"
-args = ["@bytebase/dbhub", "--transport", "stdio", "--demo"]
+args = ["@bytebase/dbhub@latest", "--transport", "stdio", "--demo"]
 ```
 
 ## Verification
@@ -38,7 +38,7 @@ args = ["@bytebase/dbhub", "--transport", "stdio", "--demo"]
   • dbhub
     • Status: enabled
     • Auth: Unsupported
-    • Command: npx -y @bytebase/dbhub --demo
+    • Command: npx -y @bytebase/dbhub@latest --demo
     • Tools: execute_sql
     • Resources: schemas (db://schemas)
     • Resource templates: tables_in_schema (db://schemas/{schemaName}/tables), table_structure_in_schema (db://schemas/{schemaName}/
