@@ -85,20 +85,22 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
   const dbType = sourceConfig.type;
+  const isSingleSource = sourceIds.length === 1;
 
   // Determine tool name based on single vs multi-source configuration
-  const toolName = sourceId === "default" ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
+  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
 
   // Determine title (human-readable display name)
-  const isDefault = sourceIds[0] === sourceId;
-  const title = isDefault
+  const title = isSingleSource
     ? `Execute SQL (${dbType})`
     : `Execute SQL on ${sourceId} (${dbType})`;
 
   // Determine description with more context
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
-  const description = `Execute SQL queries on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}${readonlyNote}${maxRowsNote}`;
+  const description = isSingleSource
+    ? `Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
+    : `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -124,20 +126,21 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
 /**
  * Get search_objects tool metadata for a specific source
  * @param sourceId - The source ID to get tool metadata for
- * @param dbType - Database type
- * @param isDefault - Whether this is the default source
  * @returns Tool name, description, and annotations
  */
-export function getSearchObjectsMetadata(
-  sourceId: string,
-  dbType: string,
-  isDefault: boolean
-): { name: string; description: string; title: string } {
-  const toolName = sourceId === "default" ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
-  const title = isDefault
+export function getSearchObjectsMetadata(sourceId: string): { name: string; description: string; title: string } {
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const dbType = sourceConfig.type;
+  const isSingleSource = sourceIds.length === 1;
+
+  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
+  const title = isSingleSource
     ? `Search Database Objects (${dbType})`
     : `Search Database Objects on ${sourceId} (${dbType})`;
-  const description = `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}`;
+  const description = isSingleSource
+    ? `Search and list database objects (schemas, tables, columns, procedures, indexes) on the ${dbType} database`
+    : `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,
@@ -181,11 +184,7 @@ function buildExecuteSqlTool(sourceId: string): Tool {
  * Build search_objects tool metadata for API response
  */
 function buildSearchObjectsTool(sourceId: string): Tool {
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const dbType = sourceConfig.type;
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const isDefault = sourceIds[0] === sourceId;
-  const searchMetadata = getSearchObjectsMetadata(sourceId, dbType, isDefault);
+  const searchMetadata = getSearchObjectsMetadata(sourceId);
 
   return {
     name: searchMetadata.name,
