@@ -201,7 +201,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "pattern",
         type: "string",
         required: false,
-        description: "LIKE pattern (% = any, _ = one char). Default: %",
+        description: "LIKE pattern (% = any chars, _ = one char). Default: %",
       },
       {
         name: "schema",
