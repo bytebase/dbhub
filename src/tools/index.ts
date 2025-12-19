@@ -8,6 +8,7 @@ import { createCustomToolHandler, buildZodSchemaFromParameters } from "./custom-
 import type { ToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "./builtin-tools.js";
+import { isMinimalDescriptionsMode } from "../config/env.js";
 
 /**
  * Register all tool handlers with the MCP server
@@ -22,23 +23,51 @@ export function registerTools(server: McpServer): void {
   }
 
   const registry = getToolRegistry();
+  const isMinimal = isMinimalDescriptionsMode();
 
-  // Register all enabled tools (both built-in and custom) for each source
-  for (const sourceId of sourceIds) {
-    const enabledTools = registry.getEnabledToolConfigs(sourceId);
-    const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-    const dbType = sourceConfig.type;
-    const isDefault = sourceIds[0] === sourceId;
+  // In minimal mode, register consolidated tools once (with database parameter)
+  if (isMinimal) {
+    // Track which built-in tools have been registered
+    let executeSqlRegistered = false;
+    let searchObjectsRegistered = false;
 
-    for (const toolConfig of enabledTools) {
-      // Register based on tool name (built-in vs custom)
-      if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
-        registerExecuteSqlTool(server, sourceId, dbType);
-      } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
-        registerSearchObjectsTool(server, sourceId, dbType, isDefault);
-      } else {
-        // Custom tool
-        registerCustomTool(server, toolConfig, dbType);
+    // Check all sources to see which tools are enabled
+    for (const sourceId of sourceIds) {
+      const enabledTools = registry.getEnabledToolConfigs(sourceId);
+      const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+      const dbType = sourceConfig.type;
+
+      for (const toolConfig of enabledTools) {
+        if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL && !executeSqlRegistered) {
+          registerExecuteSql(server, sourceIds);
+          executeSqlRegistered = true;
+        } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS && !searchObjectsRegistered) {
+          registerSearchObjects(server, sourceIds);
+          searchObjectsRegistered = true;
+        } else if (toolConfig.name !== BUILTIN_TOOL_EXECUTE_SQL && toolConfig.name !== BUILTIN_TOOL_SEARCH_OBJECTS) {
+          // Custom tools are still registered per-source
+          registerCustomTool(server, toolConfig, dbType);
+        }
+      }
+    }
+  } else {
+    // Standard mode: register tools per source
+    for (const sourceId of sourceIds) {
+      const enabledTools = registry.getEnabledToolConfigs(sourceId);
+      const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+      const dbType = sourceConfig.type;
+      const isDefault = sourceIds[0] === sourceId;
+
+      for (const toolConfig of enabledTools) {
+        // Register based on tool name (built-in vs custom)
+        if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
+          registerExecuteSqlTool(server, sourceId, dbType);
+        } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
+          registerSearchObjectsTool(server, sourceId, dbType, isDefault);
+        } else {
+          // Custom tool
+          registerCustomTool(server, toolConfig, dbType);
+        }
       }
     }
   }
@@ -120,4 +149,70 @@ function registerCustomTool(
   );
 
   console.error(`  - ${toolConfig.name} → ${toolConfig.source} (${dbType})`);
+}
+
+interface ExecuteSqlArgs {
+  sql: string;
+  database?: string;
+}
+
+interface SearchObjectsArgs {
+  object_type: string;
+  pattern?: string;
+  schema?: string;
+  table?: string;
+  detail_level?: string;
+  limit?: number;
+  database?: string;
+}
+
+/**
+ * Register consolidated execute_sql tool (minimal mode)
+ */
+function registerExecuteSql(server: McpServer, sourceIds: string[]): void {
+  const metadata = getExecuteSqlMetadata(sourceIds[0]);
+  server.registerTool(
+    metadata.name,
+    {
+      description: metadata.description,
+      inputSchema: metadata.schema,
+      annotations: metadata.annotations,
+    },
+    async (args: ExecuteSqlArgs, extra: unknown) => {
+      const sourceId = args.database || sourceIds[0];
+      return createExecuteSqlToolHandler(sourceId)(args, extra);
+    }
+  );
+  console.error(`  - execute_sql (consolidated, databases: ${sourceIds.join(", ")})`);
+}
+
+/**
+ * Register consolidated search_objects tool (minimal mode)
+ */
+function registerSearchObjects(server: McpServer, sourceIds: string[]): void {
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceIds[0])!;
+  const metadata = getSearchObjectsMetadata(sourceIds[0], sourceConfig.type, true);
+  const schema = metadata.databaseSchema
+    ? { ...searchDatabaseObjectsSchema, database: metadata.databaseSchema }
+    : searchDatabaseObjectsSchema;
+
+  server.registerTool(
+    metadata.name,
+    {
+      description: metadata.description,
+      inputSchema: schema,
+      annotations: {
+        title: metadata.title,
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async (args: SearchObjectsArgs, extra: unknown) => {
+      const sourceId = args.database || sourceIds[0];
+      return createSearchDatabaseObjectsToolHandler(sourceId)(args, extra);
+    }
+  );
+  console.error(`  - search_objects (consolidated, databases: ${sourceIds.join(", ")})`);
 }

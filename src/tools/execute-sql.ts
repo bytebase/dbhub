@@ -10,7 +10,7 @@ import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
-  sql: z.string().describe("SQL query or multiple SQL statements to execute (separated by semicolons)"),
+  sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
 };
 
 /**

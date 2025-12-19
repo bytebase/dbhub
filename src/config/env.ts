@@ -149,6 +149,19 @@ export function isDemoMode(): boolean {
   return args.demo === "true";
 }
 
+/**
+ * Check if minimal descriptions mode is enabled from command line args
+ * Returns true if --minimal-descriptions flag is provided
+ *
+ * When enabled:
+ * - Tool descriptions are shortened
+ * - Tools are consolidated (one execute_sql with database param instead of execute_sql_<db>)
+ */
+export function isMinimalDescriptionsMode(): boolean {
+  const args = parseCommandLineArgs();
+  return args["minimal-descriptions"] === "true";
+}
+
 
 /**
  * Build DSN from individual environment variables
