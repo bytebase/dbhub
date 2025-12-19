@@ -73,7 +73,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp"
 # # For named instances, use:
 # # dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp?instanceName=SQLEXPRESS"
-# request_timeout = 60  # SQL Server-specific: query timeout in seconds
+# query_timeout = 60  # Query timeout in seconds (works for all databases except SQLite)
 
 # ============================================================================
 # SQLITE (Local file or in-memory)

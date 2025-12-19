@@ -27,6 +27,7 @@ import { parseQueryResults } from "../../utils/multi-statement-result-parser.js"
 class MariadbDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<mariadb.ConnectionConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
+    const queryTimeoutSeconds = config?.queryTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -41,7 +42,7 @@ class MariadbDSNParser implements DSNParser {
       // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
-      const config: mariadb.ConnectionConfig = {
+      const connectionConfig: mariadb.ConnectionConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 3306,
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
@@ -51,17 +52,20 @@ class MariadbDSNParser implements DSNParser {
         ...(connectionTimeoutSeconds !== undefined && {
           connectTimeout: connectionTimeoutSeconds * 1000
         }),
+        ...(queryTimeoutSeconds !== undefined && {
+          queryTimeout: queryTimeoutSeconds * 1000
+        }),
       };
 
       // Handle query parameters
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
           if (value === "disable") {
-            config.ssl = undefined;
+            connectionConfig.ssl = undefined;
           } else if (value === "require") {
-            config.ssl = { rejectUnauthorized: false };
+            connectionConfig.ssl = { rejectUnauthorized: false };
           } else {
-            config.ssl = {};
+            connectionConfig.ssl = {};
           }
         }
         // Add other parameters as needed
@@ -73,12 +77,12 @@ class MariadbDSNParser implements DSNParser {
       // but AWS IAM authentication requires SSL
       if (url.password && url.password.includes("X-Amz-Credential")) {
         // AWS IAM authentication requires SSL, enable if not already configured
-        if (config.ssl === undefined) {
-          config.ssl = { rejectUnauthorized: false };
+        if (connectionConfig.ssl === undefined) {
+          connectionConfig.ssl = { rejectUnauthorized: false };
         }
       }
 
-      return config;
+      return connectionConfig;
     } catch (error) {
       throw new Error(
         `Failed to parse MariaDB DSN: ${error instanceof Error ? error.message : String(error)}`

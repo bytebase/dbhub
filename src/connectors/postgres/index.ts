@@ -27,6 +27,7 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
+    const queryTimeoutSeconds = config?.queryTimeoutSeconds;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -41,7 +42,7 @@ class PostgresDSNParser implements DSNParser {
       // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
-      const config: pg.PoolConfig = {
+      const poolConfig: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
@@ -53,11 +54,11 @@ class PostgresDSNParser implements DSNParser {
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
           if (value === "disable") {
-            config.ssl = false;
+            poolConfig.ssl = false;
           } else if (value === "require") {
-            config.ssl = { rejectUnauthorized: false };
+            poolConfig.ssl = { rejectUnauthorized: false };
           } else {
-            config.ssl = true;
+            poolConfig.ssl = true;
           }
         }
         // Add other parameters as needed
@@ -66,10 +67,16 @@ class PostgresDSNParser implements DSNParser {
       // Apply connection timeout if specified
       if (connectionTimeoutSeconds !== undefined) {
         // pg library expects timeout in milliseconds
-        config.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
+        poolConfig.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
       }
 
-      return config;
+      // Apply query timeout if specified (client-side timeout)
+      if (queryTimeoutSeconds !== undefined) {
+        // pg library expects query_timeout in milliseconds
+        poolConfig.query_timeout = queryTimeoutSeconds * 1000;
+      }
+
+      return poolConfig;
     } catch (error) {
       throw new Error(
         `Failed to parse PostgreSQL DSN: ${error instanceof Error ? error.message : String(error)}`

@@ -57,8 +57,8 @@ export interface ExecuteOptions {
 export interface ConnectorConfig {
   /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
   connectionTimeoutSeconds?: number;
-  /** Request/query timeout in seconds (SQL Server only) */
-  requestTimeoutSeconds?: number;
+  /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  queryTimeoutSeconds?: number;
   /**
    * Read-only mode for SDK-level enforcement (PostgreSQL, SQLite)
    * - PostgreSQL: Sets default_transaction_read_only at connection level

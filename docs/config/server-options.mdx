@@ -120,27 +120,41 @@ title: "Server Options"
 
 ### connection-timeout
 
-<ParamField path="--connection-timeout" type="number" env="CONNECTION_TIMEOUT">
+<ParamField path="connection_timeout" type="number">
   Connection timeout in seconds. The maximum time to wait when establishing a database connection.
 
   Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
 
-  ```bash
-  npx @bytebase/dbhub@latest --dsn "postgres://..." --connection-timeout 60
+  <Note>
+  This option is only available via [TOML configuration](/config/multi-database). There is no CLI flag for connection timeout.
+  </Note>
+
+  ```toml
+  # dbhub.toml
+  [[sources]]
+  id = "prod_db"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+  connection_timeout = 60  # 60 seconds
   ```
 </ParamField>
 
-### request-timeout
+### query-timeout
 
-<ParamField path="--request-timeout" type="number" env="REQUEST_TIMEOUT">
-  Request/query timeout in seconds. The maximum time to wait for a query to complete.
+<ParamField path="query_timeout" type="number">
+  Query timeout in seconds. The maximum time to wait for a query to complete before timing out.
+
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
 
   <Note>
-  Only supported by SQL Server.
+  This option is only available via [TOML configuration](/config/multi-database). There is no CLI flag for query timeout.
   </Note>
 
-  ```bash
-  npx @bytebase/dbhub@latest --dsn "sqlserver://..." --request-timeout 120
+  ```toml
+  # dbhub.toml
+  [[sources]]
+  id = "prod_db"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+  query_timeout = 30  # 30 seconds
   ```
 </ParamField>
 
@@ -345,8 +359,8 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | - | `DB_USER` | string | - | Database username |
 | - | `DB_PASSWORD` | string | - | Database password |
 | - | `DB_NAME` | string | - | Database name or SQLite file path |
-| `--connection-timeout` | `CONNECTION_TIMEOUT` | number | - | Connection timeout in seconds |
-| `--request-timeout` | `REQUEST_TIMEOUT` | number | - | Query timeout in seconds (SQL Server only) |
+| - | - | number | - | Connection timeout in seconds (TOML only: `connection_timeout`) |
+| - | - | number | - | Query timeout in seconds (TOML only: `query_timeout`) |
 | `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
 | `--port` | `PORT` | number | `8080` | HTTP server port |
 | `--demo` | - | boolean | `false` | Use sample employee database |

@@ -256,11 +256,11 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
-  // Validate request_timeout if provided
-  if (source.request_timeout !== undefined) {
-    if (typeof source.request_timeout !== "number" || source.request_timeout <= 0) {
+  // Validate query_timeout if provided
+  if (source.query_timeout !== undefined) {
+    if (typeof source.query_timeout !== "number" || source.query_timeout <= 0) {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has invalid request_timeout. ` +
+        `Configuration file ${configPath}: source '${source.id}' has invalid query_timeout. ` +
           `Must be a positive number (in seconds).`
       );
     }
