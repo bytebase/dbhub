@@ -21,31 +21,31 @@ export type DetailLevel = "names" | "summary" | "full";
 export const searchDatabaseObjectsSchema = {
   object_type: z
     .enum(["schema", "table", "column", "procedure", "index"])
-    .describe("Type of database object to search for"),
+    .describe("Object type to search"),
   pattern: z
     .string()
     .optional()
     .default("%")
-    .describe("Search pattern (SQL LIKE syntax: % for wildcard, _ for single char). Case-insensitive. Defaults to '%' (match all)."),
+    .describe("LIKE pattern (% = any chars, _ = one char). Default: %"),
   schema: z
     .string()
     .optional()
-    .describe("Filter results to a specific schema/database (exact match)"),
+    .describe("Filter to schema"),
   table: z
     .string()
     .optional()
-    .describe("Filter to a specific table (exact match). Requires schema parameter. Only applies to columns and indexes."),
+    .describe("Filter to table (requires schema; column/index only)"),
   detail_level: z
     .enum(["names", "summary", "full"])
     .default("names")
-    .describe("Level of detail to return: names (minimal), summary (with metadata), full (complete structure)"),
+    .describe("Detail: names (minimal), summary (metadata), full (all)"),
   limit: z
     .number()
     .int()
     .positive()
     .max(1000)
     .default(100)
-    .describe("Maximum number of results to return (default: 100, max: 1000)"),
+    .describe("Max results (default: 100, max: 1000)"),
 };
 
 /**

@@ -137,7 +137,7 @@ export function getSearchObjectsMetadata(
   const title = isDefault
     ? `Search Database Objects (${dbType})`
     : `Search Database Objects on ${sourceId} (${dbType})`;
-  const description = `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}. Supports SQL LIKE patterns (default: '%' for all), filtering, and token-efficient progressive disclosure.`;
+  const description = `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database${isDefault ? " (default)" : ""}`;
 
   return {
     name: toolName,
@@ -195,31 +195,37 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "object_type",
         type: "string",
         required: true,
-        description: "Type of database object to search for (schema, table, column, procedure, index)",
+        description: "Object type to search",
       },
       {
         name: "pattern",
         type: "string",
         required: false,
-        description: "Search pattern (SQL LIKE syntax: % for wildcard, _ for single char). Case-insensitive. Defaults to '%' (match all).",
+        description: "LIKE pattern (% = any chars, _ = one char). Default: %",
       },
       {
         name: "schema",
         type: "string",
         required: false,
-        description: "Filter results to a specific schema/database",
+        description: "Filter to schema",
+      },
+      {
+        name: "table",
+        type: "string",
+        required: false,
+        description: "Filter to table (requires schema; column/index only)",
       },
       {
         name: "detail_level",
         type: "string",
         required: false,
-        description: "Level of detail to return: names (minimal), summary (with metadata), full (complete structure). Defaults to 'names'.",
+        description: "Detail: names (minimal), summary (metadata), full (all)",
       },
       {
         name: "limit",
         type: "integer",
         required: false,
-        description: "Maximum number of results to return (default: 100, max: 1000)",
+        description: "Max results (default: 100, max: 1000)",
       },
     ],
   };
