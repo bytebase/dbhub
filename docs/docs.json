@@ -46,6 +46,7 @@
       {
         "tab": "Blog",
 <<<<<<< HEAD
+<<<<<<< HEAD
         "pages": [
           "blog/postgres-mcp-server-review-dbhub",
           "blog/postgres-mcp-server-review-supabase-mcp",
@@ -58,6 +59,9 @@
         "pages": ["blog/state-of-postgres-mcp-servers-2025"]
 >>>>>>> 8d4421d (docs: blog)
 >>>>>>> d593d1a (docs: blog)
+=======
+        "pages": ["blog/state-of-postgres-mcp-servers-2025", "blog/postgres-mcp-server-review-mcp-toolbox"]
+>>>>>>> b1ee20d (chore: installation)
       }
     ]
   },
