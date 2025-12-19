@@ -96,18 +96,15 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # By default, all sources get 'execute_sql' and 'search_objects' tools enabled.
 # Use [[tools]] entries to customize behavior per source.
 
-# Production: read-only with row limits for safety
 # [[tools]]
 # name = "execute_sql"
-# source = "prod_pg"
+# source = "local_pg"
 # readonly = true
 # max_rows = 1000
 
-# Development: allow writes but limit rows
 # [[tools]]
-# name = "execute_sql"
-# source = "dev_pg"
-# max_rows = 5000
+# name = "search_objects"
+# source = "local_pg"
 
 # ============================================================================
 # CUSTOM TOOLS (Optional)
@@ -115,39 +112,47 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #
 # Define reusable SQL queries as MCP tools. Great for common operations.
 
-# Example: Find user by email (PostgreSQL)
+# Example: Current department managers (PostgreSQL - no parameters)
 # [[tools]]
-# name = "find_user_by_email"
-# description = "Look up a user by their email address"
-# source = "prod_pg"
-# statement = "SELECT id, name, email, created_at FROM users WHERE email = $1"
-#
-# [[tools.parameters]]
-# name = "email"
-# type = "string"
-# description = "Email address to search for"
-# required = true
-
-# Example: Recent orders with status filter (PostgreSQL)
-# [[tools]]
-# name = "recent_orders"
-# description = "Get recent orders, optionally filtered by status"
-# source = "prod_pg"
+# name = "current_managers"
+# description = "List all current department managers"
+# source = "local_pg"
 # statement = """
-#   SELECT id, customer_id, status, total, created_at
-#   FROM orders
-#   WHERE created_at > NOW() - INTERVAL '7 days'
-#     AND ($1::text IS NULL OR status = $1)
-#   ORDER BY created_at DESC
+#   SELECT e.emp_no, e.first_name, e.last_name, d.dept_name, dm.from_date
+#   FROM dept_manager dm
+#   JOIN employee e ON dm.emp_no = e.emp_no
+#   JOIN department d ON dm.dept_no = d.dept_no
+#   WHERE dm.to_date = '9999-01-01'
+#   ORDER BY d.dept_name
+# """
+
+# Example: Search employees by salary range (PostgreSQL - required + optional parameter)
+# [[tools]]
+# name = "salary_search"
+# description = "Find employees earning at least min_salary, optionally capped by max_salary"
+# source = "local_pg"
+# statement = """
+#   SELECT e.emp_no, e.first_name, e.last_name, s.amount as salary
+#   FROM employee e
+#   JOIN salary s ON e.emp_no = s.emp_no
+#   WHERE s.amount >= $1
+#     AND ($2::int IS NULL OR s.amount <= $2)
+#     AND s.to_date = '9999-01-01'
+#   ORDER BY s.amount DESC
 #   LIMIT 100
 # """
 #
 # [[tools.parameters]]
-# name = "status"
-# type = "string"
-# description = "Filter by order status"
+# name = "min_salary"
+# type = "integer"
+# description = "Minimum salary (required)"
+# required = true
+#
+# [[tools.parameters]]
+# name = "max_salary"
+# type = "integer"
+# description = "Maximum salary (optional, defaults to no limit)"
 # required = false
-# allowed_values = ["pending", "processing", "shipped", "delivered", "cancelled"]
 
 # ============================================================================
 # QUICK REFERENCE
