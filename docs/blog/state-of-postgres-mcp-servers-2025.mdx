@@ -1,0 +1,35 @@
+---
+title: "The State of Postgres MCP Servers (2025)"
+---
+
+![mcp-vs-postgres](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/blog/state-of-postgres-mcp-servers-2025/mcp-vs-postgres.webp)
+
+MCP is drowning in builders but starving for users. PostgreSQL has millions of users but few new tools being built. 
+The intersection—Postgres MCP server—is where both problems get solved. When Anthropic launched MCP in November 2024, 
+Postgres was among the original six reference implementations. A year later, with MCP now joined by OpenAI, Google, and
+Microsoft, the question is: which Postgres MCP server should you choose?
+
+## The Contenders
+
+If you are looking for a Postgres MCP server, you are likely searching by GitHub star count. These four have the most (as of Dec 20, 2025):
+
+- **[MCP Toolbox for Databases](https://github.com/googleapis/genai-toolbox)** (11.8k stars) — Google's MCP Toolbox supporting multiple databases with OAuth, connection pooling, and OpenTelemetry observability.
+- **[Supabase MCP](https://github.com/supabase-community/supabase-mcp)** (2.3k stars) — Built for the Supabase ecosystem, offering deep platform integration including edge functions, migrations, and branching.
+- **[DBHub](https://github.com/bytebase/dbhub)** (1.7k stars) — Bytebase's minimal, token-efficient server supporting multiple databases including Postgres.
+- **[Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp)** (1.6k stars) — Crystal DBA's performance-focused server with index tuning, query plan analysis, and database health monitoring.
+
+| Server | Maintainer | License | Language |
+|--------|------------|---------|----------|
+| MCP Toolbox for Databases | Google | Apache-2.0 | Go |
+| Supabase MCP | Supabase | Apache-2.0 | TypeScript |
+| DBHub | Bytebase | MIT | TypeScript |
+| Postgres MCP Pro | Crystal DBA | MIT | Python |
+
+
+Let's dig into each from four dimensions:
+
+1. **Installation** — How easy is it to get started?
+1. **Tools** — What capabilities does the server expose?
+1. **Token Efficiency** — How much context does the server consume?
+1. **Auth & Security** — How does it handle authentication and security?
+
