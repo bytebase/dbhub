@@ -12,30 +12,44 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Getting Started",
-        "pages": ["index", "installation", "quickstart"]
-      },
-      {
-        "group": "Tools",
-        "pages": ["tools/overview", "tools/execute-sql", "tools/search-objects", "tools/custom-tools"]
-      },
-      {
-        "group": "Integrations",
-        "pages": [
-          "integrations/claude-code",
-          "integrations/claude-desktop",
-          "integrations/codex",
-          "integrations/cursor",
-          "integrations/dify",
-          "integrations/librechat",
-          "integrations/vscode"
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["index", "installation", "quickstart"]
+          },
+          {
+            "group": "Tools",
+            "pages": [
+              "tools/overview",
+              "tools/execute-sql",
+              "tools/search-objects",
+              "tools/custom-tools"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/claude-code",
+              "integrations/claude-desktop",
+              "integrations/codex",
+              "integrations/cursor",
+              "integrations/dify",
+              "integrations/librechat",
+              "integrations/vscode"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": ["config/server-options", "config/multi-database", "config/debug"]
+          }
         ]
       },
       {
-        "group": "Configuration",
-        "pages": ["config/server-options", "config/multi-database", "config/debug"]
+        "tab": "Blog",
+        "pages": ["blog/postgres-mcp-server-review-mcp-toolbox"]
       }
     ]
   },
