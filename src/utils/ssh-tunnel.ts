@@ -245,8 +245,9 @@ export class SSHTunnel {
           settled = true;
           reject(new Error(`Local server error: ${err.message}`));
         } else {
-          // Log error if it occurs after the tunnel is established
+          // If an error occurs after the tunnel is established, log it and clean up
           console.error('Local server error after tunnel established:', err);
+          this.cleanup();
         }
       });
 
