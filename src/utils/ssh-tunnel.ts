@@ -168,6 +168,7 @@ export class SSHTunnel {
 
       const onError = (err: Error) => {
         client.removeListener('ready', onReady);
+        client.destroy();
         reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${err.message}`));
       };
 
