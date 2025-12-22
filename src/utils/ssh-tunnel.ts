@@ -88,7 +88,7 @@ export class SSHTunnel {
         privateKey,
         targetConfig.passphrase,
         previousStream,
-        i === 0 ? undefined : `jump host ${i}`
+        `jump host ${i + 1}`
       );
 
       this.sshClients.push(client);
