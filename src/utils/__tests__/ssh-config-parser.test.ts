@@ -442,23 +442,37 @@ describe('parseJumpHost', () => {
     });
   });
 
-  it('should validate port range (use default for invalid)', () => {
-    // Port 0 is invalid, should use default
-    const result1 = parseJumpHost('host:0');
-    expect(result1.port).toBe(22);
+  it('should throw error for invalid port numbers', () => {
+    // Port 0 is invalid
+    expect(() => parseJumpHost('host:0')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('host:0')).toThrow('port must be between 1 and 65535');
 
-    // Port > 65535 is invalid, should use default
-    const result2 = parseJumpHost('host:99999');
-    expect(result2.port).toBe(22);
+    // Port > 65535 is invalid
+    expect(() => parseJumpHost('host:99999')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('host:99999')).toThrow('port must be between 1 and 65535');
 
     // Valid port should work
-    const result3 = parseJumpHost('host:65535');
-    expect(result3.port).toBe(65535);
+    const result = parseJumpHost('host:65535');
+    expect(result.port).toBe(65535);
   });
 
   it('should throw error for malformed IPv6 (missing closing bracket)', () => {
     expect(() => parseJumpHost('[::1')).toThrow('missing closing bracket');
     expect(() => parseJumpHost('user@[2001:db8::1')).toThrow('missing closing bracket');
+  });
+
+  it('should throw error for invalid port numbers in IPv6 addresses', () => {
+    // Port 0 is invalid for IPv6
+    expect(() => parseJumpHost('[::1]:0')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('[::1]:0')).toThrow('port must be between 1 and 65535');
+
+    // Port > 65535 is invalid for IPv6
+    expect(() => parseJumpHost('[2001:db8::1]:99999')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('[2001:db8::1]:99999')).toThrow('port must be between 1 and 65535');
+
+    // Valid port should work for IPv6
+    const result = parseJumpHost('[::1]:8080');
+    expect(result.port).toBe(8080);
   });
 });
 
