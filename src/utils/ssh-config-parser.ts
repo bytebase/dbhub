@@ -195,6 +195,18 @@ export function looksLikeSSHAlias(host: string): boolean {
 }
 
 /**
+ * Validate a port number and throw an error if invalid
+ * @param port The port number to validate
+ * @param jumpHostStr The original jump host string for error messages
+ * @throws Error if port is invalid (NaN, <= 0, or > 65535)
+ */
+function validatePort(port: number, jumpHostStr: string): void {
+  if (isNaN(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid port number in "${jumpHostStr}": port must be between 1 and 65535`);
+  }
+}
+
+/**
  * Parse a jump host string in the format [user@]host[:port]
  * Examples:
  *   - "bastion.example.com" -> { host: "bastion.example.com", port: 22 }
@@ -239,9 +251,7 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
       const afterBracket = remaining.substring(closeBracket + 1);
       if (afterBracket.startsWith(':')) {
         const parsedPort = parseInt(afterBracket.substring(1), 10);
-        if (isNaN(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
-          throw new Error(`Invalid port number in "${jumpHostStr}": port must be between 1 and 65535`);
-        }
+        validatePort(parsedPort, jumpHostStr);
         port = parsedPort;
       }
     } else {
@@ -257,9 +267,7 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
       if (/^\d+$/.test(potentialPort)) {
         host = remaining.substring(0, lastColon);
         const parsedPort = parseInt(potentialPort, 10);
-        if (isNaN(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
-          throw new Error(`Invalid port number in "${jumpHostStr}": port must be between 1 and 65535`);
-        }
+        validatePort(parsedPort, jumpHostStr);
         port = parsedPort;
       } else {
         host = remaining;
