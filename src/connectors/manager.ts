@@ -70,6 +70,7 @@ export class ConnectorManager {
         password: source.ssh_password,
         privateKey: source.ssh_key,
         passphrase: source.ssh_passphrase,
+        proxyJump: source.ssh_proxy_jump,
       };
 
       // Validate SSH auth

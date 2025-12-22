@@ -12,6 +12,11 @@ export interface SSHConfig {
   ssh_password?: string;
   ssh_key?: string;
   ssh_passphrase?: string;
+  /**
+   * ProxyJump configuration for multi-hop SSH connections.
+   * Comma-separated list of jump hosts: "jump1.example.com,user@jump2.example.com:2222"
+   */
+  ssh_proxy_jump?: string;
 }
 
 /**

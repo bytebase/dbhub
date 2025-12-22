@@ -1,134 +1,242 @@
 import { Client, ConnectConfig } from 'ssh2';
 import { readFileSync } from 'fs';
 import { Server, createServer } from 'net';
-import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo } from '../types/ssh.js';
-import { resolveSymlink } from './ssh-config-parser.js';
+import type { Duplex } from 'stream';
+import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo, JumpHost } from '../types/ssh.js';
+import { resolveSymlink, parseJumpHosts } from './ssh-config-parser.js';
 
 /**
- * SSH Tunnel implementation for secure database connections
+ * SSH Tunnel implementation for secure database connections.
+ * Supports ProxyJump for multi-hop SSH connections through bastion/jump hosts.
  */
 export class SSHTunnel {
-  private sshClient: Client | null = null;
+  private sshClients: Client[] = []; // All SSH clients in the chain
   private localServer: Server | null = null;
   private tunnelInfo: SSHTunnelInfo | null = null;
   private isConnected: boolean = false;
 
   /**
-   * Establish an SSH tunnel
+   * Establish an SSH tunnel, optionally through jump hosts (ProxyJump).
    * @param config SSH connection configuration
    * @param options Tunnel options including target host and port
    * @returns Promise resolving to tunnel information including local port
    */
   async establish(
-    config: SSHTunnelConfig, 
+    config: SSHTunnelConfig,
     options: SSHTunnelOptions
   ): Promise<SSHTunnelInfo> {
     if (this.isConnected) {
       throw new Error('SSH tunnel is already established');
     }
 
-    return new Promise((resolve, reject) => {
-      this.sshClient = new Client();
+    // Parse jump hosts if ProxyJump is configured
+    const jumpHosts = config.proxyJump ? parseJumpHosts(config.proxyJump) : [];
 
-      // Build SSH connection config
+    // Read the private key once (shared by all connections)
+    let privateKeyBuffer: Buffer | undefined;
+    if (config.privateKey) {
+      try {
+        const resolvedKeyPath = resolveSymlink(config.privateKey);
+        privateKeyBuffer = readFileSync(resolvedKeyPath);
+      } catch (error) {
+        throw new Error(`Failed to read private key file: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // Validate authentication
+    if (!config.password && !privateKeyBuffer) {
+      throw new Error('Either password or privateKey must be provided for SSH authentication');
+    }
+
+    try {
+      // Establish the SSH connection chain
+      const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer);
+
+      // Create local server for the tunnel
+      return await this.createLocalTunnel(finalClient, options);
+    } catch (error) {
+      this.cleanup();
+      throw error;
+    }
+  }
+
+  /**
+   * Establish a chain of SSH connections through jump hosts.
+   * @returns The final SSH client connected to the target host
+   */
+  private async establishChain(
+    jumpHosts: JumpHost[],
+    targetConfig: SSHTunnelConfig,
+    privateKey: Buffer | undefined
+  ): Promise<Client> {
+    let previousStream: Duplex | undefined;
+
+    // Connect through each jump host
+    for (let i = 0; i < jumpHosts.length; i++) {
+      const jumpHost = jumpHosts[i];
+      const nextHost = i + 1 < jumpHosts.length
+        ? jumpHosts[i + 1]
+        : { host: targetConfig.host, port: targetConfig.port || 22 };
+
+      const client = await this.connectToHost(
+        {
+          host: jumpHost.host,
+          port: jumpHost.port,
+          username: jumpHost.username || targetConfig.username,
+        },
+        targetConfig.password,
+        privateKey,
+        targetConfig.passphrase,
+        previousStream,
+        i === 0 ? undefined : `jump host ${i}`
+      );
+
+      this.sshClients.push(client);
+
+      // Forward to the next host
+      console.error(`  → Forwarding through ${jumpHost.host}:${jumpHost.port} to ${nextHost.host}:${nextHost.port}`);
+      previousStream = await this.forwardTo(client, nextHost.host, nextHost.port);
+    }
+
+    // Connect to the final target
+    const finalClient = await this.connectToHost(
+      {
+        host: targetConfig.host,
+        port: targetConfig.port || 22,
+        username: targetConfig.username,
+      },
+      targetConfig.password,
+      privateKey,
+      targetConfig.passphrase,
+      previousStream,
+      jumpHosts.length > 0 ? 'target host' : undefined
+    );
+
+    this.sshClients.push(finalClient);
+    return finalClient;
+  }
+
+  /**
+   * Connect to a single SSH host.
+   */
+  private connectToHost(
+    hostInfo: { host: string; port: number; username: string },
+    password: string | undefined,
+    privateKey: Buffer | undefined,
+    passphrase: string | undefined,
+    sock: Duplex | undefined,
+    label: string | undefined
+  ): Promise<Client> {
+    return new Promise((resolve, reject) => {
+      const client = new Client();
+
       const sshConfig: ConnectConfig = {
-        host: config.host,
-        port: config.port || 22,
-        username: config.username,
+        host: hostInfo.host,
+        port: hostInfo.port,
+        username: hostInfo.username,
       };
 
-      // Configure authentication
-      if (config.password) {
-        sshConfig.password = config.password;
-      } else if (config.privateKey) {
-        try {
-          // Resolve symlinks (important for Windows where .ssh may be a junction)
-          const resolvedKeyPath = resolveSymlink(config.privateKey);
-          const privateKey = readFileSync(resolvedKeyPath);
-          sshConfig.privateKey = privateKey;
-          if (config.passphrase) {
-            sshConfig.passphrase = config.passphrase;
-          }
-        } catch (error) {
-          reject(new Error(`Failed to read private key file: ${error instanceof Error ? error.message : String(error)}`));
-          return;
+      if (password) {
+        sshConfig.password = password;
+      }
+      if (privateKey) {
+        sshConfig.privateKey = privateKey;
+        if (passphrase) {
+          sshConfig.passphrase = passphrase;
         }
-      } else {
-        reject(new Error('Either password or privateKey must be provided for SSH authentication'));
-        return;
+      }
+      if (sock) {
+        sshConfig.sock = sock;
       }
 
-      // Handle SSH connection errors
-      this.sshClient.on('error', (err) => {
-        this.cleanup();
-        reject(new Error(`SSH connection error: ${err.message}`));
+      client.on('error', (err) => {
+        reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${err.message}`));
       });
 
-      // When SSH connection is ready, create the tunnel
-      this.sshClient.on('ready', () => {
-        console.error('SSH connection established');
+      client.on('ready', () => {
+        const desc = label || `${hostInfo.host}:${hostInfo.port}`;
+        console.error(`SSH connection established: ${desc}`);
+        resolve(client);
+      });
 
-        // Create local server for the tunnel
-        this.localServer = createServer((localSocket) => {
-          this.sshClient!.forwardOut(
-            '127.0.0.1',
-            0,
-            options.targetHost,
-            options.targetPort,
-            (err, stream) => {
-              if (err) {
-                console.error('SSH forward error:', err);
-                localSocket.end();
-                return;
-              }
+      client.connect(sshConfig);
+    });
+  }
 
-              // Pipe data between local socket and SSH stream
-              localSocket.pipe(stream).pipe(localSocket);
+  /**
+   * Forward a connection through an SSH client to a target host.
+   */
+  private forwardTo(client: Client, targetHost: string, targetPort: number): Promise<Duplex> {
+    return new Promise((resolve, reject) => {
+      client.forwardOut('127.0.0.1', 0, targetHost, targetPort, (err, stream) => {
+        if (err) {
+          reject(new Error(`SSH forward error: ${err.message}`));
+          return;
+        }
+        resolve(stream as Duplex);
+      });
+    });
+  }
 
-              // Handle stream errors
-              stream.on('error', (err) => {
-                console.error('SSH stream error:', err);
-                localSocket.end();
-              });
-
-              localSocket.on('error', (err) => {
-                console.error('Local socket error:', err);
-                stream.end();
-              });
+  /**
+   * Create the local server that tunnels connections to the database.
+   */
+  private createLocalTunnel(
+    sshClient: Client,
+    options: SSHTunnelOptions
+  ): Promise<SSHTunnelInfo> {
+    return new Promise((resolve, reject) => {
+      this.localServer = createServer((localSocket) => {
+        sshClient.forwardOut(
+          '127.0.0.1',
+          0,
+          options.targetHost,
+          options.targetPort,
+          (err, stream) => {
+            if (err) {
+              console.error('SSH forward error:', err);
+              localSocket.end();
+              return;
             }
-          );
-        });
 
-        // Listen on local port
-        const localPort = options.localPort || 0;
-        this.localServer.listen(localPort, '127.0.0.1', () => {
-          const address = this.localServer!.address();
-          if (!address || typeof address === 'string') {
-            this.cleanup();
-            reject(new Error('Failed to get local server address'));
-            return;
+            // Pipe data between local socket and SSH stream
+            localSocket.pipe(stream).pipe(localSocket);
+
+            stream.on('error', (err) => {
+              console.error('SSH stream error:', err);
+              localSocket.end();
+            });
+
+            localSocket.on('error', (err) => {
+              console.error('Local socket error:', err);
+              stream.end();
+            });
           }
-
-          this.tunnelInfo = {
-            localPort: address.port,
-            targetHost: options.targetHost,
-            targetPort: options.targetPort,
-          };
-
-          this.isConnected = true;
-          console.error(`SSH tunnel established: localhost:${address.port} -> ${options.targetHost}:${options.targetPort}`);
-          resolve(this.tunnelInfo);
-        });
-
-        // Handle local server errors
-        this.localServer.on('error', (err) => {
-          this.cleanup();
-          reject(new Error(`Local server error: ${err.message}`));
-        });
+        );
       });
 
-      // Connect to SSH server
-      this.sshClient.connect(sshConfig);
+      const localPort = options.localPort || 0;
+      this.localServer.listen(localPort, '127.0.0.1', () => {
+        const address = this.localServer!.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('Failed to get local server address'));
+          return;
+        }
+
+        this.tunnelInfo = {
+          localPort: address.port,
+          targetHost: options.targetHost,
+          targetPort: options.targetPort,
+        };
+
+        this.isConnected = true;
+        console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
+        resolve(this.tunnelInfo);
+      });
+
+      this.localServer.on('error', (err) => {
+        reject(new Error(`Local server error: ${err.message}`));
+      });
     });
   }
 
@@ -149,7 +257,7 @@ export class SSHTunnel {
   }
 
   /**
-   * Clean up resources
+   * Clean up resources. Closes all SSH clients in reverse order (innermost first).
    */
   private cleanup(): void {
     if (this.localServer) {
@@ -157,10 +265,15 @@ export class SSHTunnel {
       this.localServer = null;
     }
 
-    if (this.sshClient) {
-      this.sshClient.end();
-      this.sshClient = null;
+    // Close SSH clients in reverse order (innermost connection first)
+    for (let i = this.sshClients.length - 1; i >= 0; i--) {
+      try {
+        this.sshClients[i].end();
+      } catch {
+        // Ignore errors during cleanup
+      }
     }
+    this.sshClients = [];
 
     this.tunnelInfo = null;
   }

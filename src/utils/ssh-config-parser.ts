@@ -10,7 +10,7 @@ import { readFileSync, realpathSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import SSHConfig from 'ssh-config';
-import type { SSHTunnelConfig } from '../types/ssh.js';
+import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
 
 /**
  * Default SSH key paths to check if no IdentityFile is specified
@@ -230,10 +230,14 @@ export function parseSSHConfig(
       }
     }
 
-    // ProxyJump support could be added in the future if needed
-    // Currently, we'll log a warning if ProxyJump is detected
-    if (hostConfig.ProxyJump || hostConfig.ProxyCommand) {
-      console.error('Warning: ProxyJump/ProxyCommand in SSH config is not yet supported by DBHub');
+    // ProxyJump support for multi-hop SSH connections
+    if (hostConfig.ProxyJump) {
+      sshConfig.proxyJump = hostConfig.ProxyJump;
+    }
+
+    // ProxyCommand is not supported (requires shell execution)
+    if (hostConfig.ProxyCommand) {
+      console.error('Warning: ProxyCommand in SSH config is not supported by DBHub. Use ProxyJump instead.');
     }
 
     // Validate that we have minimum required fields
@@ -257,17 +261,95 @@ export function looksLikeSSHAlias(host: string): boolean {
   if (host.includes('.')) {
     return false;
   }
-  
+
   // If it's all numbers (with possible colons for IPv6), it's likely an IP
   if (/^[\d:]+$/.test(host)) {
     return false;
   }
-  
+
   // Check for IPv6 addresses with hex characters
   if (/^[0-9a-fA-F:]+$/.test(host) && host.includes(':')) {
     return false;
   }
-  
+
   // Otherwise, treat it as a potential SSH alias
   return true;
+}
+
+/**
+ * Parse a jump host string in the format [user@]host[:port]
+ * Examples:
+ *   - "bastion.example.com" -> { host: "bastion.example.com", port: 22 }
+ *   - "admin@bastion.example.com" -> { host: "bastion.example.com", port: 22, username: "admin" }
+ *   - "bastion.example.com:2222" -> { host: "bastion.example.com", port: 2222 }
+ *   - "admin@bastion.example.com:2222" -> { host: "bastion.example.com", port: 2222, username: "admin" }
+ *
+ * @param jumpHostStr The jump host string to parse
+ * @returns Parsed JumpHost object
+ */
+export function parseJumpHost(jumpHostStr: string): JumpHost {
+  let username: string | undefined;
+  let host: string;
+  let port = 22;
+
+  let remaining = jumpHostStr.trim();
+
+  // Extract username if present (user@...)
+  const atIndex = remaining.indexOf('@');
+  if (atIndex !== -1) {
+    username = remaining.substring(0, atIndex);
+    remaining = remaining.substring(atIndex + 1);
+  }
+
+  // Extract port if present (...:port)
+  // Be careful with IPv6 addresses like [::1]:22
+  if (remaining.startsWith('[')) {
+    // IPv6 address in brackets
+    const closeBracket = remaining.indexOf(']');
+    if (closeBracket !== -1) {
+      host = remaining.substring(1, closeBracket);
+      const afterBracket = remaining.substring(closeBracket + 1);
+      if (afterBracket.startsWith(':')) {
+        port = parseInt(afterBracket.substring(1), 10) || 22;
+      }
+    } else {
+      host = remaining;
+    }
+  } else {
+    // Regular hostname or IPv4
+    const lastColon = remaining.lastIndexOf(':');
+    if (lastColon !== -1) {
+      const potentialPort = remaining.substring(lastColon + 1);
+      // Only treat as port if it's a valid number
+      if (/^\d+$/.test(potentialPort)) {
+        host = remaining.substring(0, lastColon);
+        port = parseInt(potentialPort, 10);
+      } else {
+        host = remaining;
+      }
+    } else {
+      host = remaining;
+    }
+  }
+
+  return { host, port, username };
+}
+
+/**
+ * Parse a ProxyJump string into an array of JumpHost objects.
+ * ProxyJump can be a comma-separated list of hosts for multi-hop connections.
+ *
+ * @param proxyJump The ProxyJump string (e.g., "jump1.example.com,user@jump2.example.com:2222")
+ * @returns Array of parsed JumpHost objects in connection order
+ */
+export function parseJumpHosts(proxyJump: string): JumpHost[] {
+  if (!proxyJump || proxyJump.trim() === '' || proxyJump.toLowerCase() === 'none') {
+    return [];
+  }
+
+  return proxyJump
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .map(parseJumpHost);
 }
