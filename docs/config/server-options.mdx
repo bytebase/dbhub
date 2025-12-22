@@ -226,9 +226,9 @@ title: "Server Options"
 
   **SQL Server only.**
 
-  <Note>
-  This option is only available via [TOML configuration](/config/multi-database) when using individual connection parameters. When using DSN, include `?authentication=ntlm&domain=MYDOMAIN` in the connection string.
-  </Note>
+  Can be configured via:
+  - **DSN query parameter**: `?authentication=ntlm&domain=CORP` or `?authentication=azure-active-directory-access-token`
+  - **TOML field**: `authentication = "ntlm"` (when using individual connection parameters)
 
   ```toml
   # NTLM authentication
@@ -263,9 +263,9 @@ title: "Server Options"
 
   **Required when `authentication = "ntlm"`. SQL Server only.**
 
-  <Note>
-  This option is only available via [TOML configuration](/config/multi-database) when using individual connection parameters. When using DSN, include `?authentication=ntlm&domain=MYDOMAIN` in the connection string.
-  </Note>
+  Can be configured via:
+  - **DSN query parameter**: `?authentication=ntlm&domain=CORP`
+  - **TOML field**: `domain = "CORP"` (when using individual connection parameters)
 
   ```toml
   # dbhub.toml
@@ -487,8 +487,8 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | - | - | number | - | Query timeout in seconds (TOML only: `query_timeout`) |
 | - | - | string | - | SSL mode: disable, require (TOML only: `sslmode`) |
 | - | - | string | - | SQL Server named instance (TOML only: `instanceName`) |
-| - | - | string | - | SQL Server auth: ntlm, azure-active-directory-access-token (TOML only: `authentication`) |
-| - | - | string | - | Windows domain for NTLM (TOML only: `domain`) |
+| - | - | string | - | SQL Server auth: ntlm, azure-active-directory-access-token (`authentication`) |
+| - | - | string | - | Windows domain for NTLM (`domain`) |
 | `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
 | `--port` | `PORT` | number | `8080` | HTTP server port |
 | `--demo` | - | boolean | `false` | Use sample employee database |
