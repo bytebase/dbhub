@@ -200,6 +200,8 @@ export class SSHTunnel {
     options: SSHTunnelOptions
   ): Promise<SSHTunnelInfo> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      
       this.localServer = createServer((localSocket) => {
         sshClient.forwardOut(
           '127.0.0.1',
@@ -231,14 +233,23 @@ export class SSHTunnel {
 
       // Register error listener before calling listen() to catch all errors
       this.localServer.on('error', (err) => {
-        reject(new Error(`Local server error: ${err.message}`));
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Local server error: ${err.message}`));
+        } else {
+          // Log error if it occurs after the tunnel is established
+          console.error('Local server error after tunnel established:', err);
+        }
       });
 
       const localPort = options.localPort || 0;
       this.localServer.listen(localPort, '127.0.0.1', () => {
         const address = this.localServer!.address();
         if (!address || typeof address === 'string') {
-          reject(new Error('Failed to get local server address'));
+          if (!settled) {
+            settled = true;
+            reject(new Error('Failed to get local server address'));
+          }
           return;
         }
 
@@ -250,6 +261,7 @@ export class SSHTunnel {
 
         this.isConnected = true;
         console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
+        settled = true;
         resolve(this.tunnelInfo);
       });
     });
