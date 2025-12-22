@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink } from '../ssh-config-parser.js';
 <<<<<<< HEAD
 <<<<<<< HEAD
