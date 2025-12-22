@@ -1,8 +1,34 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseSSHConfig, looksLikeSSHAlias } from '../ssh-config-parser.js';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
+import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink } from '../ssh-config-parser.js';
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
+import { tmpdir, homedir } from 'os';
 import { join } from 'path';
+
+/**
+ * Check if symlinks are supported on the current platform.
+ * On Windows without admin rights, symlink creation will fail with EPERM.
+ */
+function checkSymlinkSupport(): boolean {
+  const testDir = mkdtempSync(join(tmpdir(), 'symlink-check-'));
+  const targetFile = join(testDir, 'target');
+  const linkFile = join(testDir, 'link');
+
+  try {
+    writeFileSync(targetFile, 'test');
+    symlinkSync(targetFile, linkFile);
+    unlinkSync(linkFile);
+    unlinkSync(targetFile);
+    rmSync(testDir, { recursive: true });
+    return true;
+  } catch (error) {
+    rmSync(testDir, { recursive: true, force: true });
+    const e = error as NodeJS.ErrnoException;
+    return !(e.code === 'EPERM' || e.code === 'ENOTSUP');
+  }
+}
+
+// Check symlink support once at module load time
+const symlinksSupported = checkSymlinkSupport();
 
 describe('SSH Config Parser', () => {
   let tempDir: string;
@@ -40,7 +66,7 @@ Host myserver
     it('should handle identity file', () => {
       const identityPath = join(tempDir, 'id_rsa');
       writeFileSync(identityPath, 'fake-key-content');
-      
+
       const configContent = `
 Host dev-server
   HostName dev.example.com
@@ -53,7 +79,8 @@ Host dev-server
       expect(result).toEqual({
         host: 'dev.example.com',
         username: 'developer',
-        privateKey: identityPath
+        // Path is resolved to real path (e.g., on macOS /var -> /private/var)
+        privateKey: realpathSync(identityPath)
       });
     });
 
@@ -62,7 +89,7 @@ Host dev-server
       const identityPath2 = join(tempDir, 'id_ed25519');
       writeFileSync(identityPath1, 'fake-key-1');
       writeFileSync(identityPath2, 'fake-key-2');
-      
+
       const configContent = `
 Host multi-key
   HostName multi.example.com
@@ -73,7 +100,8 @@ Host multi-key
       writeFileSync(configPath, configContent);
 
       const result = parseSSHConfig('multi-key', configPath);
-      expect(result?.privateKey).toBe(identityPath1);
+      // Path is resolved to real path (e.g., on macOS /var -> /private/var)
+      expect(result?.privateKey).toBe(realpathSync(identityPath1));
     });
 
     it('should handle wildcard patterns', () => {
@@ -141,7 +169,7 @@ Host incomplete
       // Mock a key file that would exist in home directory
       const mockKeyPath = join(tempDir, 'mock_id_rsa');
       writeFileSync(mockKeyPath, 'fake-key');
-      
+
       const configContent = `
 Host tilde-test
   HostName tilde.example.com
@@ -151,7 +179,8 @@ Host tilde-test
       writeFileSync(configPath, configContent);
 
       const result = parseSSHConfig('tilde-test', configPath);
-      expect(result?.privateKey).toBe(mockKeyPath);
+      // Path is resolved to real path (e.g., on macOS /var -> /private/var)
+      expect(result?.privateKey).toBe(realpathSync(mockKeyPath));
     });
   });
 
@@ -173,6 +202,111 @@ Host tilde-test
       expect(looksLikeSSHAlias('10.0.0.1')).toBe(false);
       expect(looksLikeSSHAlias('::1')).toBe(false);
       expect(looksLikeSSHAlias('2001:db8::1')).toBe(false);
+    });
+  });
+
+  describe('resolveSymlink', () => {
+    it('should return the same path for regular files', () => {
+      const filePath = join(tempDir, 'regular_file');
+      writeFileSync(filePath, 'content');
+
+      const result = resolveSymlink(filePath);
+      expect(result).toBe(realpathSync(filePath));
+    });
+
+    it.skipIf(!symlinksSupported)('should resolve symlinks to files', () => {
+      const targetPath = join(tempDir, 'target_file');
+      const linkPath = join(tempDir, 'link_to_file');
+      writeFileSync(targetPath, 'content');
+
+      symlinkSync(targetPath, linkPath);
+      const result = resolveSymlink(linkPath);
+      expect(result).toBe(realpathSync(targetPath));
+    });
+
+    it.skipIf(!symlinksSupported)('should resolve symlinks to directories', () => {
+      const targetDir = join(tempDir, 'target_dir');
+      const linkDir = join(tempDir, 'link_to_dir');
+      mkdirSync(targetDir);
+
+      symlinkSync(targetDir, linkDir, 'dir');
+      const result = resolveSymlink(linkDir);
+      expect(result).toBe(realpathSync(targetDir));
+    });
+
+    it('should handle tilde expansion', () => {
+      const result = resolveSymlink('~/some/path');
+      expect(result.startsWith(homedir())).toBe(true);
+      expect(result).toContain('some');
+      expect(result).toContain('path');
+    });
+
+    it('should return expanded path for non-existent files', () => {
+      const result = resolveSymlink('~/non/existent/path');
+      expect(result.startsWith(homedir())).toBe(true);
+    });
+
+    it.skipIf(!symlinksSupported)('should handle files within symlinked directories', () => {
+      const targetDir = join(tempDir, 'ssh_target');
+      const linkDir = join(tempDir, 'ssh_link');
+      mkdirSync(targetDir);
+
+      const configFile = join(targetDir, 'config');
+      writeFileSync(configFile, 'Host test\n  User testuser\n');
+
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedConfigPath = join(linkDir, 'config');
+      const result = resolveSymlink(linkedConfigPath);
+      expect(result).toBe(realpathSync(configFile));
+    });
+  });
+
+  describe.skipIf(!symlinksSupported)('parseSSHConfig with symlinks', () => {
+    it('should parse config from symlinked directory', () => {
+      const targetDir = join(tempDir, 'ssh_real');
+      const linkDir = join(tempDir, 'ssh_symlink');
+      mkdirSync(targetDir);
+
+      const configContent = `
+Host symlink-test
+  HostName symlink.example.com
+  User symlinkuser
+`;
+      writeFileSync(join(targetDir, 'config'), configContent);
+
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedConfigPath = join(linkDir, 'config');
+      const result = parseSSHConfig('symlink-test', linkedConfigPath);
+      expect(result).toEqual({
+        host: 'symlink.example.com',
+        username: 'symlinkuser'
+      });
+    });
+
+    it('should handle identity file in symlinked directory', () => {
+      const targetDir = join(tempDir, 'ssh_keys_real');
+      const linkDir = join(tempDir, 'ssh_keys_link');
+      mkdirSync(targetDir);
+
+      const keyPath = join(targetDir, 'id_rsa');
+      writeFileSync(keyPath, 'fake-key-content');
+
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedKeyPath = join(linkDir, 'id_rsa');
+
+      const configContent = `
+Host key-symlink-test
+  HostName keytest.example.com
+  User keyuser
+  IdentityFile ${linkedKeyPath}
+`;
+      writeFileSync(configPath, configContent);
+
+      const result = parseSSHConfig('key-symlink-test', configPath);
+      expect(result?.host).toBe('keytest.example.com');
+      expect(result?.username).toBe('keyuser');
+      // The private key path should be resolved to the real path
+      expect(result?.privateKey).toBe(realpathSync(keyPath));
     });
   });
 });

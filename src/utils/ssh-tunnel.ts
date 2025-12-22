@@ -2,6 +2,7 @@ import { Client, ConnectConfig } from 'ssh2';
 import { readFileSync } from 'fs';
 import { Server, createServer } from 'net';
 import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo } from '../types/ssh.js';
+import { resolveSymlink } from './ssh-config-parser.js';
 
 /**
  * SSH Tunnel implementation for secure database connections
@@ -41,7 +42,9 @@ export class SSHTunnel {
         sshConfig.password = config.password;
       } else if (config.privateKey) {
         try {
-          const privateKey = readFileSync(config.privateKey);
+          // Resolve symlinks (important for Windows where .ssh may be a junction)
+          const resolvedKeyPath = resolveSymlink(config.privateKey);
+          const privateKey = readFileSync(resolvedKeyPath);
           sshConfig.privateKey = privateKey;
           if (config.passphrase) {
             sshConfig.passphrase = config.passphrase;
