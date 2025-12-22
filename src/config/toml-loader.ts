@@ -21,9 +21,17 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     const fileContent = fs.readFileSync(configPath, "utf-8");
     const parsedToml = toml.parse(fileContent) as unknown as TomlConfig;
 
-    // Validate and process the configuration
-    validateTomlConfig(parsedToml, configPath);
+    // Basic structure check before processing
+    if (!Array.isArray(parsedToml.sources)) {
+      throw new Error(
+        `Configuration file ${configPath}: must contain a [[sources]] array. ` +
+          `Use [[sources]] syntax for array of tables in TOML.`
+      );
+    }
+
+    // Process first to populate fields from DSN (like type), then validate
     const sources = processSourceConfigs(parsedToml.sources, configPath);
+    validateTomlConfig({ ...parsedToml, sources }, configPath);
 
     return {
       sources,
@@ -79,15 +87,8 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
     );
   }
 
-  // Check if sources is an array
-  if (!Array.isArray(config.sources)) {
-    throw new Error(
-      `Configuration file ${configPath}: 'sources' must be an array. ` +
-        `Use [[sources]] syntax for array of tables in TOML.`
-    );
-  }
-
   // Check if sources array is not empty
+  // Note: Array check is done in loadTomlConfig before processing
   if (config.sources.length === 0) {
     throw new Error(
       `Configuration file ${configPath}: sources array cannot be empty. ` +
@@ -298,6 +299,49 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
   }
+
+  // Validate SQL Server authentication options
+  // Note: source.type is already populated from DSN by processSourceConfigs
+  if (source.authentication !== undefined) {
+    // authentication is only valid for SQL Server
+    if (source.type !== "sqlserver") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has authentication but it is only supported for SQL Server.`
+      );
+    }
+
+    const validAuthMethods = ["ntlm", "azure-active-directory-access-token"];
+    if (!validAuthMethods.includes(source.authentication)) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid authentication '${source.authentication}'. ` +
+          `Valid values: ${validAuthMethods.join(", ")}`
+      );
+    }
+
+    // NTLM requires domain
+    if (source.authentication === "ntlm" && !source.domain) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' uses NTLM authentication but 'domain' is not specified.`
+      );
+    }
+  }
+
+  // Validate domain field
+  if (source.domain !== undefined) {
+    // domain is only valid for SQL Server
+    if (source.type !== "sqlserver") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has domain but it is only supported for SQL Server.`
+      );
+    }
+
+    // domain requires authentication=ntlm
+    if (source.authentication !== "ntlm") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has domain but authentication is not set to 'ntlm'.`
+      );
+    }
+  }
 }
 
 /**
@@ -416,9 +460,17 @@ export function buildDSNFromSource(source: SourceConfig): string {
   // Collect query parameters
   const queryParams: string[] = [];
 
-  // Add SQL Server specific: instanceName
-  if (source.type === "sqlserver" && source.instanceName) {
-    queryParams.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
+  // Add SQL Server specific parameters
+  if (source.type === "sqlserver") {
+    if (source.instanceName) {
+      queryParams.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
+    }
+    if (source.authentication) {
+      queryParams.push(`authentication=${encodeURIComponent(source.authentication)}`);
+    }
+    if (source.domain) {
+      queryParams.push(`domain=${encodeURIComponent(source.domain)}`);
+    }
   }
 
   // Add sslmode for network databases (not sqlite)

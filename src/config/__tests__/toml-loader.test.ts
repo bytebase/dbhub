@@ -484,6 +484,172 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       });
     });
 
+    describe('SQL Server authentication validation', () => {
+      it('should accept authentication = "ntlm" with domain', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+authentication = "ntlm"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].authentication).toBe('ntlm');
+        expect(result?.sources[0].domain).toBe('MYDOMAIN');
+      });
+
+      it('should accept authentication = "azure-active-directory-access-token"', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "myserver.database.windows.net"
+database = "testdb"
+user = "admin@tenant.onmicrosoft.com"
+password = ""
+authentication = "azure-active-directory-access-token"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].authentication).toBe('azure-active-directory-access-token');
+      });
+
+      it('should throw error for invalid authentication value', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+authentication = "invalid"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("invalid authentication 'invalid'");
+      });
+
+      it('should throw error when authentication is used with non-SQL Server database', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+authentication = "ntlm"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("only supported for SQL Server");
+      });
+
+      it('should throw error when NTLM authentication is missing domain', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+authentication = "ntlm"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("'domain' is not specified");
+      });
+
+      it('should throw error when domain is used without authentication = "ntlm"', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("authentication is not set to 'ntlm'");
+      });
+
+      it('should throw error when domain is used with non-SQL Server database', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+authentication = "ntlm"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("only supported for SQL Server");
+      });
+
+      it('should throw error when authentication is used with non-SQL Server DSN (no explicit type)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+authentication = "ntlm"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("only supported for SQL Server");
+      });
+
+      it('should throw error when domain is used with non-SQL Server DSN (no explicit type)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+authentication = "ntlm"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("only supported for SQL Server");
+      });
+
+      it('should accept authentication with SQL Server DSN (no explicit type)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb"
+authentication = "ntlm"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].authentication).toBe('ntlm');
+        expect(result?.sources[0].domain).toBe('MYDOMAIN');
+      });
+    });
+
     describe('query_timeout validation', () => {
       it('should accept valid query_timeout', () => {
         const tomlContent = `
@@ -682,6 +848,62 @@ query_timeout = 120
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('sqlserver://sa:Pass123!@localhost:1433/testdb?instanceName=SQLEXPRESS&sslmode=require');
+    });
+
+    it('should build SQL Server DSN with NTLM authentication', () => {
+      const source: SourceConfig = {
+        id: 'sqlserver_ntlm',
+        type: 'sqlserver',
+        host: 'sqlserver.corp.local',
+        port: 1433,
+        database: 'appdb',
+        user: 'jsmith',
+        password: 'secret',
+        authentication: 'ntlm',
+        domain: 'CORP'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://jsmith:secret@sqlserver.corp.local:1433/appdb?authentication=ntlm&domain=CORP');
+    });
+
+    it('should build SQL Server DSN with Azure AD authentication', () => {
+      const source: SourceConfig = {
+        id: 'sqlserver_azure',
+        type: 'sqlserver',
+        host: 'myserver.database.windows.net',
+        port: 1433,
+        database: 'mydb',
+        user: 'admin@tenant.onmicrosoft.com',
+        password: 'placeholder', // Not used for Azure AD, but required by buildDSNFromSource
+        authentication: 'azure-active-directory-access-token',
+        sslmode: 'require'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://admin%40tenant.onmicrosoft.com:placeholder@myserver.database.windows.net:1433/mydb?authentication=azure-active-directory-access-token&sslmode=require');
+    });
+
+    it('should build SQL Server DSN with all parameters', () => {
+      const source: SourceConfig = {
+        id: 'sqlserver_all',
+        type: 'sqlserver',
+        host: 'sqlserver.corp.local',
+        port: 1433,
+        database: 'appdb',
+        user: 'jsmith',
+        password: 'secret',
+        instanceName: 'PROD',
+        authentication: 'ntlm',
+        domain: 'CORP',
+        sslmode: 'require'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://jsmith:secret@sqlserver.corp.local:1433/appdb?instanceName=PROD&authentication=ntlm&domain=CORP&sslmode=require');
     });
 
     it('should not append sslmode for SQLite in DSN building', () => {

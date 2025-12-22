@@ -88,10 +88,34 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # instanceName = "SQLEXPRESS"  # Optional: for named instances
 # sslmode = "disable"          # Optional: "disable" or "require"
 
-# SQL Server with Windows/NTLM authentication
+# SQL Server with Windows/NTLM authentication (DSN format)
 # [[sources]]
 # id = "corp_sqlserver"
 # dsn = "sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?authentication=ntlm&domain=CORP"
+
+# SQL Server with Windows/NTLM authentication (individual parameters)
+# [[sources]]
+# id = "corp_sqlserver"
+# type = "sqlserver"
+# host = "sqlserver.corp.local"
+# port = 1433
+# database = "app_db"
+# user = "jsmith"
+# password = "secret"
+# authentication = "ntlm"      # Required for Windows auth
+# domain = "CORP"              # Required when authentication = "ntlm"
+
+# SQL Server with Azure AD authentication
+# [[sources]]
+# id = "azure_sqlserver"
+# type = "sqlserver"
+# host = "myserver.database.windows.net"
+# port = 1433
+# database = "mydb"
+# user = "admin@mytenant.onmicrosoft.com"
+# password = ""                # Not used for Azure AD
+# authentication = "azure-active-directory-access-token"
+# sslmode = "require"
 
 # ============================================================================
 # SQLITE (Local file or in-memory)
@@ -192,6 +216,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # SSL Mode (for network databases, not SQLite):
 #   sslmode = "disable"   # No SSL
 #   sslmode = "require"   # SSL without certificate verification
+#
+# SQL Server Authentication:
+#   authentication = "ntlm"                              # Windows/NTLM auth (requires domain)
+#   authentication = "azure-active-directory-access-token"  # Azure AD auth
+#   domain = "MYDOMAIN"                                  # Required for NTLM
 #
 # Tool Options:
 #   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN
