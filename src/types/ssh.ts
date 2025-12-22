@@ -23,8 +23,8 @@ export interface SSHTunnelConfig {
 
   /**
    * ProxyJump configuration for multi-hop SSH connections.
-   * Can be a comma-separated string of hosts (e.g., "jump1.example.com,jump2.example.com")
-   * or parsed into an array of JumpHost objects.
+   * Accepts a comma-separated string of hosts (e.g., "jump1.example.com,jump2.example.com"),
+   * which is parsed internally into an array of JumpHost objects.
    * Each host can include optional user and port: "user@host:port"
    */
   proxyJump?: string;
