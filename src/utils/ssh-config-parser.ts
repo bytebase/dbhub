@@ -313,7 +313,8 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
         port = parseInt(afterBracket.substring(1), 10) || 22;
       }
     } else {
-      host = remaining;
+      // Malformed IPv6 address: missing closing bracket
+      throw new Error(`Invalid ProxyJump host "${jumpHostStr}": missing closing bracket in IPv6 address`);
     }
   } else {
     // Regular hostname or IPv4
