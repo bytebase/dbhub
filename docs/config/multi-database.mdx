@@ -149,6 +149,7 @@ See [Server Options](/config/server-options) for detailed option descriptions an
 
   <Tab title="With SSH Tunnel">
     ```toml
+    # Simple SSH tunnel through bastion
     [[sources]]
     id = "production"
     dsn = "postgres://user:pass@db.internal:5432/myapp"
@@ -164,6 +165,15 @@ See [Server Options](/config/server-options) for detailed option descriptions an
     [[tools]]
     name = "search_objects"
     source = "production"
+
+    # Multi-hop SSH tunnel (ProxyJump)
+    [[sources]]
+    id = "secure_db"
+    dsn = "postgres://user:pass@db.secure:5432/myapp"
+    ssh_host = "target.internal"
+    ssh_user = "ubuntu"
+    ssh_key = "~/.ssh/id_rsa"
+    ssh_proxy_jump = "bastion1.example.com,admin@bastion2.internal:2222"
     ```
   </Tab>
 </Tabs>
