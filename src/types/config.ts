@@ -26,6 +26,9 @@ export interface ConnectionParams {
   password?: string;
   instanceName?: string; // SQL Server named instance support
   sslmode?: "disable" | "require"; // SSL mode for network databases (not applicable to SQLite)
+  // SQL Server authentication options
+  authentication?: "ntlm" | "azure-active-directory-access-token";
+  domain?: string; // Required for NTLM authentication
 }
 
 /**

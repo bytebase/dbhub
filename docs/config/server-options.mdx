@@ -39,7 +39,10 @@ title: "Server Options"
       # Named instance (e.g., ENV1, ENV2, ENV3)
       sqlserver://sa:YourPassword123@localhost:1433/mydb?instanceName=ENV1
 
-      # Azure AD authentication
+      # Windows/NTLM authentication
+      sqlserver://jsmith:secret@sqlserver.corp.local:1433/mydb?authentication=ntlm&domain=CORP
+
+      # Azure AD authentication (password optional/empty)
       sqlserver://username@localhost:1433/mydb?authentication=azure-active-directory-access-token
       ```
     </Tab>
@@ -158,6 +161,73 @@ title: "Server Options"
   ```
 </ParamField>
 
+### sslmode
+
+<ParamField path="sslmode" type="string">
+  SSL/TLS mode for database connections.
+
+  **Options:**
+  - `disable` - No SSL/TLS encryption. Data is transmitted in plaintext.
+  - `require` - SSL/TLS encryption enabled, but server certificate is not verified.
+
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+
+  ```bash
+  # DSN query parameter
+  postgres://user:password@localhost:5432/dbname?sslmode=require
+  sqlserver://sa:password@localhost:1433/mydb?sslmode=disable
+  ```
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration.
+</ParamField>
+
+### instanceName
+
+<ParamField path="instanceName" type="string">
+  SQL Server named instance. Use when connecting to a specific SQL Server instance (e.g., SQLEXPRESS, ENV1).
+
+  **SQL Server only.**
+
+  ```bash
+  # DSN query parameter
+  sqlserver://sa:YourPassword123@localhost:1433/mydb?instanceName=SQLEXPRESS
+  ```
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration.
+</ParamField>
+
+### authentication
+
+<ParamField path="authentication" type="string">
+  SQL Server authentication method. **SQL Server only.**
+
+  **Options:**
+  - `ntlm` - Windows/NTLM authentication. Requires `domain` parameter.
+  - `azure-active-directory-access-token` - Azure AD authentication. Token is fetched automatically using Azure SDK. **Password is not required.**
+
+  ```bash
+  # Windows/NTLM authentication
+  sqlserver://jsmith:secret@sqlserver.corp.local:1433/mydb?authentication=ntlm&domain=CORP
+
+  # Azure AD authentication (no password required)
+  sqlserver://admin@myserver.database.windows.net:1433/mydb?authentication=azure-active-directory-access-token
+  ```
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration.
+</ParamField>
+
+### domain
+
+<ParamField path="domain" type="string">
+  Windows domain for NTLM authentication. **Required when `authentication=ntlm`. SQL Server only.**
+
+  ```bash
+  sqlserver://jsmith:secret@sqlserver.corp.local:1433/mydb?authentication=ntlm&domain=CORP
+  ```
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration.
+</ParamField>
+
 ## General
 
 ### transport
@@ -255,7 +325,7 @@ title: "Server Options"
     --ssh-host bastion.example.com
   ```
 
-  See [SSH Tunnel](/features/ssh-tunnel) for detailed SSH configuration examples.
+  See [SSH Tunnel](/features/ssh-tunnel) for detailed examples and [Multi-Database Setup](/config/multi-database) for TOML configuration.
 </ParamField>
 
 ### ssh-port
@@ -359,8 +429,12 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | - | `DB_USER` | string | - | Database username |
 | - | `DB_PASSWORD` | string | - | Database password |
 | - | `DB_NAME` | string | - | Database name or SQLite file path |
-| - | - | number | - | Connection timeout in seconds (TOML only: `connection_timeout`) |
-| - | - | number | - | Query timeout in seconds (TOML only: `query_timeout`) |
+| - | - | number | - | Connection timeout in seconds (TOML: `connection_timeout`) |
+| - | - | number | - | Query timeout in seconds (TOML: `query_timeout`) |
+| - | - | string | - | SSL mode: disable, require (DSN: `?sslmode=`, TOML: `sslmode`) |
+| - | - | string | - | SQL Server named instance (DSN: `?instanceName=`, TOML: `instanceName`) |
+| - | - | string | - | SQL Server auth method (DSN: `?authentication=`, TOML: `authentication`) |
+| - | - | string | - | Windows domain for NTLM (DSN: `?domain=`, TOML: `domain`) |
 | `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
 | `--port` | `PORT` | number | `8080` | HTTP server port |
 | `--demo` | - | boolean | `false` | Use sample employee database |
