@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
+import { SQLServerConnector } from '../sqlserver/index.js';
 
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {
@@ -61,5 +62,68 @@ describe('DSN Parser - AWS IAM Authentication', () => {
 
       expect(config.ssl).toBeUndefined();
     });
+  });
+});
+
+describe('DSN Parser - SQL Server NTLM Authentication', () => {
+  const connector = new SQLServerConnector();
+  const parser = connector.dsnParser;
+
+  it('should configure NTLM authentication when authentication=ntlm and domain are provided', async () => {
+    const dsn = 'sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?authentication=ntlm&domain=CORP';
+
+    const config = await parser.parse(dsn);
+
+    expect(config.authentication).toEqual({
+      type: 'ntlm',
+      options: {
+        domain: 'CORP',
+        userName: 'jsmith',
+        password: 'secret',
+      },
+    });
+    // Credentials should only be in authentication object, not at top level
+    expect(config.user).toBeUndefined();
+    expect(config.password).toBeUndefined();
+  });
+
+  it('should preserve other options when using NTLM authentication', async () => {
+    const dsn = 'sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?authentication=ntlm&domain=CORP&sslmode=require&instanceName=PROD';
+
+    const config = await parser.parse(dsn);
+
+    expect(config.authentication).toEqual({
+      type: 'ntlm',
+      options: {
+        domain: 'CORP',
+        userName: 'jsmith',
+        password: 'secret',
+      },
+    });
+    expect(config.options?.encrypt).toBe(true);
+    expect(config.options?.trustServerCertificate).toBe(true);
+    expect(config.options?.instanceName).toBe('PROD');
+  });
+
+  it('should throw error when authentication=ntlm but domain is missing', async () => {
+    const dsn = 'sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?authentication=ntlm';
+
+    await expect(parser.parse(dsn)).rejects.toThrow("NTLM authentication requires 'domain' parameter");
+  });
+
+  it('should throw error when domain is provided without authentication=ntlm', async () => {
+    const dsn = 'sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?domain=CORP';
+
+    await expect(parser.parse(dsn)).rejects.toThrow("Parameter 'domain' requires 'authentication=ntlm'");
+  });
+
+  it('should not configure NTLM for normal SQL authentication', async () => {
+    const dsn = 'sqlserver://sa:password@localhost:1433/mydb';
+
+    const config = await parser.parse(dsn);
+
+    expect(config.authentication).toBeUndefined();
+    expect(config.user).toBe('sa');
+    expect(config.password).toBe('password');
   });
 });
