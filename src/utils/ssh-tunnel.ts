@@ -29,26 +29,29 @@ export class SSHTunnel {
       throw new Error('SSH tunnel is already established');
     }
 
-    // Parse jump hosts if ProxyJump is configured
-    const jumpHosts = config.proxyJump ? parseJumpHosts(config.proxyJump) : [];
-
-    // Read the private key once (shared by all connections)
-    let privateKeyBuffer: Buffer | undefined;
-    if (config.privateKey) {
-      try {
-        const resolvedKeyPath = resolveSymlink(config.privateKey);
-        privateKeyBuffer = readFileSync(resolvedKeyPath);
-      } catch (error) {
-        throw new Error(`Failed to read private key file: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-
-    // Validate authentication
-    if (!config.password && !privateKeyBuffer) {
-      throw new Error('Either password or privateKey must be provided for SSH authentication');
-    }
+    // Set isConnected immediately to prevent concurrent calls
+    this.isConnected = true;
 
     try {
+      // Parse jump hosts if ProxyJump is configured
+      const jumpHosts = config.proxyJump ? parseJumpHosts(config.proxyJump) : [];
+
+      // Read the private key once (shared by all connections)
+      let privateKeyBuffer: Buffer | undefined;
+      if (config.privateKey) {
+        try {
+          const resolvedKeyPath = resolveSymlink(config.privateKey);
+          privateKeyBuffer = readFileSync(resolvedKeyPath);
+        } catch (error) {
+          throw new Error(`Failed to read private key file: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
+      // Validate authentication
+      if (!config.password && !privateKeyBuffer) {
+        throw new Error('Either password or privateKey must be provided for SSH authentication');
+      }
+
       // Establish the SSH connection chain
       const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer);
 
@@ -264,7 +267,6 @@ export class SSHTunnel {
           targetPort: options.targetPort,
         };
 
-        this.isConnected = true;
         console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
         settled = true;
         resolve(this.tunnelInfo);
@@ -282,7 +284,6 @@ export class SSHTunnel {
 
     return new Promise((resolve) => {
       this.cleanup();
-      this.isConnected = false;
       console.error('SSH tunnel closed');
       resolve();
     });
@@ -308,6 +309,7 @@ export class SSHTunnel {
     this.sshClients = [];
 
     this.tunnelInfo = null;
+    this.isConnected = false;
   }
 
   /**
