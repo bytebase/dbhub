@@ -111,11 +111,11 @@ function isFile(filePath: string): boolean {
  * require the path to be pre-resolved; any path accepted by {@link statSync}
  * can be used.
  *
- * @param resolvedPath Path to check for an existing file
+ * @param filePath Path to check for an existing file
  */
-function isFile(resolvedPath: string): boolean {
+function isFile(filePath: string): boolean {
   try {
-    const stat = statSync(resolvedPath);
+    const stat = statSync(filePath);
     return stat.isFile();
 >>>>>>> 3a1c62d (chore: address comment)
   } catch {
