@@ -336,9 +336,16 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
 
     // domain requires authentication=ntlm
+    if (source.authentication === undefined) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has domain but authentication is not set. ` +
+          `Add authentication = "ntlm" to use Windows domain authentication.`
+      );
+    }
     if (source.authentication !== "ntlm") {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has domain but authentication is not set to 'ntlm'.`
+        `Configuration file ${configPath}: source '${source.id}' has domain but authentication is set to '${source.authentication}'. ` +
+          `Domain is only valid with authentication = "ntlm".`
       );
     }
   }
@@ -434,11 +441,19 @@ export function buildDSNFromSource(source: SourceConfig): string {
     return `sqlite:///${source.database}`;
   }
 
-  // For other databases, require host, user, password, database
-  if (!source.host || !source.user || !source.password || !source.database) {
+  // For other databases, require host, user, database
+  // Password is optional for Azure AD access token authentication
+  const passwordRequired = source.authentication !== "azure-active-directory-access-token";
+  if (!source.host || !source.user || !source.database) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +
-        `Required: type, host, user, password, database`
+        `Required: type, host, user, database`
+    );
+  }
+  if (passwordRequired && !source.password) {
+    throw new Error(
+      `Source '${source.id}': password is required. ` +
+        `(Password is optional only for azure-active-directory-access-token authentication)`
     );
   }
 
@@ -451,7 +466,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
 
   // Encode credentials
   const encodedUser = encodeURIComponent(source.user);
-  const encodedPassword = encodeURIComponent(source.password);
+  const encodedPassword = source.password ? encodeURIComponent(source.password) : "";
   const encodedDatabase = encodeURIComponent(source.database);
 
   // Build base DSN

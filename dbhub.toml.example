@@ -105,7 +105,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # authentication = "ntlm"      # Required for Windows auth
 # domain = "CORP"              # Required when authentication = "ntlm"
 
-# SQL Server with Azure AD authentication
+# SQL Server with Azure AD authentication (no password required)
 # [[sources]]
 # id = "azure_sqlserver"
 # type = "sqlserver"
@@ -113,7 +113,6 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # port = 1433
 # database = "mydb"
 # user = "admin@mytenant.onmicrosoft.com"
-# password = ""                # Not used for Azure AD
 # authentication = "azure-active-directory-access-token"
 # sslmode = "require"
 

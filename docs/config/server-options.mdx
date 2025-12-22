@@ -221,8 +221,8 @@ title: "Server Options"
   SQL Server authentication method.
 
   **Options:**
-  - `ntlm` - Windows/NTLM authentication. Requires `domain` field.
-  - `azure-active-directory-access-token` - Azure AD authentication. Token is fetched automatically using Azure SDK.
+  - `ntlm` - Windows/NTLM authentication. Requires `domain` field and `password`.
+  - `azure-active-directory-access-token` - Azure AD authentication. Token is fetched automatically using Azure SDK. **Password is not required.**
 
   **SQL Server only.**
 
@@ -243,7 +243,7 @@ title: "Server Options"
   authentication = "ntlm"
   domain = "CORP"
 
-  # Azure AD authentication
+  # Azure AD authentication (no password required)
   [[sources]]
   id = "azure_sqlserver"
   type = "sqlserver"
@@ -251,7 +251,6 @@ title: "Server Options"
   port = 1433
   database = "mydb"
   user = "admin@tenant.onmicrosoft.com"
-  password = "placeholder"
   authentication = "azure-active-directory-access-token"
   sslmode = "require"
   ```
