@@ -567,6 +567,51 @@ describe('parseJumpHost', () => {
       username: 'admin'
     });
   });
+
+  it('should throw error for empty string', () => {
+    expect(() => parseJumpHost('')).toThrow('Jump host string cannot be empty');
+    expect(() => parseJumpHost('   ')).toThrow('Jump host string cannot be empty');
+  });
+
+  it('should throw error for empty host (user@:port)', () => {
+    expect(() => parseJumpHost('user@:22')).toThrow('host cannot be empty');
+  });
+
+  it('should throw error for only @ symbol', () => {
+    expect(() => parseJumpHost('@')).toThrow('host cannot be empty');
+  });
+
+  it('should throw error for only port (:22)', () => {
+    expect(() => parseJumpHost(':22')).toThrow('host cannot be empty');
+  });
+
+  it('should handle @host without username (treats as host)', () => {
+    const result = parseJumpHost('@bastion.example.com');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should validate port range (use default for invalid)', () => {
+    // Port 0 is invalid, should use default
+    const result1 = parseJumpHost('host:0');
+    expect(result1.port).toBe(22);
+
+    // Port > 65535 is invalid, should use default
+    const result2 = parseJumpHost('host:99999');
+    expect(result2.port).toBe(22);
+
+    // Valid port should work
+    const result3 = parseJumpHost('host:65535');
+    expect(result3.port).toBe(65535);
+  });
+
+  it('should throw error for malformed IPv6 (missing closing bracket)', () => {
+    expect(() => parseJumpHost('[::1')).toThrow('missing closing bracket');
+    expect(() => parseJumpHost('user@[2001:db8::1')).toThrow('missing closing bracket');
+  });
 });
 
 describe('parseJumpHosts', () => {

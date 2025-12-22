@@ -286,6 +286,7 @@ export function looksLikeSSHAlias(host: string): boolean {
  *
  * @param jumpHostStr The jump host string to parse
  * @returns Parsed JumpHost object
+ * @throws Error if the input is empty or results in an empty/invalid host
  */
 export function parseJumpHost(jumpHostStr: string): JumpHost {
   let username: string | undefined;
@@ -294,13 +295,18 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
 
   let remaining = jumpHostStr.trim();
 
+  // Validate input is not empty
+  if (!remaining) {
+    throw new Error('Jump host string cannot be empty');
+  }
+
   // Extract username if present (user@...)
   const atIndex = remaining.indexOf('@');
   if (atIndex !== -1) {
-    username = remaining.substring(0, atIndex);
-    // Treat empty or whitespace-only usernames as undefined
-    if (username.trim() === '') {
-      username = undefined;
+    const extractedUsername = remaining.substring(0, atIndex).trim();
+    // Only set username if non-empty (handles case like "@host" or " @host")
+    if (extractedUsername) {
+      username = extractedUsername;
     }
     remaining = remaining.substring(atIndex + 1);
   }
@@ -314,7 +320,10 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
       host = remaining.substring(1, closeBracket);
       const afterBracket = remaining.substring(closeBracket + 1);
       if (afterBracket.startsWith(':')) {
-        port = parseInt(afterBracket.substring(1), 10) || 22;
+        const parsedPort = parseInt(afterBracket.substring(1), 10);
+        if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
+          port = parsedPort;
+        }
       }
     } else {
       // Malformed IPv6 address: missing closing bracket
@@ -328,13 +337,21 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
       // Only treat as port if it's a valid number
       if (/^\d+$/.test(potentialPort)) {
         host = remaining.substring(0, lastColon);
-        port = parseInt(potentialPort, 10);
+        const parsedPort = parseInt(potentialPort, 10);
+        if (parsedPort > 0 && parsedPort <= 65535) {
+          port = parsedPort;
+        }
       } else {
         host = remaining;
       }
     } else {
       host = remaining;
     }
+  }
+
+  // Validate that host is non-empty
+  if (!host) {
+    throw new Error(`Invalid jump host format: "${jumpHostStr}" - host cannot be empty`);
   }
 
   return { host, port, username };
