@@ -325,7 +325,7 @@ title: "Server Options"
     --ssh-host bastion.example.com
   ```
 
-  See [SSH Tunnel](/features/ssh-tunnel) for detailed examples and [Multi-Database Setup](/config/multi-database) for TOML configuration.
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration.
 </ParamField>
 
 ### ssh-port
@@ -399,6 +399,44 @@ title: "Server Options"
   ```
 </ParamField>
 
+### ssh-proxy-jump
+
+<ParamField path="--ssh-proxy-jump" type="string" env="SSH_PROXY_JUMP">
+  ProxyJump configuration for multi-hop SSH connections through one or more bastion/jump hosts.
+
+  Format: `[user@]host[:port]` - can be a comma-separated list for multi-hop chains.
+
+  ```bash
+  # Single jump host
+  npx @bytebase/dbhub@latest \
+    --dsn "postgres://user:pass@database.internal:5432/mydb" \
+    --ssh-host target.internal \
+    --ssh-user ubuntu \
+    --ssh-proxy-jump bastion.example.com
+
+  # Jump host with custom user and port
+  npx @bytebase/dbhub@latest \
+    --dsn "..." \
+    --ssh-host target.internal \
+    --ssh-user ubuntu \
+    --ssh-proxy-jump admin@bastion.example.com:2222
+
+  # Multi-hop chain (bastion1 → bastion2 → target)
+  npx @bytebase/dbhub@latest \
+    --dsn "..." \
+    --ssh-host target.internal \
+    --ssh-user ubuntu \
+    --ssh-proxy-jump "bastion1.example.com,admin@bastion2.internal:2222"
+  ```
+
+  <Note>
+  ProxyJump is also automatically read from `~/.ssh/config` when using SSH host aliases.
+  ProxyCommand is not supported (requires shell execution). Use ProxyJump instead.
+  </Note>
+
+  See [Multi-Database Setup](/config/multi-database) for TOML configuration (`ssh_proxy_jump`).
+</ParamField>
+
 ## Configuration Priority
 
 DBHub follows this priority order for configuration:
@@ -446,6 +484,7 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | `--ssh-password` | `SSH_PASSWORD` | string | - | SSH password |
 | `--ssh-key` | `SSH_KEY` | string | - | Path to SSH private key |
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | - | SSH key passphrase |
+| `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | - | ProxyJump hosts for multi-hop SSH |
 
 <Note>
 *Required unless using `--demo` or `--config`
