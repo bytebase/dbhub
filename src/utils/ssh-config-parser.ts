@@ -298,6 +298,10 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
   const atIndex = remaining.indexOf('@');
   if (atIndex !== -1) {
     username = remaining.substring(0, atIndex);
+    // Treat empty or whitespace-only usernames as undefined
+    if (username.trim() === '') {
+      username = undefined;
+    }
     remaining = remaining.substring(atIndex + 1);
   }
 
