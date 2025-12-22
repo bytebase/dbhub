@@ -606,6 +606,22 @@ domain = "MYDOMAIN"
         expect(() => loadTomlConfig()).toThrow("Domain is only valid with authentication = \"ntlm\"");
       });
 
+      it('should throw error when domain is used with non-SQL Server database', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+domain = "MYDOMAIN"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("domain but it is only supported for SQL Server");
+      });
+
       it('should throw error when authentication is used with non-SQL Server DSN (no explicit type)', () => {
         const tomlContent = `
 [[sources]]
