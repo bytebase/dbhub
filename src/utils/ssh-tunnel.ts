@@ -163,15 +163,20 @@ export class SSHTunnel {
         sshConfig.sock = sock;
       }
 
-      client.on('error', (err) => {
+      const onError = (err: Error) => {
+        client.removeListener('ready', onReady);
         reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${err.message}`));
-      });
+      };
 
-      client.on('ready', () => {
+      const onReady = () => {
+        client.removeListener('error', onError);
         const desc = label || `${hostInfo.host}:${hostInfo.port}`;
         console.error(`SSH connection established: ${desc}`);
         resolve(client);
-      });
+      };
+
+      client.on('error', onError);
+      client.on('ready', onReady);
 
       client.connect(sshConfig);
     });
