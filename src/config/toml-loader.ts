@@ -279,6 +279,25 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
   }
+
+  // Validate sslmode if provided
+  if (source.sslmode !== undefined) {
+    // SQLite doesn't support SSL (local file-based database)
+    if (source.type === "sqlite") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has sslmode but SQLite does not support SSL. ` +
+          `Remove the sslmode field for SQLite sources.`
+      );
+    }
+
+    const validSslModes = ["disable", "require"];
+    if (!validSslModes.includes(source.sslmode)) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid sslmode '${source.sslmode}'. ` +
+          `Valid values: ${validSslModes.join(", ")}`
+      );
+    }
+  }
 }
 
 /**
@@ -394,9 +413,22 @@ export function buildDSNFromSource(source: SourceConfig): string {
   // Build base DSN
   let dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}/${encodedDatabase}`;
 
-  // Add SQL Server specific query parameters
+  // Collect query parameters
+  const queryParams: string[] = [];
+
+  // Add SQL Server specific: instanceName
   if (source.type === "sqlserver" && source.instanceName) {
-    dsn += `?instanceName=${encodeURIComponent(source.instanceName)}`;
+    queryParams.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
+  }
+
+  // Add sslmode for network databases (not sqlite)
+  if (source.sslmode && source.type !== "sqlite") {
+    queryParams.push(`sslmode=${source.sslmode}`);
+  }
+
+  // Append query string if any params exist
+  if (queryParams.length > 0) {
+    dsn += `?${queryParams.join("&")}`;
   }
 
   return dsn;

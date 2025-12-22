@@ -401,6 +401,89 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       });
     });
 
+    describe('sslmode validation', () => {
+      it('should accept sslmode = "disable"', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "disable"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('disable');
+      });
+
+      it('should accept sslmode = "require"', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "require"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('require');
+      });
+
+      it('should throw error for invalid sslmode value', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "invalid"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("invalid sslmode 'invalid'");
+      });
+
+      it('should throw error when sslmode is specified for SQLite', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlite"
+database = "/path/to/database.db"
+sslmode = "require"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("SQLite does not support SSL");
+      });
+
+      it('should work without sslmode (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBeUndefined();
+      });
+    });
+
     describe('query_timeout validation', () => {
       it('should accept valid query_timeout', () => {
         const tomlContent = `
@@ -548,6 +631,72 @@ query_timeout = 120
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('sqlserver://sa:Pass123!@localhost:1433/testdb?instanceName=ENV1');
+    });
+
+    it('should build PostgreSQL DSN with sslmode', () => {
+      const source: SourceConfig = {
+        id: 'pg_ssl',
+        type: 'postgres',
+        host: 'localhost',
+        port: 5432,
+        database: 'testdb',
+        user: 'user',
+        password: 'pass',
+        sslmode: 'require'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@localhost:5432/testdb?sslmode=require');
+    });
+
+    it('should build MySQL DSN with sslmode', () => {
+      const source: SourceConfig = {
+        id: 'mysql_ssl',
+        type: 'mysql',
+        host: 'localhost',
+        database: 'testdb',
+        user: 'root',
+        password: 'secret',
+        sslmode: 'disable'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('mysql://root:secret@localhost:3306/testdb?sslmode=disable');
+    });
+
+    it('should build SQL Server DSN with both instanceName and sslmode', () => {
+      const source: SourceConfig = {
+        id: 'sqlserver_full',
+        type: 'sqlserver',
+        host: 'localhost',
+        port: 1433,
+        database: 'testdb',
+        user: 'sa',
+        password: 'Pass123!',
+        instanceName: 'SQLEXPRESS',
+        sslmode: 'require'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://sa:Pass123!@localhost:1433/testdb?instanceName=SQLEXPRESS&sslmode=require');
+    });
+
+    it('should not append sslmode for SQLite in DSN building', () => {
+      // Note: Validation rejects sslmode for SQLite at config load time,
+      // but buildDSNFromSource also handles it gracefully
+      const source: SourceConfig = {
+        id: 'sqlite_no_ssl',
+        type: 'sqlite',
+        database: '/path/to/database.db',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlite:////path/to/database.db');
+      expect(dsn).not.toContain('sslmode');
     });
 
     it('should build SQLite DSN from database path', () => {

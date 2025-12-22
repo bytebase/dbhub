@@ -29,6 +29,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # database = "myapp"
 # user = "postgres"
 # password = "p@ss:word/123"
+# sslmode = "disable"  # Optional: "disable" or "require"
 
 # Development PostgreSQL (shared dev server)
 # [[sources]]
@@ -74,6 +75,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # # For named instances, use:
 # # dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp?instanceName=SQLEXPRESS"
 # query_timeout = 60  # Query timeout in seconds (works for all databases except SQLite)
+
+# SQL Server - Individual parameters (use when password contains special characters)
+# [[sources]]
+# id = "local_sqlserver"
+# type = "sqlserver"
+# host = "localhost"
+# port = 1433
+# database = "myapp"
+# user = "sa"
+# password = "YourStrong@Passw0rd"
+# instanceName = "SQLEXPRESS"  # Optional: for named instances
+# sslmode = "disable"          # Optional: "disable" or "require"
 
 # SQL Server with Windows/NTLM authentication
 # [[sources]]
@@ -175,6 +188,10 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_host, ssh_port (default: 22), ssh_user
 #   ssh_key (path to private key) OR ssh_password
 #   ssh_passphrase (if key is encrypted)
+#
+# SSL Mode (for network databases, not SQLite):
+#   sslmode = "disable"   # No SSL
+#   sslmode = "require"   # SSL without certificate verification
 #
 # Tool Options:
 #   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN

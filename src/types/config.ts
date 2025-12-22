@@ -25,6 +25,7 @@ export interface ConnectionParams {
   user?: string;
   password?: string;
   instanceName?: string; // SQL Server named instance support
+  sslmode?: "disable" | "require"; // SSL mode for network databases (not applicable to SQLite)
 }
 
 /**
