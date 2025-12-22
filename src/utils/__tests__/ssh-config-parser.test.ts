@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink } from '../ssh-config-parser.js';
+<<<<<<< HEAD
 <<<<<<< HEAD
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
 =======
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync } from 'fs';
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
+>>>>>>> 3a1c62d (chore: address comment)
 import { tmpdir, homedir } from 'os';
 import { join } from 'path';
 
@@ -219,14 +223,19 @@ Host tilde-test
     });
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     it.skipIf(!symlinksSupported)('should resolve symlinks to files', () => {
 =======
     it('should resolve symlinks to files', () => {
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+    it.skipIf(!symlinksSupported)('should resolve symlinks to files', () => {
+>>>>>>> 3a1c62d (chore: address comment)
       const targetPath = join(tempDir, 'target_file');
       const linkPath = join(tempDir, 'link_to_file');
       writeFileSync(targetPath, 'content');
 
+<<<<<<< HEAD
 <<<<<<< HEAD
       symlinkSync(targetPath, linkPath);
       const result = resolveSymlink(linkPath);
@@ -252,10 +261,19 @@ Host tilde-test
 
     it('should resolve symlinks to directories', () => {
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+      symlinkSync(targetPath, linkPath);
+      const result = resolveSymlink(linkPath);
+      expect(result).toBe(realpathSync(targetPath));
+    });
+
+    it.skipIf(!symlinksSupported)('should resolve symlinks to directories', () => {
+>>>>>>> 3a1c62d (chore: address comment)
       const targetDir = join(tempDir, 'target_dir');
       const linkDir = join(tempDir, 'link_to_dir');
       mkdirSync(targetDir);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
       symlinkSync(targetDir, linkDir, 'dir');
       const result = resolveSymlink(linkDir);
@@ -275,6 +293,11 @@ Host tilde-test
         throw error;
       }
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+      symlinkSync(targetDir, linkDir, 'dir');
+      const result = resolveSymlink(linkDir);
+      expect(result).toBe(realpathSync(targetDir));
+>>>>>>> 3a1c62d (chore: address comment)
     });
 
     it('should handle tilde expansion', () => {
@@ -290,10 +313,14 @@ Host tilde-test
     });
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     it.skipIf(!symlinksSupported)('should handle files within symlinked directories', () => {
 =======
     it('should handle files within symlinked directories', () => {
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+    it.skipIf(!symlinksSupported)('should handle files within symlinked directories', () => {
+>>>>>>> 3a1c62d (chore: address comment)
       const targetDir = join(tempDir, 'ssh_target');
       const linkDir = join(tempDir, 'ssh_link');
       mkdirSync(targetDir);
@@ -302,10 +329,14 @@ Host tilde-test
       writeFileSync(configFile, 'Host test\n  User testuser\n');
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3a1c62d (chore: address comment)
       symlinkSync(targetDir, linkDir, 'dir');
       const linkedConfigPath = join(linkDir, 'config');
       const result = resolveSymlink(linkedConfigPath);
       expect(result).toBe(realpathSync(configFile));
+<<<<<<< HEAD
     });
   });
 
@@ -330,6 +361,12 @@ Host tilde-test
 
   describe('parseSSHConfig with symlinks', () => {
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+    });
+  });
+
+  describe.skipIf(!symlinksSupported)('parseSSHConfig with symlinks', () => {
+>>>>>>> 3a1c62d (chore: address comment)
     it('should parse config from symlinked directory', () => {
       const targetDir = join(tempDir, 'ssh_real');
       const linkDir = join(tempDir, 'ssh_symlink');
@@ -343,6 +380,9 @@ Host symlink-test
       writeFileSync(join(targetDir, 'config'), configContent);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3a1c62d (chore: address comment)
       symlinkSync(targetDir, linkDir, 'dir');
       const linkedConfigPath = join(linkDir, 'config');
       const result = parseSSHConfig('symlink-test', linkedConfigPath);
@@ -350,6 +390,7 @@ Host symlink-test
         host: 'symlink.example.com',
         username: 'symlinkuser'
       });
+<<<<<<< HEAD
 =======
       try {
         symlinkSync(targetDir, linkDir, 'dir');
@@ -369,6 +410,8 @@ Host symlink-test
         throw error;
       }
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+>>>>>>> 3a1c62d (chore: address comment)
     });
 
     it('should handle identity file in symlinked directory', () => {
@@ -379,6 +422,7 @@ Host symlink-test
       const keyPath = join(targetDir, 'id_rsa');
       writeFileSync(keyPath, 'fake-key-content');
 
+<<<<<<< HEAD
 <<<<<<< HEAD
       symlinkSync(targetDir, linkDir, 'dir');
       const linkedKeyPath = join(linkDir, 'id_rsa');
@@ -391,11 +435,18 @@ Host symlink-test
 
         const configContent = `
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedKeyPath = join(linkDir, 'id_rsa');
+
+      const configContent = `
+>>>>>>> 3a1c62d (chore: address comment)
 Host key-symlink-test
   HostName keytest.example.com
   User keyuser
   IdentityFile ${linkedKeyPath}
 `;
+<<<<<<< HEAD
 <<<<<<< HEAD
       writeFileSync(configPath, configContent);
 
@@ -409,22 +460,19 @@ Host key-symlink-test
 });
 =======
         writeFileSync(configPath, configContent);
+=======
+      writeFileSync(configPath, configContent);
+>>>>>>> 3a1c62d (chore: address comment)
 
-        const result = parseSSHConfig('key-symlink-test', configPath);
-        expect(result?.host).toBe('keytest.example.com');
-        expect(result?.username).toBe('keyuser');
-        // The private key path should be resolved to the real path
-        expect(result?.privateKey).toBe(realpathSync(keyPath));
-      } catch (error) {
-        // Skip test if symlinks are not supported
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      const result = parseSSHConfig('key-symlink-test', configPath);
+      expect(result?.host).toBe('keytest.example.com');
+      expect(result?.username).toBe('keyuser');
+      // The private key path should be resolved to the real path
+      expect(result?.privateKey).toBe(realpathSync(keyPath));
     });
   });
 });
+<<<<<<< HEAD
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
+=======
+>>>>>>> 3a1c62d (chore: address comment)
