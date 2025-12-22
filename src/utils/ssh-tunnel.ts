@@ -229,6 +229,11 @@ export class SSHTunnel {
         );
       });
 
+      // Register error listener before calling listen() to catch all errors
+      this.localServer.on('error', (err) => {
+        reject(new Error(`Local server error: ${err.message}`));
+      });
+
       const localPort = options.localPort || 0;
       this.localServer.listen(localPort, '127.0.0.1', () => {
         const address = this.localServer!.address();
@@ -246,10 +251,6 @@ export class SSHTunnel {
         this.isConnected = true;
         console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
         resolve(this.tunnelInfo);
-      });
-
-      this.localServer.on('error', (err) => {
-        reject(new Error(`Local server error: ${err.message}`));
       });
     });
   }
