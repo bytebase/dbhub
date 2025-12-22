@@ -257,7 +257,7 @@ export function parseJumpHost(jumpHostStr: string): JumpHost {
       if (/^\d+$/.test(potentialPort)) {
         host = remaining.substring(0, lastColon);
         const parsedPort = parseInt(potentialPort, 10);
-        if (parsedPort <= 0 || parsedPort > 65535) {
+        if (isNaN(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
           throw new Error(`Invalid port number in "${jumpHostStr}": port must be between 1 and 65535`);
         }
         port = parsedPort;
