@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { readFileSync, realpathSync, statSync } from 'fs';
+=======
+import { readFileSync, existsSync, realpathSync, statSync } from 'fs';
+>>>>>>> 6844af2 (feat: implement ssh symbolic link)
 import { homedir } from 'os';
 import { join } from 'path';
 import SSHConfig from 'ssh-config';
@@ -28,12 +32,36 @@ function expandTilde(filePath: string): string {
  * Resolve a path, following symlinks if necessary.
  * This is particularly important on Windows where .ssh directory
  * may be a directory junction or symbolic link.
+<<<<<<< HEAD
  * @param filePath The path to resolve (may contain ~)
  * @returns The resolved real path, or the expanded path if resolution fails
+=======
+ * @param filePath The path to resolve
+ * @returns The resolved real path, or the original path if resolution fails
+ */
+export function resolveSymlink(filePath: string): string {
+  try {
+    // First expand tilde
+    const expandedPath = expandTilde(filePath);
+
+    // Try to resolve the real path (follows symlinks)
+    return realpathSync(expandedPath);
+  } catch {
+    // If realpathSync fails (e.g., file doesn't exist yet),
+    // fall back to just expanding tilde
+    return expandTilde(filePath);
+  }
+}
+
+/**
+ * Check if a file exists, properly handling symlinks on Windows.
+ * Uses realpathSync to resolve symlinks before checking existence.
+>>>>>>> 6844af2 (feat: implement ssh symbolic link)
  */
 export function resolveSymlink(filePath: string): string {
   const expandedPath = expandTilde(filePath);
   try {
+<<<<<<< HEAD
     return realpathSync(expandedPath);
   } catch {
     // If realpathSync fails (e.g., file doesn't exist),
@@ -55,6 +83,20 @@ function isFile(filePath: string): boolean {
   try {
     const stat = statSync(filePath);
     return stat.isFile();
+=======
+    const expandedPath = expandTilde(filePath);
+
+    // First try to resolve symlinks and check if target exists
+    try {
+      const realPath = realpathSync(expandedPath);
+      const stat = statSync(realPath);
+      return stat.isFile();
+    } catch {
+      // If realpathSync fails, fall back to basic existsSync
+      // This handles cases where the file simply doesn't exist
+      return existsSync(expandedPath);
+    }
+>>>>>>> 6844af2 (feat: implement ssh symbolic link)
   } catch {
     return false;
   }
@@ -66,8 +108,14 @@ function isFile(filePath: string): boolean {
  */
 function findDefaultSSHKey(): string | undefined {
   for (const keyPath of DEFAULT_SSH_KEYS) {
+<<<<<<< HEAD
     const resolvedPath = resolveSymlink(keyPath);
     if (isFile(resolvedPath)) {
+=======
+    // Resolve symlinks (important for Windows where .ssh may be a junction)
+    const resolvedPath = resolveSymlink(keyPath);
+    if (fileExists(resolvedPath)) {
+>>>>>>> 6844af2 (feat: implement ssh symbolic link)
       return resolvedPath;
     }
   }
@@ -135,7 +183,11 @@ export function parseSSHConfig(
 
       // Resolve symlinks (important for Windows where .ssh may be a junction)
       const resolvedPath = resolveSymlink(identityFile);
+<<<<<<< HEAD
       if (isFile(resolvedPath)) {
+=======
+      if (fileExists(resolvedPath)) {
+>>>>>>> 6844af2 (feat: implement ssh symbolic link)
         sshConfig.privateKey = resolvedPath;
       }
     }
