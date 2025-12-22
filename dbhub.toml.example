@@ -59,6 +59,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # ssh_key = "~/.ssh/id_ed25519"
 # # ProxyJump: comma-separated list of jump hosts
 # # Format: [user@]host[:port] - user/port optional, inherits from ssh_user if not specified
+# # Note: While each jump host can have a different username, the same SSH key (or password)
+# #       specified in ssh_key/ssh_password will be used for authentication to ALL hosts in the chain
 # ssh_proxy_jump = "bastion.company.com,admin@jump2.internal:2222"
 
 # ============================================================================
