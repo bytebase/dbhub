@@ -476,6 +476,15 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     sources.push("SSH_PASSPHRASE from environment");
   }
 
+  // SSH ProxyJump (optional) - for multi-hop SSH connections
+  if (args["ssh-proxy-jump"]) {
+    config.proxyJump = args["ssh-proxy-jump"];
+    sources.push("ssh-proxy-jump from command line");
+  } else if (process.env.SSH_PROXY_JUMP) {
+    config.proxyJump = process.env.SSH_PROXY_JUMP;
+    sources.push("SSH_PROXY_JUMP from environment");
+  }
+
   // Validate required fields
   if (!config.host || !config.username) {
     throw new Error("SSH tunnel configuration requires at least --ssh-host and --ssh-user");

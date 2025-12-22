@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink } from '../ssh-config-parser.js';
+import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink, parseJumpHost, parseJumpHosts } from '../ssh-config-parser.js';
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
 import { tmpdir, homedir } from 'os';
 import { join } from 'path';
@@ -308,5 +308,226 @@ Host key-symlink-test
       // The private key path should be resolved to the real path
       expect(result?.privateKey).toBe(realpathSync(keyPath));
     });
+  });
+
+  describe('parseSSHConfig with ProxyJump', () => {
+    it('should extract ProxyJump from SSH config', () => {
+      const configContent = `
+Host target-with-jump
+  HostName 10.0.0.5
+  User admin
+  ProxyJump bastion.example.com
+`;
+      writeFileSync(configPath, configContent);
+
+      const result = parseSSHConfig('target-with-jump', configPath);
+      expect(result?.host).toBe('10.0.0.5');
+      expect(result?.username).toBe('admin');
+      expect(result?.proxyJump).toBe('bastion.example.com');
+    });
+
+    it('should extract multi-hop ProxyJump from SSH config', () => {
+      const configContent = `
+Host multi-jump-target
+  HostName 10.0.0.6
+  User root
+  ProxyJump jump1.example.com,admin@jump2.example.com:2222
+`;
+      writeFileSync(configPath, configContent);
+
+      const result = parseSSHConfig('multi-jump-target', configPath);
+      expect(result?.host).toBe('10.0.0.6');
+      expect(result?.username).toBe('root');
+      expect(result?.proxyJump).toBe('jump1.example.com,admin@jump2.example.com:2222');
+    });
+  });
+});
+
+describe('parseJumpHost', () => {
+  it('should parse simple hostname', () => {
+    const result = parseJumpHost('bastion.example.com');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should parse hostname with port', () => {
+    const result = parseJumpHost('bastion.example.com:2222');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 2222,
+      username: undefined
+    });
+  });
+
+  it('should parse hostname with username', () => {
+    const result = parseJumpHost('admin@bastion.example.com');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 22,
+      username: 'admin'
+    });
+  });
+
+  it('should parse hostname with username and port', () => {
+    const result = parseJumpHost('admin@bastion.example.com:2222');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 2222,
+      username: 'admin'
+    });
+  });
+
+  it('should handle IPv4 addresses', () => {
+    const result = parseJumpHost('192.168.1.100:22');
+    expect(result).toEqual({
+      host: '192.168.1.100',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should handle IPv6 addresses in brackets', () => {
+    const result = parseJumpHost('[::1]:22');
+    expect(result).toEqual({
+      host: '::1',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should handle IPv6 with username', () => {
+    const result = parseJumpHost('admin@[2001:db8::1]:2222');
+    expect(result).toEqual({
+      host: '2001:db8::1',
+      port: 2222,
+      username: 'admin'
+    });
+  });
+
+  it('should trim whitespace', () => {
+    const result = parseJumpHost('  admin@bastion.example.com:2222  ');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 2222,
+      username: 'admin'
+    });
+  });
+
+  it('should throw error for empty string', () => {
+    expect(() => parseJumpHost('')).toThrow('Jump host string cannot be empty');
+    expect(() => parseJumpHost('   ')).toThrow('Jump host string cannot be empty');
+  });
+
+  it('should throw error for empty host (user@:port)', () => {
+    expect(() => parseJumpHost('user@:22')).toThrow('host cannot be empty');
+  });
+
+  it('should throw error for only @ symbol', () => {
+    expect(() => parseJumpHost('@')).toThrow('host cannot be empty');
+  });
+
+  it('should throw error for only port (:22)', () => {
+    expect(() => parseJumpHost(':22')).toThrow('host cannot be empty');
+  });
+
+  it('should handle @host without username (treats as host)', () => {
+    const result = parseJumpHost('@bastion.example.com');
+    expect(result).toEqual({
+      host: 'bastion.example.com',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should throw error for invalid port numbers', () => {
+    // Port 0 is invalid
+    expect(() => parseJumpHost('host:0')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('host:0')).toThrow('port must be between 1 and 65535');
+
+    // Port > 65535 is invalid
+    expect(() => parseJumpHost('host:99999')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('host:99999')).toThrow('port must be between 1 and 65535');
+
+    // Valid port should work
+    const result = parseJumpHost('host:65535');
+    expect(result.port).toBe(65535);
+  });
+
+  it('should throw error for malformed IPv6 (missing closing bracket)', () => {
+    expect(() => parseJumpHost('[::1')).toThrow('missing closing bracket');
+    expect(() => parseJumpHost('user@[2001:db8::1')).toThrow('missing closing bracket');
+  });
+
+  it('should throw error for invalid port numbers in IPv6 addresses', () => {
+    // Port 0 is invalid for IPv6
+    expect(() => parseJumpHost('[::1]:0')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('[::1]:0')).toThrow('port must be between 1 and 65535');
+
+    // Port > 65535 is invalid for IPv6
+    expect(() => parseJumpHost('[2001:db8::1]:99999')).toThrow('Invalid port number');
+    expect(() => parseJumpHost('[2001:db8::1]:99999')).toThrow('port must be between 1 and 65535');
+
+    // Valid port should work for IPv6
+    const result = parseJumpHost('[::1]:8080');
+    expect(result.port).toBe(8080);
+  });
+});
+
+describe('parseJumpHosts', () => {
+  it('should parse single jump host', () => {
+    const result = parseJumpHosts('bastion.example.com');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      host: 'bastion.example.com',
+      port: 22,
+      username: undefined
+    });
+  });
+
+  it('should parse multiple jump hosts', () => {
+    const result = parseJumpHosts('jump1.example.com,admin@jump2.example.com:2222');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      host: 'jump1.example.com',
+      port: 22,
+      username: undefined
+    });
+    expect(result[1]).toEqual({
+      host: 'jump2.example.com',
+      port: 2222,
+      username: 'admin'
+    });
+  });
+
+  it('should handle whitespace around commas', () => {
+    const result = parseJumpHosts('jump1.example.com , jump2.example.com');
+    expect(result).toHaveLength(2);
+    expect(result[0].host).toBe('jump1.example.com');
+    expect(result[1].host).toBe('jump2.example.com');
+  });
+
+  it('should return empty array for empty string', () => {
+    expect(parseJumpHosts('')).toEqual([]);
+  });
+
+  it('should return empty array for "none"', () => {
+    expect(parseJumpHosts('none')).toEqual([]);
+    expect(parseJumpHosts('NONE')).toEqual([]);
+  });
+
+  it('should filter out empty segments', () => {
+    const result = parseJumpHosts('jump1.example.com,,jump2.example.com');
+    expect(result).toHaveLength(2);
+  });
+
+  it('should parse complex multi-hop chain', () => {
+    const result = parseJumpHosts('bastion.company.com,admin@internal.company.com:2222,root@10.0.0.1');
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({ host: 'bastion.company.com', port: 22, username: undefined });
+    expect(result[1]).toEqual({ host: 'internal.company.com', port: 2222, username: 'admin' });
+    expect(result[2]).toEqual({ host: '10.0.0.1', port: 22, username: 'root' });
   });
 });

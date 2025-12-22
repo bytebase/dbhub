@@ -49,6 +49,20 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # ssh_key = "~/.ssh/id_ed25519"
 # # ssh_passphrase = "your_key_passphrase"  # If key is encrypted
 
+# Production PostgreSQL (multi-hop SSH through multiple jump hosts)
+# [[sources]]
+# id = "prod_pg_multihop"
+# dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
+# # SSH tunnel with ProxyJump (connects through jump hosts in order)
+# ssh_host = "internal-server.company.com"
+# ssh_user = "deploy"
+# ssh_key = "~/.ssh/id_ed25519"
+# # ProxyJump: comma-separated list of jump hosts
+# # Format: [user@]host[:port] - user/port optional, inherits from ssh_user if not specified
+# # Note: While each jump host can have a different username, the same SSH key (or password)
+# #       specified in ssh_key/ssh_password will be used for authentication to ALL hosts in the chain
+# ssh_proxy_jump = "bastion.company.com,admin@jump2.internal:2222"
+
 # ============================================================================
 # MYSQL (Local development)
 # ============================================================================
@@ -211,6 +225,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_host, ssh_port (default: 22), ssh_user
 #   ssh_key (path to private key) OR ssh_password
 #   ssh_passphrase (if key is encrypted)
+#   ssh_proxy_jump (ProxyJump for multi-hop: "jump1.com,user@jump2.com:2222")
 #
 # SSL Mode (for network databases, not SQLite):
 #   sslmode = "disable"   # No SSL
