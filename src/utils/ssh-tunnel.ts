@@ -78,24 +78,38 @@ export class SSHTunnel {
         ? jumpHosts[i + 1]
         : { host: targetConfig.host, port: targetConfig.port || 22 };
 
-      const client = await this.connectToHost(
-        {
-          host: jumpHost.host,
-          port: jumpHost.port,
-          username: jumpHost.username || targetConfig.username,
-        },
-        targetConfig.password,
-        privateKey,
-        targetConfig.passphrase,
-        previousStream,
-        `jump host ${i + 1}`
-      );
+      let client: Client | null = null;
+      let forwardStream: Duplex;
+      try {
+        client = await this.connectToHost(
+          {
+            host: jumpHost.host,
+            port: jumpHost.port,
+            username: jumpHost.username || targetConfig.username,
+          },
+          targetConfig.password,
+          privateKey,
+          targetConfig.passphrase,
+          previousStream,
+          `jump host ${i + 1}`
+        );
+
+        // Forward to the next host
+        console.error(`  → Forwarding through ${jumpHost.host}:${jumpHost.port} to ${nextHost.host}:${nextHost.port}`);
+        forwardStream = await this.forwardTo(client, nextHost.host, nextHost.port);
+      } catch (error) {
+        if (client) {
+          try {
+            client.end();
+          } catch {
+            // Ignore errors during cleanup of partially established client
+          }
+        }
+        throw error;
+      }
 
       this.sshClients.push(client);
-
-      // Forward to the next host
-      console.error(`  → Forwarding through ${jumpHost.host}:${jumpHost.port} to ${nextHost.host}:${nextHost.port}`);
-      previousStream = await this.forwardTo(client, nextHost.host, nextHost.port);
+      previousStream = forwardStream;
     }
 
     // Connect to the final target
