@@ -4,6 +4,7 @@ import type { SSHTunnelConfig } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
+import { redactDSN } from "../config/env.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -35,6 +36,8 @@ export class ConnectorManager {
       throw new Error("No sources provided");
     }
 
+    console.error(`Connecting to ${sources.length} database source(s)...`);
+
     // Connect to each source
     for (const source of sources) {
       await this.connectSource(source);
@@ -48,6 +51,7 @@ export class ConnectorManager {
     const sourceId = source.id;
     // Build DSN from source config
     const dsn = buildDSNFromSource(source);
+    console.error(`  - ${sourceId}: ${redactDSN(dsn)}`);
 
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
