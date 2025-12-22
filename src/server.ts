@@ -8,8 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, redactDSN, resolveSourceConfigs, isDemoMode } from "./config/env.js";
-import { buildDSNFromSource } from "./config/toml-loader.js";
+import { resolveTransport, resolvePort, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
@@ -91,11 +90,6 @@ See documentation for more details on configuring database connections.
     console.error(`Configuration source: ${sourceConfigsData.source}`);
 
     // Connect to database(s) - works uniformly for all modes (demo, single DSN, multi-source TOML)
-    console.error(`Connecting to ${sources.length} database source(s)...`);
-    for (const source of sources) {
-      const dsn = source.dsn || buildDSNFromSource(source);
-      console.error(`  - ${source.id}: ${redactDSN(dsn)}`);
-    }
     await connectorManager.connectWithSources(sources);
 
     // Initialize tool registry (manages both built-in and custom tools)
