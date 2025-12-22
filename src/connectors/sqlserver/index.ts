@@ -48,8 +48,18 @@ export class SQLServerDSNParser implements DSNParser {
           options.sslmode = value;
         } else if (key === "instanceName") {
           options.instanceName = value;
+        } else if (key === "domain") {
+          options.domain = value;
         }
       });
+
+      // Validate NTLM parameter consistency
+      if (options.authentication === "ntlm" && !options.domain) {
+        throw new Error("NTLM authentication requires 'domain' parameter");
+      }
+      if (options.domain && options.authentication !== "ntlm") {
+        throw new Error("Parameter 'domain' requires 'authentication=ntlm'");
+      }
       
       // Handle sslmode parameter similar to PostgreSQL and MySQL
       if (options.sslmode) {
@@ -63,10 +73,8 @@ export class SQLServerDSNParser implements DSNParser {
         // Default behavior (certificate verification) is handled by the default values below
       }
       
-      // Base configuration without authentication first
+      // Base configuration
       const config: sql.config = {
-        user: url.username,
-        password: url.password,
         server: url.hostname,
         port: url.port ? parseInt(url.port) : 1433, // Default SQL Server port
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading slash
@@ -82,29 +90,42 @@ export class SQLServerDSNParser implements DSNParser {
           instanceName: options.instanceName, // Add named instance support
         },
       };
-      
-      // Handle Azure Active Directory authentication with access token
-      if (options.authentication === "azure-active-directory-access-token") {
-        try {
-          // Create a credential instance
-          const credential = new DefaultAzureCredential();
-          
-          // Get token for SQL Server resource
-          const token = await credential.getToken("https://database.windows.net/");
-          
-          // Set the token in the config
+
+      // Handle authentication types
+      switch (options.authentication) {
+        case "azure-active-directory-access-token": {
+          try {
+            const credential = new DefaultAzureCredential();
+            const token = await credential.getToken("https://database.windows.net/");
+            config.authentication = {
+              type: "azure-active-directory-access-token",
+              options: {
+                token: token.token,
+              },
+            };
+          } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to get Azure AD token: ${errorMessage}`);
+          }
+          break;
+        }
+        case "ntlm":
           config.authentication = {
-            type: "azure-active-directory-access-token",
+            type: "ntlm",
             options: {
-              token: token.token,
+              domain: options.domain,
+              userName: url.username,
+              password: url.password,
             },
           };
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          throw new Error(`Failed to get Azure AD token: ${errorMessage}`);
-        }
+          break;
+        default:
+          // Default SQL Server authentication
+          config.user = url.username;
+          config.password = url.password;
+          break;
       }
-      
+
       return config;
     } catch (error) {
       throw new Error(

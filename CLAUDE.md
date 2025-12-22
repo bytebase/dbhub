@@ -133,6 +133,7 @@ DBHub supports three configuration methods (in priority order):
   - MariaDB: `mariadb://user:password@localhost:3306/dbname?sslmode=disable`
   - SQL Server: `sqlserver://user:password@localhost:1433/dbname?sslmode=disable`
   - SQL Server (named instance): `sqlserver://user:password@localhost:1433/dbname?instanceName=ENV1`
+  - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - SQLite: `sqlite:///path/to/database.db` or `sqlite:///:memory:`
 - SSL modes: `sslmode=disable` (no SSL) or `sslmode=require` (SSL without cert verification)
 

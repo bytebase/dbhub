@@ -75,6 +75,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # # dsn = "sqlserver://sa:YourStrong@Passw0rd@localhost:1433/myapp?instanceName=SQLEXPRESS"
 # query_timeout = 60  # Query timeout in seconds (works for all databases except SQLite)
 
+# SQL Server with Windows/NTLM authentication
+# [[sources]]
+# id = "corp_sqlserver"
+# dsn = "sqlserver://jsmith:secret@sqlserver.corp.local:1433/app_db?authentication=ntlm&domain=CORP"
+
 # ============================================================================
 # SQLITE (Local file or in-memory)
 # ============================================================================
