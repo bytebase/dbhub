@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, realpathSync, statSync } from 'fs';
+import { readFileSync, realpathSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import SSHConfig from 'ssh-config';
@@ -28,54 +28,42 @@ function expandTilde(filePath: string): string {
  * Resolve a path, following symlinks if necessary.
  * This is particularly important on Windows where .ssh directory
  * may be a directory junction or symbolic link.
- * @param filePath The path to resolve
- * @returns The resolved real path, or the original path if resolution fails
+ * @param filePath The path to resolve (may contain ~)
+ * @returns The resolved real path, or the expanded path if resolution fails
  */
 export function resolveSymlink(filePath: string): string {
+  const expandedPath = expandTilde(filePath);
   try {
-    // First expand tilde
-    const expandedPath = expandTilde(filePath);
-
-    // Try to resolve the real path (follows symlinks)
     return realpathSync(expandedPath);
   } catch {
-    // If realpathSync fails (e.g., file doesn't exist yet),
-    // fall back to just expanding tilde
-    return expandTilde(filePath);
+    // If realpathSync fails (e.g., file doesn't exist),
+    // fall back to the expanded path
+    return expandedPath;
   }
 }
 
 /**
- * Check if a file exists, properly handling symlinks on Windows.
- * Uses realpathSync to resolve symlinks before checking existence.
+ * Check if a path points to an existing file.
+ * Assumes the path is already resolved (no tilde, symlinks followed).
+ * @param resolvedPath An already-resolved absolute path
  */
-function fileExists(filePath: string): boolean {
+function isFile(resolvedPath: string): boolean {
   try {
-    const expandedPath = expandTilde(filePath);
-
-    // First try to resolve symlinks and check if target exists
-    try {
-      const realPath = realpathSync(expandedPath);
-      const stat = statSync(realPath);
-      return stat.isFile();
-    } catch {
-      // If realpathSync fails, fall back to basic existsSync
-      // This handles cases where the file simply doesn't exist
-      return existsSync(expandedPath);
-    }
+    const stat = statSync(resolvedPath);
+    return stat.isFile();
   } catch {
     return false;
   }
 }
 
 /**
- * Find the first existing SSH key from default locations
+ * Find the first existing SSH key from default locations.
+ * Resolves symlinks and returns the real path if found.
  */
 function findDefaultSSHKey(): string | undefined {
   for (const keyPath of DEFAULT_SSH_KEYS) {
-    // Resolve symlinks (important for Windows where .ssh may be a junction)
     const resolvedPath = resolveSymlink(keyPath);
-    if (fileExists(resolvedPath)) {
+    if (isFile(resolvedPath)) {
       return resolvedPath;
     }
   }
@@ -96,7 +84,7 @@ export function parseSSHConfig(
   const sshConfigPath = resolveSymlink(configPath);
 
   // Check if SSH config file exists
-  if (!existsSync(sshConfigPath)) {
+  if (!isFile(sshConfigPath)) {
     return null;
   }
 
@@ -143,7 +131,7 @@ export function parseSSHConfig(
 
       // Resolve symlinks (important for Windows where .ssh may be a junction)
       const resolvedPath = resolveSymlink(identityFile);
-      if (fileExists(resolvedPath)) {
+      if (isFile(resolvedPath)) {
         sshConfig.privateKey = resolvedPath;
       }
     }

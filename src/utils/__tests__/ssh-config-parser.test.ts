@@ -1,8 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink } from '../ssh-config-parser.js';
-import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
 import { tmpdir, homedir } from 'os';
 import { join } from 'path';
+
+/**
+ * Check if symlinks are supported on the current platform.
+ * On Windows without admin rights, symlink creation will fail with EPERM.
+ */
+function checkSymlinkSupport(): boolean {
+  const testDir = mkdtempSync(join(tmpdir(), 'symlink-check-'));
+  const targetFile = join(testDir, 'target');
+  const linkFile = join(testDir, 'link');
+
+  try {
+    writeFileSync(targetFile, 'test');
+    symlinkSync(targetFile, linkFile);
+    unlinkSync(linkFile);
+    unlinkSync(targetFile);
+    rmSync(testDir, { recursive: true });
+    return true;
+  } catch (error) {
+    rmSync(testDir, { recursive: true, force: true });
+    const e = error as NodeJS.ErrnoException;
+    return !(e.code === 'EPERM' || e.code === 'ENOTSUP');
+  }
+}
+
+// Check symlink support once at module load time
+const symlinksSupported = checkSymlinkSupport();
 
 describe('SSH Config Parser', () => {
   let tempDir: string;
@@ -188,44 +214,24 @@ Host tilde-test
       expect(result).toBe(realpathSync(filePath));
     });
 
-    it('should resolve symlinks to files', () => {
+    it.skipIf(!symlinksSupported)('should resolve symlinks to files', () => {
       const targetPath = join(tempDir, 'target_file');
       const linkPath = join(tempDir, 'link_to_file');
       writeFileSync(targetPath, 'content');
 
-      try {
-        symlinkSync(targetPath, linkPath);
-        const result = resolveSymlink(linkPath);
-        expect(result).toBe(realpathSync(targetPath));
-      } catch (error) {
-        // Skip test if symlinks are not supported (e.g., Windows without admin rights)
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      symlinkSync(targetPath, linkPath);
+      const result = resolveSymlink(linkPath);
+      expect(result).toBe(realpathSync(targetPath));
     });
 
-    it('should resolve symlinks to directories', () => {
+    it.skipIf(!symlinksSupported)('should resolve symlinks to directories', () => {
       const targetDir = join(tempDir, 'target_dir');
       const linkDir = join(tempDir, 'link_to_dir');
       mkdirSync(targetDir);
 
-      try {
-        symlinkSync(targetDir, linkDir, 'dir');
-        const result = resolveSymlink(linkDir);
-        expect(result).toBe(realpathSync(targetDir));
-      } catch (error) {
-        // Skip test if symlinks are not supported
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      symlinkSync(targetDir, linkDir, 'dir');
+      const result = resolveSymlink(linkDir);
+      expect(result).toBe(realpathSync(targetDir));
     });
 
     it('should handle tilde expansion', () => {
@@ -240,7 +246,7 @@ Host tilde-test
       expect(result.startsWith(homedir())).toBe(true);
     });
 
-    it('should handle files within symlinked directories', () => {
+    it.skipIf(!symlinksSupported)('should handle files within symlinked directories', () => {
       const targetDir = join(tempDir, 'ssh_target');
       const linkDir = join(tempDir, 'ssh_link');
       mkdirSync(targetDir);
@@ -248,24 +254,14 @@ Host tilde-test
       const configFile = join(targetDir, 'config');
       writeFileSync(configFile, 'Host test\n  User testuser\n');
 
-      try {
-        symlinkSync(targetDir, linkDir, 'dir');
-        const linkedConfigPath = join(linkDir, 'config');
-        const result = resolveSymlink(linkedConfigPath);
-        expect(result).toBe(realpathSync(configFile));
-      } catch (error) {
-        // Skip test if symlinks are not supported
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedConfigPath = join(linkDir, 'config');
+      const result = resolveSymlink(linkedConfigPath);
+      expect(result).toBe(realpathSync(configFile));
     });
   });
 
-  describe('parseSSHConfig with symlinks', () => {
+  describe.skipIf(!symlinksSupported)('parseSSHConfig with symlinks', () => {
     it('should parse config from symlinked directory', () => {
       const targetDir = join(tempDir, 'ssh_real');
       const linkDir = join(tempDir, 'ssh_symlink');
@@ -278,23 +274,13 @@ Host symlink-test
 `;
       writeFileSync(join(targetDir, 'config'), configContent);
 
-      try {
-        symlinkSync(targetDir, linkDir, 'dir');
-        const linkedConfigPath = join(linkDir, 'config');
-        const result = parseSSHConfig('symlink-test', linkedConfigPath);
-        expect(result).toEqual({
-          host: 'symlink.example.com',
-          username: 'symlinkuser'
-        });
-      } catch (error) {
-        // Skip test if symlinks are not supported
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedConfigPath = join(linkDir, 'config');
+      const result = parseSSHConfig('symlink-test', linkedConfigPath);
+      expect(result).toEqual({
+        host: 'symlink.example.com',
+        username: 'symlinkuser'
+      });
     });
 
     it('should handle identity file in symlinked directory', () => {
@@ -305,32 +291,22 @@ Host symlink-test
       const keyPath = join(targetDir, 'id_rsa');
       writeFileSync(keyPath, 'fake-key-content');
 
-      try {
-        symlinkSync(targetDir, linkDir, 'dir');
-        const linkedKeyPath = join(linkDir, 'id_rsa');
+      symlinkSync(targetDir, linkDir, 'dir');
+      const linkedKeyPath = join(linkDir, 'id_rsa');
 
-        const configContent = `
+      const configContent = `
 Host key-symlink-test
   HostName keytest.example.com
   User keyuser
   IdentityFile ${linkedKeyPath}
 `;
-        writeFileSync(configPath, configContent);
+      writeFileSync(configPath, configContent);
 
-        const result = parseSSHConfig('key-symlink-test', configPath);
-        expect(result?.host).toBe('keytest.example.com');
-        expect(result?.username).toBe('keyuser');
-        // The private key path should be resolved to the real path
-        expect(result?.privateKey).toBe(realpathSync(keyPath));
-      } catch (error) {
-        // Skip test if symlinks are not supported
-        const e = error as NodeJS.ErrnoException;
-        if (e.code === 'EPERM' || e.code === 'ENOTSUP') {
-          console.log('Symlink creation not supported, skipping test');
-          return;
-        }
-        throw error;
-      }
+      const result = parseSSHConfig('key-symlink-test', configPath);
+      expect(result?.host).toBe('keytest.example.com');
+      expect(result?.username).toBe('keyuser');
+      // The private key path should be resolved to the real path
+      expect(result?.privateKey).toBe(realpathSync(keyPath));
     });
   });
 });
