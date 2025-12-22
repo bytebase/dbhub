@@ -5,6 +5,7 @@ node_modules/
 vendor/
 jspm_packages/
 bower_components/
+package-lock.json
 
 # Build outputs
 build/
