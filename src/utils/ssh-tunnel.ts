@@ -233,6 +233,7 @@ export class SSHTunnel {
       this.localServer.listen(localPort, '127.0.0.1', () => {
         const address = this.localServer!.address();
         if (!address || typeof address === 'string') {
+          this.cleanup();
           reject(new Error('Failed to get local server address'));
           return;
         }
@@ -249,6 +250,7 @@ export class SSHTunnel {
       });
 
       this.localServer.on('error', (err) => {
+        this.cleanup();
         reject(new Error(`Local server error: ${err.message}`));
       });
     });
