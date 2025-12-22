@@ -106,8 +106,12 @@ function isFile(filePath: string): boolean {
 >>>>>>> 6844af2 (feat: implement ssh symbolic link)
 =======
  * Check if a path points to an existing file.
- * Assumes the path is already resolved (no tilde, symlinks followed).
- * @param resolvedPath An already-resolved absolute path
+ *
+ * This function uses {@link statSync} and will follow symlinks. It does not
+ * require the path to be pre-resolved; any path accepted by {@link statSync}
+ * can be used.
+ *
+ * @param resolvedPath Path to check for an existing file
  */
 function isFile(resolvedPath: string): boolean {
   try {
