@@ -32,17 +32,20 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
           to={`/source/${source.id}`}
           aria-label={source.id}
           className={cn(
-            'flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg transition-colors',
-            'hover:bg-accent hover:text-accent-foreground',
-            isActive && 'bg-accent text-accent-foreground'
+            'flex flex-col items-center gap-0.5 py-2 px-1 transition-colors',
+            'hover:bg-card/50',
+            isActive && 'bg-card'
           )}
         >
           <img
             src={DB_LOGOS[source.type]}
             alt={`${source.type} logo`}
-            className="w-5 h-5"
+            className="w-6 h-6"
           />
-          <span className="text-[10px] text-muted-foreground truncate w-full text-center">
+          <span className={cn(
+            'text-[10px] truncate w-full text-center',
+            isActive ? 'text-foreground' : 'text-muted-foreground'
+          )}>
             {truncatedId}
           </span>
         </Link>
