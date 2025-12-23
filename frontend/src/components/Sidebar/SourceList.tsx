@@ -1,25 +1,13 @@
 import { Link, useParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
+import { DB_LOGOS } from '../../lib/db-logos';
 import type { DataSource, DatabaseType } from '../../types/datasource';
 import LockIcon from '../icons/LockIcon';
-import PostgresLogo from '../../assets/logos/postgres.svg';
-import MySQLLogo from '../../assets/logos/mysql.svg';
-import MariaDBLogo from '../../assets/logos/mariadb.svg';
-import SQLServerLogo from '../../assets/logos/sqlserver.svg';
-import SQLiteLogo from '../../assets/logos/sqlite.svg';
 
 interface SourceListProps {
   sources: DataSource[];
   isLoading: boolean;
 }
-
-const DB_LOGOS: Record<DatabaseType, string> = {
-  postgres: PostgresLogo,
-  mysql: MySQLLogo,
-  mariadb: MariaDBLogo,
-  sqlserver: SQLServerLogo,
-  sqlite: SQLiteLogo,
-};
 
 function DatabaseIcon({ type }: { type: DatabaseType }) {
   return (

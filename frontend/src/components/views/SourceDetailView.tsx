@@ -2,16 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { ApiError } from '../../api/errors';
-import type { DataSource, DatabaseType } from '../../types/datasource';
+import type { DataSource } from '../../types/datasource';
+import { DB_LOGOS } from '../../lib/db-logos';
 import LockIcon from '../icons/LockIcon';
-
-const DB_TYPE_DISPLAY_NAMES: Record<DatabaseType, string> = {
-  postgres: 'PostgreSQL',
-  mysql: 'MySQL',
-  mariadb: 'MariaDB',
-  sqlserver: 'SQL Server',
-  sqlite: 'SQLite',
-};
 
 export default function SourceDetailView() {
   const { sourceId } = useParams<{ sourceId: string }>();
@@ -76,14 +69,14 @@ export default function SourceDetailView() {
   return (
     <div className="container mx-auto px-8 py-12 max-w-4xl">
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            {source.id}
-          </h1>
-          <p className="text-muted-foreground">
-            {DB_TYPE_DISPLAY_NAMES[source.type]} Database
-          </p>
-        </div>
+        <h1 className="flex items-center gap-3 text-3xl font-bold text-foreground">
+          <img
+            src={DB_LOGOS[source.type]}
+            alt={`${source.type} logo`}
+            className="w-8 h-8"
+          />
+          {source.id}
+        </h1>
 
         <div className="bg-card border border-border rounded-lg p-6">
           <h2 className="text-xl font-semibold text-foreground mb-4">
