@@ -11,7 +11,7 @@ interface LayoutProps {
 export default function Layout({ sources, isLoading }: LayoutProps) {
   return (
     <div className="flex h-screen bg-background">
-      <Gutter />
+      <Gutter sources={sources} />
       <Sidebar sources={sources} isLoading={isLoading} />
       <main className="flex-1 overflow-auto" aria-label="Main content">
         <Outlet />
