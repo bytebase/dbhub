@@ -24,11 +24,11 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
             Loading...
           </div>
         ) : currentSource ? (
-          <div className="flex flex-col overflow-hidden">
+          <div className="flex flex-col overflow-hidden px-2 pt-2">
             <Link
               to={`/source/${currentSource.id}`}
               className={cn(
-                'flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors',
+                'flex items-center gap-2 px-2 py-2 text-sm font-medium transition-colors rounded-md',
                 'bg-accent text-accent-foreground'
               )}
             >
@@ -39,7 +39,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                 <Link
                   key={tool.name}
                   to={`/source/${currentSource.id}`}
-                  className="flex items-center px-6 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                  className="flex items-center px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors rounded-md"
                 >
                   <span className="truncate font-mono text-xs">{tool.name}</span>
                 </Link>
