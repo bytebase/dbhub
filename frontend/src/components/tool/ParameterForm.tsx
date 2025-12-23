@@ -103,7 +103,7 @@ function ParameterInput({ parameter, value, onChange }: ParameterInputProps) {
         value={Array.isArray(value) ? value.join(', ') : ''}
         onChange={(e) => {
           const val = e.target.value;
-          onChange(val ? val.split(',').map((s) => s.trim()) : []);
+          onChange(val ? val.split(',').map((s) => s.trim()) : undefined);
         }}
         placeholder="Enter comma-separated values"
       />
