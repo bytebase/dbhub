@@ -33,7 +33,7 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
             aria-label={source.id}
             className={cn(
               'w-full rounded-l-lg p-2 mt-1 flex flex-col items-center justify-center transition-colors',
-              isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
+              isActive && 'bg-accent shadow'
             )}
           >
             <img
