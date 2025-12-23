@@ -13,15 +13,15 @@ export default function Gutter({ sources }: GutterProps) {
   return (
     <Tooltip.Provider delayDuration={300}>
       <aside
-        className="w-12 h-screen flex flex-col items-center bg-muted"
+        className="w-16 h-screen flex flex-col items-center bg-gray-200 dark:bg-zinc-600 pl-2 py-4 pt-6"
         aria-label="Main navigation"
       >
-        <div className="flex-1 pt-2 flex flex-col gap-1 overflow-auto">
+        <div className="w-full flex-1 flex flex-col justify-start items-start overflow-auto">
           {sources.map((source) => (
             <GutterSourceItem key={source.id} source={source} />
           ))}
         </div>
-        <div className="pb-3 flex flex-col gap-2">
+        <div className="w-full flex flex-col gap-2 items-center">
           <GutterIcon icon={<ActivityIcon />} to="/requests" tooltip="Requests" />
           <GutterIcon icon={<HelpIcon />} href="https://dbhub.ai" tooltip="Help" />
         </div>
