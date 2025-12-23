@@ -69,7 +69,10 @@ export default function ToolDetailView() {
 
     Object.entries(params).forEach(([name, value]) => {
       if (value !== undefined && value !== '') {
-        const displayValue = typeof value === 'string' ? `'${value}'` : String(value);
+        const displayValue =
+          typeof value === 'string'
+            ? `'${value.replace(/'/g, "''")}'`
+            : String(value);
         sqlText = sqlText.replace(new RegExp(`:${name}\\b`, 'g'), displayValue);
       }
     });
