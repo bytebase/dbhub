@@ -89,7 +89,7 @@ export default function ToolDetailView() {
   }, [tool, params]);
 
   // Run query
-  const handleRun = async () => {
+  const handleRun = useCallback(async () => {
     if (!tool || !toolName) return;
 
     setIsRunning(true);
@@ -111,7 +111,7 @@ export default function ToolDetailView() {
     } finally {
       setIsRunning(false);
     }
-  };
+  }, [tool, toolName, toolType, sql, params]);
 
   // Compute disabled state for run button
   const isRunDisabled =
@@ -196,6 +196,8 @@ export default function ToolDetailView() {
           <SqlEditor
             value={toolType === 'execute_sql' ? sql : getSqlPreview()}
             onChange={toolType === 'execute_sql' ? setSql : undefined}
+            onRunShortcut={handleRun}
+            disabled={isRunDisabled || isRunning}
             readOnly={toolType !== 'execute_sql'}
             placeholder={
               toolType === 'execute_sql'
