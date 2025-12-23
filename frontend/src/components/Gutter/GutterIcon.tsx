@@ -12,15 +12,12 @@ interface GutterIconProps {
 export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps) {
   const location = useLocation();
   const isActive = to ? location.pathname === to : false;
-  const isStandalone = !to && !href;
 
   const iconButton = (
     <div
       className={cn(
-        'w-10 h-10 flex items-center justify-center rounded-lg transition-colors',
-        'hover:bg-accent hover:text-accent-foreground',
-        isActive && 'bg-accent text-accent-foreground',
-        isStandalone && 'cursor-pointer'
+        'w-full h-10 rounded-l-lg p-2 flex items-center justify-center transition-colors',
+        isActive && 'bg-accent shadow'
       )}
     >
       {icon}

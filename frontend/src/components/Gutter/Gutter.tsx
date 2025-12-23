@@ -1,19 +1,28 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import GutterIcon from './GutterIcon';
-import HomeIcon from '../icons/HomeIcon';
+import GutterSourceItem from './GutterSourceItem';
+import ActivityIcon from '../icons/ActivityIcon';
 import HelpIcon from '../icons/HelpIcon';
+import type { DataSource } from '../../types/datasource';
 
-export default function Gutter() {
+interface GutterProps {
+  sources: DataSource[];
+}
+
+export default function Gutter({ sources }: GutterProps) {
   return (
     <Tooltip.Provider delayDuration={300}>
       <aside
-        className="w-12 h-screen flex flex-col items-center border-r border-border bg-background"
+        className="w-16 h-screen flex flex-col items-center bg-card pl-2 py-4 pt-6"
         aria-label="Main navigation"
       >
-        <div className="flex-1 pt-3">
-          <GutterIcon icon={<HomeIcon />} to="/" tooltip="Home" />
+        <div className="w-full flex-1 flex flex-col justify-start items-start overflow-auto">
+          {sources.map((source) => (
+            <GutterSourceItem key={source.id} source={source} />
+          ))}
         </div>
-        <div className="pb-3">
+        <div className="w-full flex flex-col gap-2 items-center">
+          <GutterIcon icon={<ActivityIcon />} to="/requests" tooltip="Requests" />
           <GutterIcon icon={<HelpIcon />} href="https://dbhub.ai" tooltip="Help" />
         </div>
       </aside>
