@@ -23,7 +23,6 @@ interface GutterSourceItemProps {
 export default function GutterSourceItem({ source }: GutterSourceItemProps) {
   const { sourceId } = useParams<{ sourceId: string }>();
   const isActive = sourceId === source.id;
-  const truncatedId = source.id.length > 5 ? source.id.slice(0, 5) + '…' : source.id;
 
   return (
     <Tooltip.Root>
@@ -32,20 +31,20 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
           to={`/source/${source.id}`}
           aria-label={source.id}
           className={cn(
-            'w-full h-12 rounded-l-lg p-2 mt-1 flex flex-col items-center justify-center transition-colors',
+            'w-full rounded-l-lg p-2 mt-1 flex flex-col items-center justify-center transition-colors',
             isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
           )}
         >
           <img
             src={DB_LOGOS[source.type]}
             alt={`${source.type} logo`}
-            className="w-6 h-6"
+            className="w-7 h-7"
           />
           <span className={cn(
-            'text-[10px] truncate w-full text-center mt-0.5',
+            'text-[10px] w-full text-center mt-1 leading-tight break-words',
             isActive ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            {truncatedId}
+            {source.id}
           </span>
         </Link>
       </Tooltip.Trigger>
