@@ -4,7 +4,6 @@ import { fetchSource } from '../../api/sources';
 import { ApiError } from '../../api/errors';
 import type { DataSource } from '../../types/datasource';
 import { DB_LOGOS } from '../../lib/db-logos';
-import LockIcon from '../icons/LockIcon';
 
 export default function SourceDetailView() {
   const { sourceId } = useParams<{ sourceId: string }>();
@@ -131,33 +130,6 @@ export default function SourceDetailView() {
           </dl>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
-            Configuration
-          </h2>
-          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Read-Only Mode</dt>
-              <dd className="mt-1 text-sm text-foreground">
-                {source.readonly ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
-                    <LockIcon className="w-3 h-3" />
-                    Enabled
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">Disabled</span>
-                )}
-              </dd>
-            </div>
-
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Max Rows</dt>
-              <dd className="mt-1 text-sm text-foreground font-mono">
-                {source.max_rows ?? 'Unlimited'}
-              </dd>
-            </div>
-          </dl>
-        </div>
 
         {source.ssh_tunnel?.enabled && (
           <div className="bg-card border border-border rounded-lg p-6">

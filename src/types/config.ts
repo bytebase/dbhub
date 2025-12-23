@@ -86,6 +86,8 @@ export interface CustomToolConfig {
   description: string;
   statement: string;
   parameters?: ParameterConfig[];
+  readonly?: boolean;
+  max_rows?: number;
 }
 
 /**

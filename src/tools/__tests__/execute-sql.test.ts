@@ -35,13 +35,11 @@ const parseToolResponse = (response: any) => {
 describe('execute-sql tool', () => {
   let mockConnector: Connector;
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
-  const mockGetCurrentExecuteOptions = vi.mocked(ConnectorManager.getCurrentExecuteOptions);
   const mockGetToolRegistry = vi.mocked(getToolRegistry);
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
     mockGetCurrentConnector.mockReturnValue(mockConnector);
-    mockGetCurrentExecuteOptions.mockReturnValue({});
 
     // Mock tool registry to return empty config (no readonly, no max_rows)
     mockGetToolRegistry.mockReturnValue({
@@ -65,7 +63,7 @@ describe('execute-sql tool', () => {
       expect(parsedResult.success).toBe(true);
       expect(parsedResult.data.rows).toEqual([{ id: 1, name: 'test' }]);
       expect(parsedResult.data.count).toBe(1);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: false, max_rows: undefined });
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: undefined, maxRows: undefined });
     });
 
     it('should pass multi-statement SQL directly to connector', async () => {
@@ -78,7 +76,7 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: false, max_rows: undefined });
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: undefined, maxRows: undefined });
     });
 
     it('should handle execution errors', async () => {
@@ -112,7 +110,7 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: true, max_rows: undefined });
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: true, maxRows: undefined });
     });
 
     it('should allow multiple read-only statements', async () => {

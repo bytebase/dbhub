@@ -29,8 +29,8 @@ describe('Data Sources API Integration Tests', () => {
     manager = await setupManagerWithFixture(FIXTURES.READONLY_MAXROWS);
 
     // Initialize ToolRegistry with fixture config
-    const sources = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
-    initializeToolRegistry({ sources, tools: [] });
+    const { sources, tools } = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+    initializeToolRegistry({ sources, tools: tools || [] });
 
     // Set up Express app with API routes
     app = express();
@@ -89,21 +89,24 @@ describe('Data Sources API Integration Tests', () => {
       });
     });
 
-    it('should include execution options', async () => {
+    it('should include execution options on tools', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
-      // First source has readonly and max_rows
-      expect(sources[0].readonly).toBe(true);
-      expect(sources[0].max_rows).toBe(100);
+      // First source has execute_sql tool with readonly and max_rows
+      const firstExecuteSql = sources[0].tools.find(t => t.name.startsWith('execute_sql'));
+      expect(firstExecuteSql?.readonly).toBe(true);
+      expect(firstExecuteSql?.max_rows).toBe(100);
 
-      // Second source has different settings
-      expect(sources[1].readonly).toBe(false);
-      expect(sources[1].max_rows).toBe(500);
+      // Second source has execute_sql tool with different settings
+      const secondExecuteSql = sources[1].tools.find(t => t.name.startsWith('execute_sql'));
+      expect(secondExecuteSql?.readonly).toBe(false);
+      expect(secondExecuteSql?.max_rows).toBe(500);
 
-      // Third source has no explicit settings
-      expect(sources[2].readonly).toBeUndefined();
-      expect(sources[2].max_rows).toBeUndefined();
+      // Third source has execute_sql tool with no explicit settings
+      const thirdExecuteSql = sources[2].tools.find(t => t.name.startsWith('execute_sql'));
+      expect(thirdExecuteSql?.readonly).toBeUndefined();
+      expect(thirdExecuteSql?.max_rows).toBeUndefined();
     });
 
     it('should include database connection details', async () => {
@@ -218,8 +221,11 @@ describe('Data Sources API Integration Tests', () => {
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('readonly_limited');
       expect(source.type).toBe('sqlite');
-      expect(source.readonly).toBe(true);
-      expect(source.max_rows).toBe(100);
+
+      // Check execute_sql tool has readonly and max_rows
+      const executeSql = source.tools.find(t => t.name.startsWith('execute_sql'));
+      expect(executeSql?.readonly).toBe(true);
+      expect(executeSql?.max_rows).toBe(100);
     });
 
     it('should return correct data for another source', async () => {
@@ -228,8 +234,11 @@ describe('Data Sources API Integration Tests', () => {
 
       const source = (await response.json()) as DataSource;
       expect(source.id).toBe('writable_limited');
-      expect(source.readonly).toBe(false);
-      expect(source.max_rows).toBe(500);
+
+      // Check execute_sql tool has readonly and max_rows
+      const executeSql = source.tools.find(t => t.name.startsWith('execute_sql'));
+      expect(executeSql?.readonly).toBe(false);
+      expect(executeSql?.max_rows).toBe(500);
     });
 
     it('should return 404 for non-existent source', async () => {

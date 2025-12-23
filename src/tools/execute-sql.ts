@@ -68,10 +68,10 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       }
 
       // Execute the SQL (single or multiple statements) if validation passed
-      // Pass max_rows from tool config (if set)
+      // Pass readonly and maxRows from tool config (if set)
       const executeOptions = {
-        readonly: isReadonly,
-        max_rows: toolConfig?.max_rows,
+        readonly: toolConfig?.readonly,
+        maxRows: toolConfig?.max_rows,
       };
       result = await connector.executeSQL(sql, executeOptions);
 

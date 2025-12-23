@@ -33,19 +33,19 @@ export function fixtureTomlPath(fixtureName: string): string {
 }
 
 /**
- * Load a TOML fixture and return its parsed SourceConfig array
+ * Load a TOML fixture and return its parsed configuration
  *
  * @param fixtureName - Name of the fixture file (without .toml extension)
- * @returns Array of SourceConfig objects from the fixture
+ * @returns Object containing sources array and optional tools array
  * @throws Error if fixture file doesn't exist or is invalid
  *
  * @example
  * ```ts
- * const sources = loadFixtureConfig('multi-sqlite');
- * // Returns: [{ id: 'database_a', ... }, { id: 'database_b', ... }]
+ * const { sources, tools } = loadFixtureConfig('multi-sqlite');
+ * // Returns: { sources: [...], tools: [...] }
  * ```
  */
-export function loadFixtureConfig(fixtureName: string): SourceConfig[] {
+export function loadFixtureConfig(fixtureName: string): { sources: SourceConfig[]; tools?: any[] } {
   const fixturePath = fixtureTomlPath(fixtureName);
 
   if (!fs.existsSync(fixturePath)) {
@@ -62,7 +62,10 @@ export function loadFixtureConfig(fixtureName: string): SourceConfig[] {
       throw new Error(`Failed to load fixture: ${fixtureName}`);
     }
 
-    return config.sources;
+    return {
+      sources: config.sources,
+      tools: config.tools,
+    };
   } finally {
     process.argv = originalArgv;
   }
@@ -89,7 +92,7 @@ export function loadFixtureConfig(fixtureName: string): SourceConfig[] {
  * ```
  */
 export async function setupManagerWithFixture(fixtureName: string): Promise<ConnectorManager> {
-  const sources = loadFixtureConfig(fixtureName);
+  const { sources } = loadFixtureConfig(fixtureName);
   const manager = new ConnectorManager();
   await manager.connectWithSources(sources);
   return manager;

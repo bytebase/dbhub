@@ -199,23 +199,22 @@ function validateToolsConfig(
           `Configuration file ${configPath}: custom tool '${tool.name}' must have 'description' and 'statement' fields`
         );
       }
-
-      // Custom tools should NOT have builtin-specific fields
-      if (tool.readonly !== undefined || tool.max_rows !== undefined) {
-        throw new Error(
-          `Configuration file ${configPath}: custom tool '${tool.name}' cannot have readonly or max_rows fields ` +
-            `(these are only valid for ${BUILTIN_TOOL_EXECUTE_SQL} tool)`
-        );
-      }
     }
 
-    // Validate max_rows if provided (only for execute_sql)
+    // Validate max_rows if provided
     if (tool.max_rows !== undefined) {
       if (typeof tool.max_rows !== "number" || tool.max_rows <= 0) {
         throw new Error(
           `Configuration file ${configPath}: tool '${tool.name}' has invalid max_rows. Must be a positive integer.`
         );
       }
+    }
+
+    // Validate readonly if provided
+    if (tool.readonly !== undefined && typeof tool.readonly !== "boolean") {
+      throw new Error(
+        `Configuration file ${configPath}: tool '${tool.name}' has invalid readonly. Must be a boolean (true or false).`
+      );
     }
   }
 }
@@ -348,6 +347,20 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
           `Domain is only valid with authentication = "ntlm".`
       );
     }
+  }
+
+  // Reject readonly and max_rows at source level (they should be set on tools instead)
+  if ((source as any).readonly !== undefined) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has 'readonly' field, but readonly must be configured per-tool, not per-source. ` +
+        `Move 'readonly' to [[tools]] configuration instead.`
+    );
+  }
+  if ((source as any).max_rows !== undefined) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has 'max_rows' field, but max_rows must be configured per-tool, not per-source. ` +
+        `Move 'max_rows' to [[tools]] configuration instead.`
+    );
   }
 }
 

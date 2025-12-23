@@ -161,6 +161,58 @@ title: "Server Options"
   ```
 </ParamField>
 
+## Tool Execution Options
+
+### readonly
+
+<ParamField path="readonly" type="boolean">
+  Restrict SQL execution to read-only operations (SELECT, SHOW, DESCRIBE, EXPLAIN, PRAGMA). Write operations like INSERT, UPDATE, DELETE are blocked.
+
+  <Note>
+  This is a **tool-level** setting, not a source-level setting. Configure it in the `[[tools]]` section of your TOML file, not in `[[sources]]`.
+  </Note>
+
+  ```toml
+  # dbhub.toml
+  [[sources]]
+  id = "production"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+
+  # Configure readonly on the tool, not the source
+  [[tools]]
+  name = "execute_sql"
+  source = "production"
+  readonly = true  # Read-only mode for this tool
+  ```
+
+  See [Execute SQL documentation](/tools/execute-sql#readonly-mode) for more details.
+</ParamField>
+
+### max_rows
+
+<ParamField path="max_rows" type="number">
+  Maximum number of rows to return from SELECT queries. Queries returning more rows will be truncated.
+
+  <Note>
+  This is a **tool-level** setting, not a source-level setting. Configure it in the `[[tools]]` section of your TOML file, not in `[[sources]]`.
+  </Note>
+
+  ```toml
+  # dbhub.toml
+  [[sources]]
+  id = "production"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+
+  # Configure max_rows on the tool, not the source
+  [[tools]]
+  name = "execute_sql"
+  source = "production"
+  max_rows = 1000  # Limit to 1000 rows
+  ```
+
+  See [Execute SQL documentation](/tools/execute-sql#row-limits) for more details.
+</ParamField>
+
 ### sslmode
 
 <ParamField path="sslmode" type="string">
@@ -458,6 +510,18 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 
 ## Quick Reference
 
+### General & Server Options
+
+| CLI Option | Env | Type | Default | Description |
+|------------|---------------------|------|---------|-------------|
+| `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
+| `--port` | `PORT` | number | `8080` | HTTP server port |
+| `--demo` | - | boolean | `false` | Use sample employee database |
+| `--id` | `ID` | string | - | Instance identifier for tool names |
+| `--config` | - | string | `./dbhub.toml` | Path to TOML config file |
+
+### Source (Database) Options
+
 | CLI Option | Env | Type | Default | Description |
 |------------|---------------------|------|---------|-------------|
 | `--dsn` | `DSN` | string | Required* | Database connection string |
@@ -473,11 +537,11 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | - | - | string | - | SQL Server named instance (DSN: `?instanceName=`, TOML: `instanceName`) |
 | - | - | string | - | SQL Server auth method (DSN: `?authentication=`, TOML: `authentication`) |
 | - | - | string | - | Windows domain for NTLM (DSN: `?domain=`, TOML: `domain`) |
-| `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
-| `--port` | `PORT` | number | `8080` | HTTP server port |
-| `--demo` | - | boolean | `false` | Use sample employee database |
-| `--id` | `ID` | string | - | Instance identifier for tool names |
-| `--config` | - | string | `./dbhub.toml` | Path to TOML config file |
+
+### SSH Tunnel Options
+
+| CLI Option | Env | Type | Default | Description |
+|------------|---------------------|------|---------|-------------|
 | `--ssh-host` | `SSH_HOST` | string | - | SSH server hostname |
 | `--ssh-port` | `SSH_PORT` | number | `22` | SSH server port |
 | `--ssh-user` | `SSH_USER` | string | - | SSH username |
@@ -486,6 +550,15 @@ If using TOML config, remove these flags. If you need `--id` or `--dsn`, use com
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | - | SSH key passphrase |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | - | ProxyJump hosts for multi-hop SSH |
 
+### Tool Execution Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `readonly` | boolean | `false` | Read-only mode (TOML: `[[tools]]` section only) |
+| `max_rows` | number | unlimited | Max rows limit (TOML: `[[tools]]` section only) |
+
 <Note>
 *Required unless using `--demo` or `--config`
+
+**Tool options** (`readonly`, `max_rows`) can only be configured in TOML `[[tools]]` sections, not via CLI or environment variables.
 </Note>

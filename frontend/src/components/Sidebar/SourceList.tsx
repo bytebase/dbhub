@@ -2,7 +2,6 @@ import { Link, useParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { DB_LOGOS } from '../../lib/db-logos';
 import type { DataSource, DatabaseType } from '../../types/datasource';
-import LockIcon from '../icons/LockIcon';
 
 interface SourceListProps {
   sources: DataSource[];
@@ -58,7 +57,6 @@ export default function SourceList({ sources, isLoading }: SourceListProps) {
             <DatabaseIcon type={source.type} />
             <span className="flex-1 flex items-center gap-1.5 min-w-0">
               <span className="truncate">{source.id}</span>
-              {source.readonly && <LockIcon className="w-4 h-4 text-muted-foreground" />}
             </span>
             {source.is_default && (
               <span className="text-xs text-muted-foreground">default</span>

@@ -30,8 +30,8 @@ dsn = "sqlite:///./dev.db"
 [[tools]]
 name = "execute_sql"
 source = "production"
-readonly = true
-max_rows = 1000
+readonly = true    # Tool-level setting: restrict to read-only queries
+max_rows = 1000    # Tool-level setting: limit result set size
 
 [[tools]]
 name = "search_objects"
@@ -41,14 +41,14 @@ source = "production"
 [[tools]]
 name = "execute_sql"
 source = "staging"
-max_rows = 5000
+max_rows = 5000    # Tool-level setting: higher limit for staging
 
 [[tools]]
 name = "search_objects"
 source = "staging"
 
 # Local: default tools (both execute_sql and search_objects)
-# No [[tools]] entries = both tools enabled by default
+# No [[tools]] entries = both tools enabled by default with no restrictions
 ```
 
 Start DBHub:
@@ -80,15 +80,15 @@ See [Server Options](/config/server-options) for detailed option descriptions an
     [[tools]]
     name = "execute_sql"
     source = "production"
-    readonly = true
-    max_rows = 1000
+    readonly = true    # Tool-level: read-only mode
+    max_rows = 1000    # Tool-level: result limit
 
     [[tools]]
     name = "search_objects"
     source = "production"
 
     # Staging: full access (default tools)
-    # No [[tools]] for staging = both tools enabled
+    # No [[tools]] for staging = both tools enabled with no restrictions
     ```
   </Tab>
 
@@ -108,7 +108,7 @@ See [Server Options](/config/server-options) for detailed option descriptions an
     [[tools]]
     name = "execute_sql"
     source = "production"
-    readonly = true
+    readonly = true    # Tool-level: read-only mode
 
     # SQL Server with named instance
     [[sources]]
@@ -160,7 +160,7 @@ See [Server Options](/config/server-options) for detailed option descriptions an
     [[tools]]
     name = "execute_sql"
     source = "production"
-    readonly = true
+    readonly = true    # Tool-level: read-only mode
 
     [[tools]]
     name = "search_objects"

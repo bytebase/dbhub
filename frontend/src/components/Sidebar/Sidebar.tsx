@@ -42,7 +42,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                   key={tool.name}
                   to={`/source/${currentSource.id}/tool/${tool.name}`}
                   className={cn(
-                    'flex items-center px-4 py-2 text-sm transition-colors rounded-md',
+                    'flex items-center gap-2 px-4 py-2 text-sm transition-colors rounded-md',
                     toolName === tool.name
                       ? 'bg-accent text-accent-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'

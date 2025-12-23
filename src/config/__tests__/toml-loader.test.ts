@@ -35,8 +35,6 @@ describe('TOML Configuration Tests', () => {
 [[sources]]
 id = "test_db"
 dsn = "postgres://user:pass@localhost:5432/testdb"
-readonly = false
-max_rows = 1000
 `;
       fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -53,8 +51,6 @@ max_rows = 1000
         port: 5432,
         database: 'testdb',
         user: 'user',
-        readonly: false,
-        max_rows: 1000,
       });
       expect(result?.source).toBe('dbhub.toml');
     });
@@ -1029,8 +1025,6 @@ query_timeout = 120
 [[sources]]
 id = "prod_pg"
 dsn = "postgres://user:pass@10.0.0.5:5432/production"
-readonly = true
-max_rows = 1000
 ssh_host = "bastion.example.com"
 ssh_port = 22
 ssh_user = "ubuntu"
@@ -1044,13 +1038,11 @@ port = 3307
 database = "staging"
 user = "devuser"
 password = "devpass"
-max_rows = 500
 
 [[sources]]
 id = "local_sqlite"
 type = "sqlite"
 database = "~/databases/local.db"
-readonly = false
 `;
       fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -1068,8 +1060,6 @@ readonly = false
         port: 5432,
         database: 'production',
         user: 'user',
-        readonly: true,
-        max_rows: 1000,
         ssh_host: 'bastion.example.com',
         ssh_port: 22,
         ssh_user: 'ubuntu',
@@ -1087,14 +1077,12 @@ readonly = false
         database: 'staging',
         user: 'devuser',
         password: 'devpass',
-        max_rows: 500,
       });
 
       // Verify third source (SQLite)
       expect(result?.sources[2]).toMatchObject({
         id: 'local_sqlite',
         type: 'sqlite',
-        readonly: false,
       });
       expect(result?.sources[2].database).toBe(
         path.join(os.homedir(), 'databases', 'local.db')
@@ -1146,6 +1134,180 @@ database = ":memory:"
 
       expect(result?.sources).toHaveLength(5);
       expect(result?.sources.map(s => s.id)).toEqual(['pg', 'my', 'maria', 'mssql', 'sqlite']);
+    });
+  });
+
+  describe('Custom Tool Configuration', () => {
+    it('should accept custom tool with readonly and max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "get_active_users"
+source = "test_db"
+description = "Get all active users"
+statement = "SELECT * FROM users WHERE active = true"
+readonly = true
+max_rows = 100
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result).toBeTruthy();
+      expect(result?.tools).toBeDefined();
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'get_active_users',
+        source: 'test_db',
+        description: 'Get all active users',
+        statement: 'SELECT * FROM users WHERE active = true',
+        readonly: true,
+        max_rows: 100,
+      });
+    });
+
+    it('should accept custom tool with readonly only', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "list_departments"
+source = "test_db"
+description = "List all departments"
+statement = "SELECT * FROM departments"
+readonly = true
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'list_departments',
+        readonly: true,
+      });
+      expect(result?.tools![0].max_rows).toBeUndefined();
+    });
+
+    it('should accept custom tool with max_rows only', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "search_logs"
+source = "test_db"
+description = "Search application logs"
+statement = "SELECT * FROM logs WHERE level = 'ERROR'"
+max_rows = 500
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'search_logs',
+        max_rows: 500,
+      });
+      expect(result?.tools![0].readonly).toBeUndefined();
+    });
+
+    it('should accept custom tool without readonly or max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "update_status"
+source = "test_db"
+description = "Update user status"
+statement = "UPDATE users SET status = $1 WHERE id = $2"
+
+[[tools.parameters]]
+name = "status"
+type = "string"
+description = "New status"
+required = true
+
+[[tools.parameters]]
+name = "user_id"
+type = "integer"
+description = "User ID"
+required = true
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'update_status',
+        description: 'Update user status',
+      });
+      expect(result?.tools![0].readonly).toBeUndefined();
+      expect(result?.tools![0].max_rows).toBeUndefined();
+    });
+
+    it('should throw error for custom tool with invalid readonly type', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "test_tool"
+source = "test_db"
+description = "Test tool"
+statement = "SELECT 1"
+readonly = "yes"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid readonly');
+    });
+
+    it('should throw error for custom tool with invalid max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "test_tool"
+source = "test_db"
+description = "Test tool"
+statement = "SELECT 1"
+max_rows = -50
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid max_rows');
+    });
+
+    it('should throw error for custom tool with zero max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "test_tool"
+source = "test_db"
+description = "Test tool"
+statement = "SELECT 1"
+max_rows = 0
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid max_rows');
     });
   });
 });

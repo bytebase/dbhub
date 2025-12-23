@@ -5,6 +5,7 @@ import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
 import type { Tool } from '../../types/datasource';
 import { SqlEditor, ParameterForm, RunButton, ResultsTable } from '../tool';
+import LockIcon from '../icons/LockIcon';
 
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
@@ -28,8 +29,8 @@ export default function ToolDetailView() {
     setError(null);
 
     fetchSource(sourceId)
-      .then((source) => {
-        const foundTool = source.tools.find((t) => t.name === toolName);
+      .then((sourceData) => {
+        const foundTool = sourceData.tools.find((t) => t.name === toolName);
         setTool(foundTool || null);
         setIsLoading(false);
       })
@@ -166,7 +167,15 @@ export default function ToolDetailView() {
     return (
       <div className="container mx-auto px-8 py-12 max-w-4xl">
         <div className="space-y-4">
-          <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+            {tool.readonly && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                <LockIcon className="w-3 h-3" />
+                Read-Only
+              </span>
+            )}
+          </div>
           <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
           <div className="border border-border rounded-lg bg-card p-8 text-center">
             <p className="text-muted-foreground">
@@ -183,7 +192,15 @@ export default function ToolDetailView() {
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+            {tool.readonly && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+                <LockIcon className="w-3 h-3" />
+                Read-Only
+              </span>
+            )}
+          </div>
           <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
         </div>
 
