@@ -183,6 +183,10 @@ components:
           description: Tool input parameters
           items:
             $ref: '#/components/schemas/ToolParameter'
+        statement:
+          type: string
+          description: SQL statement template for custom tools (with parameter placeholders)
+          example: SELECT * FROM users WHERE id = $1
 
     ToolParameter:
       type: object
