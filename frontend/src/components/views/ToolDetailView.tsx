@@ -50,17 +50,17 @@ export default function ToolDetailView() {
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
     if (!tool?.statement) return '';
-    let result = tool.statement;
+    let transformedSql = tool.statement;
     let placeholderIndex = 0;
 
     // Replace $1, $2, etc. or ? with :param_name
-    result = result.replace(/\$\d+|\?/g, () => {
+    transformedSql = transformedSql.replace(/\$\d+|\?/g, () => {
       const param = tool.parameters[placeholderIndex];
       placeholderIndex++;
       return param ? `:${param.name}` : ':?';
     });
 
-    return result;
+    return transformedSql;
   }, [tool]);
 
   // Get SQL with values substituted for preview
