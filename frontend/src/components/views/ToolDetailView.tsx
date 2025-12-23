@@ -18,6 +18,8 @@ export default function ToolDetailView() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [executionTimeMs, setExecutionTimeMs] = useState<number | null>(null);
+  const [executedSql, setExecutedSql] = useState<string>('');
 
   useEffect(() => {
     if (!sourceId || !toolName) return;
@@ -95,23 +97,34 @@ export default function ToolDetailView() {
     setIsRunning(true);
     setQueryError(null);
     setResult(null);
+    setExecutionTimeMs(null);
+
+    const startTime = performance.now();
 
     try {
       let queryResult: QueryResult;
+      let sqlToExecute: string;
 
       if (toolType === 'execute_sql') {
+        sqlToExecute = sql;
         queryResult = await executeTool(toolName, { sql });
       } else {
+        sqlToExecute = getSqlPreview();
         queryResult = await executeTool(toolName, params);
       }
 
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+
       setResult(queryResult);
+      setExecutionTimeMs(duration);
+      setExecutedSql(sqlToExecute);
     } catch (err) {
       setQueryError(err instanceof Error ? err.message : 'Query failed');
     } finally {
       setIsRunning(false);
     }
-  }, [tool, toolName, toolType, sql, params]);
+  }, [tool, toolName, toolType, sql, params, getSqlPreview]);
 
   // Compute disabled state for run button
   const isRunDisabled =
@@ -215,7 +228,13 @@ export default function ToolDetailView() {
         />
 
         {/* Results */}
-        <ResultsTable result={result} error={queryError} isLoading={isRunning} />
+        <ResultsTable
+          result={result}
+          error={queryError}
+          isLoading={isRunning}
+          executedSql={executedSql}
+          executionTimeMs={executionTimeMs ?? undefined}
+        />
       </div>
     </div>
   );
