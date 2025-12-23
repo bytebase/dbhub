@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import HomeRedirect from './components/views/HomeRedirect';
 import HomeView from './components/views/HomeView';
 import SourceDetailView from './components/views/SourceDetailView';
+import ToolDetailView from './components/views/ToolDetailView';
 import NotFoundView from './components/views/NotFoundView';
 import { ToastProvider, toastManager } from './components/ui/toast';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -38,6 +39,7 @@ function App() {
               <Route index element={<HomeRedirect />} />
               <Route path="requests" element={<HomeView />} />
               <Route path="source/:sourceId" element={<SourceDetailView />} />
+              <Route path="source/:sourceId/tool/:toolName" element={<ToolDetailView />} />
               <Route path="*" element={<NotFoundView />} />
             </Route>
           </Routes>

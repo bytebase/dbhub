@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ sources, isLoading }: SidebarProps) {
-  const { sourceId } = useParams<{ sourceId: string }>();
+  const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
   const currentSource = sources.find((s) => s.id === sourceId);
 
   return (
@@ -29,7 +29,9 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               to={`/source/${currentSource.id}`}
               className={cn(
                 'flex items-center gap-2 px-2 py-2 text-sm font-medium transition-colors rounded-md',
-                'bg-accent text-accent-foreground'
+                toolName
+                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  : 'bg-accent text-accent-foreground'
               )}
             >
               <span className="truncate">{currentSource.id}</span>
@@ -38,8 +40,13 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               {currentSource.tools.map((tool) => (
                 <Link
                   key={tool.name}
-                  to={`/source/${currentSource.id}`}
-                  className="flex items-center px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors rounded-md"
+                  to={`/source/${currentSource.id}/tool/${tool.name}`}
+                  className={cn(
+                    'flex items-center px-4 py-2 text-sm transition-colors rounded-md',
+                    toolName === tool.name
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                  )}
                 >
                   <span className="truncate font-mono text-xs">{tool.name}</span>
                 </Link>
