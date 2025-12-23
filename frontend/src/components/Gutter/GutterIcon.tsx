@@ -17,7 +17,7 @@ export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps)
     <div
       className={cn(
         'w-full h-10 rounded-l-lg p-2 flex items-center justify-center transition-colors',
-        isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
+        isActive && 'bg-accent shadow'
       )}
     >
       {icon}
