@@ -23,6 +23,7 @@ export interface Tool {
   name: string;
   description: string;
   parameters: ToolParameter[];
+  statement?: string;
 }
 
 /**
@@ -238,6 +239,7 @@ function buildCustomTool(toolConfig: ToolConfig): Tool {
     name: toolConfig.name,
     description: toolConfig.description!,
     parameters: customParamsToToolParams(toolConfig.parameters),
+    statement: toolConfig.statement,
   };
 }
 

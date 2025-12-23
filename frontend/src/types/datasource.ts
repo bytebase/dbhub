@@ -18,6 +18,7 @@ export interface Tool {
   name: string;
   description: string;
   parameters: ToolParameter[];
+  statement?: string;
 }
 
 export interface DataSource {
