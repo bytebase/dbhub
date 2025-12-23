@@ -38,10 +38,10 @@ function highlightText(text: string, searchTerm: string): React.ReactNode {
     // Add highlighted match
     parts.push(
       <mark key={index} className="bg-amber-200/50 text-foreground">
-        {text.substring(index, index + searchTerm.length)}
+        {text.substring(index, index + lowerSearchTerm.length)}
       </mark>
     );
-    lastIndex = index + searchTerm.length;
+    lastIndex = index + lowerSearchTerm.length;
     index = lowerText.indexOf(lowerSearchTerm, lastIndex);
   }
 
