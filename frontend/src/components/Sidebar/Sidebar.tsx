@@ -18,7 +18,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
       aria-label="Data sources sidebar"
     >
       <Logo />
-      <nav className="flex-1 flex flex-col overflow-hidden" aria-label="Source navigation">
+      <nav className="flex-1 flex flex-col overflow-hidden" aria-label="Data sources navigation">
         {isLoading ? (
           <div className="px-4 py-3 text-sm text-muted-foreground">
             Loading...
