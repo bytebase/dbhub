@@ -41,7 +41,7 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
             className="w-7 h-7"
           />
           <span className={cn(
-            'text-[10px] w-full text-center mt-1 leading-tight break-words',
+            'text-[10px] w-full text-center mt-1 leading-tight break-words line-clamp-2',
             isActive ? 'text-foreground' : 'text-muted-foreground'
           )}>
             {source.id}
