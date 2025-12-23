@@ -172,6 +172,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "current_managers"
 # description = "List all current department managers"
 # source = "local_pg"
+# readonly = true
 # statement = """
 #   SELECT e.emp_no, e.first_name, e.last_name, d.dept_name, dm.from_date
 #   FROM dept_manager dm
@@ -185,6 +186,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "salary_search"
 # description = "Find employees earning at least min_salary, optionally capped by max_salary"
 # source = "local_pg"
+# readonly = true
 # statement = """
 #   SELECT e.emp_no, e.first_name, e.last_name, s.amount as salary
 #   FROM employee e
@@ -206,6 +208,24 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # type = "integer"
 # description = "Maximum salary (optional, defaults to no limit)"
 # required = false
+
+# Example: Delete old salary records (PostgreSQL - with required parameter)
+# [[tools]]
+# name = "delete_old_salaries"
+# description = "Delete salary records older than specified date for cleanup"
+# source = "local_pg"
+# readonly = false  # Explicitly allow DELETE operations
+# statement = """
+#   DELETE FROM salary
+#   WHERE to_date < $1
+#   RETURNING emp_no, amount, from_date, to_date
+# """
+#
+# [[tools.parameters]]
+# name = "cutoff_date"
+# type = "string"
+# description = "Delete salary records with to_date before this date (format: YYYY-MM-DD)"
+# required = true
 
 # ============================================================================
 # QUICK REFERENCE
