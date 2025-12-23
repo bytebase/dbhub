@@ -13,7 +13,7 @@ export default function Gutter({ sources }: GutterProps) {
   return (
     <Tooltip.Provider delayDuration={300}>
       <aside
-        className="w-16 h-screen flex flex-col items-center bg-gray-200 dark:bg-zinc-600 pl-2 py-4 pt-6"
+        className="w-16 h-screen flex flex-col items-center bg-card pl-2 py-4 pt-6"
         aria-label="Main navigation"
       >
         <div className="w-full flex-1 flex flex-col justify-start items-start overflow-auto">
