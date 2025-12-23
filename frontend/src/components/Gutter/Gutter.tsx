@@ -1,4 +1,4 @@
-import * as Tooltip from '@radix-ui/react-tooltip';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import GutterIcon from './GutterIcon';
 import GutterSourceItem from './GutterSourceItem';
 import ActivityIcon from '../icons/ActivityIcon';
@@ -11,7 +11,7 @@ interface GutterProps {
 
 export default function Gutter({ sources }: GutterProps) {
   return (
-    <Tooltip.Provider delayDuration={300}>
+    <TooltipProvider>
       <aside
         className="w-16 h-screen flex flex-col items-center bg-card pl-2 py-4 pt-6"
         aria-label="Main navigation"
@@ -26,6 +26,6 @@ export default function Gutter({ sources }: GutterProps) {
           <GutterIcon icon={<HelpIcon />} href="https://dbhub.ai" tooltip="Help" />
         </div>
       </aside>
-    </Tooltip.Provider>
+    </TooltipProvider>
   );
 }

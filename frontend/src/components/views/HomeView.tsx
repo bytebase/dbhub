@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import * as Tooltip from '@radix-ui/react-tooltip';
+import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from '@/components/ui/tooltip';
 import { fetchRequests } from '../../api/requests';
 import { ApiError } from '../../api/errors';
 import type { Request } from '../../types/request';
@@ -29,43 +29,33 @@ function formatDate(timestamp: string): string {
   });
 }
 
-function SqlTooltip({ sql, children }: { sql: string; children: React.ReactNode }) {
+function SqlTooltip({ sql, children }: { sql: string; children: React.ReactElement }) {
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        {children}
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content
-          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
-          sideOffset={5}
-        >
-          {sql}
-          <Tooltip.Arrow className="fill-popover" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipPopup
+        className="whitespace-pre-wrap break-all max-w-md"
+        sideOffset={5}
+      >
+        {sql}
+      </TooltipPopup>
+    </Tooltip>
   );
 }
 
-function ErrorTooltip({ error, children }: { error: string; children: React.ReactNode }) {
+function ErrorTooltip({ error, children }: { error: string; children: React.ReactElement }) {
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        {children}
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content
-          className="bg-popover text-popover-foreground text-xs rounded-md shadow-lg border border-border px-3 py-2 whitespace-pre-wrap break-all max-w-md z-50"
-          sideOffset={5}
-          side="top"
-          align="end"
-        >
-          {error}
-          <Tooltip.Arrow className="fill-popover" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipPopup
+        className="whitespace-pre-wrap break-all max-w-md"
+        sideOffset={5}
+        side="top"
+        align="end"
+      >
+        {error}
+      </TooltipPopup>
+    </Tooltip>
   );
 }
 
@@ -143,7 +133,7 @@ export default function HomeView() {
   }
 
   return (
-    <Tooltip.Provider delayDuration={300}>
+    <TooltipProvider>
     <div className="container mx-auto px-8 py-12 max-w-6xl">
       <div className="space-y-6">
         <div>
@@ -251,6 +241,6 @@ export default function HomeView() {
         )}
       </div>
     </div>
-    </Tooltip.Provider>
+    </TooltipProvider>
   );
 }

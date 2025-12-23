@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import * as Tooltip from '@radix-ui/react-tooltip';
+import { Tooltip, TooltipTrigger, TooltipPopup } from '@/components/ui/tooltip';
 import { cn } from '../../lib/utils';
 
 interface GutterIconProps {
@@ -17,7 +17,7 @@ export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps)
     <div
       className={cn(
         'w-full h-10 rounded-l-lg p-2 flex items-center justify-center transition-colors',
-        isActive && 'bg-accent shadow'
+        isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
       )}
     >
       {icon}
@@ -37,20 +37,11 @@ export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps)
   );
 
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        {wrappedIcon}
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content
-          side="right"
-          sideOffset={8}
-          className="z-50 px-2 py-1 text-xs bg-popover text-popover-foreground rounded shadow-md"
-        >
-          {tooltip}
-          <Tooltip.Arrow className="fill-popover" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <Tooltip>
+      <TooltipTrigger render={wrappedIcon} />
+      <TooltipPopup side="right" sideOffset={8}>
+        {tooltip}
+      </TooltipPopup>
+    </Tooltip>
   );
 }
