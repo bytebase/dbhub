@@ -131,6 +131,11 @@ export interface components {
             description: string;
             /** @description Tool input parameters */
             parameters: components["schemas"]["ToolParameter"][];
+            /**
+             * @description SQL statement template for custom tools (with parameter placeholders)
+             * @example SELECT * FROM users WHERE id = $1
+             */
+            statement?: string;
         };
         /** @description Parameter definition for a tool */
         ToolParameter: {
