@@ -123,6 +123,7 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
         <input
           type="text"
           placeholder="Filter results..."
+          aria-label="Filter table results"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="text-sm px-3 py-1 border border-border rounded bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
