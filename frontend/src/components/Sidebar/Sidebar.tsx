@@ -14,7 +14,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
 
   return (
     <aside
-      className="w-[200px] sm:w-[220px] md:w-[240px] lg:w-[280px] border-r border-border bg-card flex flex-col"
+      className="w-[200px] sm:w-[220px] md:w-[240px] lg:w-[280px] border-r border-border bg-gray-100 dark:bg-zinc-700 flex flex-col"
       aria-label="Sidebar"
     >
       <Logo />

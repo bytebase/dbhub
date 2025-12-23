@@ -16,9 +16,8 @@ export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps)
   const iconButton = (
     <div
       className={cn(
-        'w-10 h-10 flex items-center justify-center transition-colors',
-        'hover:bg-card/50',
-        isActive && 'bg-card'
+        'w-full h-10 rounded-l-lg p-2 flex items-center justify-center transition-colors',
+        isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
       )}
     >
       {icon}

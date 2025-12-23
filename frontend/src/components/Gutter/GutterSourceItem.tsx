@@ -32,9 +32,8 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
           to={`/source/${source.id}`}
           aria-label={source.id}
           className={cn(
-            'flex flex-col items-center gap-0.5 py-2 px-1 transition-colors',
-            'hover:bg-card/50',
-            isActive && 'bg-card'
+            'w-full h-12 rounded-l-lg p-2 mt-1 flex flex-col items-center justify-center transition-colors',
+            isActive && 'bg-gray-100 dark:bg-zinc-700 shadow'
           )}
         >
           <img
@@ -43,7 +42,7 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
             className="w-6 h-6"
           />
           <span className={cn(
-            'text-[10px] truncate w-full text-center',
+            'text-[10px] truncate w-full text-center mt-0.5',
             isActive ? 'text-foreground' : 'text-muted-foreground'
           )}>
             {truncatedId}
