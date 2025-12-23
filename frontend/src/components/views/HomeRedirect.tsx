@@ -15,7 +15,7 @@ export default function HomeRedirect() {
     }).catch(() => {
       navigate('/requests', { replace: true });
     });
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="flex items-center justify-center h-full">
