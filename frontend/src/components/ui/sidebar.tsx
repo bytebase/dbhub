@@ -194,11 +194,8 @@ function Sidebar({
           data-sidebar="sidebar"
           data-slot="sidebar"
           side={side}
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-            } as unknown as React.CSSProperties
-          }
+          // @ts-expect-error CSS custom properties type conflict in monorepo
+          style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE }}
         >
           <SheetHeader className="sr-only">
             <SheetTitle>Sidebar</SheetTitle>
