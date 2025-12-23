@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/view';
 import { sql } from '@codemirror/lang-sql';
 import { defaultKeymap } from '@codemirror/commands';
@@ -8,6 +8,8 @@ import { basicSetup } from 'codemirror';
 interface SqlEditorProps {
   value: string;
   onChange?: (value: string) => void;
+  onRunShortcut?: () => void;
+  disabled?: boolean;
   readOnly?: boolean;
   placeholder?: string;
 }
@@ -15,20 +17,47 @@ interface SqlEditorProps {
 export function SqlEditor({
   value,
   onChange,
+  onRunShortcut,
+  disabled = false,
   readOnly = false,
   placeholder = 'Enter SQL query...',
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const onRunShortcutRef = useRef(onRunShortcut);
+  const disabledRef = useRef(disabled);
+
+  // Keep refs updated without causing re-renders
+  useEffect(() => {
+    onRunShortcutRef.current = onRunShortcut;
+    disabledRef.current = disabled;
+  }, [onRunShortcut, disabled]);
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // Custom keymap for Cmd+Enter / Ctrl+Enter
+    // Wrap with Prec.highest() to ensure it runs before any other keymaps
+    const runShortcutKeymap = Prec.highest(
+      keymap.of([
+        {
+          key: 'Mod-Enter',
+          run: () => {
+            if (!disabledRef.current && onRunShortcutRef.current) {
+              onRunShortcutRef.current();
+            }
+            return true; // Prevent default behavior and newline insertion
+          },
+        },
+      ])
+    );
 
     const extensions = [
       basicSetup,
       sql(),
       keymap.of(defaultKeymap),
       placeholderExt(placeholder),
+      runShortcutKeymap, // Add at the end with highest precedence
       EditorView.theme({
         '&': {
           fontSize: '14px',
