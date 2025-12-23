@@ -17,7 +17,6 @@ export class ConnectorManager {
   // Maps for multi-source support
   private connectors: Map<string, Connector> = new Map();
   private sshTunnels: Map<string, SSHTunnel> = new Map();
-  private executeOptions: Map<string, ExecuteOptions> = new Map();
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
 
@@ -143,16 +142,6 @@ export class ConnectorManager {
 
     // Store source config (for API exposure)
     this.sourceConfigs.set(sourceId, source);
-
-    // Store execute options
-    const options: ExecuteOptions = {};
-    if (source.max_rows !== undefined) {
-      options.maxRows = source.max_rows;
-    }
-    if (source.readonly !== undefined) {
-      options.readonly = source.readonly;
-    }
-    this.executeOptions.set(sourceId, options);
   }
 
   /**
@@ -181,7 +170,6 @@ export class ConnectorManager {
     // Clear multi-source state
     this.connectors.clear();
     this.sshTunnels.clear();
-    this.executeOptions.clear();
     this.sourceConfigs.clear();
     this.sourceIds = [];
   }
@@ -233,26 +221,6 @@ export class ConnectorManager {
     return managerInstance.getConnector(sourceId);
   }
 
-  /**
-   * Get execute options for SQL execution
-   * @param sourceId - Optional source ID. If not provided, returns default options
-   */
-  getExecuteOptions(sourceId?: string): ExecuteOptions {
-    const id = sourceId || this.sourceIds[0];
-    return this.executeOptions.get(id) || {};
-  }
-
-  /**
-   * Get the current execute options
-   * This is used by tool handlers
-   * @param sourceId - Optional source ID. If not provided, returns default options
-   */
-  static getCurrentExecuteOptions(sourceId?: string): ExecuteOptions {
-    if (!managerInstance) {
-      throw new Error("ConnectorManager not initialized");
-    }
-    return managerInstance.getExecuteOptions(sourceId);
-  }
 
   /**
    * Get all available source IDs

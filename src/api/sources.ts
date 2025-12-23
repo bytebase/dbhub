@@ -45,14 +45,6 @@ function transformSourceConfig(source: SourceConfig): DataSource {
     dataSource.user = source.user;
   }
 
-  // Add execution options
-  if (source.readonly !== undefined) {
-    dataSource.readonly = source.readonly;
-  }
-  if (source.max_rows !== undefined) {
-    dataSource.max_rows = source.max_rows;
-  }
-
   // Add SSH tunnel configuration (excluding credentials)
   if (source.ssh_host) {
     const sshTunnel: SSHTunnel = {

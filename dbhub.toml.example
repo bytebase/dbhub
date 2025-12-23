@@ -172,7 +172,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "current_managers"
 # description = "List all current department managers"
 # source = "local_pg"
-# readonly = true
+# readonly = true       # Optional: restrict to read-only operations
+# max_rows = 100        # Optional: limit result set size
 # statement = """
 #   SELECT e.emp_no, e.first_name, e.last_name, d.dept_name, dm.from_date
 #   FROM dept_manager dm
@@ -186,7 +187,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "salary_search"
 # description = "Find employees earning at least min_salary, optionally capped by max_salary"
 # source = "local_pg"
-# readonly = true
+# readonly = true       # Optional: restrict to read-only operations
+# max_rows = 1000       # Optional: limit result set size
 # statement = """
 #   SELECT e.emp_no, e.first_name, e.last_name, s.amount as salary
 #   FROM employee e
@@ -257,8 +259,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   domain = "MYDOMAIN"                                  # Required for NTLM
 #
 # Tool Options:
-#   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN
-#   max_rows = 1000    # Limit result set size
+#   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN (works for execute_sql and custom tools)
+#   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
 #
 # Parameter Placeholders by Database:
 #   PostgreSQL:     $1, $2, $3

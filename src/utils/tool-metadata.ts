@@ -4,6 +4,7 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
 import { getToolRegistry } from "../tools/registry.js";
+import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
 
 /**
@@ -24,6 +25,8 @@ export interface Tool {
   description: string;
   parameters: ToolParameter[];
   statement?: string;
+  readonly?: boolean;
+  max_rows?: number;
 }
 
 /**
@@ -84,9 +87,16 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
 export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const executeOptions = ConnectorManager.getCurrentExecuteOptions(sourceId);
   const dbType = sourceConfig.type;
   const isSingleSource = sourceIds.length === 1;
+
+  // Get tool configuration from registry to extract readonly/max_rows
+  const registry = getToolRegistry();
+  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, sourceId);
+  const executeOptions = {
+    readonly: toolConfig?.readonly,
+    maxRows: toolConfig?.max_rows,
+  };
 
   // Determine tool name based on single vs multi-source configuration
   const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
@@ -171,13 +181,21 @@ function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolPa
 /**
  * Build execute_sql tool metadata for API response
  */
-function buildExecuteSqlTool(sourceId: string): Tool {
+function buildExecuteSqlTool(sourceId: string, toolConfig?: ToolConfig): Tool {
   const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
   const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
+
+  // Extract readonly and max_rows from toolConfig
+  // ToolConfig is a union type, but ExecuteSqlToolConfig and CustomToolConfig both have these fields
+  const readonly = toolConfig && 'readonly' in toolConfig ? toolConfig.readonly : undefined;
+  const max_rows = toolConfig && 'max_rows' in toolConfig ? toolConfig.max_rows : undefined;
+
   return {
     name: executeSqlMetadata.name,
     description: executeSqlMetadata.description,
     parameters: executeSqlParameters,
+    readonly,
+    max_rows,
   };
 }
 
@@ -240,6 +258,8 @@ function buildCustomTool(toolConfig: ToolConfig): Tool {
     description: toolConfig.description!,
     parameters: customParamsToToolParams(toolConfig.parameters),
     statement: toolConfig.statement,
+    readonly: toolConfig.readonly,
+    max_rows: toolConfig.max_rows,
   };
 }
 
@@ -258,7 +278,7 @@ export function getToolsForSource(sourceId: string): Tool[] {
   return enabledToolConfigs.map((toolConfig) => {
     // Dispatch based on tool name
     if (toolConfig.name === "execute_sql") {
-      return buildExecuteSqlTool(sourceId);
+      return buildExecuteSqlTool(sourceId, toolConfig);
     } else if (toolConfig.name === "search_objects") {
       return buildSearchObjectsTool(sourceId);
     } else {

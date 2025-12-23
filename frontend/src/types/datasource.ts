@@ -19,6 +19,8 @@ export interface Tool {
   description: string;
   parameters: ToolParameter[];
   statement?: string;
+  readonly?: boolean;
+  max_rows?: number;
 }
 
 export interface DataSource {
@@ -29,8 +31,6 @@ export interface DataSource {
   database?: string;
   user?: string;
   is_default: boolean;
-  readonly?: boolean;
-  max_rows?: number | null;
   ssh_tunnel?: SSHTunnel;
   tools: Tool[];
 }

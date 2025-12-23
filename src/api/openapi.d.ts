@@ -80,16 +80,6 @@ export interface components {
              * @example dbuser
              */
             user?: string;
-            /**
-             * @description Whether the connection is restricted to read-only operations
-             * @example true
-             */
-            readonly?: boolean;
-            /**
-             * @description Maximum number of rows returned from SELECT queries (null means no limit)
-             * @example 1000
-             */
-            max_rows?: number | null;
             ssh_tunnel?: components["schemas"]["SSHTunnel"];
             /** @description Available MCP tools for this data source */
             tools: components["schemas"]["Tool"][];
@@ -229,9 +219,7 @@ export interface operations {
                      *       "host": "localhost",
                      *       "port": 5432,
                      *       "database": "production",
-                     *       "user": "dbuser",
-                     *       "readonly": true,
-                     *       "max_rows": 1000
+                     *       "user": "dbuser"
                      *     }
                      */
                     "application/json": components["schemas"]["DataSource"];

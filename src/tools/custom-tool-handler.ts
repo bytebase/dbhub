@@ -166,13 +166,16 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
       // 1. Validate arguments against Zod schema
       const validatedArgs = zodSchema.parse(args);
 
-      // 2. Get connector and execute options for the specified source
+      // 2. Get connector for the specified source
       const connector = ConnectorManager.getCurrentConnector(toolConfig.source);
-      const executeOptions = ConnectorManager.getCurrentExecuteOptions(
-        toolConfig.source
-      );
 
-      // 3. Check if SQL is allowed based on readonly mode
+      // 3. Build execute options from tool configuration
+      const executeOptions = {
+        readonly: toolConfig.readonly,
+        maxRows: toolConfig.max_rows,
+      };
+
+      // 4. Check if SQL is allowed based on readonly mode
       const isReadonly = executeOptions.readonly === true;
       if (isReadonly && !isReadOnlySQL(toolConfig.statement, connector.id)) {
         errorMessage = `Tool '${toolConfig.name}' cannot execute in readonly mode for source '${toolConfig.source}'. Only read-only SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
@@ -180,20 +183,20 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
 
-      // 4. Map parameters to array format for SQL execution
+      // 5. Map parameters to array format for SQL execution
       paramValues = mapArgumentsToArray(
         toolConfig.parameters,
         validatedArgs
       );
 
-      // 5. Execute SQL with parameters
+      // 6. Execute SQL with parameters
       const result = await connector.executeSQL(
         toolConfig.statement,
         executeOptions,
         paramValues
       );
 
-      // 6. Build response data
+      // 7. Build response data
       const responseData = {
         rows: result.rows,
         count: result.rows.length,
