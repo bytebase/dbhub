@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom';
+import Gutter from './Gutter';
 import Sidebar from './Sidebar/Sidebar';
 import type { DataSource } from '../types/datasource';
 
@@ -10,6 +11,7 @@ interface LayoutProps {
 export default function Layout({ sources, isLoading }: LayoutProps) {
   return (
     <div className="flex h-screen bg-background">
+      <Gutter />
       <Sidebar sources={sources} isLoading={isLoading} />
       <main className="flex-1 overflow-auto" aria-label="Main content">
         <Outlet />
