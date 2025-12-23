@@ -76,7 +76,7 @@ export function SqlEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, [readOnly, placeholder]);
+  }, [readOnly, placeholder, onChange]);
 
   // Update content when value prop changes externally
   useEffect(() => {
