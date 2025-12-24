@@ -98,38 +98,50 @@ export default function ToolDetailView() {
     if (toolType !== 'execute_sql') return;
 
     const timer = setTimeout(() => {
-      const newParams = new URLSearchParams(searchParams);
+      setSearchParams((currentParams) => {
+        const newParams = new URLSearchParams(currentParams);
 
-      if (sql.trim()) {
-        newParams.set('sql', sql);
-      } else {
-        newParams.delete('sql');
-      }
+        if (sql.trim()) {
+          newParams.set('sql', sql);
+        } else {
+          newParams.delete('sql');
+        }
 
-      setSearchParams(newParams, { replace: true });
+        return newParams;
+      }, { replace: true });
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [sql, toolType, searchParams, setSearchParams]);
+  }, [sql, toolType, setSearchParams]); // Removed searchParams from dependencies
 
   // Update URL when params change (debounced for custom tools)
   useEffect(() => {
     if (toolType !== 'custom') return;
 
     const timer = setTimeout(() => {
-      const newParams = new URLSearchParams();
+      setSearchParams((currentParams) => {
+        const newParams = new URLSearchParams(currentParams);
 
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== '') {
-          newParams.set(key, String(value));
-        }
-      });
+        // Clear all non-reserved params first
+        Array.from(newParams.keys()).forEach(key => {
+          if (key !== 'sql') {
+            newParams.delete(key);
+          }
+        });
 
-      setSearchParams(newParams, { replace: true });
+        // Add current param values
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            newParams.set(key, String(value));
+          }
+        });
+
+        return newParams;
+      }, { replace: true });
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [params, toolType, setSearchParams]);
+  }, [params, toolType, setSearchParams]); // No searchParams dependency
 
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
