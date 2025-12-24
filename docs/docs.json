@@ -21,7 +21,7 @@
             "pages": ["index", "installation", "quickstart"]
           },
           {
-            "group": "Tools",
+            "group": "MCP Tools",
             "pages": [
               "tools/overview",
               "tools/execute-sql",
@@ -31,7 +31,7 @@
           },
           {
             "group": "Configuration",
-            "pages": ["config/server-options", "config/multi-database", "config/debug"]
+            "pages": ["config/command-line", "config/toml", "config/debug"]
           }
         ]
       },

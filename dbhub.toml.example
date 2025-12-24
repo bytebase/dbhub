@@ -1,6 +1,6 @@
 # DBHub Multi-Database Configuration
 #
-# Documentation: https://dbhub.ai/config/multi-database
+# Documentation: https://dbhub.ai/config/toml
 #
 # Quick Start:
 #   1. Copy this file to 'dbhub.toml' in your project directory

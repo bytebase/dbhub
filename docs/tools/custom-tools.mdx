@@ -15,7 +15,7 @@ Custom tools are ideal for:
 
 ## Configuration
 
-Custom tools are defined in your `dbhub.toml` configuration file. See the [Tool Options](/config/server-options#tool-options) documentation for complete configuration reference.
+Custom tools are defined in your `dbhub.toml` configuration file. See the [TOML Configuration](/config/toml) documentation for complete configuration reference.
 
 **Required fields:**
 - `name` - Unique tool identifier
@@ -24,7 +24,7 @@ Custom tools are defined in your `dbhub.toml` configuration file. See the [Tool 
 - `statement` - SQL query with parameter placeholders
 - `parameters` - Parameter definitions (optional)
 
-See [Tool Options Configuration](/config/server-options#statement) for detailed field descriptions, parameter types, and validation rules.
+See [TOML Configuration - Tool Options](/config/toml#tool-options) for detailed field descriptions, parameter types, and validation rules.
 
 ## Examples
 
@@ -143,7 +143,7 @@ The same tool pattern works across different databases, just adjust the paramete
   </Tab>
 </Tabs>
 
-See [Parameter Placeholders](/config/server-options#parameters) for syntax reference.
+See [Parameter Placeholders](/config/toml#parameters) for syntax reference.
 
 ## Common Patterns
 
@@ -324,6 +324,6 @@ Custom tools return the same response format as `execute_sql`:
 
 ## See Also
 
-- [Tool Options Configuration](/config/server-options#tool-options) - Complete configuration reference
+- [TOML Configuration](/config/toml) - Complete configuration reference
 - [execute_sql](/tools/execute-sql) - Direct SQL execution tool
 - [search_objects](/tools/search-objects) - Database schema exploration tool

@@ -69,14 +69,16 @@ DBHub supports three configuration methods (in priority order):
 **Recommended for projects requiring multiple database connections**
 
 - Create `dbhub.toml` in your project directory or use `--config=path/to/config.toml`
-- Configuration structure uses `[[sources]]` array with unique `id` fields
+- Configuration structure:
+  - `[[sources]]` - Database connection definitions with unique `id` fields
+  - `[[tools]]` - Tool configuration (execution settings, custom tools)
 - Example:
   ```toml
   [[sources]]
   id = "prod_pg"
   dsn = "postgres://user:pass@localhost:5432/production"
-  readonly = true
-  max_rows = 1000
+  connection_timeout = 60
+  query_timeout = 30
 
   [[sources]]
   id = "staging_mysql"
@@ -85,19 +87,28 @@ DBHub supports three configuration methods (in priority order):
   database = "staging"
   user = "root"
   password = "secret"
+
+  # Tool configuration (readonly, max_rows are tool-level settings)
+  [[tools]]
+  name = "execute_sql"
+  source = "prod_pg"
+  readonly = true
+  max_rows = 1000
   ```
 - Key files:
   - `src/types/config.ts`: TypeScript interfaces for TOML structure
   - `src/config/toml-loader.ts`: TOML parsing and validation
   - `src/config/__tests__/toml-loader.test.ts`: Comprehensive test suite
 - Features:
-  - Per-source SSH tunnel configuration (inline: `ssh_host`, `ssh_user`, `ssh_key`, etc.)
-  - Per-source execution options (`readonly`, `max_rows`)
+  - Per-source settings: SSH tunnels, timeouts, SSL configuration
+  - Per-tool settings: `readonly`, `max_rows` (configured in `[[tools]]` section, not `[[sources]]`)
+  - Custom tools: Define reusable, parameterized SQL operations
   - Path expansion for `~/` in file paths
   - Automatic password redaction in logs
   - First source is the default database
 - Usage in MCP tools: Add optional `source_id` parameter (e.g., `execute_sql(sql, source_id="prod_pg")`)
 - See `dbhub.toml.example` for complete configuration reference
+- Documentation: https://dbhub.ai/config/toml
 
 ### 2. Environment Variables (Single Database)
 - Copy `.env.example` to `.env` and configure for your database connection
@@ -112,9 +123,10 @@ DBHub supports three configuration methods (in priority order):
 - `--port`: HTTP server port (default: 8080)
 - `--config`: Path to TOML configuration file
 - `--demo`: Use bundled SQLite employee database
-- `--readonly`: Restrict to read-only SQL operations
-- `--max-rows`: Limit rows returned from SELECT queries
+- `--readonly`: Restrict to read-only SQL operations (deprecated - use TOML configuration instead)
+- `--max-rows`: Limit rows returned from SELECT queries (deprecated - use TOML configuration instead)
 - SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
+- Documentation: https://dbhub.ai/config/command-line
 
 ### Configuration Priority Order
 1. Command-line arguments (highest)

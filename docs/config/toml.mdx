@@ -1,289 +1,65 @@
 ---
-title: "Server Options"
+title: "TOML Configuration"
 ---
 
-DBHub supports three configuration methods with the following priority order:
+TOML configuration is the recommended way to configure DBHub for multi-database setups and advanced configurations. It provides more flexibility than command-line options or environment variables.
 
-1. **Command-line arguments** (highest priority)
-2. **TOML configuration file** (if `--config` is provided or `./dbhub.toml` exists)
-3. **Environment variables**
-4. **`.env` files** (`.env.local` in development, `.env` in production)
+## Overview
 
-## Command-Line Options
+TOML configuration enables:
+- **Multi-database support**: Connect to multiple databases from a single DBHub instance
+- **Per-source settings**: Configure timeouts, SSL, and SSH tunnels individually per database
+- **Per-tool settings**: Apply different restrictions (readonly, max_rows) per tool
+- **Custom tools**: Define reusable, parameterized SQL operations as MCP tools
 
-Command-line flags are passed when starting DBHub. These have the highest priority and override all other configuration methods.
+## Configuration Structure
 
-### --transport
+A TOML configuration file has two main sections:
 
-<ParamField path="--transport" type="string" env="TRANSPORT" default="stdio">
-  Transport protocol for [MCP communication](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
+1. **`[[sources]]`** - Database connection definitions
+2. **`[[tools]]`** - Tool configuration (execution settings, custom tools)
 
-  **Options:**
-  - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor). Pure MCP-over-stdio with no HTTP server.
-  - `http` - For browser and network clients. Starts HTTP server with MCP endpoint, admin console, and API.
+Create `dbhub.toml` in your project directory:
 
-  | Feature | `stdio` | `http` |
-  |---------|:-------:|:------:|
-  | MCP communication | stdin/stdout | HTTP POST `/mcp` |
-  | Admin console | ❌ | ✅ `http://host:port/` |
-  | Health check | ❌ | ✅ `/healthz` |
-  | API | ❌ | ✅ `/api/xxx` |
-  | Multiple instances | ✅ No port conflicts | Requires different ports |
-
-  ```bash
-  # stdio (default) - for Claude Desktop, Claude Code, Cursor
-  # No HTTP server started
-  npx @bytebase/dbhub@latest --transport stdio --dsn "..."
-
-  # http - for web clients, admin console, and remote access
-  npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "..."
-  ```
-</ParamField>
-
-### --port
-
-<ParamField path="--port" type="number" env="PORT" default="8080">
-  HTTP server port. Only used when `--transport=http`. Ignored for stdio transport.
-
-  ```bash
-  npx @bytebase/dbhub@latest --transport http --port 3000 --dsn "..."
-  ```
-</ParamField>
-
-### --dsn
-
-<ParamField path="--dsn" type="string" env="DSN">
-  Database connection string (Data Source Name). Format: `database_type://username:password@host:port/database_name?options`
-
-  <Tabs>
-    <Tab title="PostgreSQL">
-      ```bash
-      # Format: postgres://[user]:[password]@[host]:[port]/[database]?[options]
-      postgres://myuser:mypassword@localhost:5432/mydb
-      ```
-    </Tab>
-
-    <Tab title="MySQL">
-      ```bash
-      # Format: mysql://[user]:[password]@[host]:[port]/[database]?[options]
-      mysql://root:password@localhost:3306/mydb
-      ```
-    </Tab>
-
-    <Tab title="MariaDB">
-      ```bash
-      # Format: mariadb://[user]:[password]@[host]:[port]/[database]?[options]
-      mariadb://root:password@localhost:3306/mydb
-      ```
-    </Tab>
-
-    <Tab title="SQL Server">
-      ```bash
-      # Format: sqlserver://[user]:[password]@[host]:[port]/[database]?[options]
-      sqlserver://sa:YourPassword123@localhost:1433/mydb
-
-      # Named instance (e.g., ENV1, ENV2, ENV3)
-      sqlserver://sa:YourPassword123@localhost:1433/mydb?instanceName=ENV1
-
-      # Windows/NTLM authentication
-      sqlserver://jsmith:secret@sqlserver.corp.local:1433/mydb?authentication=ntlm&domain=CORP
-
-      # Azure AD authentication (password optional/empty)
-      sqlserver://username@localhost:1433/mydb?authentication=azure-active-directory-access-token
-      ```
-    </Tab>
-
-    <Tab title="SQLite">
-      ```bash
-      # Format: sqlite:///[path/to/database.db] or sqlite:///:memory:
-
-      # Unix/Linux/macOS
-      sqlite:///var/lib/data/mydb.db
-
-      # Windows
-      sqlite:///C:/Users/YourName/data/database.db
-
-      # In-memory
-      sqlite:///:memory:
-      ```
-    </Tab>
-  </Tabs>
-
-  **DSN Query Parameters:**
-
-  | Parameter | Databases | Description | Example |
-  |-----------|-----------|-------------|---------|
-  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server | SSL mode: `disable`, `require` | `?sslmode=require` |
-  | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
-  | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
-  | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
-
-  **SSL/TLS Options:**
-
-  | Database   | `sslmode=disable` | `sslmode=require` | Default |
-  | ---------- | :---------------: | :---------------: | :-----: |
-  | PostgreSQL |        ✅         |        ✅         | Certificate verification |
-  | MySQL      |        ✅         |        ✅         | Certificate verification |
-  | MariaDB    |        ✅         |        ✅         | Certificate verification |
-  | SQL Server |        ✅         |        ✅         | Certificate verification |
-  | SQLite     |        ❌         |        ❌         | N/A (file-based) |
-
-  - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
-  - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
-
-  ```bash
-  # Examples
-  postgres://user:password@localhost:5432/dbname?sslmode=disable
-  postgres://user:password@localhost:5432/dbname?sslmode=require
-  sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
-  ```
-</ParamField>
-
-**Environment Variables (Alternative to --dsn)**
-
-<ParamField path="DB_*" type="environment">
-  Recommended for databases with complex passwords containing special characters:
-
-  | Variable | Type | Description |
-  |----------|------|-------------|
-  | `DB_TYPE` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `sqlite` |
-  | `DB_HOST` | string | Database server hostname (not needed for SQLite) |
-  | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`) |
-  | `DB_USER` | string | Database username (not needed for SQLite) |
-  | `DB_PASSWORD` | string | Database password (not needed for SQLite). Supports special characters without URL encoding. |
-  | `DB_NAME` | string | Database name or SQLite file path |
-
-  ```bash
-  export DB_TYPE=postgres
-  export DB_HOST=localhost
-  export DB_PORT=5432
-  export DB_USER=myuser
-  export DB_PASSWORD='p@ss:word#123'
-  export DB_NAME=mydb
-  npx @bytebase/dbhub@latest
-  ```
-</ParamField>
-
-### --id
-
-<ParamField path="--id" type="string" env="ID">
-  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor).
-
-  Tools will be named `execute_sql_{id}` for each instance.
-
-  ```bash
-  npx @bytebase/dbhub@latest --id prod --dsn "postgres://user:pass@prod-host:5432/db"
-  npx @bytebase/dbhub@latest --id staging --dsn "postgres://user:pass@staging-host:5432/db"
-  ```
-
-  Result: `execute_sql_prod` and `execute_sql_staging` tools
-
-  <Warning>
-  Cannot be used with `--config` (TOML configuration). TOML config defines source IDs directly in the configuration file. Use command-line DSN configuration instead if you need the `--id` flag.
-  </Warning>
-</ParamField>
-
-### --demo
-
-<ParamField path="--demo" type="boolean" default="false">
-  Run DBHub with a bundled SQLite sample "employee" database for testing.
-
-  ```bash
-  npx @bytebase/dbhub@latest --demo --transport http --port 8080
-  ```
-</ParamField>
-
-### --config
-
-<ParamField path="--config" type="string" default="./dbhub.toml">
-  Path to TOML configuration file for managing multiple database connections.
-
-  Automatically loads `./dbhub.toml` if it exists in the current directory.
-
-  ```bash
-  npx @bytebase/dbhub@latest --config ./dbhub.toml --transport http --port 8080
-  ```
-
-  See [Multi-Database Setup](/config/multi-database) for TOML configuration details.
-
-  <Warning>
-  **`--config` (TOML) is mutually exclusive with:**
-  - `--dsn` - TOML configuration defines database connections directly
-  - `--id` - TOML configuration defines source IDs directly in the file
-
-  If using TOML config, remove these flags. If you need `--id` or `--dsn`, use command-line/environment configuration instead.
-  </Warning>
-</ParamField>
-
-### SSH Tunnel Options
-
-SSH tunnel configuration for connecting to databases through bastion/jump hosts.
-
-| Option | Env | Type | Description |
-|--------|-----|------|-------------|
-| `--ssh-host` | `SSH_HOST` | string | SSH server hostname or alias from `~/.ssh/config` |
-| `--ssh-port` | `SSH_PORT` | number | SSH server port (default: `22`) |
-| `--ssh-user` | `SSH_USER` | string | SSH username |
-| `--ssh-password` | `SSH_PASSWORD` | string | SSH password (for password auth) |
-| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key file. Auto-detects `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc. if not specified |
-| `--ssh-passphrase` | `SSH_PASSPHRASE` | string | Passphrase for encrypted SSH key |
-| `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts for multi-hop SSH. Format: `[user@]host[:port]` (comma-separated for chains) |
-
-**Examples:**
-
-```bash
-# Password auth
-npx @bytebase/dbhub@latest --dsn "..." \
-  --ssh-host bastion.example.com --ssh-user ubuntu --ssh-password mypassword
-
-# Key-based auth
-npx @bytebase/dbhub@latest --dsn "..." \
-  --ssh-host bastion.example.com --ssh-user ubuntu --ssh-key ~/.ssh/id_rsa
-
-# ProxyJump (single hop)
-npx @bytebase/dbhub@latest --dsn "..." \
-  --ssh-host target.internal --ssh-proxy-jump bastion.example.com
-
-# ProxyJump (multi-hop: bastion1 → bastion2 → target)
-npx @bytebase/dbhub@latest --dsn "..." \
-  --ssh-host target.internal --ssh-proxy-jump "bastion1.com,admin@bastion2:2222"
-```
-
-<Note>
-- ProxyJump is automatically read from `~/.ssh/config` when using SSH host aliases
-- ProxyCommand is not supported (requires shell execution). Use ProxyJump instead
-- Path expansion for `~/` is supported in file paths
-</Note>
-
-## TOML Configuration
-
-TOML configuration is used for multi-database setups and advanced configurations. See [Multi-Database Setup](/config/multi-database) for complete details.
-
-<Note>
-TOML configuration is **mutually exclusive** with `--dsn` and `--id` command-line flags.
-</Note>
-
-### Source Options
-
-Source options are configured in the `[[sources]]` section of your TOML file. Each source represents a database connection.
-
-```toml
+```toml dbhub.toml
+# Define database sources
 [[sources]]
 id = "production"
 dsn = "postgres://user:pass@localhost:5432/mydb"
 connection_timeout = 60
-query_timeout = 30
-sslmode = "require"
 
-# SSH tunnel configuration (optional)
-ssh_host = "bastion.example.com"
-ssh_port = 22
-ssh_user = "ubuntu"
-ssh_key = "~/.ssh/id_rsa"
-ssh_proxy_jump = "jump1.example.com,jump2.internal"
+[[sources]]
+id = "staging"
+dsn = "mysql://root:pass@localhost:3306/myapp"
+
+# Configure tools for each source
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+max_rows = 1000
+
+[[tools]]
+name = "execute_sql"
+source = "staging"
+readonly = false
 ```
 
-#### id
+Start DBHub:
+
+```bash
+# Automatically loads ./dbhub.toml
+npx @bytebase/dbhub@latest --transport http --port 8080
+
+# Or specify custom location
+npx @bytebase/dbhub@latest --config=/path/to/config.toml
+```
+
+## Source Options
+
+Sources define database connections. Each source represents a database that DBHub can connect to.
+
+### id
 
 <ParamField path="id" type="string" required>
   **Required.** Unique identifier for this data source. Used for routing tool calls and in tool names.
@@ -294,13 +70,13 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   ```
 </ParamField>
 
-#### dsn
+### dsn
 
 <ParamField path="dsn" type="string" required>
-  **Required.** Database connection string. Same format as command-line [`--dsn`](#--dsn).
+  **Required.** Database connection string. Same format as command-line [`--dsn`](/config/command-line#--dsn).
 
   <Tabs>
-    <Tab title="Using DSN (Recommended)">
+    <Tab title="Using DSN">
       ```toml
       [[sources]]
       id = "production"
@@ -366,7 +142,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Tabs>
 </ParamField>
 
-#### connection_timeout
+### connection_timeout
 
 <ParamField path="connection_timeout" type="number">
   Connection timeout in seconds. The maximum time to wait when establishing a database connection.
@@ -385,7 +161,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Note>
 </ParamField>
 
-#### query_timeout
+### query_timeout
 
 <ParamField path="query_timeout" type="number">
   Query timeout in seconds. The maximum time to wait for a query to complete before timing out.
@@ -404,7 +180,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Note>
 </ParamField>
 
-#### sslmode
+### sslmode
 
 <ParamField path="sslmode" type="string">
   SSL/TLS mode for database connections.
@@ -427,7 +203,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Tip>
 </ParamField>
 
-#### instanceName
+### instanceName
 
 <ParamField path="instanceName" type="string">
   SQL Server named instance. Use when connecting to a specific SQL Server instance (e.g., SQLEXPRESS, ENV1).
@@ -446,7 +222,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Tip>
 </ParamField>
 
-#### authentication
+### authentication
 
 <ParamField path="authentication" type="string">
   SQL Server authentication method. **SQL Server only.**
@@ -468,7 +244,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   </Tip>
 </ParamField>
 
-#### domain
+### domain
 
 <ParamField path="domain" type="string">
   Windows domain for NTLM authentication. **Required when `authentication=ntlm`. SQL Server only.**
@@ -482,7 +258,7 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   ```
 </ParamField>
 
-#### SSH Tunnel Options
+### SSH Tunnel Options
 
 <ParamField path="ssh_*" type="group">
   SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_proxy_jump`.
@@ -501,26 +277,18 @@ ssh_proxy_jump = "jump1.example.com,jump2.internal"
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
   ```
 
-  See [SSH Tunnel Options](#ssh-tunnel-options) for complete documentation and examples.
+  See [Command-Line Options - SSH Tunnel](/config/command-line#ssh-tunnel-options) for complete documentation and examples.
 </ParamField>
 
-### Tool Options
+## Tool Options
 
-Tool options are configured in the `[[tools]]` section of your TOML file. Each tool represents an MCP tool (like `execute_sql`) with specific execution settings.
-
-```toml
-[[tools]]
-name = "execute_sql"
-source = "production"
-readonly = true
-max_rows = 1000
-```
+Tools define MCP tools (like `execute_sql`) with specific execution settings. Tool options control **how** tools execute queries, not **what** databases they connect to.
 
 <Warning>
 **Tool options cannot be set via command-line flags.** They are **only available in TOML configuration** in the `[[tools]]` section.
 </Warning>
 
-#### name
+### name
 
 <ParamField path="name" type="string" required>
   **Required.** Tool name. Currently, the primary tool is `execute_sql`.
@@ -532,7 +300,7 @@ max_rows = 1000
   ```
 </ParamField>
 
-#### source
+### source
 
 <ParamField path="source" type="string" required>
   **Required.** The source ID this tool should use. Must match an `id` from the `[[sources]]` section.
@@ -548,7 +316,7 @@ max_rows = 1000
   ```
 </ParamField>
 
-#### readonly
+### readonly
 
 <ParamField path="readonly" type="boolean" default="false">
   Restrict SQL execution to read-only operations (SELECT, SHOW, DESCRIBE, EXPLAIN, PRAGMA). Write operations like INSERT, UPDATE, DELETE are blocked.
@@ -567,7 +335,7 @@ max_rows = 1000
   See [Execute SQL documentation](/tools/execute-sql#readonly-mode) for more details.
 </ParamField>
 
-#### max_rows
+### max_rows
 
 <ParamField path="max_rows" type="number">
   Maximum number of rows to return from SELECT queries. Queries returning more rows will be truncated.
@@ -586,7 +354,7 @@ max_rows = 1000
   See [Execute SQL documentation](/tools/execute-sql#row-limits) for more details.
 </ParamField>
 
-#### statement
+### statement
 
 <ParamField path="statement" type="string">
   Optional predefined SQL statement for custom tools. Enables creating reusable, parameterized database operations that are automatically registered as MCP tools.
@@ -607,7 +375,7 @@ max_rows = 1000
   See [Custom Tools documentation](/tools/custom-tools) for examples and patterns.
 </ParamField>
 
-#### description
+### description
 
 <ParamField path="description" type="string">
   **Required for custom tools.** Human-readable description of the tool's purpose. Helps AI models understand when and how to use the tool.
@@ -621,7 +389,7 @@ max_rows = 1000
   ```
 </ParamField>
 
-#### parameters
+### parameters
 
 <ParamField path="parameters" type="array">
   Parameter definitions for custom tools. Each parameter defines a typed input that will be validated before execution.
@@ -697,9 +465,9 @@ max_rows = 1000
   </Tip>
 </ParamField>
 
-## Complete TOML Example
+## Complete Example
 
-```toml
+```toml dbhub.toml
 # Multi-database configuration with different tool settings
 
 [[sources]]
@@ -770,36 +538,7 @@ default = 10
 
 ## Quick Reference
 
-### Command-Line Options
-
-| CLI Option | Env | Type | Default | Description |
-|------------|---------------------|------|---------|-------------|
-| `--transport` | `TRANSPORT` | string | `stdio` | Transport mode: stdio or http |
-| `--port` | `PORT` | number | `8080` | HTTP server port (http transport only) |
-| `--demo` | - | boolean | `false` | Use sample employee database |
-| `--id` | `ID` | string | - | Instance identifier for tool names |
-| `--config` | - | string | `./dbhub.toml` | Path to TOML config file |
-| `--dsn` | `DSN` | string | Required* | Database connection string |
-| - | `DB_TYPE` | string | - | Database type |
-| - | `DB_HOST` | string | - | Database hostname |
-| - | `DB_PORT` | number | Varies | Database port |
-| - | `DB_USER` | string | - | Database username |
-| - | `DB_PASSWORD` | string | - | Database password |
-| - | `DB_NAME` | string | - | Database name or SQLite file path |
-| `--ssh-host` | `SSH_HOST` | string | - | SSH server hostname |
-| `--ssh-port` | `SSH_PORT` | number | `22` | SSH server port |
-| `--ssh-user` | `SSH_USER` | string | - | SSH username |
-| `--ssh-password` | `SSH_PASSWORD` | string | - | SSH password |
-| `--ssh-key` | `SSH_KEY` | string | - | Path to SSH private key |
-| `--ssh-passphrase` | `SSH_PASSPHRASE` | string | - | SSH key passphrase |
-| `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | - | ProxyJump hosts |
-
-<Note>
-*Required unless using `--demo` or `--config`
-</Note>
-
-### TOML Configuration
-#### Source Options
+### Source Options
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -819,7 +558,7 @@ default = 10
 | `ssh_passphrase` | string | ❌ | SSH key passphrase |
 | `ssh_proxy_jump` | string | ❌ | ProxyJump hosts |
 
-#### Tool Options
+### Tool Options
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|

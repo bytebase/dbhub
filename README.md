@@ -80,13 +80,13 @@ npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:p
 npx @bytebase/dbhub@latest --transport http --port 8080 --demo
 ```
 
-See [Server Options](https://dbhub.ai/config/server-options) for all available parameters.
+See [Command-Line Options](https://dbhub.ai/config/command-line) for all available parameters.
 
 ### Multi-Database Setup
 
 Connect to multiple databases simultaneously using TOML configuration files. Perfect for managing production, staging, and development databases from a single DBHub instance.
 
-See [Multi-Database Configuration](https://dbhub.ai/config/multi-database) for complete setup instructions.
+See [Multi-Database Configuration](https://dbhub.ai/config/toml) for complete setup instructions.
 
 ## Development
 
