@@ -93,6 +93,44 @@ export default function ToolDetailView() {
     }
   }, [tool, toolType, searchParams, coerceParamValue]);
 
+  // Update URL when sql changes (debounced for execute_sql tools)
+  useEffect(() => {
+    if (toolType !== 'execute_sql') return;
+
+    const timer = setTimeout(() => {
+      const newParams = new URLSearchParams(searchParams);
+
+      if (sql.trim()) {
+        newParams.set('sql', sql);
+      } else {
+        newParams.delete('sql');
+      }
+
+      setSearchParams(newParams, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [sql, toolType, searchParams, setSearchParams]);
+
+  // Update URL when params change (debounced for custom tools)
+  useEffect(() => {
+    if (toolType !== 'custom') return;
+
+    const timer = setTimeout(() => {
+      const newParams = new URLSearchParams();
+
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') {
+          newParams.set(key, String(value));
+        }
+      });
+
+      setSearchParams(newParams, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [params, toolType, setSearchParams]);
+
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
     if (!tool?.statement) return '';
