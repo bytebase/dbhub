@@ -16,6 +16,7 @@ out/
 # Environment & config
 dbhub.toml
 docs/plans/
+docs/testing/
 .env
 .env.local
 .env.development.local

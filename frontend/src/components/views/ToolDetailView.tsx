@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
@@ -9,12 +9,16 @@ import LockIcon from '../icons/LockIcon';
 
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tool, setTool] = useState<Tool | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
   // Query state
-  const [sql, setSql] = useState('');
+  const [sql, setSql] = useState(() => {
+    // Only for execute_sql tools - read from URL on mount
+    return searchParams.get('sql') || '';
+  });
   const [params, setParams] = useState<Record<string, any>>({});
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -49,6 +53,95 @@ export default function ToolDetailView() {
   }, [tool]);
 
   const toolType = getToolType();
+
+  // Coerce URL parameter values to correct types based on parameter schema
+  const coerceParamValue = useCallback((value: string, paramName: string): any => {
+    if (!tool) return value;
+
+    const paramDef = tool.parameters.find(p => p.name === paramName);
+    if (!paramDef) return undefined; // Invalid param - will be filtered out
+
+    // Type coercion based on parameter schema
+    if (paramDef.type === 'number' || paramDef.type === 'integer' || paramDef.type === 'float') {
+      const num = Number(value);
+      return isNaN(num) ? undefined : num; // Exclude invalid numbers entirely
+    }
+    if (paramDef.type === 'boolean') {
+      return value === 'true';
+    }
+    return value; // string type
+  }, [tool]);
+
+  // Coerce URL params to correct types after tool is loaded
+  useEffect(() => {
+    if (!tool || toolType !== 'custom') return;
+
+    // Only coerce params from URL on initial mount
+    const urlParams: Record<string, any> = {};
+    searchParams.forEach((value, key) => {
+      if (key !== 'sql') {
+        const coerced = coerceParamValue(String(value), key);
+        if (coerced !== undefined) {
+          urlParams[key] = coerced;
+        }
+      }
+    });
+
+    // Only update if we have URL params to coerce
+    if (Object.keys(urlParams).length > 0) {
+      setParams(urlParams);
+    }
+  }, [tool, toolType, searchParams, coerceParamValue]);
+
+  // Update URL when sql changes (debounced for execute_sql tools)
+  useEffect(() => {
+    if (toolType !== 'execute_sql') return;
+
+    const timer = setTimeout(() => {
+      setSearchParams((currentParams) => {
+        const newParams = new URLSearchParams(currentParams);
+
+        if (sql.trim()) {
+          newParams.set('sql', sql);
+        } else {
+          newParams.delete('sql');
+        }
+
+        return newParams;
+      }, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [sql, toolType, setSearchParams]); // Removed searchParams from dependencies
+
+  // Update URL when params change (debounced for custom tools)
+  useEffect(() => {
+    if (toolType !== 'custom') return;
+
+    const timer = setTimeout(() => {
+      setSearchParams((currentParams) => {
+        const newParams = new URLSearchParams(currentParams);
+
+        // Clear all non-reserved params first
+        Array.from(newParams.keys()).forEach(key => {
+          if (key !== 'sql') {
+            newParams.delete(key);
+          }
+        });
+
+        // Add current param values
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== '') {
+            newParams.set(key, String(value));
+          }
+        });
+
+        return newParams;
+      }, { replace: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [params, toolType, setSearchParams]); // No searchParams dependency
 
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
