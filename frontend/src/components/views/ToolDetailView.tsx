@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
@@ -9,13 +9,27 @@ import LockIcon from '../icons/LockIcon';
 
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tool, setTool] = useState<Tool | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
   // Query state
-  const [sql, setSql] = useState('');
-  const [params, setParams] = useState<Record<string, any>>({});
+  const [sql, setSql] = useState(() => {
+    // Only for execute_sql tools - read from URL on mount
+    return searchParams.get('sql') || '';
+  });
+  const [params, setParams] = useState<Record<string, any>>(() => {
+    // For custom tools - read all params from URL on mount
+    const urlParams: Record<string, any> = {};
+    searchParams.forEach((value, key) => {
+      // Skip reserved keys
+      if (key !== 'sql') {
+        urlParams[key] = value;
+      }
+    });
+    return urlParams;
+  });
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
