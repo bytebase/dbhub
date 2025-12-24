@@ -19,17 +19,7 @@ export default function ToolDetailView() {
     // Only for execute_sql tools - read from URL on mount
     return searchParams.get('sql') || '';
   });
-  const [params, setParams] = useState<Record<string, any>>(() => {
-    // For custom tools - read all params from URL on mount
-    const urlParams: Record<string, any> = {};
-    searchParams.forEach((value, key) => {
-      // Skip reserved keys
-      if (key !== 'sql') {
-        urlParams[key] = value;
-      }
-    });
-    return urlParams;
-  });
+  const [params, setParams] = useState<Record<string, any>>({});
   const [result, setResult] = useState<QueryResult | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -63,6 +53,45 @@ export default function ToolDetailView() {
   }, [tool]);
 
   const toolType = getToolType();
+
+  // Coerce URL parameter values to correct types based on parameter schema
+  const coerceParamValue = useCallback((value: string, paramName: string): any => {
+    if (!tool) return value;
+
+    const paramDef = tool.parameters.find(p => p.name === paramName);
+    if (!paramDef) return undefined; // Invalid param - will be filtered out
+
+    // Type coercion based on parameter schema
+    if (paramDef.type === 'number' || paramDef.type === 'integer' || paramDef.type === 'float') {
+      const num = Number(value);
+      return isNaN(num) ? '' : num;
+    }
+    if (paramDef.type === 'boolean') {
+      return value === 'true';
+    }
+    return value; // string type
+  }, [tool]);
+
+  // Coerce URL params to correct types after tool is loaded
+  useEffect(() => {
+    if (!tool || toolType !== 'custom') return;
+
+    // Only coerce params from URL on initial mount
+    const urlParams: Record<string, any> = {};
+    searchParams.forEach((value, key) => {
+      if (key !== 'sql') {
+        const coerced = coerceParamValue(String(value), key);
+        if (coerced !== undefined) {
+          urlParams[key] = coerced;
+        }
+      }
+    });
+
+    // Only update if we have URL params to coerce
+    if (Object.keys(urlParams).length > 0) {
+      setParams(urlParams);
+    }
+  }, [tool, toolType, searchParams, coerceParamValue]);
 
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
