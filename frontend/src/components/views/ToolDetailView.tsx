@@ -64,7 +64,7 @@ export default function ToolDetailView() {
     // Type coercion based on parameter schema
     if (paramDef.type === 'number' || paramDef.type === 'integer' || paramDef.type === 'float') {
       const num = Number(value);
-      return isNaN(num) ? '' : num;
+      return isNaN(num) ? undefined : num; // Exclude invalid numbers entirely
     }
     if (paramDef.type === 'boolean') {
       return value === 'true';
