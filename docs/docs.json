@@ -30,18 +30,6 @@
             ]
           },
           {
-            "group": "Integrations",
-            "pages": [
-              "integrations/claude-code",
-              "integrations/claude-desktop",
-              "integrations/codex",
-              "integrations/cursor",
-              "integrations/dify",
-              "integrations/librechat",
-              "integrations/vscode"
-            ]
-          },
-          {
             "group": "Configuration",
             "pages": ["config/server-options", "config/multi-database", "config/debug"]
           }
