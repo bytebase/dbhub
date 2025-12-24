@@ -49,7 +49,11 @@
       },
       {
         "tab": "Blog",
-        "pages": ["blog/postgres-mcp-server-review-supabase-mcp", "blog/postgres-mcp-server-review-mcp-toolbox"]
+        "pages": [
+          "blog/postgres-mcp-server-review-dbhub",
+          "blog/postgres-mcp-server-review-supabase-mcp",
+          "blog/postgres-mcp-server-review-mcp-toolbox"
+        ]
       }
     ]
   },
