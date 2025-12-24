@@ -1,6 +1,7 @@
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import type { ToolParameter } from '../../types/datasource';
+import { useEffect, useState } from 'react';
 
 interface ParameterFormProps {
   parameters: ToolParameter[];
@@ -50,15 +51,23 @@ function ParameterInput({ parameter, value, onChange }: ParameterInputProps) {
 
   // Boolean type: checkbox
   if (type === 'boolean') {
+    const [localChecked, setLocalChecked] = useState<boolean>(value === true || value === 'true');
+
+    // Sync local state when value prop changes
+    useEffect(() => {
+      const newChecked = value === true || value === 'true';
+      setLocalChecked(newChecked);
+    }, [value]);
+
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center h-10">
         <Checkbox
-          checked={value === true}
-          onCheckedChange={(checked) => onChange(checked === true)}
+          checked={localChecked}
+          onCheckedChange={(checked) => {
+            setLocalChecked(checked);
+            onChange(checked);
+          }}
         />
-        <span className="text-sm text-muted-foreground">
-          {value === true ? 'Yes' : 'No'}
-        </span>
       </div>
     );
   }
