@@ -126,6 +126,16 @@ export interface components {
              * @example SELECT * FROM users WHERE id = $1
              */
             statement?: string;
+            /**
+             * @description Whether the tool is restricted to read-only operations (execute_sql and custom tools only)
+             * @example true
+             */
+            readonly?: boolean;
+            /**
+             * @description Maximum number of rows returned by SELECT queries (execute_sql and custom tools only)
+             * @example 1000
+             */
+            max_rows?: number;
         };
         /** @description Parameter definition for a tool */
         ToolParameter: {

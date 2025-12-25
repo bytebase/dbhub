@@ -34,6 +34,11 @@ export default function ToolDetailView() {
 
     setIsLoading(true);
     setError(null);
+    // Reset result state when switching tools
+    setResult(null);
+    setQueryError(null);
+    setExecutionTimeMs(null);
+    setExecutedSql('');
 
     fetchSource(sourceId)
       .then((sourceData) => {
@@ -155,7 +160,7 @@ export default function ToolDetailView() {
     // Replace $1, $2, etc. or ? with :param_name
     // For $N placeholders, use the number to look up the parameter (1-indexed)
     // For ? placeholders, use sequential order
-    transformedSql = transformedSql.replace(/\$(\d+)|\?/g, (match, num) => {
+    transformedSql = transformedSql.replace(/\$(\d+)|\?/g, (_match, num) => {
       let param;
       if (num) {
         // $N placeholder - use the number (1-indexed) to find parameter

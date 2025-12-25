@@ -18,7 +18,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
         className="grid place-content-center text-current"
         data-slot="checkbox-indicator"
       >
-        {props.checked === "indeterminate" ? (
+        {(props.checked as boolean | "indeterminate") === "indeterminate" ? (
           <svg fill="currentcolor" height="9" viewBox="0 0 9 9" width="9">
             <path d="M0.75 4.5C0.75 4.08579 1.08579 3.75 1.5 3.75H7.5C7.91421 3.75 8.25 4.08579 8.25 4.5C8.25 4.91421 7.91421 5.25 7.5 5.25H1.5C1.08579 5.25 0.75 4.91421 0.75 4.5Z" />
           </svg>
