@@ -225,6 +225,26 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # description = "Employee number"
 # required = true
 
+# Example: Update employee department (PostgreSQL - with two required parameters)
+# [[tools]]
+# name = "update_employee_department"
+# description = "Update an employee's department assignment"
+# source = "local_pg"
+# readonly = false  # Explicitly allow UPDATE operations
+# statement = "UPDATE dept_emp SET dept_no = $2 WHERE emp_no = $1"
+#
+# [[tools.parameters]]
+# name = "emp_no"
+# type = "integer"
+# description = "Employee number"
+# required = true
+#
+# [[tools.parameters]]
+# name = "dept_no"
+# type = "string"
+# description = "New department number (e.g., d001, d002)"
+# required = true
+
 # ============================================================================
 # QUICK REFERENCE
 # ============================================================================

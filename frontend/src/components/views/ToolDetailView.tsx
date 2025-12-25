@@ -147,12 +147,21 @@ export default function ToolDetailView() {
   const transformedStatement = useCallback((): string => {
     if (!tool?.statement) return '';
     let transformedSql = tool.statement;
-    let placeholderIndex = 0;
+    let questionMarkIndex = 0;
 
     // Replace $1, $2, etc. or ? with :param_name
-    transformedSql = transformedSql.replace(/\$\d+|\?/g, () => {
-      const param = tool.parameters[placeholderIndex];
-      placeholderIndex++;
+    // For $N placeholders, use the number to look up the parameter (1-indexed)
+    // For ? placeholders, use sequential order
+    transformedSql = transformedSql.replace(/\$(\d+)|\?/g, (match, num) => {
+      let param;
+      if (num) {
+        // $N placeholder - use the number (1-indexed) to find parameter
+        param = tool.parameters[parseInt(num, 10) - 1];
+      } else {
+        // ? placeholder - use sequential order
+        param = tool.parameters[questionMarkIndex];
+        questionMarkIndex++;
+      }
       return param ? `:${param.name}` : ':?';
     });
 
