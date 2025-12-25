@@ -1,0 +1,25 @@
+---
+title: "Overview"
+description: "A web-based interface for exploring and executing database tools"
+---
+
+The Workbench is DBHub's built-in web interface for interacting with your database tools. It provides a visual way to execute queries and test custom tools without requiring an MCP client.
+
+![workbench](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/workbench.webp)
+
+## Starting the Workbench
+
+The Workbench is available when running DBHub with HTTP transport:
+
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --dsn "postgres://..."
+```
+
+Then open `http://localhost:8080` in your browser.
+
+<Tip>
+Try demo mode to explore the Workbench without setting up a database:
+```bash
+npx @bytebase/dbhub --transport http --port 8080 --demo
+```
+</Tip>
