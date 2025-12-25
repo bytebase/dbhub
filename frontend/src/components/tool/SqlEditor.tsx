@@ -20,7 +20,7 @@ export function SqlEditor({
   onRunShortcut,
   disabled = false,
   readOnly = false,
-  placeholder = 'Enter SQL query...',
+  placeholder = 'Enter SQL statement...',
 }: SqlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);

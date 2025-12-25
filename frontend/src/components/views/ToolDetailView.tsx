@@ -6,6 +6,8 @@ import { ApiError } from '../../api/errors';
 import type { Tool } from '../../types/datasource';
 import { SqlEditor, ParameterForm, RunButton, ResultsTable } from '../tool';
 import LockIcon from '../icons/LockIcon';
+import CopyIcon from '../icons/CopyIcon';
+import CheckIcon from '../icons/CheckIcon';
 
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
@@ -25,6 +27,7 @@ export default function ToolDetailView() {
   const [isRunning, setIsRunning] = useState(false);
   const [executionTimeMs, setExecutionTimeMs] = useState<number | null>(null);
   const [executedSql, setExecutedSql] = useState<string>('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!sourceId || !toolName) return;
@@ -233,6 +236,14 @@ export default function ToolDetailView() {
   const isRunDisabled =
     toolType === 'execute_sql' ? !sql.trim() : !allRequiredParamsFilled();
 
+  // Copy SQL to clipboard
+  const handleCopy = useCallback(async () => {
+    const sqlToCopy = toolType === 'execute_sql' ? sql : getSqlPreview();
+    await navigator.clipboard.writeText(sqlToCopy);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [toolType, sql, getSqlPreview]);
+
   if (!sourceId || !toolName) {
     return <Navigate to="/" replace />;
   }
@@ -322,9 +333,28 @@ export default function ToolDetailView() {
 
         {/* SQL Editor */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">
-            {toolType === 'execute_sql' ? 'SQL Query' : 'SQL Statement'}
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-foreground">
+              SQL Statement
+            </label>
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors"
+              title="Copy SQL"
+            >
+              {copied ? (
+                <>
+                  <CheckIcon className="w-3.5 h-3.5" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="w-3.5 h-3.5" />
+                  Copy
+                </>
+              )}
+            </button>
+          </div>
           <SqlEditor
             value={toolType === 'execute_sql' ? sql : getSqlPreview()}
             onChange={toolType === 'execute_sql' ? setSql : undefined}
