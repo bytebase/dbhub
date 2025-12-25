@@ -23,25 +23,21 @@ Example configuration in `dbhub.toml`:
 
 ```toml dbhub.toml
 [[tools]]
-name = "delete_old_salaries"
-description = "Delete salary records older than specified date for cleanup"
+name = "delete_employee_salaries"
+description = "Delete salary records for a specific employee"
 source = "local_pg"
 readonly = false  # Explicitly allow DELETE operations
-statement = """
-  DELETE FROM salary
-  WHERE to_date < $1
-  RETURNING emp_no, amount, from_date, to_date
-"""
+statement = "DELETE FROM salary WHERE emp_no = $1"
 
 [[tools.parameters]]
-name = "cutoff_date"
-type = "string"
-description = "Delete salary records with to_date before this date (format: YYYY-MM-DD)"
+name = "emp_no"
+type = "integer"
+description = "Employee number"
 required = true
 ```
 
-In the Workbench, this renders as a form with a single date input. The generated SQL is shown as a read-only preview before execution.
+In the Workbench, this renders as a form with a single input. The generated SQL is shown as a read-only preview before execution.
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `{param_name}` | Prefills the form field matching the parameter name (URL encoded) | `?cutoff_date=2020-01-01` |
+| `{param_name}` | Prefills the form field matching the parameter name (URL encoded) | `?emp_no=10001` |

@@ -211,22 +211,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # description = "Maximum salary (optional, defaults to no limit)"
 # required = false
 
-# Example: Delete old salary records (PostgreSQL - with required parameter)
+# Example: Delete employee salaries (PostgreSQL - with required parameter)
 # [[tools]]
-# name = "delete_old_salaries"
-# description = "Delete salary records older than specified date for cleanup"
+# name = "delete_employee_salaries"
+# description = "Delete salary records for a specific employee"
 # source = "local_pg"
 # readonly = false  # Explicitly allow DELETE operations
-# statement = """
-#   DELETE FROM salary
-#   WHERE to_date < $1
-#   RETURNING emp_no, amount, from_date, to_date
-# """
+# statement = "DELETE FROM salary WHERE emp_no = $1"
 #
 # [[tools.parameters]]
-# name = "cutoff_date"
-# type = "string"
-# description = "Delete salary records with to_date before this date (format: YYYY-MM-DD)"
+# name = "emp_no"
+# type = "integer"
+# description = "Employee number"
 # required = true
 
 # ============================================================================
