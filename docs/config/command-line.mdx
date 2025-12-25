@@ -20,12 +20,12 @@ Command-line flags are passed when starting DBHub. These have the highest priori
 
   **Options:**
   - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor). Pure MCP-over-stdio with no HTTP server.
-  - `http` - For browser and network clients. Starts HTTP server with MCP endpoint, admin console, and API.
+  - `http` - For browser and network clients. Starts HTTP server with MCP endpoint, workbench, and API.
 
   | Feature | `stdio` | `http` |
   |---------|:-------:|:------:|
   | MCP communication | stdin/stdout | HTTP POST `/mcp` |
-  | Admin console | ❌ | ✅ `http://host:port/` |
+  | Workbench | ❌ | ✅ `http://host:port/` |
   | Health check | ❌ | ✅ `/healthz` |
   | API | ❌ | ✅ `/api/xxx` |
   | Multiple instances | ✅ No port conflicts | Requires different ports |
@@ -35,7 +35,7 @@ Command-line flags are passed when starting DBHub. These have the highest priori
   # No HTTP server started
   npx @bytebase/dbhub@latest --transport stdio --dsn "..."
 
-  # http - for web clients, admin console, and remote access
+  # http - for web clients, workbench, and remote access
   npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "..."
   ```
 </ParamField>

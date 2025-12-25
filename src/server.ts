@@ -150,7 +150,7 @@ See documentation for more details on configuring database connections.
 
     // Set up transport-specific server
     if (transportData.type === "http") {
-      // HTTP transport: Start Express server with MCP endpoint and admin console
+      // HTTP transport: Start Express server with MCP endpoint and workbench
       const app = express();
 
       // Enable JSON parsing
@@ -233,11 +233,11 @@ See documentation for more details on configuring database connections.
         // In development mode, suggest using the Vite dev server for hot reloading
         if (process.env.NODE_ENV === 'development') {
           console.error('Development mode detected!');
-          console.error('   Admin console dev server (with HMR): http://localhost:5173');
+          console.error('   Workbench dev server (with HMR): http://localhost:5173');
           console.error('   Backend API: http://localhost:8080');
           console.error('');
         } else {
-          console.error(`Admin console at http://localhost:${port}/`);
+          console.error(`Workbench at http://localhost:${port}/`);
         }
         console.error(`MCP server endpoint at http://localhost:${port}/mcp`);
       });
