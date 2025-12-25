@@ -53,7 +53,7 @@ describe('execute-sql tool', () => {
 
   describe('basic execution', () => {
     it('should execute SELECT and return rows', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1, name: 'test' }] };
+      const mockResult: SQLResult = { rows: [{ id: 1, name: 'test' }], rowCount: 1 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');
@@ -67,7 +67,7 @@ describe('execute-sql tool', () => {
     });
 
     it('should pass multi-statement SQL directly to connector', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1 }] };
+      const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT * FROM users; SELECT * FROM roles;';
@@ -102,7 +102,7 @@ describe('execute-sql tool', () => {
     });
 
     it('should allow SELECT statements', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1 }] };
+      const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');
@@ -114,7 +114,7 @@ describe('execute-sql tool', () => {
     });
 
     it('should allow multiple read-only statements', async () => {
-      const mockResult: SQLResult = { rows: [] };
+      const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT * FROM users; SELECT * FROM roles;';
@@ -173,7 +173,7 @@ describe('execute-sql tool', () => {
       mockGetToolRegistry.mockReturnValue({
         getBuiltinToolConfig: vi.fn().mockReturnValue(toolConfig),
       } as any);
-      const mockResult: SQLResult = { rows: [] };
+      const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('writable_source');
@@ -208,7 +208,7 @@ describe('execute-sql tool', () => {
       ['inline comments', 'SELECT id, -- user id\n       name FROM users'],
       ['only comments', '-- Just a comment\n/* Another */'],
     ])('should allow SELECT with %s', async (_, sql) => {
-      const mockResult: SQLResult = { rows: [] };
+      const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');
@@ -231,7 +231,7 @@ describe('execute-sql tool', () => {
       ['empty string', ''],
       ['only semicolons and whitespace', '   ;  ;  ; '],
     ])('should handle %s', async (_, sql) => {
-      const mockResult: SQLResult = { rows: [] };
+      const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');

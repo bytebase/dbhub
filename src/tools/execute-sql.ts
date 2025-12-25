@@ -78,7 +78,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       // Build response data
       const responseData = {
         rows: result.rows,
-        count: result.rows.length,
+        count: result.rowCount,
         source_id: effectiveSourceId,
       };
 

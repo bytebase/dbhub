@@ -444,17 +444,21 @@ export class PostgresConnector implements Connector {
         const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
 
         // Use parameters if provided
+        let result;
         if (parameters && parameters.length > 0) {
           try {
-            return await client.query(processedStatement, parameters);
+            result = await client.query(processedStatement, parameters);
           } catch (error) {
             console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
             console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
             console.error(`[PostgreSQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
             throw error;
           }
+        } else {
+          result = await client.query(processedStatement);
         }
-        return await client.query(processedStatement);
+        // Explicitly return rows and rowCount to ensure rowCount is preserved
+        return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
         if (parameters && parameters.length > 0) {
@@ -463,6 +467,7 @@ export class PostgresConnector implements Connector {
 
         // Execute all in same session for transaction consistency
         let allRows: any[] = [];
+        let totalRowCount = 0;
 
         // Execute within a transaction to ensure session consistency
         await client.query('BEGIN');
@@ -476,6 +481,10 @@ export class PostgresConnector implements Connector {
             if (result.rows && result.rows.length > 0) {
               allRows.push(...result.rows);
             }
+            // Accumulate rowCount for INSERT/UPDATE/DELETE statements
+            if (result.rowCount) {
+              totalRowCount += result.rowCount;
+            }
           }
           await client.query('COMMIT');
         } catch (error) {
@@ -483,7 +492,7 @@ export class PostgresConnector implements Connector {
           throw error;
         }
 
-        return { rows: allRows };
+        return { rows: allRows, rowCount: totalRowCount };
       }
     } finally {
       client.release();

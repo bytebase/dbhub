@@ -108,11 +108,15 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
     );
   }
 
-  // No results
+  // No rows returned - could be empty SELECT or successful INSERT/UPDATE/DELETE
   if (result.rows.length === 0) {
     return (
       <div className="border border-border rounded-lg bg-card p-8 text-center">
-        <p className="text-muted-foreground text-sm">No results returned</p>
+        <p className="text-muted-foreground text-sm">
+          {result.rowCount > 0
+            ? `${result.rowCount} row${result.rowCount !== 1 ? 's' : ''} affected`
+            : 'No results returned'}
+        </p>
       </div>
     );
   }

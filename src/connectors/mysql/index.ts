@@ -14,7 +14,7 @@ import {
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { parseQueryResults } from "../../utils/multi-statement-result-parser.js";
+import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 
 /**
  * MySQL DSN Parser
@@ -553,7 +553,8 @@ export class MySQLConnector implements Connector {
 
       // Parse results using shared utility that handles both single and multi-statement queries
       const rows = parseQueryResults(firstResult);
-      return { rows };
+      const rowCount = extractAffectedRows(firstResult);
+      return { rows, rowCount };
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;

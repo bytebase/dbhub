@@ -199,7 +199,7 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
       // 7. Build response data
       const responseData = {
         rows: result.rows,
-        count: result.rows.length,
+        count: result.rowCount,
         source_id: toolConfig.source,
       };
 
