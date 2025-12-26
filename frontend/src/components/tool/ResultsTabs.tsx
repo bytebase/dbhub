@@ -72,11 +72,12 @@ export function ResultsTabs({
           >
             <span>{formatTimestamp(tab.timestamp)}</span>
             {tab.error && (
-              <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+              <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-label="Error" />
             )}
             <span
               role="button"
               tabIndex={0}
+              aria-label="Close tab"
               onClick={(e) => {
                 e.stopPropagation();
                 onTabClose(tab.id);
