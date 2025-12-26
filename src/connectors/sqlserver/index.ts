@@ -4,7 +4,7 @@ import {
   ConnectorType,
   ConnectorRegistry,
   DSNParser,
-  SQLResult,
+  StatementResult,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -501,63 +501,96 @@ export class SQLServerConnector implements Connector {
     }
   }
 
-  async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
+  async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<StatementResult[]> {
     if (!this.connection) {
       throw new Error("Not connected to SQL Server database");
     }
 
     try {
-      // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sqlQuery;
-      if (options.maxRows) {
-        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
-      }
+      // Check if this is a multi-statement query
+      const statements = sqlQuery.split(';')
+        .map(statement => statement.trim())
+        .filter(statement => statement.length > 0);
 
-      // Create request and add parameters if provided
-      const request = this.connection.request();
-      if (parameters && parameters.length > 0) {
-        // SQL Server uses @p1, @p2, etc. for parameters
-        parameters.forEach((param, index) => {
-          const paramName = `p${index + 1}`;
-          // Infer SQL Server type from JavaScript type
-          if (typeof param === 'string') {
-            request.input(paramName, sql.VarChar, param);
-          } else if (typeof param === 'number') {
-            if (Number.isInteger(param)) {
-              request.input(paramName, sql.Int, param);
-            } else {
-              request.input(paramName, sql.Float, param);
-            }
-          } else if (typeof param === 'boolean') {
-            request.input(paramName, sql.Bit, param);
-          } else if (param === null || param === undefined) {
-            request.input(paramName, sql.VarChar, param);
-          } else if (Array.isArray(param)) {
-            // For arrays, convert to JSON string
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          } else {
-            // For objects, convert to JSON string
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          }
-        });
-      }
-
-      let result;
-      try {
-        result = await request.query(processedSQL);
-      } catch (error) {
-        if (parameters && parameters.length > 0) {
-          console.error(`[SQL Server executeSQL] ERROR: ${(error as Error).message}`);
-          console.error(`[SQL Server executeSQL] SQL: ${processedSQL}`);
-          console.error(`[SQL Server executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+      if (statements.length === 1) {
+        // Single statement - apply maxRows if applicable
+        let processedSQL = statements[0];
+        if (options.maxRows) {
+          processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(processedSQL, options.maxRows);
         }
-        throw error;
-      }
 
-      return {
-        rows: result.recordset || [],
-        rowCount: result.rowsAffected[0] || 0,
-      };
+        // Create request and add parameters if provided
+        const request = this.connection.request();
+        if (parameters && parameters.length > 0) {
+          // SQL Server uses @p1, @p2, etc. for parameters
+          parameters.forEach((param, index) => {
+            const paramName = `p${index + 1}`;
+            // Infer SQL Server type from JavaScript type
+            if (typeof param === 'string') {
+              request.input(paramName, sql.VarChar, param);
+            } else if (typeof param === 'number') {
+              if (Number.isInteger(param)) {
+                request.input(paramName, sql.Int, param);
+              } else {
+                request.input(paramName, sql.Float, param);
+              }
+            } else if (typeof param === 'boolean') {
+              request.input(paramName, sql.Bit, param);
+            } else if (param === null || param === undefined) {
+              request.input(paramName, sql.VarChar, param);
+            } else if (Array.isArray(param)) {
+              // For arrays, convert to JSON string
+              request.input(paramName, sql.VarChar, JSON.stringify(param));
+            } else {
+              // For objects, convert to JSON string
+              request.input(paramName, sql.VarChar, JSON.stringify(param));
+            }
+          });
+        }
+
+        let result;
+        try {
+          result = await request.query(processedSQL);
+        } catch (error) {
+          if (parameters && parameters.length > 0) {
+            console.error(`[SQL Server executeSQL] ERROR: ${(error as Error).message}`);
+            console.error(`[SQL Server executeSQL] SQL: ${processedSQL}`);
+            console.error(`[SQL Server executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+          }
+          throw error;
+        }
+
+        // Return single statement result in array format
+        return [{
+          sql: statements[0],
+          rows: result.recordset || [],
+          rowCount: result.rowsAffected[0] || 0,
+        }];
+      } else {
+        // Multiple statements - parameters not supported for multi-statement queries
+        if (parameters && parameters.length > 0) {
+          throw new Error("Parameters are not supported for multi-statement queries in SQL Server");
+        }
+
+        // Execute all statements
+        const results: StatementResult[] = [];
+
+        for (let statement of statements) {
+          // Apply maxRows limit to SELECT queries if specified
+          const processedStatement = SQLRowLimiter.applyMaxRowsForSQLServer(statement, options.maxRows);
+
+          const result = await this.connection.request().query(processedStatement);
+
+          // Add each statement result to the array
+          results.push({
+            sql: statement,
+            rows: result.recordset || [],
+            rowCount: result.rowsAffected[0] || 0,
+          });
+        }
+
+        return results;
+      }
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
     }

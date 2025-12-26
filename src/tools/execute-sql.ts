@@ -75,10 +75,13 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       };
       result = await connector.executeSQL(sql, executeOptions);
 
-      // Build response data
+      // Build response data with per-statement results
       const responseData = {
-        rows: result.rows,
-        count: result.rowCount,
+        statements: result.map((r: any) => ({
+          sql: r.sql,
+          rows: r.rows,
+          count: r.rowCount,
+        })),
         source_id: effectiveSourceId,
       };
 

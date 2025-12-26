@@ -21,6 +21,14 @@ function formatTimestamp(date: Date): string {
   });
 }
 
+function formatTabLabel(tab: ResultTab): string {
+  const time = formatTimestamp(tab.timestamp);
+  if (tab.statementTotal && tab.statementTotal > 1) {
+    return `${time} (${tab.statementIndex}/${tab.statementTotal})`;
+  }
+  return time;
+}
+
 export function ResultsTabs({
   tabs,
   activeTabId,
@@ -70,7 +78,7 @@ export function ResultsTabs({
                 : 'border-transparent text-muted-foreground hover:text-foreground'
             )}
           >
-            <span>{formatTimestamp(tab.timestamp)}</span>
+            <span>{formatTabLabel(tab)}</span>
             {tab.error && (
               <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-label="Error" />
             )}
@@ -102,7 +110,6 @@ export function ResultsTabs({
           result={activeTab.result}
           error={activeTab.error}
           isLoading={isLoading}
-          executedSql={activeTab.executedSql}
           executionTimeMs={activeTab.executionTimeMs}
         />
       )}

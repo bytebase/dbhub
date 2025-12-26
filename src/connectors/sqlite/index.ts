@@ -10,7 +10,7 @@ import {
   ConnectorType,
   ConnectorRegistry,
   DSNParser,
-  SQLResult,
+  StatementResult,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -378,7 +378,7 @@ export class SQLiteConnector implements Connector {
   }
 
 
-  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<StatementResult[]> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");
     }
@@ -388,6 +388,8 @@ export class SQLiteConnector implements Connector {
       const statements = sql.split(';')
         .map(statement => statement.trim())
         .filter(statement => statement.length > 0);
+
+      const results: StatementResult[] = [];
 
       if (statements.length === 1) {
         // Single statement - determine if it returns data
@@ -413,7 +415,7 @@ export class SQLiteConnector implements Connector {
           if (parameters && parameters.length > 0) {
             try {
               const rows = this.db.prepare(processedStatement).all(...parameters);
-              return { rows, rowCount: rows.length };
+              results.push({ sql: statements[0], rows, rowCount: rows.length });
             } catch (error) {
               console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
               console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
@@ -422,7 +424,7 @@ export class SQLiteConnector implements Connector {
             }
           } else {
             const rows = this.db.prepare(processedStatement).all();
-            return { rows, rowCount: rows.length };
+            results.push({ sql: statements[0], rows, rowCount: rows.length });
           }
         } else {
           // Use run() for statements that don't return data
@@ -439,7 +441,7 @@ export class SQLiteConnector implements Connector {
           } else {
             result = this.db.prepare(processedStatement).run();
           }
-          return { rows: [], rowCount: result.changes };
+          results.push({ sql: statements[0], rows: [], rowCount: result.changes });
         }
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -447,48 +449,32 @@ export class SQLiteConnector implements Connector {
           throw new Error("Parameters are not supported for multi-statement queries in SQLite");
         }
 
-        // Use native .exec() for optimal performance
-        // Note: .exec() doesn't return results, so we need to handle SELECT statements differently
-        const readStatements = [];
-        const writeStatements = [];
-
-        // Separate read and write operations
-        for (const statement of statements) {
+        // Execute each statement individually and collect results
+        for (let statement of statements) {
           const trimmedStatement = statement.toLowerCase().trim();
-          if (trimmedStatement.startsWith('select') ||
-              trimmedStatement.startsWith('with') ||
-              trimmedStatement.startsWith('explain') ||
-              trimmedStatement.startsWith('analyze') ||
-              (trimmedStatement.startsWith('pragma') &&
-               (trimmedStatement.includes('table_info') ||
-                trimmedStatement.includes('index_info') ||
-                trimmedStatement.includes('index_list') ||
-                trimmedStatement.includes('foreign_key_list')))) {
-            readStatements.push(statement);
+          const isReadStatement = trimmedStatement.startsWith('select') ||
+                                trimmedStatement.startsWith('with') ||
+                                trimmedStatement.startsWith('explain') ||
+                                trimmedStatement.startsWith('analyze') ||
+                                (trimmedStatement.startsWith('pragma') &&
+                                 (trimmedStatement.includes('table_info') ||
+                                  trimmedStatement.includes('index_info') ||
+                                  trimmedStatement.includes('index_list') ||
+                                  trimmedStatement.includes('foreign_key_list')));
+
+          if (isReadStatement) {
+            // Apply maxRows limit to SELECT queries if specified
+            const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
+            const rows = this.db.prepare(processedStatement).all();
+            results.push({ sql: statement, rows, rowCount: rows.length });
           } else {
-            writeStatements.push(statement);
+            const result = this.db.prepare(statement).run();
+            results.push({ sql: statement, rows: [], rowCount: result.changes });
           }
         }
-
-        // Execute write statements individually to track changes
-        let totalChanges = 0;
-        for (const statement of writeStatements) {
-          const result = this.db.prepare(statement).run();
-          totalChanges += result.changes;
-        }
-
-        // Execute read statements individually to collect results
-        let allRows: any[] = [];
-        for (let statement of readStatements) {
-          // Apply maxRows limit to SELECT queries if specified
-          statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
-          const result = this.db.prepare(statement).all();
-          allRows.push(...result);
-        }
-
-        // rowCount is total changes for writes, plus rows returned for reads
-        return { rows: allRows, rowCount: totalChanges + allRows.length };
       }
+
+      return results;
     } catch (error) {
       throw error;
     }

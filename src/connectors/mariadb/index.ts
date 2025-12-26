@@ -4,7 +4,7 @@ import {
   ConnectorType,
   ConnectorRegistry,
   DSNParser,
-  SQLResult,
+  StatementResult,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -497,7 +497,7 @@ export class MariaDBConnector implements Connector {
     return rows[0].DB;
   }
 
-  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<StatementResult[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -506,26 +506,23 @@ export class MariaDBConnector implements Connector {
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
     try {
-      // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sql;
-      if (options.maxRows) {
-        // Handle multi-statement SQL by processing each statement individually
-        const statements = sql.split(';')
-          .map(statement => statement.trim())
-          .filter(statement => statement.length > 0);
+      // Split SQL into individual statements for per-statement result tracking
+      const statements = sql.split(';')
+        .map(statement => statement.trim())
+        .filter(statement => statement.length > 0);
 
-        const processedStatements = statements.map(statement =>
+      // Apply maxRows limit to SELECT queries if specified
+      let processedStatements = statements;
+      if (options.maxRows) {
+        processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)
         );
-
-        processedSQL = processedStatements.join('; ');
-        if (sql.trim().endsWith(';')) {
-          processedSQL += ';';
-        }
       }
 
-      // Use dedicated connection - MariaDB driver returns rows directly for single statements
-      // Pass parameters if provided
+      // Reconstruct SQL for execution
+      const processedSQL = processedStatements.join('; ') + (sql.trim().endsWith(';') ? ';' : '');
+
+      // Execute query with parameters if provided
       let results: any;
       if (parameters && parameters.length > 0) {
         try {
@@ -540,10 +537,36 @@ export class MariaDBConnector implements Connector {
         results = await conn.query(processedSQL);
       }
 
-      // Parse results using shared utility that handles both single and multi-statement queries
-      const rows = parseQueryResults(results);
-      const rowCount = extractAffectedRows(results);
-      return { rows, rowCount };
+      // Parse results into per-statement format
+      // MariaDB returns an array of results for multi-statement queries
+      const statementResults: StatementResult[] = [];
+
+      if (statements.length === 1) {
+        // Single statement - results is either rows array or metadata object
+        const rows = parseQueryResults(results);
+        const rowCount = extractAffectedRows(results);
+        statementResults.push({
+          sql: statements[0],
+          rows,
+          rowCount
+        });
+      } else {
+        // Multi-statement - results is array of result sets
+        if (Array.isArray(results)) {
+          for (let i = 0; i < statements.length && i < results.length; i++) {
+            const result = results[i];
+            const rows = parseQueryResults(result);
+            const rowCount = extractAffectedRows(result);
+            statementResults.push({
+              sql: statements[i],
+              rows,
+              rowCount
+            });
+          }
+        }
+      }
+
+      return statementResults;
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;

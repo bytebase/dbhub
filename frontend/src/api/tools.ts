@@ -1,6 +1,7 @@
 import { ApiError } from './errors';
 
-export interface QueryResult {
+export interface StatementResult {
+  sql: string;
   columns: string[];
   rows: any[][];
   rowCount: number;
@@ -18,11 +19,16 @@ interface McpResponse {
   };
 }
 
+interface StatementData {
+  sql: string;
+  rows: Record<string, any>[];
+  count: number;
+}
+
 interface ToolResultData {
   success: boolean;
   data: {
-    rows: Record<string, any>[];
-    count: number;
+    statements: StatementData[];
     source_id: string;
   } | null;
   error: string | null;
@@ -31,7 +37,7 @@ interface ToolResultData {
 export async function executeTool(
   toolName: string,
   args: Record<string, any>
-): Promise<QueryResult> {
+): Promise<StatementResult[]> {
   const response = await fetch('/mcp', {
     method: 'POST',
     headers: {
@@ -69,22 +75,29 @@ export async function executeTool(
     throw new ApiError(toolResult.error || 'Tool execution failed', 500);
   }
 
-  if (!toolResult.data || !toolResult.data.rows) {
-    return { columns: [], rows: [], rowCount: 0 };
+  if (!toolResult.data || !toolResult.data.statements) {
+    return [];
   }
 
-  const rows = toolResult.data.rows;
-  if (rows.length === 0) {
-    // For INSERT/UPDATE/DELETE, rows is empty but count reflects affected rows
-    return { columns: [], rows: [], rowCount: toolResult.data.count };
-  }
+  return toolResult.data.statements.map((stmt) => {
+    const rows = stmt.rows;
+    if (rows.length === 0) {
+      return {
+        sql: stmt.sql,
+        columns: [],
+        rows: [],
+        rowCount: stmt.count,
+      };
+    }
 
-  const columns = Object.keys(rows[0]);
-  const rowArrays = rows.map((row) => columns.map((col) => row[col]));
+    const columns = Object.keys(rows[0]);
+    const rowArrays = rows.map((row) => columns.map((col) => row[col]));
 
-  return {
-    columns,
-    rows: rowArrays,
-    rowCount: toolResult.data.count,
-  };
+    return {
+      sql: stmt.sql,
+      columns,
+      rows: rowArrays,
+      rowCount: stmt.count,
+    };
+  });
 }

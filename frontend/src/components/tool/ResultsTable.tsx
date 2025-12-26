@@ -1,12 +1,11 @@
 import { useRef, useState, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { QueryResult } from '../../api/tools';
+import type { StatementResult } from '../../api/tools';
 
 interface ResultsTableProps {
-  result: QueryResult | null;
+  result: StatementResult | null;
   error: string | null;
   isLoading?: boolean;
-  executedSql?: string;
   executionTimeMs?: number;
 }
 
@@ -53,7 +52,7 @@ function highlightText(text: string, searchTerm: string): React.ReactNode {
   return parts;
 }
 
-export function ResultsTable({ result, error, isLoading, executedSql, executionTimeMs }: ResultsTableProps) {
+export function ResultsTable({ result, error, isLoading, executionTimeMs }: ResultsTableProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -198,9 +197,9 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
           </div>
         </div>
       </div>
-      {executedSql && executionTimeMs !== undefined && (
+      {result.sql && executionTimeMs !== undefined && (
         <div className="flex justify-between items-center text-sm text-muted-foreground">
-          <span>{executedSql}</span>
+          <span>{result.sql}</span>
           <span>Executed in {formatExecutionTime(executionTimeMs)}</span>
         </div>
       )}

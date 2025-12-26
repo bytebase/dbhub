@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
-import { executeTool, type QueryResult } from '../../api/tools';
+import { executeTool } from '../../api/tools';
 import { ApiError } from '../../api/errors';
 import type { Tool } from '../../types/datasource';
 import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab } from '../tool';
@@ -206,37 +206,38 @@ export default function ToolDetailView() {
     const startTime = performance.now();
 
     try {
-      let queryResult: QueryResult;
-      let sqlToExecute: string;
-
-      if (toolType === 'execute_sql') {
-        sqlToExecute = sql;
-        queryResult = await executeTool(toolName, { sql });
-      } else {
-        sqlToExecute = getSqlPreview();
-        queryResult = await executeTool(toolName, params);
-      }
+      const results = toolType === 'execute_sql'
+        ? await executeTool(toolName, { sql })
+        : await executeTool(toolName, params);
 
       const endTime = performance.now();
       const duration = endTime - startTime;
+      const timestamp = new Date();
 
-      const newTab: ResultTab = {
+      const newTabs: ResultTab[] = results.map((stmt, index) => ({
         id: crypto.randomUUID(),
-        timestamp: new Date(),
-        result: queryResult,
+        timestamp: new Date(timestamp.getTime() + index),
+        result: stmt,
         error: null,
-        executedSql: sqlToExecute,
-        executionTimeMs: duration,
-      };
-      setResultTabs(prev => [newTab, ...prev]);
-      setActiveTabId(newTab.id);
+        executionTimeMs: index === 0 ? duration : 0,
+        statementIndex: results.length > 1 ? index + 1 : undefined,
+        statementTotal: results.length > 1 ? results.length : undefined,
+      }));
+
+      setResultTabs(prev => [...newTabs, ...prev]);
+      setActiveTabId(newTabs[0]?.id ?? null);
     } catch (err) {
+      const sqlToExecute = toolType === 'execute_sql' ? sql : getSqlPreview();
       const errorTab: ResultTab = {
         id: crypto.randomUUID(),
         timestamp: new Date(),
-        result: null,
+        result: {
+          sql: sqlToExecute,
+          columns: [],
+          rows: [],
+          rowCount: 0,
+        },
         error: err instanceof Error ? err.message : 'Query failed',
-        executedSql: toolType === 'execute_sql' ? sql : getSqlPreview(),
         executionTimeMs: 0,
       };
       setResultTabs(prev => [errorTab, ...prev]);

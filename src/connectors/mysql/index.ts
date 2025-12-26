@@ -4,7 +4,7 @@ import {
   ConnectorType,
   ConnectorRegistry,
   DSNParser,
-  SQLResult,
+  StatementResult,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -504,7 +504,7 @@ export class MySQLConnector implements Connector {
     return rows[0].DB;
   }
 
-  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<StatementResult[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -513,48 +513,86 @@ export class MySQLConnector implements Connector {
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
     try {
-      // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sql;
-      if (options.maxRows) {
-        // Handle multi-statement SQL by processing each statement individually
-        const statements = sql.split(';')
-          .map(statement => statement.trim())
-          .filter(statement => statement.length > 0);
+      // Check if this is a multi-statement query
+      const statements = sql.split(';')
+        .map(statement => statement.trim())
+        .filter(statement => statement.length > 0);
 
+      const results: StatementResult[] = [];
+
+      if (statements.length === 1) {
+        // Single statement - apply maxRows if applicable
+        const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
+
+        // Use parameters if provided
+        let queryResult: any;
+        if (parameters && parameters.length > 0) {
+          try {
+            queryResult = await conn.query({ sql: processedStatement, timeout: this.queryTimeoutMs }, parameters);
+          } catch (error) {
+            console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
+            console.error(`[MySQL executeSQL] SQL: ${processedStatement}`);
+            console.error(`[MySQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+            throw error;
+          }
+        } else {
+          queryResult = await conn.query({ sql: processedStatement, timeout: this.queryTimeoutMs });
+        }
+
+        // MySQL2 returns results in format [rows, fields]
+        const [firstResult] = queryResult;
+
+        // Parse results using shared utility
+        const rows = parseQueryResults(firstResult);
+        const rowCount = extractAffectedRows(firstResult);
+        results.push({ sql: statements[0], rows, rowCount });
+      } else {
+        // Multiple statements - parameters not supported for multi-statement queries
+        if (parameters && parameters.length > 0) {
+          throw new Error("Parameters are not supported for multi-statement queries in MySQL");
+        }
+
+        // Build complete SQL with all statements
         const processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)
         );
+        const processedSQL = processedStatements.join('; ') + (sql.trim().endsWith(';') ? ';' : '');
 
-        processedSQL = processedStatements.join('; ');
-        if (sql.trim().endsWith(';')) {
-          processedSQL += ';';
+        // Execute all statements in one query (MySQL2 supports multipleStatements: true)
+        const queryResult = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs });
+        const [firstResult] = queryResult;
+
+        // MySQL2 returns an array of results for multi-statement queries
+        // Each result can be either a rows array (SELECT) or metadata object (INSERT/UPDATE/DELETE)
+        if (Array.isArray(firstResult) && firstResult.length > 0) {
+          // Check if this is a multi-statement result
+          const isMultiStatement = firstResult.some((item: any) =>
+            Array.isArray(item) || (typeof item === 'object' && ('affectedRows' in item || 'insertId' in item))
+          );
+
+          if (isMultiStatement) {
+            // Process each statement's result
+            for (let i = 0; i < statements.length; i++) {
+              const statementResult = firstResult[i];
+              const rows = parseQueryResults(statementResult);
+              const rowCount = extractAffectedRows(statementResult);
+              results.push({ sql: statements[i], rows, rowCount });
+            }
+          } else {
+            // Single statement result (fallback)
+            const rows = parseQueryResults(firstResult);
+            const rowCount = extractAffectedRows(firstResult);
+            results.push({ sql: statements[0], rows, rowCount });
+          }
+        } else {
+          // Handle metadata object (single non-SELECT statement)
+          const rows = parseQueryResults(firstResult);
+          const rowCount = extractAffectedRows(firstResult);
+          results.push({ sql: statements[0], rows, rowCount });
         }
       }
 
-      // Use dedicated connection with multipleStatements: true support
-      // Pass parameters if provided, with optional query timeout
-      let results: any;
-      if (parameters && parameters.length > 0) {
-        try {
-          results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs }, parameters);
-        } catch (error) {
-          console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
-          console.error(`[MySQL executeSQL] SQL: ${processedSQL}`);
-          console.error(`[MySQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-          throw error;
-        }
-      } else {
-        results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs });
-      }
-
-      // MySQL2 returns results in format [rows, fields]
-      // Extract the first element which contains the actual row data
-      const [firstResult] = results;
-
-      // Parse results using shared utility that handles both single and multi-statement queries
-      const rows = parseQueryResults(firstResult);
-      const rowCount = extractAffectedRows(firstResult);
-      return { rows, rowCount };
+      return results;
     } catch (error) {
       console.error("Error executing query:", error);
       throw error;

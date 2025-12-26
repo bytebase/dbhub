@@ -5,7 +5,7 @@ import {
   ConnectorType,
   ConnectorRegistry,
   DSNParser,
-  SQLResult,
+  StatementResult,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -427,7 +427,7 @@ export class PostgresConnector implements Connector {
   }
 
 
-  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
+  async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<StatementResult[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -457,8 +457,12 @@ export class PostgresConnector implements Connector {
         } else {
           result = await client.query(processedStatement);
         }
-        // Explicitly return rows and rowCount to ensure rowCount is preserved
-        return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+        // Return single statement result in array format
+        return [{
+          sql: statements[0],
+          rows: result.rows,
+          rowCount: result.rowCount ?? result.rows.length
+        }];
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
         if (parameters && parameters.length > 0) {
@@ -466,8 +470,7 @@ export class PostgresConnector implements Connector {
         }
 
         // Execute all in same session for transaction consistency
-        let allRows: any[] = [];
-        let totalRowCount = 0;
+        const results: StatementResult[] = [];
 
         // Execute within a transaction to ensure session consistency
         await client.query('BEGIN');
@@ -477,14 +480,13 @@ export class PostgresConnector implements Connector {
             const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
 
             const result = await client.query(processedStatement);
-            // Collect rows from SELECT/WITH/EXPLAIN statements
-            if (result.rows && result.rows.length > 0) {
-              allRows.push(...result.rows);
-            }
-            // Accumulate rowCount for INSERT/UPDATE/DELETE statements
-            if (result.rowCount) {
-              totalRowCount += result.rowCount;
-            }
+
+            // Add each statement result to the array
+            results.push({
+              sql: statement,
+              rows: result.rows || [],
+              rowCount: result.rowCount ?? result.rows?.length ?? 0
+            });
           }
           await client.query('COMMIT');
         } catch (error) {
@@ -492,7 +494,7 @@ export class PostgresConnector implements Connector {
           throw error;
         }
 
-        return { rows: allRows, rowCount: totalRowCount };
+        return results;
       }
     } finally {
       client.release();
