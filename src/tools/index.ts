@@ -115,6 +115,4 @@ function registerCustomTool(
     },
     createCustomToolHandler(toolConfig)
   );
-
-  console.error(`  - ${toolConfig.name} → ${toolConfig.source} (${dbType})`);
 }
