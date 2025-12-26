@@ -246,6 +246,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         description: "Max results (default: 100, max: 1000)",
       },
     ],
+    readonly: true, // search_objects is always readonly
   };
 }
 
