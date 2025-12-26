@@ -32,6 +32,44 @@ function formatDate(timestamp: string): string {
   });
 }
 
+function parseUserAgent(ua: string): string {
+  // Check for common browsers in order of specificity
+  // Edge (Chromium-based)
+  const edgeMatch = ua.match(/Edg(?:e|A|iOS)?\/(\d+)/);
+  if (edgeMatch) return `Edge ${edgeMatch[1]}`;
+
+  // Opera
+  const operaMatch = ua.match(/(?:OPR|Opera)\/(\d+)/);
+  if (operaMatch) return `Opera ${operaMatch[1]}`;
+
+  // Chrome (must check after Edge/Opera since they include Chrome in UA)
+  const chromeMatch = ua.match(/Chrome\/(\d+)/);
+  if (chromeMatch && !ua.includes('Edg') && !ua.includes('OPR')) {
+    return `Chrome ${chromeMatch[1]}`;
+  }
+
+  // Safari (must check after Chrome since Chrome includes Safari in UA)
+  const safariMatch = ua.match(/Version\/(\d+(?:\.\d+)?)\s+Safari/);
+  if (safariMatch) return `Safari ${safariMatch[1]}`;
+
+  // Firefox
+  const firefoxMatch = ua.match(/Firefox\/(\d+)/);
+  if (firefoxMatch) return `Firefox ${firefoxMatch[1]}`;
+
+  // Claude Desktop / Electron apps
+  if (ua.includes('Claude')) return 'Claude Desktop';
+  if (ua.includes('Electron')) return 'Electron App';
+
+  // Cursor
+  if (ua.includes('Cursor')) return 'Cursor';
+
+  // Generic fallback - try to extract something useful
+  const genericMatch = ua.match(/^(\w+)\/[\d.]+/);
+  if (genericMatch) return genericMatch[1];
+
+  return ua.length > 20 ? ua.substring(0, 20) + '...' : ua;
+}
+
 function SqlTooltip({ sql, children }: { sql: string; children: React.ReactElement }) {
   return (
     <Tooltip>
@@ -218,7 +256,7 @@ export default function RequestView() {
                       {formatDate(request.timestamp)} {formatTime(request.timestamp)}
                     </td>
                     <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
-                      {request.client}
+                      {parseUserAgent(request.client)}
                     </td>
                     <td className="px-4 py-2 text-sm whitespace-nowrap">
                       <Link
