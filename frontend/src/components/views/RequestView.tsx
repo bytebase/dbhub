@@ -5,6 +5,7 @@ import { fetchRequests } from '../../api/requests';
 import { fetchSources } from '../../api/sources';
 import { ApiError } from '../../api/errors';
 import { DB_LOGOS } from '../../lib/db-logos';
+import LockIcon from '../icons/LockIcon';
 import type { Request } from '../../types/request';
 import type { DatabaseType } from '../../types/datasource';
 
@@ -129,6 +130,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
 export default function RequestView() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [sourceTypes, setSourceTypes] = useState<Record<string, DatabaseType>>({});
+  const [toolReadonly, setToolReadonly] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
@@ -138,10 +140,17 @@ export default function RequestView() {
       .then(([requestsData, sourcesData]) => {
         setRequests(requestsData.requests);
         const typeMap: Record<string, DatabaseType> = {};
+        const readonlyMap: Record<string, boolean> = {};
         for (const source of sourcesData) {
           typeMap[source.id] = source.type;
+          for (const tool of source.tools) {
+            if (tool.readonly) {
+              readonlyMap[tool.name] = true;
+            }
+          }
         }
         setSourceTypes(typeMap);
+        setToolReadonly(readonlyMap);
         setIsLoading(false);
       })
       .catch((err) => {
@@ -258,9 +267,12 @@ export default function RequestView() {
                     <td className="px-4 py-2 text-sm whitespace-nowrap">
                       <Link
                         to={`/source/${request.sourceId}`}
-                        className="text-primary hover:underline"
+                        className="text-primary hover:underline inline-flex items-center gap-1"
                       >
                         {request.toolName}
+                        {toolReadonly[request.toolName] && (
+                          <LockIcon className="w-3 h-3 text-muted-foreground" />
+                        )}
                       </Link>
                     </td>
                     <td className="px-4 py-2 text-sm font-mono text-foreground max-w-0">
