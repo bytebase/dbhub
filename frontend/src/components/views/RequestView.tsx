@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from '@/components/ui/tooltip';
 import { fetchRequests } from '../../api/requests';
+import { fetchSources } from '../../api/sources';
 import { ApiError } from '../../api/errors';
+import { DB_LOGOS } from '../../lib/db-logos';
 import type { Request } from '../../types/request';
+import type { DatabaseType } from '../../types/datasource';
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -87,19 +90,25 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
 
 export default function RequestView() {
   const [requests, setRequests] = useState<Request[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<Record<string, DatabaseType>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRequests()
-      .then((data) => {
-        setRequests(data.requests);
+    Promise.all([fetchRequests(), fetchSources()])
+      .then(([requestsData, sourcesData]) => {
+        setRequests(requestsData.requests);
+        const typeMap: Record<string, DatabaseType> = {};
+        for (const source of sourcesData) {
+          typeMap[source.id] = source.type;
+        }
+        setSourceTypes(typeMap);
         setIsLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to fetch requests:', err);
-        const message = err instanceof ApiError ? err.message : 'Failed to load requests';
+        console.error('Failed to fetch data:', err);
+        const message = err instanceof ApiError ? err.message : 'Failed to load data';
         setError(message);
         setIsLoading(false);
       });
@@ -158,16 +167,24 @@ export default function RequestView() {
               </button>
               {sourceIds.map((sourceId) => {
                 const count = requests.filter((r) => r.sourceId === sourceId).length;
+                const dbType = sourceTypes[sourceId];
                 return (
                   <button
                     key={sourceId}
                     onClick={() => setSelectedSource(sourceId)}
-                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors flex items-center gap-1.5 ${
                       selectedSource === sourceId
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                     }`}
                   >
+                    {dbType && (
+                      <img
+                        src={DB_LOGOS[dbType]}
+                        alt={`${dbType} logo`}
+                        className="w-4 h-4"
+                      />
+                    )}
                     {sourceId} ({count})
                   </button>
                 );
