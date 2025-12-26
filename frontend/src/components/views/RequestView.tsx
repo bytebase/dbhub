@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from '@/components/ui/tooltip';
 import { fetchRequests } from '../../api/requests';
+import { fetchSources } from '../../api/sources';
 import { ApiError } from '../../api/errors';
+import { DB_LOGOS } from '../../lib/db-logos';
 import type { Request } from '../../types/request';
+import type { DatabaseType } from '../../types/datasource';
 
 function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
@@ -27,6 +30,44 @@ function formatDate(timestamp: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function parseUserAgent(ua: string): string {
+  // Check for common browsers in order of specificity
+  // Edge (Chromium-based)
+  const edgeMatch = ua.match(/Edg(?:e|A|iOS)?\/(\d+)/);
+  if (edgeMatch) return `Edge ${edgeMatch[1]}`;
+
+  // Opera
+  const operaMatch = ua.match(/(?:OPR|Opera)\/(\d+)/);
+  if (operaMatch) return `Opera ${operaMatch[1]}`;
+
+  // Chrome (must check after Edge/Opera since they include Chrome in UA)
+  const chromeMatch = ua.match(/Chrome\/(\d+)/);
+  if (chromeMatch && !ua.includes('Edg') && !ua.includes('OPR')) {
+    return `Chrome ${chromeMatch[1]}`;
+  }
+
+  // Safari (must check after Chrome since Chrome includes Safari in UA)
+  const safariMatch = ua.match(/Version\/(\d+(?:\.\d+)?)\s+Safari/);
+  if (safariMatch) return `Safari ${safariMatch[1]}`;
+
+  // Firefox
+  const firefoxMatch = ua.match(/Firefox\/(\d+)/);
+  if (firefoxMatch) return `Firefox ${firefoxMatch[1]}`;
+
+  // Claude Desktop / Electron apps
+  if (ua.includes('Claude')) return 'Claude Desktop';
+  if (ua.includes('Electron')) return 'Electron App';
+
+  // Cursor
+  if (ua.includes('Cursor')) return 'Cursor';
+
+  // Generic fallback - try to extract something useful
+  const genericMatch = ua.match(/^(\w+)\/[\d.]+/);
+  if (genericMatch) return genericMatch[1];
+
+  return ua.length > 20 ? ua.substring(0, 20) + '...' : ua;
 }
 
 function SqlTooltip({ sql, children }: { sql: string; children: React.ReactElement }) {
@@ -87,19 +128,25 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
 
 export default function RequestView() {
   const [requests, setRequests] = useState<Request[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<Record<string, DatabaseType>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRequests()
-      .then((data) => {
-        setRequests(data.requests);
+    Promise.all([fetchRequests(), fetchSources()])
+      .then(([requestsData, sourcesData]) => {
+        setRequests(requestsData.requests);
+        const typeMap: Record<string, DatabaseType> = {};
+        for (const source of sourcesData) {
+          typeMap[source.id] = source.type;
+        }
+        setSourceTypes(typeMap);
         setIsLoading(false);
       })
       .catch((err) => {
-        console.error('Failed to fetch requests:', err);
-        const message = err instanceof ApiError ? err.message : 'Failed to load requests';
+        console.error('Failed to fetch data:', err);
+        const message = err instanceof ApiError ? err.message : 'Failed to load data';
         setError(message);
         setIsLoading(false);
       });
@@ -158,16 +205,24 @@ export default function RequestView() {
               </button>
               {sourceIds.map((sourceId) => {
                 const count = requests.filter((r) => r.sourceId === sourceId).length;
+                const dbType = sourceTypes[sourceId];
                 return (
                   <button
                     key={sourceId}
                     onClick={() => setSelectedSource(sourceId)}
-                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors flex items-center gap-1.5 ${
                       selectedSource === sourceId
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                     }`}
                   >
+                    {dbType && (
+                      <img
+                        src={DB_LOGOS[dbType]}
+                        alt={`${dbType} logo`}
+                        className="w-4 h-4"
+                      />
+                    )}
                     {sourceId} ({count})
                   </button>
                 );
@@ -181,9 +236,6 @@ export default function RequestView() {
                     Time
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
-                    Client
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                     Tool
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-full">
@@ -192,6 +244,9 @@ export default function RequestView() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
                     Result
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    Client
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -199,9 +254,6 @@ export default function RequestView() {
                   <tr key={request.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
                       {formatDate(request.timestamp)} {formatTime(request.timestamp)}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
-                      {request.client}
                     </td>
                     <td className="px-4 py-2 text-sm whitespace-nowrap">
                       <Link
@@ -223,6 +275,9 @@ export default function RequestView() {
                         <StatusBadge success={request.success} error={request.error} />
                         <span className="text-muted-foreground">{request.durationMs}ms</span>
                       </div>
+                    </td>
+                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                      {parseUserAgent(request.client)}
                     </td>
                   </tr>
                 ))}
