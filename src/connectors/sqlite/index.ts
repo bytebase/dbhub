@@ -395,23 +395,13 @@ export class SQLiteConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - determine if it returns data
         let processedStatement = statements[0];
-        const trimmedStatement = statements[0].toLowerCase().trim();
-        const isReadStatement = trimmedStatement.startsWith('select') ||
-                               trimmedStatement.startsWith('with') ||
-                               trimmedStatement.startsWith('explain') ||
-                               trimmedStatement.startsWith('analyze') ||
-                               (trimmedStatement.startsWith('pragma') &&
-                                (trimmedStatement.includes('table_info') ||
-                                 trimmedStatement.includes('index_info') ||
-                                 trimmedStatement.includes('index_list') ||
-                                 trimmedStatement.includes('foreign_key_list')));
 
         // Apply maxRows limit to SELECT queries if specified (not PRAGMA/ANALYZE)
         if (options.maxRows) {
           processedStatement = SQLRowLimiter.applyMaxRows(processedStatement, options.maxRows);
         }
 
-        if (isReadStatement) {
+        if (isReadOnlySQL(statements[0], this.id)) {
           // Pass parameters if provided
           if (parameters && parameters.length > 0) {
             try {
