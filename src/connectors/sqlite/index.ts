@@ -18,6 +18,7 @@ import {
   ConnectorConfig,
 } from "../interface.js";
 import Database from "better-sqlite3";
+import { isReadOnlySQL } from "../../utils/allowed-keywords.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -451,18 +452,7 @@ export class SQLiteConnector implements Connector {
 
         // Execute each statement individually and collect results
         for (let statement of statements) {
-          const trimmedStatement = statement.toLowerCase().trim();
-          const isReadStatement = trimmedStatement.startsWith('select') ||
-                                trimmedStatement.startsWith('with') ||
-                                trimmedStatement.startsWith('explain') ||
-                                trimmedStatement.startsWith('analyze') ||
-                                (trimmedStatement.startsWith('pragma') &&
-                                 (trimmedStatement.includes('table_info') ||
-                                  trimmedStatement.includes('index_info') ||
-                                  trimmedStatement.includes('index_list') ||
-                                  trimmedStatement.includes('foreign_key_list')));
-
-          if (isReadStatement) {
+          if (isReadOnlySQL(statement, this.id)) {
             // Apply maxRows limit to SELECT queries if specified
             const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
             const rows = this.db.prepare(processedStatement).all();
