@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ResultsTable } from './ResultsTable';
 import type { ResultTab } from './types';
@@ -28,10 +29,40 @@ export function ResultsTabs({
   onTabClose,
   isLoading,
 }: ResultsTabsProps) {
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId),
     [tabs, activeTabId]
   );
+
+  const updateScrollButtons = useCallback(() => {
+    const container = tabsContainerRef.current;
+    if (!container) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = container;
+    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    updateScrollButtons();
+    window.addEventListener('resize', updateScrollButtons);
+    return () => window.removeEventListener('resize', updateScrollButtons);
+  }, [updateScrollButtons, tabs]);
+
+  const scroll = (direction: 'left' | 'right') => {
+    const container = tabsContainerRef.current;
+    if (!container) return;
+
+    const scrollAmount = 150;
+    container.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
 
   // Loading state (no tabs yet)
   if (isLoading && tabs.length === 0) {
@@ -56,44 +87,79 @@ export function ResultsTabs({
   return (
     <div className="space-y-2">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border overflow-x-auto overflow-y-hidden">
-        {tabs.map((tab) => (
+      <div className="relative flex items-center border-b border-border">
+        {/* Left scroll button */}
+        {canScrollLeft && (
           <button
-            key={tab.id}
             type="button"
-            onClick={() => onTabSelect(tab.id)}
-            className={cn(
-              'group flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap',
-              'border-b-2 -mb-px transition-colors cursor-pointer',
-              tab.id === activeTabId
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
+            onClick={() => scroll('left')}
+            className="absolute left-0 z-10 flex items-center justify-center w-6 h-full bg-background hover:bg-muted cursor-pointer"
+            aria-label="Scroll tabs left"
           >
-            <span>{formatTimestamp(tab.timestamp)}</span>
-            {tab.error && (
-              <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-label="Error" />
-            )}
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label="Close tab"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTabClose(tab.id);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+            <ChevronLeftIcon className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+
+        {/* Tabs container */}
+        <div
+          ref={tabsContainerRef}
+          onScroll={updateScrollButtons}
+          className={cn(
+            "flex items-center gap-1 overflow-hidden",
+            canScrollLeft && "pl-6",
+            canScrollRight && "pr-6"
+          )}
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabSelect(tab.id)}
+              className={cn(
+                'group flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap',
+                'border-b-2 -mb-px transition-colors cursor-pointer',
+                tab.id === activeTabId
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <span>{formatTimestamp(tab.timestamp)}</span>
+              {tab.error && (
+                <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-label="Error" />
+              )}
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Close tab"
+                onClick={(e) => {
                   e.stopPropagation();
                   onTabClose(tab.id);
-                }
-              }}
-              className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
-            >
-              <XIcon className="w-3 h-3" />
-            </span>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    onTabClose(tab.id);
+                  }
+                }}
+                className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
+              >
+                <XIcon className="w-3 h-3" />
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Right scroll button */}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            className="absolute right-0 z-10 flex items-center justify-center w-6 h-full bg-background hover:bg-muted cursor-pointer"
+            aria-label="Scroll tabs right"
+          >
+            <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
           </button>
-        ))}
+        )}
       </div>
 
       {/* Active tab content */}
