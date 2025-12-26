@@ -3,6 +3,8 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import type { Connector } from "../connectors/interface.js";
 import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
+import { requestStore } from "../requests/index.js";
+import { getClientIdentifier } from "../utils/client-identifier.js";
 
 /**
  * Object types that can be searched
@@ -454,7 +456,7 @@ async function searchIndexes(
  * Create a search_database_objects tool handler
  */
 export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
-  return async (args: any, _extra: any) => {
+  return async (args: any, extra: any) => {
     const {
       object_type,
       pattern = "%",
@@ -471,6 +473,11 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       limit: number;
     };
 
+    const startTime = Date.now();
+    const effectiveSourceId = sourceId || "default";
+    let success = true;
+    let errorMessage: string | undefined;
+
     try {
       const connector = ConnectorManager.getCurrentConnector(sourceId);
 
@@ -479,16 +486,14 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       // Validate table parameter
       if (table) {
         if (!schema) {
-          return createToolErrorResponse(
-            "The 'table' parameter requires 'schema' to be specified",
-            "SCHEMA_REQUIRED"
-          );
+          success = false;
+          errorMessage = "The 'table' parameter requires 'schema' to be specified";
+          return createToolErrorResponse(errorMessage, "SCHEMA_REQUIRED");
         }
         if (!["column", "index"].includes(object_type)) {
-          return createToolErrorResponse(
-            `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`,
-            "INVALID_TABLE_FILTER"
-          );
+          success = false;
+          errorMessage = `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`;
+          return createToolErrorResponse(errorMessage, "INVALID_TABLE_FILTER");
         }
       }
 
@@ -496,10 +501,9 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       if (schema) {
         const schemas = await connector.getSchemas();
         if (!schemas.includes(schema)) {
-          return createToolErrorResponse(
-            `Schema '${schema}' does not exist. Available schemas: ${schemas.join(", ")}`,
-            "SCHEMA_NOT_FOUND"
-          );
+          success = false;
+          errorMessage = `Schema '${schema}' does not exist. Available schemas: ${schemas.join(", ")}`;
+          return createToolErrorResponse(errorMessage, "SCHEMA_NOT_FOUND");
         }
       }
 
@@ -523,10 +527,9 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
           results = await searchIndexes(connector, pattern, schema, table, detail_level, limit);
           break;
         default:
-          return createToolErrorResponse(
-            `Unsupported object_type: ${object_type}`,
-            "INVALID_OBJECT_TYPE"
-          );
+          success = false;
+          errorMessage = `Unsupported object_type: ${object_type}`;
+          return createToolErrorResponse(errorMessage, "INVALID_OBJECT_TYPE");
       }
 
       return createToolSuccessResponse({
@@ -540,10 +543,25 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
         truncated: results.length === limit,
       });
     } catch (error) {
+      success = false;
+      errorMessage = (error as Error).message;
       return createToolErrorResponse(
-        `Error searching database objects: ${(error as Error).message}`,
+        `Error searching database objects: ${errorMessage}`,
         "SEARCH_ERROR"
       );
+    } finally {
+      // Track the request
+      requestStore.add({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        sourceId: effectiveSourceId,
+        toolName: effectiveSourceId === "default" ? "search_objects" : `search_objects_${effectiveSourceId}`,
+        sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
+        durationMs: Date.now() - startTime,
+        client: getClientIdentifier(extra),
+        success,
+        error: errorMessage,
+      });
     }
   };
 }
