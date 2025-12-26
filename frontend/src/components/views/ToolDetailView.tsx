@@ -216,7 +216,7 @@ export default function ToolDetailView() {
 
       const newTabs: ResultTab[] = results.map((stmt, index) => ({
         id: crypto.randomUUID(),
-        timestamp: new Date(timestamp.getTime() + index),
+        timestamp: timestamp,
         result: stmt,
         error: null,
         executionTimeMs: index === 0 ? duration : 0,
