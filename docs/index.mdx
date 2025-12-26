@@ -12,7 +12,7 @@ title: "Introduction"
   src="/images/logo/full-dark.svg"
 />
 
-DBHub is a minimal database MCP server that implements the Model Context Protocol server interface. This lightweight gateway enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
+DBHub is a zero-dependency, minimal database MCP server that implements the Model Context Protocol server interface. This lightweight gateway enables AI-powered tools like Claude Desktop, Claude Code, Cursor, and VS Code Copilot to securely connect to and interact with your databases.
 
 ```
  +------------------+    +--------------+    +------------------+
@@ -49,40 +49,61 @@ DBHub brings powerful database capabilities to AI coding assistants:
 
 ## Key Features
 
-### Database Exploration
+### MCP Tools
 
-AI assistants can discover and explore your database schema:
-- List schemas, tables, and columns
-- View table structures and relationships
-- Inspect indexes and stored procedures
-- Understand database constraints
-
-### SQL Execution
-
-Execute SQL queries directly from AI tools:
-- Run SELECT queries for data analysis
-- Execute DDL/DML in read-write mode
-- Support for parameterized queries
-- Multi-statement execution with transaction support
-
-### AI Assistant Capabilities
-
-DBHub enables AI assistants to:
-- Generate optimized SQL queries
-- Explain database elements and relationships
-- Suggest schema improvements
-- Debug complex queries
-
-### Security Features
-
-- **Read-only Mode**: Restrict operations to SELECT queries only
-- **SSH Tunneling**: Secure connections through bastion hosts
-- **SSL/TLS**: Encrypted database connections
-- **Row Limiting**: Prevent accidental large data retrieval
+DBHub provides AI assistants with direct database access through three core tools:
+- **[execute_sql](/tools/execute-sql)**: Run queries with transaction support and safety controls
+- **[search_objects](/tools/search-objects)**: Explore schemas, tables, columns, indexes, and procedures
+- **[Custom Tools](/tools/custom-tools)**: Define reusable, parameterized SQL operations
 
 ### Workbench
 
-A [web-based interface](/workbench/overview) for exploring data sources and executing tools directly in your browser.
+A [web-based interface](/workbench/overview) for running database tools and viewing request traces without requiring an MCP client.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    %% Human User
+    User["Human User"]
+
+    %% Workbench
+    WB["DBHub Workbench"]
+
+    %% AI Agent with MCP Client
+    subgraph Agent["AI Agent"]
+        MC["MCP Client"]
+    end
+
+    %% Configuration
+    Config["dbhub.toml"]
+
+    %% DBHub Server
+    subgraph DBHub["DBHub Server"]
+        MCP["/mcp endpoint"]
+        subgraph Tools["MCP Tools"]
+            ES["execute_sql"]
+            SO["search_objects"]
+            CT["custom tools"]
+        end
+    end
+
+    %% Databases
+    Databases["PostgreSQL, MySQL, SQL Server, MariaDB, SQLite"]
+
+    %% Connections
+    User --> WB
+    WB --> DBHub
+
+    Agent --> MC
+    MC --> MCP
+    MCP --> Tools
+
+    Config -.->|loads| DBHub
+    Tools --> Databases
+```
+
+DBHub acts as a gateway between databases and AI agents. AI agents access databases through the `/mcp` endpoint using MCP tools, while the Workbench provides direct browser-based access for humans.
 
 ## Getting Started
 

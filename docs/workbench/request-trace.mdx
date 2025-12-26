@@ -1,0 +1,12 @@
+---
+title: "Request Trace"
+description: "View recent tool execution traces"
+---
+
+The Request Trace page (`/requests`) displays recent tool executions, helping you track queries and debug issues.
+
+![request-trace](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/request-trace.webp)
+
+## Data Retention
+
+Request traces are stored in memory (resets on restart), keeping the latest 100 requests per source.

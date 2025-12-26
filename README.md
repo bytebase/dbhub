@@ -30,7 +30,7 @@
                  MCP Clients           MCP Server             Databases
 ```
 
-DBHub is a Minimal Database MCP Server implementing the Model Context Protocol (MCP) server interface. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases:
+DBHub is a zero-dependency, minimal database MCP server implementing the Model Context Protocol (MCP) server interface. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases:
 
 - **Token Efficient**: Just two general MCP tools (execute_sql, search_objects) to minimize context window usage, plus support for custom tools
 - **Multi-Database**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
@@ -49,6 +49,12 @@ DBHub implements MCP tools for database operations:
 - **[execute_sql](https://dbhub.ai/tools/execute-sql)**: Execute SQL queries with transaction support and safety controls
 - **[search_objects](https://dbhub.ai/tools/search-objects)**: Search and explore database schemas, tables, columns, indexes, and procedures with progressive disclosure
 - **[Custom Tools](https://dbhub.ai/tools/custom-tools)**: Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file
+
+## Workbench
+
+DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) for interacting with your database tools. It provides a visual way to execute queries, run custom tools, and view request traces without requiring an MCP client.
+
+![workbench](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/workbench.webp)
 
 ## Installation
 

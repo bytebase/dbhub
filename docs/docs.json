@@ -34,7 +34,7 @@
             "pages": [
               "workbench/overview",
               "workbench/tool-execution",
-              "workbench/request-history"
+              "workbench/request-trace"
             ]
           },
           {
