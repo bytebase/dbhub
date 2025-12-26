@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
 import type { Tool } from '../../types/datasource';
-import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab } from '../tool';
+import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab, type SqlEditorHandle } from '../tool';
 import LockIcon from '../icons/LockIcon';
 import CopyIcon from '../icons/CopyIcon';
 import CheckIcon from '../icons/CheckIcon';
@@ -15,6 +15,9 @@ export default function ToolDetailView() {
   const [tool, setTool] = useState<Tool | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+
+  // Ref to access SqlEditor's selection
+  const sqlEditorRef = useRef<SqlEditorHandle>(null);
 
   // Query state
   const [sql, setSql] = useState(() => {
@@ -210,8 +213,9 @@ export default function ToolDetailView() {
       let sqlToExecute: string;
 
       if (toolType === 'execute_sql') {
-        sqlToExecute = sql;
-        queryResult = await executeTool(toolName, { sql });
+        // Get selected SQL from editor (returns selection if any, otherwise full content)
+        sqlToExecute = sqlEditorRef.current?.getSelectedSql() ?? sql;
+        queryResult = await executeTool(toolName, { sql: sqlToExecute });
       } else {
         sqlToExecute = getSqlPreview();
         queryResult = await executeTool(toolName, params);
@@ -386,6 +390,7 @@ export default function ToolDetailView() {
             </button>
           </div>
           <SqlEditor
+            ref={sqlEditorRef}
             value={toolType === 'execute_sql' ? sql : getSqlPreview()}
             onChange={toolType === 'execute_sql' ? setSql : undefined}
             onRunShortcut={handleRun}
