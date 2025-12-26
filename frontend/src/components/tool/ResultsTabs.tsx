@@ -60,7 +60,7 @@ export function ResultsTabs({
   return (
     <div className="space-y-2">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto overflow-y-hidden">
         {tabs.map((tab) => (
           <button
             key={tab.id}
