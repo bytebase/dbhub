@@ -3,10 +3,12 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
-import { requestStore } from "../requests/index.js";
-import { getClientIdentifier } from "../utils/client-identifier.js";
 import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
+import {
+  getEffectiveSourceId,
+  trackToolRequest,
+} from "../utils/tool-handler-helpers.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
@@ -45,7 +47,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
   return async (args: any, extra: any) => {
     const { sql } = args as { sql: string };
     const startTime = Date.now();
-    const effectiveSourceId = sourceId || "default";
+    const effectiveSourceId = getEffectiveSourceId(sourceId);
     let success = true;
     let errorMessage: string | undefined;
     let result: any;
@@ -89,17 +91,17 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
     } finally {
       // Track the request
-      requestStore.add({
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        sourceId: effectiveSourceId,
-        toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
-        sql,
-        durationMs: Date.now() - startTime,
-        client: getClientIdentifier(extra),
+      trackToolRequest(
+        {
+          sourceId: effectiveSourceId,
+          toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
+          sql,
+        },
+        startTime,
+        extra,
         success,
-        error: errorMessage,
-      });
+        errorMessage
+      );
     }
   };
 }
