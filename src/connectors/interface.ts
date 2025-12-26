@@ -9,7 +9,7 @@ export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlse
  */
 export interface SQLResult {
   rows: any[];
-  [key: string]: any;
+  rowCount: number;
 }
 
 export interface TableColumn {

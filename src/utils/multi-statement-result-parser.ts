@@ -69,6 +69,43 @@ export function extractRowsFromMultiStatement(results: any): any[] {
 }
 
 /**
+ * Extracts total affected rows from query results.
+ *
+ * For INSERT/UPDATE/DELETE operations, returns the sum of affectedRows.
+ * For SELECT operations, returns the number of rows.
+ *
+ * @param results - Raw results from the database driver
+ * @returns Total number of affected/returned rows
+ */
+export function extractAffectedRows(results: any): number {
+  // Handle metadata object (single INSERT/UPDATE/DELETE)
+  if (isMetadataObject(results)) {
+    return results.affectedRows || 0;
+  }
+
+  // Handle non-array results
+  if (!Array.isArray(results)) {
+    return 0;
+  }
+
+  // Check if this is a multi-statement result
+  if (isMultiStatementResult(results)) {
+    let totalAffected = 0;
+    for (const result of results) {
+      if (isMetadataObject(result)) {
+        totalAffected += result.affectedRows || 0;
+      } else if (Array.isArray(result)) {
+        totalAffected += result.length;
+      }
+    }
+    return totalAffected;
+  }
+
+  // Single statement result - results is the rows array directly
+  return results.length;
+}
+
+/**
  * Parses database query results, handling both single and multi-statement queries.
  *
  * This function unifies the result parsing logic for MariaDB and MySQL2 drivers,

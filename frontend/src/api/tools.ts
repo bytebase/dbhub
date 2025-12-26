@@ -75,7 +75,8 @@ export async function executeTool(
 
   const rows = toolResult.data.rows;
   if (rows.length === 0) {
-    return { columns: [], rows: [], rowCount: 0 };
+    // For INSERT/UPDATE/DELETE, rows is empty but count reflects affected rows
+    return { columns: [], rows: [], rowCount: toolResult.data.count };
   }
 
   const columns = Object.keys(rows[0]);

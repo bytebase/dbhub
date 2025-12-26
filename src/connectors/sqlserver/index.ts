@@ -556,12 +556,6 @@ export class SQLServerConnector implements Connector {
 
       return {
         rows: result.recordset || [],
-        fields:
-          result.recordset && result.recordset.length > 0
-            ? Object.keys(result.recordset[0]).map((key) => ({
-                name: key,
-              }))
-            : [],
         rowCount: result.rowsAffected[0] || 0,
       };
     } catch (error) {

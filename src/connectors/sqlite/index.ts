@@ -413,7 +413,7 @@ export class SQLiteConnector implements Connector {
           if (parameters && parameters.length > 0) {
             try {
               const rows = this.db.prepare(processedStatement).all(...parameters);
-              return { rows };
+              return { rows, rowCount: rows.length };
             } catch (error) {
               console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
               console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
@@ -422,13 +422,14 @@ export class SQLiteConnector implements Connector {
             }
           } else {
             const rows = this.db.prepare(processedStatement).all();
-            return { rows };
+            return { rows, rowCount: rows.length };
           }
         } else {
           // Use run() for statements that don't return data
+          let result;
           if (parameters && parameters.length > 0) {
             try {
-              this.db.prepare(processedStatement).run(...parameters);
+              result = this.db.prepare(processedStatement).run(...parameters);
             } catch (error) {
               console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
               console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
@@ -436,9 +437,9 @@ export class SQLiteConnector implements Connector {
               throw error;
             }
           } else {
-            this.db.prepare(processedStatement).run();
+            result = this.db.prepare(processedStatement).run();
           }
-          return { rows: [] };
+          return { rows: [], rowCount: result.changes };
         }
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -469,9 +470,11 @@ export class SQLiteConnector implements Connector {
           }
         }
 
-        // Execute write statements using native .exec() for optimal performance
-        if (writeStatements.length > 0) {
-          this.db.exec(writeStatements.join('; '));
+        // Execute write statements individually to track changes
+        let totalChanges = 0;
+        for (const statement of writeStatements) {
+          const result = this.db.prepare(statement).run();
+          totalChanges += result.changes;
         }
 
         // Execute read statements individually to collect results
@@ -483,7 +486,8 @@ export class SQLiteConnector implements Connector {
           allRows.push(...result);
         }
 
-        return { rows: allRows };
+        // rowCount is total changes for writes, plus rows returned for reads
+        return { rows: allRows, rowCount: totalChanges + allRows.length };
       }
     } catch (error) {
       throw error;
