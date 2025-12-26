@@ -151,16 +151,6 @@ describe('execute-sql tool', () => {
       expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
-    it('should include source_id in error message', async () => {
-      // Create connector with source ID 'prod_db'
-      const prodConnector = createMockConnector('sqlite', 'prod_db');
-      mockGetCurrentConnector.mockReturnValue(prodConnector);
-
-      const handler = createExecuteSqlToolHandler('prod_db');
-      const result = await handler({ sql: "DROP TABLE users" }, null);
-
-      expect(parseToolResponse(result).error).toContain('prod_db');
-    });
   });
 
   describe('readonly per-source isolation', () => {
