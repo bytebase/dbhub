@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import HomeRedirect from './components/views/HomeRedirect';
-import HomeView from './components/views/HomeView';
+import RequestView from './components/views/RequestView';
 import SourceDetailView from './components/views/SourceDetailView';
 import ToolDetailView from './components/views/ToolDetailView';
 import NotFoundView from './components/views/NotFoundView';
@@ -37,7 +37,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Layout sources={sources} isLoading={isLoading} />}>
               <Route index element={<HomeRedirect />} />
-              <Route path="requests" element={<HomeView />} />
+              <Route path="requests" element={<RequestView />} />
               <Route path="source/:sourceId" element={<SourceDetailView />} />
               <Route path="source/:sourceId/tool/:toolName" element={<ToolDetailView />} />
               <Route path="*" element={<NotFoundView />} />
