@@ -4,7 +4,7 @@ import { fetchSource } from '../../api/sources';
 import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
 import type { Tool } from '../../types/datasource';
-import { SqlEditor, ParameterForm, RunButton, ResultsTable } from '../tool';
+import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab } from '../tool';
 import LockIcon from '../icons/LockIcon';
 import CopyIcon from '../icons/CopyIcon';
 import CheckIcon from '../icons/CheckIcon';
@@ -22,11 +22,9 @@ export default function ToolDetailView() {
     return searchParams.get('sql') || '';
   });
   const [params, setParams] = useState<Record<string, any>>({});
-  const [result, setResult] = useState<QueryResult | null>(null);
-  const [queryError, setQueryError] = useState<string | null>(null);
+  const [resultTabs, setResultTabs] = useState<ResultTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [executionTimeMs, setExecutionTimeMs] = useState<number | null>(null);
-  const [executedSql, setExecutedSql] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -35,10 +33,8 @@ export default function ToolDetailView() {
     setIsLoading(true);
     setError(null);
     // Reset result state when switching tools
-    setResult(null);
-    setQueryError(null);
-    setExecutionTimeMs(null);
-    setExecutedSql('');
+    setResultTabs([]);
+    setActiveTabId(null);
 
     fetchSource(sourceId)
       .then((sourceData) => {
@@ -206,9 +202,6 @@ export default function ToolDetailView() {
     if (!tool || !toolName) return;
 
     setIsRunning(true);
-    setQueryError(null);
-    setResult(null);
-    setExecutionTimeMs(null);
 
     const startTime = performance.now();
 
@@ -227,11 +220,27 @@ export default function ToolDetailView() {
       const endTime = performance.now();
       const duration = endTime - startTime;
 
-      setResult(queryResult);
-      setExecutionTimeMs(duration);
-      setExecutedSql(sqlToExecute);
+      const newTab: ResultTab = {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        result: queryResult,
+        error: null,
+        executedSql: sqlToExecute,
+        executionTimeMs: duration,
+      };
+      setResultTabs(prev => [newTab, ...prev]);
+      setActiveTabId(newTab.id);
     } catch (err) {
-      setQueryError(err instanceof Error ? err.message : 'Query failed');
+      const errorTab: ResultTab = {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        result: null,
+        error: err instanceof Error ? err.message : 'Query failed',
+        executedSql: toolType === 'execute_sql' ? sql : getSqlPreview(),
+        executionTimeMs: 0,
+      };
+      setResultTabs(prev => [errorTab, ...prev]);
+      setActiveTabId(errorTab.id);
     } finally {
       setIsRunning(false);
     }
@@ -248,6 +257,22 @@ export default function ToolDetailView() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [toolType, sql, getSqlPreview]);
+
+  const handleTabClose = useCallback((idToClose: string) => {
+    setResultTabs(prev => {
+      const index = prev.findIndex(tab => tab.id === idToClose);
+      const newTabs = prev.filter(tab => tab.id !== idToClose);
+
+      if (idToClose === activeTabId && newTabs.length > 0) {
+        const nextIndex = Math.min(index, newTabs.length - 1);
+        setActiveTabId(newTabs[nextIndex].id);
+      } else if (newTabs.length === 0) {
+        setActiveTabId(null);
+      }
+
+      return newTabs;
+    });
+  }, [activeTabId]);
 
   if (!sourceId || !toolName) {
     return <Navigate to="/" replace />;
@@ -382,12 +407,12 @@ export default function ToolDetailView() {
         />
 
         {/* Results */}
-        <ResultsTable
-          result={result}
-          error={queryError}
+        <ResultsTabs
+          tabs={resultTabs}
+          activeTabId={activeTabId}
+          onTabSelect={setActiveTabId}
+          onTabClose={handleTabClose}
           isLoading={isRunning}
-          executedSql={executedSql}
-          executionTimeMs={executionTimeMs ?? undefined}
         />
       </div>
     </div>
