@@ -3,8 +3,10 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import type { Connector } from "../connectors/interface.js";
 import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
-import { requestStore } from "../requests/index.js";
-import { getClientIdentifier } from "../utils/client-identifier.js";
+import {
+  getEffectiveSourceId,
+  trackToolRequest,
+} from "../utils/tool-handler-helpers.js";
 
 /**
  * Object types that can be searched
@@ -474,7 +476,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
     };
 
     const startTime = Date.now();
-    const effectiveSourceId = sourceId || "default";
+    const effectiveSourceId = getEffectiveSourceId(sourceId);
     let success = true;
     let errorMessage: string | undefined;
 
@@ -551,17 +553,17 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       );
     } finally {
       // Track the request
-      requestStore.add({
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        sourceId: effectiveSourceId,
-        toolName: effectiveSourceId === "default" ? "search_objects" : `search_objects_${effectiveSourceId}`,
-        sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
-        durationMs: Date.now() - startTime,
-        client: getClientIdentifier(extra),
+      trackToolRequest(
+        {
+          sourceId: effectiveSourceId,
+          toolName: effectiveSourceId === "default" ? "search_objects" : `search_objects_${effectiveSourceId}`,
+          sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
+        },
+        startTime,
+        extra,
         success,
-        error: errorMessage,
-      });
+        errorMessage
+      );
     }
   };
 }

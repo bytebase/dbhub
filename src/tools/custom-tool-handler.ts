@@ -11,9 +11,11 @@ import {
   createToolErrorResponse,
 } from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
-import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
-import { requestStore } from "../requests/index.js";
-import { getClientIdentifier } from "../utils/client-identifier.js";
+import {
+  isAllowedInReadonlyMode,
+  createReadonlyViolationMessage,
+  trackToolRequest,
+} from "../utils/tool-handler-helpers.js";
 
 /**
  * Build a Zod schema from parameter definitions
@@ -177,8 +179,8 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
 
       // 4. Check if SQL is allowed based on readonly mode
       const isReadonly = executeOptions.readonly === true;
-      if (isReadonly && !isReadOnlySQL(toolConfig.statement, connector.id)) {
-        errorMessage = `Tool '${toolConfig.name}' cannot execute in readonly mode for source '${toolConfig.source}'. Only read-only SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+      if (isReadonly && !isAllowedInReadonlyMode(toolConfig.statement, connector.id)) {
+        errorMessage = createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id);
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
@@ -220,17 +222,17 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
       return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
     } finally {
       // Track the request
-      requestStore.add({
-        id: crypto.randomUUID(),
-        timestamp: new Date().toISOString(),
-        sourceId: toolConfig.source,
-        toolName: toolConfig.name,
-        sql: toolConfig.statement,
-        durationMs: Date.now() - startTime,
-        client: getClientIdentifier(extra),
+      trackToolRequest(
+        {
+          sourceId: toolConfig.source,
+          toolName: toolConfig.name,
+          sql: toolConfig.statement,
+        },
+        startTime,
+        extra,
         success,
-        error: errorMessage,
-      });
+        errorMessage
+      );
     }
   };
 }
