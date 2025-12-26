@@ -1,9 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/view';
 import { sql } from '@codemirror/lang-sql';
 import { defaultKeymap } from '@codemirror/commands';
 import { basicSetup } from 'codemirror';
+
+export interface SqlEditorHandle {
+  getSelectedSql: () => string;
+}
 
 interface SqlEditorProps {
   value: string;
@@ -14,14 +18,14 @@ interface SqlEditorProps {
   placeholder?: string;
 }
 
-export function SqlEditor({
+export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor({
   value,
   onChange,
   onRunShortcut,
   disabled = false,
   readOnly = false,
   placeholder = 'Enter SQL statement...',
-}: SqlEditorProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onRunShortcutRef = useRef(onRunShortcut);
@@ -32,6 +36,18 @@ export function SqlEditor({
     onRunShortcutRef.current = onRunShortcut;
     disabledRef.current = disabled;
   }, [onRunShortcut, disabled]);
+
+  // Expose method to get selected SQL (or full content if no selection)
+  useImperativeHandle(ref, () => ({
+    getSelectedSql: () => {
+      const view = viewRef.current;
+      if (!view) return '';
+      const { from, to } = view.state.selection.main;
+      return from !== to
+        ? view.state.sliceDoc(from, to)
+        : view.state.doc.toString();
+    },
+  }), []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -130,4 +146,4 @@ export function SqlEditor({
       className="border border-border rounded-lg bg-background overflow-hidden"
     />
   );
-}
+});
