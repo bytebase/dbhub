@@ -14,7 +14,7 @@ import { getClientIdentifier } from "./client-identifier.js";
 export interface RequestMetadata {
   sourceId: string;
   toolName: string;
-  sql?: string;
+  sql: string;
 }
 
 /**
@@ -27,17 +27,10 @@ export function getEffectiveSourceId(sourceId?: string): string {
 }
 
 /**
- * Check if SQL is allowed in readonly mode
- * @param sql SQL statement to validate
- * @param connectorType Database connector type
- * @returns True if SQL is allowed (read-only), false otherwise
+ * Re-export isReadOnlySQL for readonly mode validation
+ * Checks if SQL statement is read-only (SELECT, WITH, etc.)
  */
-export function isAllowedInReadonlyMode(
-  sql: string,
-  connectorType: ConnectorType
-): boolean {
-  return isReadOnlySQL(sql, connectorType);
-}
+export { isReadOnlySQL as isAllowedInReadonlyMode };
 
 /**
  * Create a readonly violation error message
