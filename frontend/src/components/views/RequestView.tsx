@@ -85,7 +85,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   return errorIcon;
 }
 
-export default function HomeView() {
+export default function RequestView() {
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
