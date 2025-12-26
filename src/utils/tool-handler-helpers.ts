@@ -27,26 +27,31 @@ export function getEffectiveSourceId(sourceId?: string): string {
 }
 
 /**
- * Validate SQL against readonly mode constraints
+ * Check if SQL is allowed in readonly mode
  * @param sql SQL statement to validate
  * @param connectorType Database connector type
- * @param readonly Whether readonly mode is enabled
- * @param toolName Tool name for error messages
- * @param sourceId Source ID for error messages
- * @throws Error if SQL is not allowed in readonly mode
+ * @returns True if SQL is allowed (read-only), false otherwise
  */
-export function validateReadonlySQL(
+export function isAllowedInReadonlyMode(
   sql: string,
-  connectorType: ConnectorType,
-  readonly: boolean,
+  connectorType: ConnectorType
+): boolean {
+  return isReadOnlySQL(sql, connectorType);
+}
+
+/**
+ * Create a readonly violation error message
+ * @param toolName Tool name for error message
+ * @param sourceId Source ID for error message
+ * @param connectorType Database connector type
+ * @returns Formatted error message
+ */
+export function createReadonlyViolationMessage(
   toolName: string,
-  sourceId: string
-): void {
-  if (readonly && !isReadOnlySQL(sql, connectorType)) {
-    throw new Error(
-      `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`
-    );
-  }
+  sourceId: string,
+  connectorType: ConnectorType
+): string {
+  return `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
 }
 
 /**

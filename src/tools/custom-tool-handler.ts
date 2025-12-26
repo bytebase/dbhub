@@ -12,8 +12,8 @@ import {
 } from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import {
-  getEffectiveSourceId,
-  validateReadonlySQL,
+  isAllowedInReadonlyMode,
+  createReadonlyViolationMessage,
   trackToolRequest,
 } from "../utils/tool-handler-helpers.js";
 
@@ -179,14 +179,10 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
 
       // 4. Check if SQL is allowed based on readonly mode
       const isReadonly = executeOptions.readonly === true;
-      if (isReadonly) {
-        validateReadonlySQL(
-          toolConfig.statement,
-          connector.id,
-          isReadonly,
-          toolConfig.name,
-          toolConfig.source
-        );
+      if (isReadonly && !isAllowedInReadonlyMode(toolConfig.statement, connector.id)) {
+        errorMessage = createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id);
+        success = false;
+        return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
 
       // 5. Map parameters to array format for SQL execution
