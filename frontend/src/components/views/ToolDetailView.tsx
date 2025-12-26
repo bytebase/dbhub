@@ -220,8 +220,6 @@ export default function ToolDetailView() {
         result: stmt,
         error: null,
         executionTimeMs: index === 0 ? duration : 0,
-        statementIndex: results.length > 1 ? index + 1 : undefined,
-        statementTotal: results.length > 1 ? results.length : undefined,
       }));
 
       setResultTabs(prev => [...newTabs, ...prev]);

@@ -22,11 +22,7 @@ function formatTimestamp(date: Date): string {
 }
 
 function formatTabLabel(tab: ResultTab): string {
-  const time = formatTimestamp(tab.timestamp);
-  if (tab.statementTotal && tab.statementTotal > 1) {
-    return `${time} (${tab.statementIndex}/${tab.statementTotal})`;
-  }
-  return time;
+  return formatTimestamp(tab.timestamp);
 }
 
 export function ResultsTabs({

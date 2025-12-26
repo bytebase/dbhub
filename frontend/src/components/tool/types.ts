@@ -6,6 +6,4 @@ export interface ResultTab {
   result: StatementResult | null;
   error: string | null;
   executionTimeMs: number;
-  statementIndex?: number;  // 1-based, for multi-statement
-  statementTotal?: number;  // For multi-statement
 }
