@@ -62,7 +62,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       // Check if SQL is allowed based on readonly mode (per-tool)
       const isReadonly = toolConfig?.readonly === true;
       if (isReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
-        errorMessage = `Read-only mode is enabled for source '${actualSourceId}'. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+        errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }
