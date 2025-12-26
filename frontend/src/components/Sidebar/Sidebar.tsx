@@ -38,23 +38,25 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               <span className="truncate">{currentSource.id}</span>
             </Link>
             <div className="flex-1 overflow-auto">
-              {currentSource.tools.map((tool) => (
-                <Link
-                  key={tool.name}
-                  to={`/source/${currentSource.id}/tool/${tool.name}`}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2 text-sm transition-colors rounded-md',
-                    toolName === tool.name
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                  )}
-                >
-                  <span className="truncate font-mono text-xs">{tool.name}</span>
-                  {tool.readonly && (
-                    <LockIcon className="w-3 h-3 ml-auto flex-shrink-0" />
-                  )}
-                </Link>
-              ))}
+              {currentSource.tools
+                .filter((tool) => tool.name !== 'search_objects')
+                .map((tool) => (
+                  <Link
+                    key={tool.name}
+                    to={`/source/${currentSource.id}/tool/${tool.name}`}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 text-sm transition-colors rounded-md',
+                      toolName === tool.name
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    )}
+                  >
+                    <span className="truncate font-mono text-xs">{tool.name}</span>
+                    {tool.readonly && (
+                      <LockIcon className="w-3 h-3 ml-auto flex-shrink-0" />
+                    )}
+                  </Link>
+                ))}
             </div>
           </div>
         ) : (
