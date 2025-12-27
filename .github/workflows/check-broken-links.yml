@@ -1,0 +1,35 @@
+name: Check Broken Links
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '.github/workflows/check-broken-links.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '.github/workflows/check-broken-links.yml'
+  workflow_dispatch:
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    name: Check for broken links in documentation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Mintlify CLI
+        run: npm install -g mintlify
+
+      - name: Check for broken links
+        working-directory: ./docs
+        run: mintlify broken-links
