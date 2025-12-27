@@ -5,7 +5,7 @@ description: "A maintainer's deep-dive into DBHub—a minimal, vendor-neutral MC
 
 _Last updated: Dec 24, 2025_
 
-This is the third in a series reviewing Postgres MCP servers. Here we—the DBHub maintainers—explain the design behind [DBHub](https://github.com/bytebase/dbhub), a minimal database MCP server that connects AI assistants to PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite. We'll cover our design decisions, trade-offs, and where DBHub falls short compared to alternatives.
+This is the third in a series reviewing Postgres MCP servers. Here we—the DBHub maintainers—explain the design behind [DBHub](https://github.com/bytebase/dbhub), a zero-dependency, token efficient MCP server that connects AI assistants to PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite. We'll cover our design decisions, trade-offs, and where DBHub falls short compared to alternatives.
 
 - **GitHub Stars**
 
@@ -135,7 +135,7 @@ DBHub supports advanced settings via TOML configuration:
 
 ### The Good
 
-- **Token efficient**: A minimal default of 2 general tools (`execute_sql`, `search_objects`). Tools can also be customized and cherry-picked via configuration.
+- **Minimal design**: Zero dependency with a minimal default of 2 general tools (`execute_sql`, `search_objects`) to minimize context window usage. Tools can also be customized and cherry-picked via configuration.
 
 - **Vendor neutral**: Unlike Supabase MCP (Supabase-only) or MCP Toolbox (tilted toward Google Cloud), DBHub works with any deployment—cloud, on-premise, or local.
 
@@ -159,7 +159,7 @@ quadrantChart
     DBHub: [0.9, 0.6]
 ```
 
-**If you work with standard relational databases** (PostgreSQL, MySQL, SQL Server, MariaDB, SQLite) and want minimal token overhead with consistent guardrails, DBHub is a good fit.
+**If you work with standard relational databases** (PostgreSQL, MySQL, SQL Server, MariaDB, SQLite) and want a zero-dependency solution with minimal token overhead and consistent guardrails, DBHub is a good fit.
 
 **If you need integrated platform experience such as built-in authentication**, look at Supabase MCP (for Supabase projects with OAuth) or MCP Toolbox (for Gemini and Google Cloud services).
 
@@ -170,4 +170,4 @@ quadrantChart
 
 1. [MCP Toolbox for Databases](/blog/postgres-mcp-server-review-mcp-toolbox) - Google's multi-database MCP server with 40+ data source support
 2. [Supabase MCP Server](/blog/postgres-mcp-server-review-supabase-mcp) - Hosted MCP server for Supabase projects
-3. **DBHub** (this article) - Minimal, vendor-neutral MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite
+3. **DBHub** (this article) - Zero-dependency, token efficient, vendor-neutral MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite
