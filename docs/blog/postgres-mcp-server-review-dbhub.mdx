@@ -1,9 +1,9 @@
 ---
 title: "Postgres MCP Server Review - DBHub Design Explained"
-description: "A maintainer's deep-dive into DBHub—a minimal, vendor-neutral MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite. Token efficient with restrained tools, consistent guardrails."
+description: "A maintainer's deep-dive into DBHub—a zero-dependency, token efficient MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite with consistent guardrails."
 ---
 
-_Last updated: Dec 24, 2025_
+_Last updated: Dec 28, 2025_
 
 This is the third in a series reviewing Postgres MCP servers. Here we—the DBHub maintainers—explain the design behind [DBHub](https://github.com/bytebase/dbhub), a zero-dependency, token efficient MCP server that connects AI assistants to PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite. We'll cover our design decisions, trade-offs, and where DBHub falls short compared to alternatives.
 
@@ -13,6 +13,21 @@ This is the third in a series reviewing Postgres MCP servers. Here we—the DBHu
 
 - **License:** MIT
 - **Language:** TypeScript
+
+## Design Objectives
+
+The first question we ask ourselves is what's the primary use case for a database MCP server today, and our answer is local development:
+
+1. Local development is where most developers spend their time coding and testing against databases (and likely with AI coding agents nowadays).
+1. Local development runs in a trusted environment, thus [lethal trifecta attack](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/) is not a concern.
+1. Local development is forgiving. If coding agent makes a mistake and nukes the database, it's not the end of the world.
+
+With local development as the primary use case, our design objectives are:
+
+1. **Minimal setup**: Developers want to get started quickly without installing complex software stacks or dependencies.
+1. **Token efficiency**: Minimize the token overhead of MCP tools to maximize the context window for actual coding and queries.
+1. **Auth is not required**: Since local development is a trusted environment, we can skip complex authentication mechanisms.
+
 
 ## Installation
 
@@ -60,7 +75,7 @@ allowed_values = ["engineering", "sales", "support"]
 
 ## Token Efficiency
 
-Token efficiency is DBHub's key design objective—it's why we call it a "Minimal" Database MCP server. This matters for two reasons:
+Token efficiency is DBHub's key design objective. This matters for two reasons:
 
 1. **Longer sessions without compaction**: Every token spent on tool definitions is a token unavailable for your actual work. Fewer tool tokens means more room for code, queries, and conversation history before hitting context limits.
 
@@ -102,6 +117,16 @@ name = "execute_sql"
 source = "prod"
 ```
 
+**Token Comparison**
+
+| MCP Server | Default Config | Minimal Config |
+|------------|----------------|----------------|
+| DBHub | **1.4k** (2 tools) | **607** (1 tool) |
+| MCP Toolbox | 19.0k (28 tools) | 579 (1 tool) |
+| Supabase MCP | 19.3k (all features) | 3.1k (5 tools) |
+
+<Note>Minimal Config refers to exposing only the `execute_sql` tool for fair comparison. Supabase MCP requires loading the entire `database` feature group.</Note>
+
 ### Progressive Disclosure
 
 The built-in `search_objects` tool supports [progressive disclosure](https://www.anthropic.com/engineering/code-execution-with-mcp#progressive-disclosure) through `detail_level`:
@@ -115,7 +140,7 @@ The built-in `search_objects` tool supports [progressive disclosure](https://www
 | Explore table structure | Separate tool calls for columns, indexes | `search_objects(pattern="users", detail_level="full")` |
 | Find ID columns across database | Load all schemas first | `search_objects(object_type="column", pattern="%_id")` |
 
-## Guardrails
+## Guardrails & Security
 
 DBHub supports advanced settings via TOML configuration:
 
@@ -129,13 +154,25 @@ DBHub supports advanced settings via TOML configuration:
 
 **What's missing**: Authentication. Unlike MCP Toolbox which provides Google Auth, or Supabase MCP which integrates OAuth with its hosted service, DBHub doesn't provide any auth yet (we're planning to support vendor-neutral authentication such as Keycloak).
 
+## Workbench
+
+DBHub includes a [built-in web interface](/workbench/overview) with two main features:
+
+1. **Tool Execution**: Run database tools directly from your browser—useful for testing and debugging without an MCP client. Custom tools render as constrained forms with validated inputs.
+
+    ![workbench](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/workbench.webp)
+
+1. **Request Traces**: Inspect MCP requests to understand how AI agents interact with DBHub.
+
+    ![request-trace](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/request-trace.webp)
+
 ## Summary
 
-**DBHub** is a minimal, vendor-neutral MCP server for relational databases with guardrails.
+**DBHub** is a zero-dependency, token efficient MCP server for relational databases with guardrails.
 
 ### The Good
 
-- **Minimal design**: Zero dependency with a minimal default of 2 general tools (`execute_sql`, `search_objects`) to minimize context window usage. Tools can also be customized and cherry-picked via configuration.
+- **Minimal design**: Zero dependency with just 2 general tools (`execute_sql`, `search_objects`) using 1.4k tokens—13-14x fewer than alternatives. Tools can also be customized and cherry-picked via configuration.
 
 - **Vendor neutral**: Unlike Supabase MCP (Supabase-only) or MCP Toolbox (tilted toward Google Cloud), DBHub works with any deployment—cloud, on-premise, or local.
 
@@ -159,7 +196,9 @@ quadrantChart
     DBHub: [0.9, 0.6]
 ```
 
-**If you work with standard relational databases** (PostgreSQL, MySQL, SQL Server, MariaDB, SQLite) and want a zero-dependency solution with minimal token overhead and consistent guardrails, DBHub is a good fit.
+**If you're an AI-assisted developer working with local databases**, DBHub is built for you. It's optimized for the local development workflow—zero setup friction, minimal token overhead, and no authentication complexity. Works with PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite out of the box.
+
+**If you need a vendor-neutral solution**, DBHub is the only option that isn't tied to a specific cloud platform. Unlike Supabase MCP (Supabase-only) or MCP Toolbox (tilted toward Google Cloud), DBHub works anywhere your database runs.
 
 **If you need integrated platform experience such as built-in authentication**, look at Supabase MCP (for Supabase projects with OAuth) or MCP Toolbox (for Gemini and Google Cloud services).
 
@@ -170,4 +209,4 @@ quadrantChart
 
 1. [MCP Toolbox for Databases](/blog/postgres-mcp-server-review-mcp-toolbox) - Google's multi-database MCP server with 40+ data source support
 2. [Supabase MCP Server](/blog/postgres-mcp-server-review-supabase-mcp) - Hosted MCP server for Supabase projects
-3. **DBHub** (this article) - Zero-dependency, token efficient, vendor-neutral MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite
+3. **DBHub** (this article) - Zero-dependency, token efficient MCP server for PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite

@@ -32,11 +32,11 @@
 
 DBHub is a zero-dependency, token efficient MCP server implementing the Model Context Protocol (MCP) server interface. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases:
 
-- **Minimal Design**: Zero dependency with just two general MCP tools (execute_sql, search_objects) to minimize context window usage, plus support for custom tools
-- **Multi-Database**: Single interface for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite
-- **Secure Access**: Read-only mode, SSH tunneling, and SSL/TLS encryption support
-- **Multiple Connections**: Connect to multiple databases simultaneously with TOML configuration
-- **Production-Ready**: Row limiting, lock timeout control, and connection pooling
+- **Local Development First**: Zero dependency, token efficient with just two MCP tools to maximize context window
+- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite through a single interface
+- **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
+- **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
+- **Secure Access**: SSH tunneling and SSL/TLS encryption
 
 ## Supported Databases
 
