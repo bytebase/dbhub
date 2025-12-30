@@ -31,11 +31,7 @@
           },
           {
             "group": "Workbench",
-            "pages": [
-              "workbench/overview",
-              "workbench/tool-execution",
-              "workbench/request-trace"
-            ]
+            "pages": ["workbench/overview", "workbench/tool-execution", "workbench/request-trace"]
           },
           {
             "group": "Configuration",
@@ -46,6 +42,7 @@
       {
         "tab": "Blog",
         "pages": [
+          "blog/state-of-postgres-mcp-servers-2025",
           "blog/postgres-mcp-server-review-dbhub",
           "blog/postgres-mcp-server-review-supabase-mcp",
           "blog/postgres-mcp-server-review-mcp-toolbox"
