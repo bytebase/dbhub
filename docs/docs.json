@@ -31,11 +31,7 @@
           },
           {
             "group": "Workbench",
-            "pages": [
-              "workbench/overview",
-              "workbench/tool-execution",
-              "workbench/request-trace"
-            ]
+            "pages": ["workbench/overview", "workbench/tool-execution", "workbench/request-trace"]
           },
           {
             "group": "Configuration",
@@ -45,23 +41,12 @@
       },
       {
         "tab": "Blog",
-<<<<<<< HEAD
-<<<<<<< HEAD
         "pages": [
+          "blog/state-of-postgres-mcp-servers-2025",
           "blog/postgres-mcp-server-review-dbhub",
           "blog/postgres-mcp-server-review-supabase-mcp",
           "blog/postgres-mcp-server-review-mcp-toolbox"
         ]
-=======
-<<<<<<< HEAD
-        "pages": ["blog/postgres-mcp-server-review-mcp-toolbox"]
-=======
-        "pages": ["blog/state-of-postgres-mcp-servers-2025"]
->>>>>>> 8d4421d (docs: blog)
->>>>>>> d593d1a (docs: blog)
-=======
-        "pages": ["blog/state-of-postgres-mcp-servers-2025", "blog/postgres-mcp-server-review-mcp-toolbox"]
->>>>>>> b1ee20d (chore: installation)
       }
     ]
   },
