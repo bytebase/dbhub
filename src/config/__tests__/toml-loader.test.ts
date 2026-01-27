@@ -397,6 +397,37 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       });
     });
 
+    describe('description field', () => {
+      it('should parse description field', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+description = "Production read replica for analytics"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].description).toBe('Production read replica for analytics');
+      });
+
+      it('should work without description (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].description).toBeUndefined();
+      });
+    });
+
     describe('sslmode validation', () => {
       it('should accept sslmode = "disable"', () => {
         const tomlContent = `

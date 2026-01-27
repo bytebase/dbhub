@@ -3,6 +3,7 @@
 
 [[sources]]
 id = "readonly_limited"
+description = "Read-only database for safe queries"
 type = "sqlite"
 database = ":memory:"
 

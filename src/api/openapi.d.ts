@@ -55,6 +55,11 @@ export interface components {
              */
             id: string;
             /**
+             * @description Human-readable description of the data source
+             * @example Production read replica for analytics queries
+             */
+            description?: string;
+            /**
              * @description Database type
              * @example postgres
              * @enum {string}
