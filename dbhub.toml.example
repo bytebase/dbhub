@@ -18,6 +18,7 @@
 # Local PostgreSQL - DSN format (typical Docker/local dev setup)
 [[sources]]
 id = "local_pg"
+description = "Local development database"
 dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 
 # Local PostgreSQL - Individual parameters (use when password contains special characters like @, :, /)
@@ -248,6 +249,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # ============================================================================
 # QUICK REFERENCE
 # ============================================================================
+#
+# Source Fields:
+#   id = "unique_id"           # Required: unique identifier
+#   description = "..."        # Optional: human-readable description
+#   dsn = "..."                # Connection string (or use individual params below)
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require

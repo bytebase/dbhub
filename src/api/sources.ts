@@ -31,6 +31,11 @@ function transformSourceConfig(source: SourceConfig): DataSource {
     type: source.type,
   };
 
+  // Add description if present
+  if (source.description) {
+    dataSource.description = source.description;
+  }
+
   // Add connection details (excluding password)
   if (source.host) {
     dataSource.host = source.host;

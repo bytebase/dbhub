@@ -211,6 +211,19 @@ describe('Data Sources API Integration Tests', () => {
         expect(sqlParam!.description).toContain('SQL');
       });
     });
+
+    it('should include description when present', async () => {
+      const response = await fetch(`${BASE_URL}/api/sources`);
+      const sources = (await response.json()) as DataSource[];
+
+      // First source has a description
+      const readonlySource = sources.find(s => s.id === 'readonly_limited');
+      expect(readonlySource?.description).toBe('Read-only database for safe queries');
+
+      // Other sources don't have descriptions
+      const writableSource = sources.find(s => s.id === 'writable_limited');
+      expect(writableSource?.description).toBeUndefined();
+    });
   });
 
   describe('GET /api/sources/{source-id}', () => {

@@ -96,6 +96,10 @@ components:
           type: string
           description: Unique identifier for the data source
           example: prod_pg
+        description:
+          type: string
+          description: Human-readable description of the data source
+          example: Production read replica for analytics queries
         type:
           type: string
           enum: [postgres, mysql, mariadb, sqlserver, sqlite]
