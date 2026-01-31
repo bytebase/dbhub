@@ -523,6 +523,68 @@ VS Code has native MCP support through GitHub Copilot. Create `.vscode/mcp.json`
 **References:**
 - [VS Code MCP Documentation](https://code.visualstudio.com/docs/copilot/customization/mcp-servers)
 
+### GitHub Copilot CLI
+
+<Tabs>
+  <Tab title="Interactive">
+    Use the Copilot CLI to interactively add the MCP server:
+
+    ```
+    /mcp add
+    ```
+
+    When prompted, you'll need to provide:
+    - **Server type**: select `local` (the default)
+    - **Server name**: for example, `dbhub`
+    - **Command**: `npx @bytebase/dbhub@latest`
+    - **Arguments**: transport (e.g., `--transport stdio`) and connection details (either `--dsn` connection string or `--demo` for the demo database)
+  </Tab>
+
+  <Tab title="Config File">
+    Create or edit the configuration file `~/.copilot/mcp-config.json`:
+
+    ```json ~/.copilot/mcp-config.json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub@latest",
+            "--transport",
+            "stdio",
+            "--dsn",
+            "postgres://user:password@localhost:5432/dbname"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Demo Mode">
+    For testing, use the built-in demo database:
+
+    ```json ~/.copilot/mcp-config.json
+    {
+      "mcpServers": {
+        "dbhub": {
+          "command": "npx",
+          "args": [
+            "@bytebase/dbhub@latest",
+            "--transport",
+            "stdio",
+            "--demo"
+          ]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+**References:**
+- [Copilot CLI MCP Documentation](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp)
+
 ### Codex
 
 <Tabs>
