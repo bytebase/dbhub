@@ -53,6 +53,9 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
     let result: any;
 
     try {
+      // Ensure source is connected (handles lazy connections)
+      await ConnectorManager.ensureConnected(sourceId);
+
       // Get connector for the specified source (or default)
       const connector = ConnectorManager.getCurrentConnector(sourceId);
       const actualSourceId = connector.getId();

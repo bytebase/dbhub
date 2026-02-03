@@ -8,7 +8,7 @@ TOML configuration is the recommended way to configure DBHub for multi-database 
 
 TOML configuration enables:
 - **Multi-database support**: Connect to multiple databases from a single DBHub instance
-- **Per-source settings**: Configure timeouts, SSL, and SSH tunnels individually per database
+- **Per-source settings**: Configure timeouts, SSL, SSH tunnels, and lazy connections individually per database
 - **Per-tool settings**: Apply different restrictions (readonly, max_rows) per tool
 - **Custom tools**: Define reusable, parameterized SQL operations as MCP tools
 
@@ -177,6 +177,29 @@ Sources define database connections. Each source represents a database that DBHu
 
   <Note>
   This option is **only available via TOML**. There is no CLI flag for query timeout.
+  </Note>
+</ParamField>
+
+### lazy
+
+<ParamField path="lazy" type="boolean" default="false">
+  Defer database connection until the first query. When enabled, the connection is not established at server startup but instead when a tool first accesses this source.
+
+  This is useful for remote databases (e.g., RDS, Cloud SQL) where you want to avoid unnecessary connection overhead if the database may not be queried during a session.
+
+  ```toml
+  [[sources]]
+  id = "production"
+  dsn = "postgres://user:pass@prod-db.example.com:5432/mydb"
+  lazy = true  # Connection deferred until first query
+  ```
+
+  **Startup behavior:**
+  - Without `lazy`: Connection established immediately, errors shown at startup
+  - With `lazy = true`: Source registered but not connected, connection errors appear on first query
+
+  <Note>
+  When a lazy source is accessed for the first time, there will be a brief delay as the connection is established. Connection errors will appear in tool responses rather than at startup.
   </Note>
 </ParamField>
 
@@ -473,6 +496,7 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
 [[sources]]
 id = "production"
 dsn = "postgres://user:pass@db.prod.internal:5432/mydb"
+lazy = true  # Defer connection until first query
 connection_timeout = 60
 query_timeout = 30
 sslmode = "require"
@@ -544,6 +568,7 @@ default = 10
 |-------|------|----------|-------------|
 | `id` | string | ✅ | Unique source identifier |
 | `dsn` | string | ✅ | Database connection string |
+| `lazy` | boolean | ❌ | Defer connection until first query (default: `false`) |
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
 | `query_timeout` | number | ❌ | Query timeout (seconds) |
 | `sslmode` | string | ❌ | SSL mode: `disable`, `require` |

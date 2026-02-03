@@ -20,6 +20,10 @@ export class ConnectorManager {
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
 
+  // Lazy connection support
+  private lazySources: Map<string, SourceConfig> = new Map(); // Sources pending lazy connection
+  private pendingConnections: Map<string, Promise<void>> = new Map(); // Prevent race conditions
+
   constructor() {
     if (!managerInstance) {
       managerInstance = this;
@@ -35,12 +39,95 @@ export class ConnectorManager {
       throw new Error("No sources provided");
     }
 
-    console.error(`Connecting to ${sources.length} database source(s)...`);
+    const eagerSources = sources.filter(s => !s.lazy);
+    const lazySources = sources.filter(s => s.lazy);
 
-    // Connect to each source
-    for (const source of sources) {
+    if (eagerSources.length > 0) {
+      console.error(`Connecting to ${eagerSources.length} database source(s)...`);
+    }
+
+    // Connect to eager sources immediately
+    for (const source of eagerSources) {
       await this.connectSource(source);
     }
+
+    // Register lazy sources without connecting
+    for (const source of lazySources) {
+      this.registerLazySource(source);
+    }
+  }
+
+  /**
+   * Register a lazy source without establishing connection
+   * Connection will be established on first use via ensureConnected()
+   */
+  private registerLazySource(source: SourceConfig): void {
+    const sourceId = source.id;
+    const dsn = buildDSNFromSource(source);
+
+    console.error(`  - ${sourceId}: ${redactDSN(dsn)} (lazy, will connect on first use)`);
+
+    // Store config for later connection
+    this.lazySources.set(sourceId, source);
+    this.sourceConfigs.set(sourceId, source);
+    this.sourceIds.push(sourceId);
+  }
+
+  /**
+   * Ensure a source is connected (handles lazy connection on demand)
+   * Safe to call multiple times - uses promise-based deduplication so concurrent calls share the same connection attempt
+   */
+  async ensureConnected(sourceId?: string): Promise<void> {
+    const id = sourceId || this.sourceIds[0];
+
+    // Already connected
+    if (this.connectors.has(id)) {
+      return;
+    }
+
+    // Not a lazy source - must be an error
+    const lazySource = this.lazySources.get(id);
+    if (!lazySource) {
+      if (sourceId) {
+        throw new Error(
+          `Source '${sourceId}' not found. Available sources: ${this.sourceIds.join(", ")}`
+        );
+      } else {
+        throw new Error("No sources configured. Call connectWithSources() first.");
+      }
+    }
+
+    // Check if connection is already in progress (race condition prevention)
+    const pending = this.pendingConnections.get(id);
+    if (pending) {
+      return pending;
+    }
+
+    // Start connection and track the promise
+    const connectionPromise = (async () => {
+      try {
+        console.error(`Lazy connecting to source '${id}'...`);
+        await this.connectSource(lazySource);
+        // Remove from lazy sources after successful connection
+        this.lazySources.delete(id);
+      } finally {
+        // Clean up pending connection tracker
+        this.pendingConnections.delete(id);
+      }
+    })();
+
+    this.pendingConnections.set(id, connectionPromise);
+    return connectionPromise;
+  }
+
+  /**
+   * Static method to ensure a source is connected (for tool handlers)
+   */
+  static async ensureConnected(sourceId?: string): Promise<void> {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.ensureConnected(sourceId);
   }
 
   /**
@@ -138,7 +225,11 @@ export class ConnectorManager {
 
     // Store connector
     this.connectors.set(sourceId, connector);
-    this.sourceIds.push(sourceId);
+
+    // Only add to sourceIds if not already present (lazy sources are pre-registered)
+    if (!this.sourceIds.includes(sourceId)) {
+      this.sourceIds.push(sourceId);
+    }
 
     // Store source config (for API exposure)
     this.sourceConfigs.set(sourceId, source);
@@ -171,6 +262,8 @@ export class ConnectorManager {
     this.connectors.clear();
     this.sshTunnels.clear();
     this.sourceConfigs.clear();
+    this.lazySources.clear();
+    this.pendingConnections.clear();
     this.sourceIds = [];
   }
 
@@ -242,7 +335,7 @@ export class ConnectorManager {
    * @param sourceId - Source ID. If not provided, returns default (first) source config
    */
   getSourceConfig(sourceId?: string): SourceConfig | null {
-    if (this.connectors.size === 0) {
+    if (this.sourceIds.length === 0) {
       return null;
     }
     const id = sourceId || this.sourceIds[0];
