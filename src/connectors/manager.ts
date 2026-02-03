@@ -75,7 +75,7 @@ export class ConnectorManager {
 
   /**
    * Ensure a source is connected (handles lazy connection on demand)
-   * Safe to call multiple times - uses mutex to prevent race conditions
+   * Safe to call multiple times - uses promise-based deduplication so concurrent calls share the same connection attempt
    */
   async ensureConnected(sourceId?: string): Promise<void> {
     const id = sourceId || this.sourceIds[0];
