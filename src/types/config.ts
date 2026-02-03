@@ -46,6 +46,7 @@ export interface SourceConfig extends ConnectionParams, SSHConfig {
   connection_timeout?: number; // Connection timeout in seconds
   query_timeout?: number; // Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server)
   init_script?: string; // Optional SQL script to run on connection (for demo mode or initialization)
+  lazy?: boolean; // Defer connection until first query (default: false)
 }
 
 /**

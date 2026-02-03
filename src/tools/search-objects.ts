@@ -481,6 +481,9 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
     let errorMessage: string | undefined;
 
     try {
+      // Ensure source is connected (handles lazy connections)
+      await ConnectorManager.ensureConnected(sourceId);
+
       const connector = ConnectorManager.getCurrentConnector(sourceId);
 
       // Tool is already registered, so it's enabled (no need to check)

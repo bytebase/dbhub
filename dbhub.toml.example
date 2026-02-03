@@ -38,10 +38,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "postgres://dev_user:dev_password@dev-db.internal.company.com:5432/myapp_dev?sslmode=require"
 # connection_timeout = 30
 
-# Production PostgreSQL (behind SSH bastion)
+# Production PostgreSQL (behind SSH bastion, lazy connection)
 # [[sources]]
 # id = "prod_pg"
 # dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
+# lazy = true  # Defer connection until first query (avoids startup overhead for remote DBs)
 # connection_timeout = 30
 # # SSH tunnel configuration
 # ssh_host = "bastion.company.com"
@@ -254,6 +255,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   id = "unique_id"           # Required: unique identifier
 #   description = "..."        # Optional: human-readable description
 #   dsn = "..."                # Connection string (or use individual params below)
+#   lazy = true                # Defer connection until first query (default: false)
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require
