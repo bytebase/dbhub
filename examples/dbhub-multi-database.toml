@@ -1,0 +1,137 @@
+# DBHub Multi-Database Configuration with Code Generation
+#
+# This configuration demonstrates connecting to PostgreSQL, Redis, and Elasticsearch
+# along with code generation tool for converting queries to C# and TypeScript
+#
+# DSN Format:
+#   - PostgreSQL: postgres://user:password@host:5432/dbname?sslmode=disable
+#   - MySQL: mysql://user:password@host:3306/dbname
+#   - Redis: redis://[:password]@host:port/db
+#   - Elasticsearch: elasticsearch://[user:password@]host:9200?index_pattern=logs-*
+#   - SQLite: sqlite:///path/to/database.db
+
+# SQL Databases
+[[sources]]
+id = "prod_postgres"
+type = "postgres"
+host = "localhost"
+port = 5432
+database = "myapp"
+user = "app_user"
+password = "secure_password"
+connection_timeout = 10
+query_timeout = 30
+description = "Production PostgreSQL database"
+
+[[sources]]
+id = "dev_postgres"
+type = "postgres"
+host = "localhost"
+port = 5432
+database = "myapp_dev"
+user = "app_user"
+password = "secure_password"
+description = "Development PostgreSQL database"
+
+# Redis Cache/Session Store
+[[sources]]
+id = "cache_redis"
+type = "redis"
+host = "localhost"
+port = 6379
+database = "0"
+password = "redis_password"
+description = "Redis cache for sessions and real-time data"
+
+# Elasticsearch for Logs and Analytics
+[[sources]]
+id = "logs_elasticsearch"
+type = "elasticsearch"
+host = "localhost"
+port = 9200
+user = "elastic"
+password = "elasticsearch_password"
+index_pattern = "logs-*"
+description = "Elasticsearch cluster for application logs"
+
+# Tool Configuration
+# execute_sql: Run SQL queries on databases
+# search_objects: Explore database schema
+# generate_code: Convert queries to C#/TypeScript implementations (global tool)
+
+[[tools]]
+name = "execute_sql"
+source = "prod_postgres"
+readonly = true
+max_rows = 1000
+description = "Read-only SQL queries on production database"
+
+[[tools]]
+name = "execute_sql"
+source = "dev_postgres"
+readonly = false
+max_rows = 5000
+description = "Full SQL access to development database"
+
+[[tools]]
+name = "search_objects"
+source = "prod_postgres"
+description = "Explore production database schema"
+
+[[tools]]
+name = "search_objects"
+source = "dev_postgres"
+description = "Explore development database schema"
+
+# Custom Redis Commands Tool
+[[tools]]
+name = "query_redis"
+source = "cache_redis"
+description = "Execute Redis commands (GET, SET, LPUSH, SADD, etc.)"
+statement = "EXAMPLE: GET mykey or HGETALL myhash"
+
+# Custom Elasticsearch Search Tool
+[[tools]]
+name = "search_logs"
+source = "logs_elasticsearch"
+description = "Search application logs with Elasticsearch DSL"
+statement = '{"index": "logs-*", "query": {"match": {"message": "error"}}}'
+
+# Example Usage with Code Generation:
+#
+# 1. Execute a SQL query:
+#    execute_sql on dev_postgres: SELECT id, email FROM users WHERE status = 'active'
+#
+# 2. Convert to code using generate_code:
+#    generate_code:
+#      query_type: "sql"
+#      database_type: "postgres"
+#      query: "SELECT id, email FROM users WHERE status = 'active'"
+#      language: "both"
+#      orm_preference: "ef-core"
+#
+#    Output includes:
+#    - C# with Entity Framework Core
+#    - C# with Dapper
+#    - TypeScript with Prisma ORM
+#    - TypeScript with raw postgres client
+#
+# 3. Execute Redis command:
+#    query_redis: GET user:123:session
+#
+# 4. Convert Redis command to code:
+#    generate_code:
+#      query_type: "redis"
+#      database_type: "redis"
+#      query: "GET user:123:session"
+#      language: "both"
+#
+# 5. Search Elasticsearch:
+#    search_logs: {"index": "logs-2025*", "query": {"match": {"level": "ERROR"}}}
+#
+# 6. Convert Elasticsearch query to code:
+#    generate_code:
+#      query_type: "elasticsearch"
+#      database_type: "elasticsearch"
+#      query: '{"index": "logs-*", "query": {"match": {"level": "ERROR"}}}'
+#      language: "both"

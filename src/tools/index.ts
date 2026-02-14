@@ -1,13 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createExecuteSqlToolHandler } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsSchema } from "./search-objects.js";
+import { createGenerateCodeToolHandler } from "./generate-code-handler.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { getExecuteSqlMetadata, getSearchObjectsMetadata } from "../utils/tool-metadata.js";
+import { getExecuteSqlMetadata, getSearchObjectsMetadata, getGenerateCodeMetadata } from "../utils/tool-metadata.js";
 import { isReadOnlySQL } from "../utils/allowed-keywords.js";
 import { createCustomToolHandler, buildZodSchemaFromParameters } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
-import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "./builtin-tools.js";
+import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, BUILTIN_TOOL_GENERATE_CODE } from "./builtin-tools.js";
 
 /**
  * Register all tool handlers with the MCP server
@@ -22,6 +23,9 @@ export function registerTools(server: McpServer): void {
   }
 
   const registry = getToolRegistry();
+
+  // Register global tools (not tied to a specific source)
+  registerGenerateCodeTool(server);
 
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
@@ -114,5 +118,21 @@ function registerCustomTool(
       },
     },
     createCustomToolHandler(toolConfig)
+  );
+}
+
+/**
+ * Register generate_code tool (global, not source-specific)
+ */
+function registerGenerateCodeTool(server: McpServer): void {
+  const metadata = getGenerateCodeMetadata();
+  server.registerTool(
+    metadata.name,
+    {
+      description: metadata.description,
+      inputSchema: metadata.schema,
+      annotations: metadata.annotations,
+    },
+    createGenerateCodeToolHandler()
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Type definition for supported database connector types
  */
-export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlserver";
+export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlserver" | "redis" | "elasticsearch";
 
 /**
  * Database Connector Interface
@@ -180,6 +180,25 @@ export interface Connector {
 
   /** Execute a SQL query with execution options and optional parameters */
   executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;
+}
+
+/**
+ * Result from Elasticsearch search/aggregation queries
+ */
+export interface ESSearchResult {
+  hits: {
+    total: number;
+    documents: any[];
+  };
+  aggregations?: any;
+}
+
+/**
+ * Result from Redis commands
+ */
+export interface RedisCommandResult {
+  value: any;
+  type: "string" | "hash" | "list" | "set" | "zset" | "stream" | "nil";
 }
 
 /**

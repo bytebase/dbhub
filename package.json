@@ -2,7 +2,7 @@
   "name": "dbhub",
   "version": "0.16.0",
   "mcpName": "io.github.bytebase/dbhub",
-  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB",
+  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB, Redis, and Elasticsearch with code generation",
   "repository": {
     "type": "git",
     "url": "https://github.com/bytebase/dbhub.git"
@@ -37,6 +37,7 @@
   "license": "MIT",
   "dependencies": {
     "@azure/identity": "^4.8.0",
+    "@elastic/elasticsearch": "^8.13.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "better-sqlite3": "^11.9.0",
@@ -46,6 +47,7 @@
     "mssql": "^11.0.1",
     "mysql2": "^3.13.0",
     "pg": "^8.13.3",
+    "redis": "^4.6.13",
     "ssh-config": "^5.0.3",
     "ssh2": "^1.16.0",
     "zod": "^3.24.2"

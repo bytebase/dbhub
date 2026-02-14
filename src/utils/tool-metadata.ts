@@ -3,6 +3,7 @@ import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
+import { generateCodeSchema } from "../tools/generate-code.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -282,9 +283,45 @@ export function getToolsForSource(sourceId: string): Tool[] {
       return buildExecuteSqlTool(sourceId, toolConfig);
     } else if (toolConfig.name === "search_objects") {
       return buildSearchObjectsTool(sourceId);
+    } else if (toolConfig.name === "generate_code") {
+      return buildGenerateCodeTool();
     } else {
       // Custom tool
       return buildCustomTool(toolConfig);
     }
   });
+}
+
+/**
+ * Get generate_code tool metadata
+ * Code generation is a global tool, not tied to a specific database source
+ */
+export function getGenerateCodeMetadata(): ToolMetadata {
+  const annotations = {
+    title: "Generate Code Implementation",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
+
+  return {
+    name: "generate_code",
+    description:
+      "Convert SQL, Redis, or Elasticsearch queries to equivalent C# and TypeScript code implementations with support for multiple ORMs (EF Core, Dapper, Prisma)",
+    schema: generateCodeSchema.shape,
+    annotations,
+  };
+}
+
+/**
+ * Build generate_code tool for API response
+ */
+function buildGenerateCodeTool(): Tool {
+  return {
+    name: "generate_code",
+    description:
+      "Convert queries to C# (EF Core, Dapper) and TypeScript (Prisma) implementations",
+    parameters: zodToParameters(generateCodeSchema.shape),
+  };
 }

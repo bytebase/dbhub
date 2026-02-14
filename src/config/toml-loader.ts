@@ -237,7 +237,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "redis", "elasticsearch"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
@@ -452,6 +452,40 @@ export function buildDSNFromSource(source: SourceConfig): string {
       );
     }
     return `sqlite:///${source.database}`;
+  }
+
+  // Handle Redis
+  if (source.type === "redis") {
+    const host = source.host || "localhost";
+    const port = source.port || 6379;
+    const db = source.database ? parseInt(source.database as any, 10) : 0;
+    let dsn = `redis://${host}:${port}/${db}`;
+
+    if (source.password) {
+      dsn = `redis://:${encodeURIComponent(source.password)}@${host}:${port}/${db}`;
+    }
+    if (source.user) {
+      dsn = `redis://${encodeURIComponent(source.user)}:${source.password ? encodeURIComponent(source.password) : ""}@${host}:${port}/${db}`;
+    }
+
+    return dsn;
+  }
+
+  // Handle Elasticsearch
+  if (source.type === "elasticsearch") {
+    const host = source.host || "localhost";
+    const port = source.port || 9200;
+    let dsn = `elasticsearch://${host}:${port}`;
+
+    if (source.user && source.password) {
+      dsn = `elasticsearch://${encodeURIComponent(source.user)}:${encodeURIComponent(source.password)}@${host}:${port}`;
+    }
+
+    if ((source as any).index_pattern) {
+      dsn += `?index_pattern=${encodeURIComponent((source as any).index_pattern)}`;
+    }
+
+    return dsn;
   }
 
   // For other databases, require host, user, database
