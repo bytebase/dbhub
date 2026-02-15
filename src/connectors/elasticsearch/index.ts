@@ -1,4 +1,5 @@
 import { Client } from "@elastic/elasticsearch";
+import { URL } from "url";
 import { Connector, ConnectorConfig, DSNParser, ExecuteOptions, ESSearchResult, ConnectorRegistry } from "../interface.js";
 
 /**
@@ -201,7 +202,7 @@ export class ElasticsearchConnector implements Connector {
           total: typeof response.hits.total === "number" 
             ? response.hits.total 
             : response.hits.total?.value || 0,
-          documents: response.hits.hits.map((hit) => ({
+          documents: response.hits.hits.map((hit: any) => ({
             _id: hit._id,
             _score: hit._score,
             ...hit._source,
@@ -285,7 +286,7 @@ export class ElasticsearchConnector implements Connector {
         total: typeof response.hits.total === "number" 
           ? response.hits.total 
           : response.hits.total?.value || 0,
-        documents: response.hits.hits.map((hit) => ({
+        documents: response.hits.hits.map((hit: any) => ({
           _id: hit._id,
           _score: hit._score,
           ...hit._source,

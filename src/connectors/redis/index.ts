@@ -1,5 +1,6 @@
 import { createClient } from "redis";
 import type { RedisClientType } from "redis";
+import { URL } from "url";
 import { Connector, ConnectorConfig, DSNParser, ExecuteOptions, RedisCommandResult, ConnectorRegistry } from "../interface.js";
 
 /**
@@ -80,19 +81,17 @@ export class RedisConnector implements Connector {
     try {
       const options = this.dsnParser.parse(dsn);
 
+      // Build Redis connection URL
+      const redisUrl = `redis://${options.username ? `${options.username}:` : ""}${options.password || ""}${options.username || options.password ? "@" : ""}${options.host}:${options.port}/${options.db}`;
+
       this.client = createClient({
-        host: options.host,
-        port: options.port,
-        username: options.username,
-        password: options.password,
-        db: options.db,
-        tls: options.tls ? {} : undefined,
+        url: redisUrl,
         socket: {
           connectTimeout: (config?.connectionTimeoutSeconds || 10) * 1000,
         },
       });
 
-      this.client.on("error", (err) =>
+      this.client.on("error", (err: any) =>
         console.error("Redis Client Error:", err)
       );
 
