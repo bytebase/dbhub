@@ -10,19 +10,20 @@ class ElasticsearchIntegrationTest {
 
   async setup(): Promise<void> {
     console.log('Starting Elasticsearch container...');
-    
+
     this.container = await new GenericContainer('docker.elastic.co/elasticsearch/elasticsearch:8.11.3')
       .withEnvironment('discovery.type', 'single-node')
       .withEnvironment('xpack.security.enabled', 'false')
+      .withEnvironment('ES_JAVA_OPTS', '-Xms512m -Xmx512m')
       .withExposedPorts(9200)
       .start();
-    
+
     console.log('Container started, establishing connection...');
-    
+
     const host = this.container.getHost();
     const port = this.container.getMappedPort(9200);
     this.connectionUri = `elasticsearch://${host}:${port}?index_pattern=test-*`;
-    
+
     // Wait for ES to be ready by retrying connection
     let retries = 0;
     while (retries < 30) {
@@ -41,7 +42,7 @@ class ElasticsearchIntegrationTest {
         }
       }
     }
-    
+
     await this.setupTestData();
     console.log('Test data setup complete');
   }
@@ -58,7 +59,7 @@ class ElasticsearchIntegrationTest {
   private async setupTestData(): Promise<void> {
     // Create a test index with documents
     const testIndex = 'test-logs';
-    
+
     try {
       // Index some test documents
       const documents = [
@@ -138,7 +139,7 @@ class ElasticsearchIntegrationTest {
           const schema = await this.connector.getTableSchema('test-logs');
           expect(schema).toBeDefined();
           expect(Array.isArray(schema)).toBe(true);
-          
+
           // Verify properties returned
           const propertyNames = schema.map((col: any) => col.column_name);
           expect(propertyNames).toContain('level');
@@ -183,7 +184,7 @@ class ElasticsearchIntegrationTest {
           const result = await this.connector.executeCommand(
             JSON.stringify({
               index: 'test-logs',
-              query: { 
+              query: {
                 multi_match: {
                   query: 'error',
                   fields: ['message', 'level']
@@ -261,7 +262,7 @@ class ElasticsearchIntegrationTest {
 
         it('should throw error when not connected', async () => {
           const disconnectedConnector = new ElasticsearchConnector();
-          
+
           await expect(
             disconnectedConnector.executeCommand(
               JSON.stringify({ query: { match_all: {} } })
@@ -280,7 +281,7 @@ class ElasticsearchIntegrationTest {
         it('should parse Elasticsearch DSN with default port', () => {
           const dsn = 'elasticsearch://localhost:9200';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.host).toBe('localhost');
           expect(parsed.port).toBe(9200);
         });
@@ -288,7 +289,7 @@ class ElasticsearchIntegrationTest {
         it('should parse Elasticsearch DSN with username and password', () => {
           const dsn = 'elasticsearch://user:password@localhost:9200';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.host).toBe('localhost');
           expect(parsed.port).toBe(9200);
           expect(parsed.username).toBe('user');
@@ -298,14 +299,14 @@ class ElasticsearchIntegrationTest {
         it('should parse Elasticsearch DSN with custom port', () => {
           const dsn = 'elasticsearch://localhost:9300';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.port).toBe(9300);
         });
 
         it('should parse index pattern from DSN', () => {
           const dsn = 'elasticsearch://localhost:9200?index_pattern=custom-*';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.indexPattern).toBe('custom-*');
         });
 

@@ -10,17 +10,17 @@ class RedisIntegrationTest {
 
   async setup(): Promise<void> {
     console.log('Starting Redis container...');
-    
+
     this.container = await new GenericContainer('redis:7-alpine')
       .withExposedPorts(6379)
       .start();
-    
+
     console.log('Container started, establishing connection...');
-    
+
     const host = this.container.getHost();
     const port = this.container.getMappedPort(6379);
     this.connectionUri = `redis://${host}:${port}/0`;
-    
+
     // Wait for Redis to be ready by retrying connection
     let retries = 0;
     while (retries < 30) {
@@ -39,7 +39,7 @@ class RedisIntegrationTest {
         }
       }
     }
-    
+
     await this.setupTestData();
     console.log('Test data setup complete');
   }
@@ -431,7 +431,7 @@ class RedisIntegrationTest {
           await this.connector.executeCommand('SET expirekey value');
           const result = await this.connector.executeCommand('EXPIRE expirekey 60');
           expect(result.type).toBe('string');
-          expect(result.value).toBe(1);
+          expect(result.value).toBe(true);
         });
 
         it('should INFO get server information', async () => {
@@ -467,7 +467,7 @@ class RedisIntegrationTest {
         it('should parse Redis DSN with defaults', () => {
           const dsn = 'redis://localhost:6379/0';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.host).toBe('localhost');
           expect(parsed.port).toBe(6379);
           expect(parsed.db).toBe(0);
@@ -476,14 +476,14 @@ class RedisIntegrationTest {
         it('should parse Redis DSN with different database', () => {
           const dsn = 'redis://localhost:6379/5';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.db).toBe(5);
         });
 
         it('should parse Redis DSN with credentials', () => {
           const dsn = 'redis://user:password@localhost:6379/0';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.username).toBe('user');
           expect(parsed.password).toBe('password');
         });
@@ -491,7 +491,7 @@ class RedisIntegrationTest {
         it('should parse rediss:// (TLS) protocol', () => {
           const dsn = 'rediss://localhost:6380/0';
           const parsed = this.connector.dsnParser.parse(dsn);
-          
+
           expect(parsed.tls).toBe(true);
         });
 
