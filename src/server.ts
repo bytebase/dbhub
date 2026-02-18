@@ -158,11 +158,7 @@ See documentation for more details on configuring database connections.
 
       // Handle CORS and security headers
       app.use((req, res, next) => {
-        // Validate Origin header to prevent DNS rebinding attacks
         const origin = req.headers.origin;
-        if (origin && !origin.startsWith('http://localhost') && !origin.startsWith('https://localhost')) {
-          return res.status(403).json({ error: 'Forbidden origin' });
-        }
 
         res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
         res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
