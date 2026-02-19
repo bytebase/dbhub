@@ -32,6 +32,22 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # password = "p@ss:word/123"
 # sslmode = "disable"  # Optional: "disable" or "require"
 
+# PostgreSQL with non-public schema (DSN format)
+# [[sources]]
+# id = "schema_pg"
+# dsn = "postgres://user:pass@localhost:5432/mydb?search_path=myschema"
+
+# PostgreSQL with non-public schema (individual parameters)
+# [[sources]]
+# id = "schema_pg"
+# type = "postgres"
+# host = "localhost"
+# database = "mydb"
+# user = "user"
+# password = "pass"
+# search_path = "myschema"          # Sets session search_path and default schema for discovery
+# # search_path = "myschema,public" # Comma-separated: first schema is used as discovery default
+
 # Development PostgreSQL (shared dev server)
 # [[sources]]
 # id = "dev_pg"
@@ -259,6 +275,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require
+#   PostgreSQL:  postgres://user:pass@host:5432/database?search_path=myschema
 #   MySQL:       mysql://user:pass@host:3306/database
 #   MariaDB:     mariadb://user:pass@host:3306/database
 #   SQL Server:  sqlserver://user:pass@host:1433/database

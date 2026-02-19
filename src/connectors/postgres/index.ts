@@ -106,6 +106,7 @@ export class PostgresConnector implements Connector {
   dsnParser = new PostgresDSNParser();
 
   private pool: pg.Pool | null = null;
+  private defaultSchema = 'public';
 
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
@@ -121,6 +122,17 @@ export class PostgresConnector implements Connector {
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
+
+      // Extract search_path to configure pg session and schema discovery defaults
+      const parsedUrl = new SafeURL(dsn);
+      const searchPath = parsedUrl.getSearchParam('search_path');
+      if (searchPath) {
+        poolConfig.options = (poolConfig.options || '') + ` -c search_path=${searchPath}`;
+        // Use the first concrete schema (skip $user special token) as the discovery default
+        const firstSchema = searchPath.split(',').map((s) => s.trim())
+          .find((s) => s !== '$user' && s !== '"$user"');
+        this.defaultSchema = firstSchema || 'public';
+      }
 
       // SDK-level readonly enforcement: Set default_transaction_read_only for the entire connection
       if (config?.readonly) {
@@ -174,7 +186,7 @@ export class PostgresConnector implements Connector {
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // 'public' is the standard default schema in PostgreSQL databases
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       const result = await client.query(
         `
@@ -200,7 +212,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       const result = await client.query(
         `
@@ -227,7 +239,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       // Query to get all indexes for the table
       const result = await client.query(
@@ -282,7 +294,7 @@ export class PostgresConnector implements Connector {
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // Tables are created in the 'public' schema by default unless otherwise specified
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       // Get table columns
       const result = await client.query(
@@ -314,7 +326,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       // Get stored procedures and functions from PostgreSQL
       const result = await client.query(
@@ -342,7 +354,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || "public";
+      const schemaToUse = schema || this.defaultSchema;
 
       // Get stored procedure details from PostgreSQL
       const result = await client.query(

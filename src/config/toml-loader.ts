@@ -6,6 +6,7 @@ import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
+import { SafeURL } from "../utils/safe-url.js";
 
 /**
  * Load and parse TOML configuration file
@@ -432,9 +433,18 @@ function expandHomeDir(filePath: string): string {
  * Similar to buildDSNFromEnvParams in env.ts but for TOML sources
  */
 export function buildDSNFromSource(source: SourceConfig): string {
-  // If DSN is already provided, use it
+  // If DSN is already provided, use it (but still apply search_path if set)
   if (source.dsn) {
-    return source.dsn;
+    let dsn = source.dsn;
+    const isPostgres = source.type === 'postgres' || dsn.startsWith('postgres://') || dsn.startsWith('postgresql://');
+    if (isPostgres && source.search_path) {
+      const url = new SafeURL(dsn);
+      if (!url.getSearchParam('search_path')) {
+        const separator = dsn.includes('?') ? '&' : '?';
+        dsn += `${separator}search_path=${encodeURIComponent(source.search_path)}`;
+      }
+    }
+    return dsn;
   }
 
   // Validate required fields
@@ -498,6 +508,13 @@ export function buildDSNFromSource(source: SourceConfig): string {
     }
     if (source.domain) {
       queryParams.push(`domain=${encodeURIComponent(source.domain)}`);
+    }
+  }
+
+  // Add PostgreSQL-specific parameters
+  if (source.type === 'postgres') {
+    if (source.search_path) {
+      queryParams.push(`search_path=${encodeURIComponent(source.search_path)}`);
     }
   }
 
