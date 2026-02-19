@@ -1,4 +1,4 @@
-import mariadb from "mariadb";
+import * as mariadb from "mariadb";
 import {
   Connector,
   ConnectorType,
