@@ -178,6 +178,13 @@ export interface Connector {
    */
   getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure>;
 
+  /**
+   * Get estimated row count for a table using database statistics.
+   * Uses catalog statistics (e.g. pg_class.reltuples) instead of COUNT(*) for performance.
+   * Optional — connectors that don't implement this fall back to COUNT(*) in search-objects.
+   */
+  getTableRowCount?(tableName: string, schema?: string): Promise<number | null>;
+
   /** Execute a SQL query with execution options and optional parameters */
   executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;
 }
