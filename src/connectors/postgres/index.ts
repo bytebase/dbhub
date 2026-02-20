@@ -120,6 +120,8 @@ export class PostgresConnector implements Connector {
   }
 
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
+    // Reset to default so reconnects without search_path don't inherit stale state
+    this.defaultSchema = "public";
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
 
