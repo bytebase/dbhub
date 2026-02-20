@@ -1,0 +1,487 @@
+# DBHub Code Generation & Extended Database Support
+
+This guide covers the new Redis, Elasticsearch connectors and the code generation tool that converts queries to C# and TypeScript implementations.
+
+## Overview
+
+DBHub now supports:
+- **Redis**: In-memory data structure store with all data types (strings, hashes, lists, sets, sorted sets, streams)
+- **Elasticsearch**: Full-text search and analytics with queries and aggregations
+- **Code Generation**: Convert SQL, Redis, and Elasticsearch queries to production-ready C# and TypeScript code
+
+## Configuration
+
+### Redis Source
+
+```toml
+[[sources]]
+id = "cache"
+type = "redis"
+host = "localhost"
+port = 6379
+database = "0"          # Optional: defaults to 0
+password = "secret"     # Optional
+description = "Primary Redis cache"
+```
+
+**DSN Format**: `redis://[user:password@]host:port/db`
+
+Examples:
+- `redis://localhost:6379/0`
+- `redis://:mypassword@cache.example.com:6379/1`
+- `redis://user:password@redis.cloud.com:6379/0`
+
+### Elasticsearch Source
+
+```toml
+[[sources]]
+id = "logs"
+type = "elasticsearch"
+host = "localhost"
+port = 9200
+user = "elastic"
+password = "changeme"
+index_pattern = "logs-*"  # Optional: defaults to "*"
+description = "Application logs and metrics"
+```
+
+**DSN Format**: `elasticsearch://[user:password@]host:port[?index_pattern=pattern]`
+
+Examples:
+- `elasticsearch://localhost:9200`
+- `elasticsearch://user:password@elasticsearch.example.com:9200?index_pattern=app-*`
+- `elasticsearch://elastic:mypass@es-cloud.elastic-cloud.com:9243`
+
+## Redis Commands
+
+### String Commands
+
+```
+GET key                    # Get string value
+SET key value             # Set string value
+APPEND key value          # Append to string
+STRLEN key                # Get string length
+INCR key                  # Increment integer
+DECR key                  # Decrement integer
+```
+
+### Hash Commands
+
+```
+HGET hash field           # Get hash field value
+HGETALL hash              # Get all hash fields
+HKEYS hash                # Get all field names
+HVALS hash                # Get all values
+HSET hash field value     # Set hash field
+HDEL hash field           # Delete hash field
+HEXISTS hash field        # Check field exists
+HLEN hash                 # Get number of fields
+```
+
+### List Commands
+
+```
+LPUSH list value          # Push to left
+RPUSH list value          # Push to right
+LPOP list                 # Pop from left
+RPOP list                 # Pop from right
+LRANGE list start stop    # Get range
+LLEN list                 # List length
+LINDEX list index         # Get by index
+```
+
+### Set Commands
+
+```
+SADD set member           # Add to set
+SREM set member           # Remove from set
+SMEMBERS set              # Get all members
+SISMEMBER set member      # Check membership
+SCARD set                 # Set cardinality
+```
+
+### Sorted Set Commands
+
+```
+ZADD zset score member    # Add with score
+ZRANGE zset start stop    # Get by index range
+ZREM zset member          # Remove member
+ZCARD zset                # Cardinality
+ZSCORE zset member        # Get score of member
+```
+
+### Generic Commands
+
+```
+DEL key [key ...]         # Delete keys
+EXISTS key [key ...]      # Check existence
+KEYS pattern              # Find keys by pattern
+SCAN cursor               # Scan keys (cursor-based)
+TYPE key                  # Get key type
+TTL key                   # Get TTL in seconds
+EXPIRE key seconds        # Set TTL
+DBSIZE                    # Get database size
+FLUSHDB                   # Clear all keys
+INFO [section]            # Get server info
+```
+
+## Elasticsearch Queries
+
+### Simple Text Search
+
+```json
+{
+  "index": "logs-*",
+  "query": {
+    "multi_match": {
+      "query": "error database",
+      "fields": ["message", "tags"]
+    }
+  },
+  "size": 20
+}
+```
+
+### Term Filter
+
+```json
+{
+  "index": "logs-*",
+  "query": {
+    "term": {
+      "level": "ERROR"
+    }
+  }
+}
+```
+
+### Range Query
+
+```json
+{
+  "index": "logs-*",
+  "query": {
+    "range": {
+      "timestamp": {
+        "gte": "2025-02-01",
+        "lte": "2025-02-14"
+      }
+    }
+  }
+}
+```
+
+### Aggregation
+
+```json
+{
+  "index": "logs-*",
+  "aggs": {
+    "error_counts": {
+      "terms": {
+        "field": "level",
+        "size": 10
+      }
+    }
+  }
+}
+```
+
+### Bool Query (AND/OR)
+
+```json
+{
+  "index": "logs-*",
+  "query": {
+    "bool": {
+      "must": [
+        { "term": { "level": "ERROR" } },
+        { "range": { "timestamp": { "gte": "now-1h" } } }
+      ],
+      "should": [
+        { "match": { "message": "database" } }
+      ]
+    }
+  }
+}
+```
+
+## Code Generation Tool
+
+The `generate_code` tool converts queries to equivalent implementations across multiple languages and ORMs.
+
+### SQL to C# Examples
+
+#### Entity Framework Core
+
+**Input Query**:
+```sql
+SELECT id, name, email FROM users WHERE status = 'active' LIMIT 10
+```
+
+**Generated C#**:
+```csharp
+var result = context.users
+  .Where(x => x.status == "active")
+  .Take(10)
+  .Select(x => new { x.id, x.name, x.email })
+  .ToListAsync();
+```
+
+#### Dapper
+
+**Generated C#**:
+```csharp
+using (var connection = new NpgsqlConnection(connectionString))
+{
+  var result = await connection.QueryAsync<dynamic>(
+    @"SELECT id, name, email FROM users WHERE status = 'active' LIMIT 10"
+  );
+}
+```
+
+### SQL to TypeScript Examples
+
+#### Prisma ORM
+
+**Generated TypeScript**:
+```typescript
+const result = await prisma.users.findMany({
+  where: { status: "active" },
+  select: { id: true, name: true, email: true },
+  take: 10,
+});
+```
+
+#### Raw Client (node-postgres)
+
+**Generated TypeScript**:
+```typescript
+const result = await pool.query(
+  `SELECT id, name, email FROM users WHERE status = 'active' LIMIT 10`,
+  []
+);
+```
+
+### Redis to Code Examples
+
+#### C# (StackExchange.Redis)
+
+```csharp
+var db = redis.GetDatabase();
+var value = await db.StringGetAsync("mykey");
+var result = value.ToString();
+```
+
+#### TypeScript (redis client)
+
+```typescript
+const redis = createClient();
+const value = await redis.get("mykey");
+const result = value;
+```
+
+### Elasticsearch to Code Examples
+
+#### C# (NEST)
+
+```csharp
+var client = new ElasticClient(settings);
+var response = await client.SearchAsync<dynamic>(s => s
+  .Index("logs-*")
+  .Query(q => q.Term(t => t.Field("level").Value("ERROR")))
+);
+```
+
+#### TypeScript (@elastic/elasticsearch)
+
+```typescript
+const client = new Client({ node: "http://localhost:9200" });
+const response = await client.search({
+  index: "logs-*",
+  body: {
+    query: {
+      term: { level: "ERROR" }
+    }
+  }
+});
+```
+
+## Usage Workflow
+
+### 1. Execute Query
+
+First, execute your query on the database:
+
+```bash
+# SQL query
+execute_sql: SELECT id, email FROM users WHERE status = 'active'
+
+# Redis command
+query_redis: HGETALL user:123
+
+# Elasticsearch search
+search_logs: {"index": "logs-*", "query": {"term": {"level": "ERROR"}}}
+```
+
+### 2. Convert to Code
+
+Once you've verified the query works, convert it to your target languages:
+
+```bash
+# SQL conversion
+generate_code:
+  query_type: "sql"
+  database_type: "postgres"
+  query: "SELECT id, email FROM users WHERE status = 'active'"
+  language: "both"
+  orm_preference: "all"
+
+# Redis conversion
+generate_code:
+  query_type: "redis"
+  database_type: "redis"
+  query: "HGETALL user:123"
+  language: "csharp"
+  orm_preference: "all"
+
+# Elasticsearch conversion
+generate_code:
+  query_type: "elasticsearch"
+  database_type: "elasticsearch"
+  query: '{"index": "logs-*", "query": {"term": {"level": "ERROR"}}}'
+  language: "typescript"
+  orm_preference: "prisma"
+```
+
+### 3. Copy Generated Code
+
+The tool generates production-ready code snippets with:
+- Required imports/dependencies
+- Connection setup code
+- Error handling patterns
+- ORM-specific syntax
+- Implementation notes
+
+## Common Patterns
+
+### Check Multiple Keys in Redis
+
+```
+MGET key1 key2 key3      # Get multiple string values
+EXISTS key1 key2 key3    # Check multiple keys exist
+DEL key1 key2 key3       # Delete multiple keys
+```
+
+### Search with Filters and Aggregations in Elasticsearch
+
+```json
+{
+  "index": "logs-*",
+  "query": {
+    "bool": {
+      "must": [
+        { "range": { "timestamp": { "gte": "now-7d" } } }
+      ],
+      "filter": [
+        { "term": { "environment": "production" } }
+      ]
+    }
+  },
+  "aggs": {
+    "errors_by_service": {
+      "terms": { "field": "service" },
+      "aggs": {
+        "error_rate": { "avg": { "field": "duration_ms" } }
+      }
+    }
+  },
+  "size": 0  # Only aggregations, no hits needed
+}
+```
+
+### SQL with JOIN and Aggregate
+
+```sql
+SELECT 
+  d.name, 
+  COUNT(e.id) as employee_count,
+  AVG(s.salary) as avg_salary
+FROM departments d
+JOIN employees e ON d.id = e.department_id
+JOIN salaries s ON e.id = s.employee_id
+WHERE d.active = true
+GROUP BY d.name
+ORDER BY avg_salary DESC
+LIMIT 10
+```
+
+**Generated EF Core**:
+```csharp
+var result = context.departments
+  .Where(d => d.active == true)
+  .Join(context.employees, d => d.id, e => e.department_id, (d, e) => new { d, e })
+  .Join(context.salaries, de => de.e.id, s => s.employee_id, (de, s) => new { de.d, de.e, s })
+  .GroupBy(x => x.d.name)
+  .Select(g => new {
+    name = g.Key,
+    employee_count = g.Select(x => x.e.id).Distinct().Count(),
+    avg_salary = g.Average(x => x.s.salary)
+  })
+  .OrderByDescending(x => x.avg_salary)
+  .Take(10)
+  .ToListAsync();
+```
+
+## Limitations and Notes
+
+1. **Code Generation**: Auto-generated code is a starting point. Review and test thoroughly before production use
+2. **Complex Queries**: Very complex queries may require manual refinement
+3. **Data Types**: Generated code assumes standard data types; may need adjustment for custom types
+4. **Error Handling**: Generated code includes basic patterns; enhance with your own error handling
+5. **Performance**: Generated code may not be optimal; consider indexes, query plans, and caching
+6. **ORM Differences**: Each ORM has unique features; generated code uses common patterns
+
+## Dependencies
+
+For generated code to work, you'll need:
+
+### C#
+- **EF Core**: `dotnet add package Microsoft.EntityFrameworkCore`
+- **Dapper**: `dotnet add package Dapper`
+- **Redis**: `dotnet add package StackExchange.Redis`
+- **Elasticsearch**: `dotnet add package Elasticsearch.Net` and `dotnet add package NEST`
+
+### TypeScript/Node.js
+- **Prisma**: `npm install @prisma/client`
+- **PostgreSQL**: `npm install pg`
+- **MySQL**: `npm install mysql2`
+- **Redis**: `npm install redis`
+- **Elasticsearch**: `npm install @elastic/elasticsearch`
+
+## Best Practices
+
+1. **Start Simple**: Begin with simple queries before using advanced features
+2. **Test Thoroughly**: Always test generated code in development first
+3. **Use Parameterized Queries**: Generated code uses parameters to prevent SQL injection
+4. **Monitor Performance**: Check query execution plans and optimize as needed
+5. **Keep Code DRY**: Use abstractions and helper methods for repeated patterns
+6. **Version Control**: Commit both queries and generated implementations
+
+## Troubleshooting
+
+### Redis Connection Issues
+- Check host, port, and password
+- Verify firewall allows connections
+- Test with `redis-cli`: `redis-cli -h host -p port -a password ping`
+
+### Elasticsearch Connection Issues
+- Verify cluster is running: `curl http://localhost:9200`
+- Check authentication credentials
+- Verify index pattern exists: `curl http://localhost:9200/_cat/indices`
+
+### Code Generation Issues
+- Ensure query syntax is valid for the database type
+- Check that table/field names are correct
+- For complex queries, you may need to refactor manually
+- Review the explanation section for additional notes

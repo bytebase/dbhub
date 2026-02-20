@@ -3,6 +3,9 @@ import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
+import { generateCodeSchema } from "../tools/generate-code.js";
+import { redisCommandSchema } from "../tools/redis-command-handler.js";
+import { elasticsearchSearchSchema } from "../tools/elasticsearch-search-handler.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -161,6 +164,46 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
 }
 
 /**
+ * Get redis_command tool metadata for a specific Redis source
+ */
+export function getRedisCommandMetadata(sourceId: string): { name: string; description: string; title: string } {
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const isSingleSource = sourceIds.length === 1;
+
+  const toolName = isSingleSource ? "redis_command" : `redis_command_${normalizeSourceId(sourceId)}`;
+  const title = isSingleSource ? "Execute Redis Command" : `Execute Redis Command on ${sourceId}`;
+  const description = isSingleSource
+    ? "Execute Redis commands (GET, SET, HGETALL, LPUSH, SADD, ZADD, etc.)"
+    : `Execute Redis commands on the '${sourceId}' Redis instance`;
+
+  return {
+    name: toolName,
+    description,
+    title,
+  };
+}
+
+/**
+ * Get elasticsearch_search tool metadata for a specific Elasticsearch source
+ */
+export function getElasticsearchSearchMetadata(sourceId: string): { name: string; description: string; title: string } {
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const isSingleSource = sourceIds.length === 1;
+
+  const toolName = isSingleSource ? "elasticsearch_search" : `elasticsearch_search_${normalizeSourceId(sourceId)}`;
+  const title = isSingleSource ? "Search Elasticsearch" : `Search Elasticsearch on ${sourceId}`;
+  const description = isSingleSource
+    ? "Execute Elasticsearch queries (search, aggregations) using JSON DSL"
+    : `Execute Elasticsearch queries on the '${sourceId}' cluster`;
+
+  return {
+    name: toolName,
+    description,
+    title,
+  };
+}
+
+/**
  * Convert custom tool parameter configs to Tool parameter format
  * @param params - Parameter configurations from custom tool
  * @returns Array of tool parameters
@@ -282,9 +325,72 @@ export function getToolsForSource(sourceId: string): Tool[] {
       return buildExecuteSqlTool(sourceId, toolConfig);
     } else if (toolConfig.name === "search_objects") {
       return buildSearchObjectsTool(sourceId);
+    } else if (toolConfig.name === "redis_command") {
+      return buildRedisCommandTool(sourceId);
+    } else if (toolConfig.name === "elasticsearch_search") {
+      return buildElasticsearchSearchTool(sourceId);
+    } else if (toolConfig.name === "generate_code") {
+      return buildGenerateCodeTool();
     } else {
       // Custom tool
       return buildCustomTool(toolConfig);
     }
   });
+}
+/**
+ * Build redis_command tool for API response
+ */
+function buildRedisCommandTool(sourceId: string): Tool {
+  const metadata = getRedisCommandMetadata(sourceId);
+  return {
+    name: metadata.name,
+    description: metadata.description,
+    parameters: zodToParameters(redisCommandSchema),
+  };
+}
+
+/**
+ * Build elasticsearch_search tool for API response
+ */
+function buildElasticsearchSearchTool(sourceId: string): Tool {
+  const metadata = getElasticsearchSearchMetadata(sourceId);
+  return {
+    name: metadata.name,
+    description: metadata.description,
+    parameters: zodToParameters(elasticsearchSearchSchema),
+  };
+}
+
+/**
+ * Get generate_code tool metadata
+ * Code generation is a global tool, not tied to a specific database source
+ */
+export function getGenerateCodeMetadata(): ToolMetadata {
+  const annotations = {
+    title: "Generate Code Implementation",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
+
+  return {
+    name: "generate_code",
+    description:
+      "Convert SQL, Redis, or Elasticsearch queries to equivalent C# and TypeScript code implementations with support for multiple ORMs (EF Core, Dapper, Prisma)",
+    schema: generateCodeSchema.shape,
+    annotations,
+  };
+}
+
+/**
+ * Build generate_code tool for API response
+ */
+function buildGenerateCodeTool(): Tool {
+  return {
+    name: "generate_code",
+    description:
+      "Convert queries to C# (EF Core, Dapper) and TypeScript (Prisma) implementations",
+    parameters: zodToParameters(generateCodeSchema.shape),
+  };
 }
