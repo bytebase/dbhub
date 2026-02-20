@@ -13,17 +13,26 @@ describe('JSON RPC Integration Tests', () => {
   beforeAll(async () => {
     // Create a temporary SQLite database file
     const tempDir = os.tmpdir();
-    testDbPath = path.join(tempDir, `json_rpc_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
+    const timestamp = Date.now();
+    testDbPath = path.join(tempDir, `json_rpc_test_${timestamp}_${Math.random().toString(36).substr(2, 9)}.db`);
     
+    // Create a temporary TOML config file to ensure we don't pick up the project's dbhub.toml
+    const tempConfigPath = path.join(tempDir, `dbhub_test_${timestamp}.toml`);
+    const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlite"
+database = "${testDbPath}"
+`;
+    fs.writeFileSync(tempConfigPath, tomlContent);
+
     baseUrl = `http://localhost:${testPort}`;
     
-    // Start the server as a child process
-    serverProcess = spawn('pnpm', ['dev'], {
+    // Start the server as a child process using tsx directly
+    // This avoids starting the frontend and ensures we use our temp config
+    serverProcess = spawn('npx', ['tsx', 'src/index.ts', '--transport=http', `--port=${testPort}`, `--config=${tempConfigPath}`], {
       env: {
         ...process.env,
-        DSN: `sqlite://${testDbPath}`,
-        TRANSPORT: 'http',
-        PORT: testPort.toString(),
         NODE_ENV: 'test'
       },
       stdio: 'pipe'

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { GenericContainer } from 'testcontainers';
+import { GenericContainer, Wait } from 'testcontainers';
 import { ElasticsearchConnector } from '../elasticsearch/index.js';
 import type { Connector } from '../interface.js';
 
@@ -16,32 +16,22 @@ class ElasticsearchIntegrationTest {
       .withEnvironment('xpack.security.enabled', 'false')
       .withEnvironment('ES_JAVA_OPTS', '-Xms512m -Xmx512m')
       .withExposedPorts(9200)
+      .withWaitStrategy(
+        Wait.forHttp('/_cluster/health?wait_for_status=yellow', 9200)
+          .forStatusCode(200)
+          .withStartupTimeout(120000)
+      )
       .start();
 
-    console.log('Container started, establishing connection...');
+    console.log('Container started, Elasticsearch is ready');
 
     const host = this.container.getHost();
     const port = this.container.getMappedPort(9200);
     this.connectionUri = `elasticsearch://${host}:${port}?index_pattern=test-*`;
 
-    // Wait for ES to be ready by retrying connection
-    let retries = 0;
-    while (retries < 30) {
-      try {
-        this.connector = new ElasticsearchConnector();
-        await this.connector.connect(this.connectionUri);
-        console.log('Connected to Elasticsearch');
-        break;
-      } catch (error) {
-        retries++;
-        if (retries < 30) {
-          console.log(`Waiting for Elasticsearch... (attempt ${retries}/30)`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } else {
-          throw new Error(`Failed to connect to Elasticsearch after 30 attempts: ${error}`);
-        }
-      }
-    }
+    this.connector = new ElasticsearchConnector();
+    await this.connector.connect(this.connectionUri);
+    console.log('Connected to Elasticsearch');
 
     await this.setupTestData();
     console.log('Test data setup complete');
@@ -57,11 +47,9 @@ class ElasticsearchIntegrationTest {
   }
 
   private async setupTestData(): Promise<void> {
-    // Create a test index with documents
     const testIndex = 'test-logs';
 
     try {
-      // Index some test documents
       const documents = [
         { timestamp: '2024-01-01', level: 'error', message: 'Database connection failed', service: 'api' },
         { timestamp: '2024-01-02', level: 'warn', message: 'High memory usage detected', service: 'worker' },
@@ -91,7 +79,7 @@ class ElasticsearchIntegrationTest {
     describe('Elasticsearch Connector Integration Tests', () => {
       beforeAll(async () => {
         await this.setup();
-      }, 300000);
+      }, 180000);
 
       afterAll(async () => {
         await this.cleanup();
@@ -140,7 +128,6 @@ class ElasticsearchIntegrationTest {
           expect(schema).toBeDefined();
           expect(Array.isArray(schema)).toBe(true);
 
-          // Verify properties returned
           const propertyNames = schema.map((col: any) => col.column_name);
           expect(propertyNames).toContain('level');
           expect(propertyNames).toContain('message');

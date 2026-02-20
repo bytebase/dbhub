@@ -451,7 +451,10 @@ export function buildDSNFromSource(source: SourceConfig): string {
         `Source '${source.id}': 'database' field is required for SQLite`
       );
     }
-    return `sqlite:///${source.database}`;
+    // If database path is absolute (starts with /), don't add an extra slash
+    // sqlite:///path/to/db (3 slashes) is the standard for absolute paths
+    const prefix = source.database.startsWith('/') ? 'sqlite://' : 'sqlite:///';
+    return `${prefix}${source.database}`;
   }
 
   // Handle Redis

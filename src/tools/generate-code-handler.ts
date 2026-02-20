@@ -14,10 +14,10 @@ import {
  * Create the tool handler for code generation
  */
 export function createGenerateCodeToolHandler() {
-  return async (request: CallToolRequest) => {
+  return async (args: any, extra: any) => {
     try {
       // Validate input
-      const params = generateCodeSchema.parse(request.input);
+      const params = generateCodeSchema.parse(args);
 
       // Generate code
       const result = generateCode(params);
