@@ -9,23 +9,12 @@ import {
   getEffectiveSourceId,
   trackToolRequest,
 } from "../utils/tool-handler-helpers.js";
+import { splitSQLStatements } from "../utils/sql-parser.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
   sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
 };
-
-/**
- * Split SQL string into individual statements, handling semicolons properly
- * @param sql The SQL string to split
- * @returns Array of individual SQL statements
- */
-function splitSQLStatements(sql: string): string[] {
-  // Split by semicolon and filter out empty statements
-  return sql.split(';')
-    .map(statement => statement.trim())
-    .filter(statement => statement.length > 0);
-}
 
 /**
  * Check if all SQL statements in a multi-statement query are read-only
@@ -34,7 +23,7 @@ function splitSQLStatements(sql: string): string[] {
  * @returns True if all statements are read-only
  */
 function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
-  const statements = splitSQLStatements(sql);
+  const statements = splitSQLStatements(sql, connectorType);
   return statements.every(statement => isReadOnlySQL(statement, connectorType));
 }
 

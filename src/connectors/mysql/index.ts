@@ -15,6 +15,7 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
+import { splitSQLStatements } from "../../utils/sql-parser.js";
 
 /**
  * MySQL DSN Parser
@@ -558,9 +559,7 @@ export class MySQLConnector implements Connector {
       let processedSQL = sql;
       if (options.maxRows) {
         // Handle multi-statement SQL by processing each statement individually
-        const statements = sql.split(';')
-          .map(statement => statement.trim())
-          .filter(statement => statement.length > 0);
+        const statements = splitSQLStatements(sql, "mysql");
 
         const processedStatements = statements.map(statement =>
           SQLRowLimiter.applyMaxRows(statement, options.maxRows)

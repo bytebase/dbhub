@@ -22,6 +22,7 @@ import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { splitSQLStatements } from "../../utils/sql-parser.js";
 
 /**
  * SQLite DSN Parser
@@ -387,9 +388,7 @@ export class SQLiteConnector implements Connector {
 
     try {
       // Check if this is a multi-statement query
-      const statements = sql.split(';')
-        .map(statement => statement.trim())
-        .filter(statement => statement.length > 0);
+      const statements = splitSQLStatements(sql, "sqlite");
 
       if (statements.length === 1) {
         // Single statement - determine if it returns data

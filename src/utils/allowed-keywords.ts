@@ -23,7 +23,7 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
   // Strip comments and strings before analyzing
-  const cleanedSQL = stripCommentsAndStrings(sql).trim().toLowerCase();
+  const cleanedSQL = stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase();
 
   // If the statement is empty after removing comments, consider it read-only
   if (!cleanedSQL) {
