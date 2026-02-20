@@ -67,7 +67,9 @@ function likePatternToRegex(pattern: string): RegExp {
 }
 
 /**
- * Get row count estimate for a table
+ * Get row count estimate for a table.
+ * Prefers the connector's native statistics-based method (e.g. pg_class.reltuples)
+ * when available, falling back to COUNT(*) for connectors that don't implement it.
  */
 async function getTableRowCount(
   connector: Connector,
@@ -75,7 +77,11 @@ async function getTableRowCount(
   schemaName?: string
 ): Promise<number | null> {
   try {
-    // Use proper identifier quoting to handle special characters and reserved keywords
+    if (connector.getTableRowCount) {
+      return await connector.getTableRowCount(tableName, schemaName);
+    }
+
+    // Fallback: COUNT(*) for connectors without a statistics-based implementation
     const qualifiedTable = quoteQualifiedIdentifier(tableName, schemaName, connector.id);
     const countQuery = `SELECT COUNT(*) as count FROM ${qualifiedTable}`;
     const result = await connector.executeSQL(countQuery, { maxRows: 1 });

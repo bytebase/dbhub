@@ -306,6 +306,36 @@ export class PostgresConnector implements Connector {
     }
   }
 
+  async getTableRowCount(tableName: string, schema?: string): Promise<number | null> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    const client = await this.pool.connect();
+    try {
+      const schemaToUse = schema || "public";
+
+      const result = await client.query(
+        `
+        SELECT c.reltuples::bigint as count
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = $1
+        AND n.nspname = $2
+      `,
+        [tableName, schemaToUse]
+      );
+
+      if (result.rows.length > 0) {
+        const count = Number(result.rows[0].count);
+        return count >= 0 ? count : null;
+      }
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
   async getStoredProcedures(schema?: string): Promise<string[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
