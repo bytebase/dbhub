@@ -5,14 +5,21 @@ import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
-import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
-import { SafeURL } from "../utils/safe-url.js";
+import {
+  BUILTIN_TOOLS,
+  BUILTIN_TOOL_EXECUTE_SQL,
+  BUILTIN_TOOL_SEARCH_OBJECTS,
+} from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
  * Returns the parsed sources array, tools array, and the source of the config file
  */
-export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig['tools']; source: string } | null {
+export function loadTomlConfig(): {
+  sources: SourceConfig[];
+  tools?: TomlConfig["tools"];
+  source: string;
+} | null {
   const configPath = resolveTomlConfigPath();
   if (!configPath) {
     return null;
@@ -41,9 +48,7 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     };
   } catch (error) {
     if (error instanceof Error) {
-      throw new Error(
-        `Failed to load TOML configuration from ${configPath}: ${error.message}`
-      );
+      throw new Error(`Failed to load TOML configuration from ${configPath}: ${error.message}`);
     }
     throw error;
   }
@@ -60,9 +65,7 @@ function resolveTomlConfigPath(): string | null {
   if (args.config) {
     const configPath = expandHomeDir(args.config);
     if (!fs.existsSync(configPath)) {
-      throw new Error(
-        `Configuration file specified by --config flag not found: ${configPath}`
-      );
+      throw new Error(`Configuration file specified by --config flag not found: ${configPath}`);
     }
     return configPath;
   }
@@ -147,9 +150,7 @@ function validateToolsConfig(
 
   for (const tool of tools) {
     if (!tool.name) {
-      throw new Error(
-        `Configuration file ${configPath}: all tools must have a 'name' field`
-      );
+      throw new Error(`Configuration file ${configPath}: all tools must have a 'name' field`);
     }
 
     if (!tool.source) {
@@ -269,11 +270,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate SSH port if provided
   if (source.ssh_port !== undefined) {
-    if (
-      typeof source.ssh_port !== "number" ||
-      source.ssh_port <= 0 ||
-      source.ssh_port > 65535
-    ) {
+    if (typeof source.ssh_port !== "number" || source.ssh_port <= 0 || source.ssh_port > 65535) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid ssh_port. ` +
           `Must be between 1 and 65535.`
@@ -368,10 +365,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 /**
  * Process source configurations (expand paths, populate fields from DSN)
  */
-function processSourceConfigs(
-  sources: SourceConfig[],
-  configPath: string
-): SourceConfig[] {
+function processSourceConfigs(sources: SourceConfig[], configPath: string): SourceConfig[] {
   return sources.map((source) => {
     const processed = { ...source };
 
@@ -433,33 +427,20 @@ function expandHomeDir(filePath: string): string {
  * Similar to buildDSNFromEnvParams in env.ts but for TOML sources
  */
 export function buildDSNFromSource(source: SourceConfig): string {
-  // If DSN is already provided, use it (but still apply search_path if set)
+  // If DSN is already provided, use it directly
   if (source.dsn) {
-    let dsn = source.dsn;
-    const isPostgres = source.type === 'postgres' || dsn.startsWith('postgres://') || dsn.startsWith('postgresql://');
-    if (isPostgres && source.search_path) {
-      const url = new SafeURL(dsn);
-      if (!url.getSearchParam('search_path')) {
-        const separator = dsn.includes('?') ? '&' : '?';
-        dsn += `${separator}search_path=${encodeURIComponent(source.search_path)}`;
-      }
-    }
-    return dsn;
+    return source.dsn;
   }
 
   // Validate required fields
   if (!source.type) {
-    throw new Error(
-      `Source '${source.id}': 'type' field is required when 'dsn' is not provided`
-    );
+    throw new Error(`Source '${source.id}': 'type' field is required when 'dsn' is not provided`);
   }
 
   // Handle SQLite
   if (source.type === "sqlite") {
     if (!source.database) {
-      throw new Error(
-        `Source '${source.id}': 'database' field is required for SQLite`
-      );
+      throw new Error(`Source '${source.id}': 'database' field is required for SQLite`);
     }
     return `sqlite:///${source.database}`;
   }
@@ -512,7 +493,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   // Add PostgreSQL-specific parameters
-  if (source.type === 'postgres') {
+  if (source.type === "postgres") {
     if (source.search_path) {
       queryParams.push(`search_path=${encodeURIComponent(source.search_path)}`);
     }
