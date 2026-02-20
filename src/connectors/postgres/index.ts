@@ -313,6 +313,8 @@ export class PostgresConnector implements Connector {
 
     const client = await this.pool.connect();
     try {
+      // In PostgreSQL, use 'public' as the default schema if none specified
+      // Tables are created in the 'public' schema by default unless otherwise specified
       const schemaToUse = schema || "public";
 
       const result = await client.query(
