@@ -23,7 +23,7 @@ export interface SSHConfig {
  * Database connection parameters (alternative to DSN)
  */
 export interface ConnectionParams {
-  type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+  type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "redis" | "elasticsearch";
   host?: string;
   port?: number;
   database?: string;
@@ -34,6 +34,8 @@ export interface ConnectionParams {
   // SQL Server authentication options
   authentication?: "ntlm" | "azure-active-directory-access-token";
   domain?: string; // Required for NTLM authentication
+  // Elasticsearch specific
+  index_pattern?: string; // Index pattern for Elasticsearch (e.g., "logs-*")
 }
 
 /**

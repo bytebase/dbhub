@@ -9,6 +9,28 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { validateParameters } from "../utils/parameter-mapper.js";
 
 /**
+ * Check if a connector type is SQL-based
+ * SQL databases support execute_sql and search_objects tools
+ */
+function isSqlDatabase(connectorType: string): boolean {
+  return ['postgres', 'mysql', 'mariadb', 'sqlite', 'sqlserver'].includes(connectorType);
+}
+
+/**
+ * Check if a connector type is Redis
+ */
+function isRedisDatabase(connectorType: string): boolean {
+  return connectorType === 'redis';
+}
+
+/**
+ * Check if a connector type is Elasticsearch
+ */
+function isElasticsearchDatabase(connectorType: string): boolean {
+  return connectorType === 'elasticsearch';
+}
+
+/**
  * Registry for managing tools across multiple database sources
  * Handles both built-in tools (execute_sql, search_objects) and custom tools
  */
@@ -181,16 +203,23 @@ export class ToolRegistry {
     }
 
     // Backward compatibility: sources without tools get default built-ins
+    // Note: Only add source-specific tools (execute_sql, search_objects), not global tools (generate_code)
+    // Connector-type aware: only add defaults for database types that support them
     for (const source of config.sources) {
       if (!registry.has(source.id)) {
-        const defaultTools: ToolConfig[] = BUILTIN_TOOLS.map((name) => {
-          // Create properly typed tool configs based on the tool name
-          if (name === 'execute_sql') {
-            return { name: 'execute_sql', source: source.id } satisfies ExecuteSqlToolConfig;
-          } else {
-            return { name: 'search_objects', source: source.id } satisfies SearchObjectsToolConfig;
-          }
-        });
+        const defaultTools: ToolConfig[] = [];
+        
+        // Only SQL databases get execute_sql and search_objects
+        // Non-SQL connectors (redis, elasticsearch) should define custom tools in TOML
+        if (isSqlDatabase(source.type)) {
+          defaultTools.push({ name: 'execute_sql', source: source.id } satisfies ExecuteSqlToolConfig);
+          defaultTools.push({ name: 'search_objects', source: source.id } satisfies SearchObjectsToolConfig);
+        } else if (isRedisDatabase(source.type)) {
+          defaultTools.push({ name: 'redis_command', source: source.id } as ToolConfig);
+        } else if (isElasticsearchDatabase(source.type)) {
+          defaultTools.push({ name: 'elasticsearch_search', source: source.id } as ToolConfig);
+        }
+        
         registry.set(source.id, defaultTools);
       }
     }
