@@ -264,6 +264,84 @@ describe('search_database_objects tool', () => {
     });
   });
 
+  describe('getTableRowCount dispatch', () => {
+    beforeEach(() => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+      ]);
+    });
+
+    it('should use connector.getTableRowCount when implemented instead of executeSQL', async () => {
+      // Add the optional method to the mock connector
+      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(42);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'users',
+        row_count: 42,
+      });
+      expect(mockConnector.getTableRowCount).toHaveBeenCalledWith('users', 'public');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to executeSQL with COUNT(*) when connector lacks getTableRowCount', async () => {
+      // Default mock connector does not have getTableRowCount
+      delete (mockConnector as any).getTableRowCount;
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 99 }] });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'users',
+        row_count: 99,
+      });
+      expect(mockConnector.executeSQL).toHaveBeenCalled();
+    });
+
+    it('should return row_count null when connector.getTableRowCount returns null without falling back to executeSQL', async () => {
+      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(null);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.results[0].row_count).toBeNull();
+      expect(mockConnector.getTableRowCount).toHaveBeenCalledWith('users', 'public');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+  });
+
   describe('search columns', () => {
     beforeEach(() => {
       vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
