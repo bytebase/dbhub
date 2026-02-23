@@ -11,7 +11,7 @@ import {
 /**
  * Object types that can be searched
  */
-export type DatabaseObjectType = "schema" | "table" | "column" | "procedure" | "index";
+export type DatabaseObjectType = "schema" | "table" | "column" | "procedure" | "function" | "index";
 
 /**
  * Detail level for search results
@@ -24,7 +24,7 @@ export type DetailLevel = "names" | "summary" | "full";
 // Schema for search_objects tool (unified search and list)
 export const searchDatabaseObjectsSchema = {
   object_type: z
-    .enum(["schema", "table", "column", "procedure", "index"])
+    .enum(["schema", "table", "column", "procedure", "function", "index"])
     .describe("Object type to search"),
   pattern: z
     .string()
@@ -338,14 +338,17 @@ async function searchColumns(
 }
 
 /**
- * Search for stored procedures
+ * Search for stored procedures and/or functions
+ * @param routineType Optional filter: "procedure" for procedures only, "function" for functions only.
+ *   If not provided, returns both.
  */
 async function searchProcedures(
   connector: Connector,
   pattern: string,
   schemaFilter: string | undefined,
   detailLevel: DetailLevel,
-  limit: number
+  limit: number,
+  routineType?: "procedure" | "function"
 ): Promise<any[]> {
   const regex = likePatternToRegex(pattern);
   const results: any[] = [];
@@ -358,12 +361,12 @@ async function searchProcedures(
     schemasToSearch = await connector.getSchemas();
   }
 
-  // Search procedures in each schema
+  // Search procedures/functions in each schema
   for (const schemaName of schemasToSearch) {
     if (results.length >= limit) break;
 
     try {
-      const procedures = await connector.getStoredProcedures(schemaName);
+      const procedures = await connector.getStoredProcedures(schemaName, routineType);
       const matched = procedures.filter((proc: string) => regex.test(proc));
 
       for (const procName of matched) {
@@ -556,7 +559,10 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
           results = await searchColumns(connector, pattern, schema, table, detail_level, limit);
           break;
         case "procedure":
-          results = await searchProcedures(connector, pattern, schema, detail_level, limit);
+          results = await searchProcedures(connector, pattern, schema, detail_level, limit, "procedure");
+          break;
+        case "function":
+          results = await searchProcedures(connector, pattern, schema, detail_level, limit, "function");
           break;
         case "index":
           results = await searchIndexes(connector, pattern, schema, table, detail_level, limit);

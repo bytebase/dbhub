@@ -426,7 +426,7 @@ export class SQLServerConnector implements Connector {
     }
   }
 
-  async getStoredProcedures(schema?: string): Promise<string[]> {
+  async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
     if (!this.connection) {
       throw new Error("Not connected to SQL Server database");
     }
@@ -437,11 +437,21 @@ export class SQLServerConnector implements Connector {
 
       const request = this.connection.request().input("schema", sql.VarChar, schemaToUse);
 
+      // Build routine type filter
+      let typeFilter: string;
+      if (routineType === "function") {
+        typeFilter = "AND ROUTINE_TYPE = 'FUNCTION'";
+      } else if (routineType === "procedure") {
+        typeFilter = "AND ROUTINE_TYPE = 'PROCEDURE'";
+      } else {
+        typeFilter = "AND (ROUTINE_TYPE = 'PROCEDURE' OR ROUTINE_TYPE = 'FUNCTION')";
+      }
+
       const query = `
           SELECT ROUTINE_NAME
           FROM INFORMATION_SCHEMA.ROUTINES
           WHERE ROUTINE_SCHEMA = @schema
-            AND (ROUTINE_TYPE = 'PROCEDURE' OR ROUTINE_TYPE = 'FUNCTION')
+            ${typeFilter}
           ORDER BY ROUTINE_NAME
       `;
 

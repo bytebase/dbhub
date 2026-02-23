@@ -525,6 +525,8 @@ describe('search_database_objects tool', () => {
         'get_user',
         'get_users_by_email',
       ]);
+      // Verify routineType filter is passed to connector
+      expect(mockConnector.getStoredProcedures).toHaveBeenCalledWith('public', 'procedure');
     });
 
     it('should return procedure details in summary level', async () => {
@@ -553,6 +555,117 @@ describe('search_database_objects tool', () => {
         type: 'function',
         return_type: 'TABLE',
       });
+    });
+  });
+
+  describe('search functions', () => {
+    beforeEach(() => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      vi.mocked(mockConnector.getStoredProcedures).mockResolvedValue([
+        'calc_total',
+        'get_user_name',
+      ]);
+    });
+
+    it('should search functions with pattern', async () => {
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: '%',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.object_type).toBe('function');
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual([
+        'calc_total',
+        'get_user_name',
+      ]);
+      // Verify routineType filter is passed to connector
+      expect(mockConnector.getStoredProcedures).toHaveBeenCalledWith('public', 'function');
+    });
+
+    it('should return function details in summary level', async () => {
+      vi.mocked(mockConnector.getStoredProcedureDetail).mockResolvedValue({
+        procedure_name: 'calc_total',
+        procedure_type: 'function',
+        language: 'plpgsql',
+        parameter_list: 'order_id INTEGER',
+        return_type: 'NUMERIC',
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'calc_total',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'calc_total',
+        schema: 'public',
+        type: 'function',
+        language: 'plpgsql',
+        return_type: 'NUMERIC',
+      });
+    });
+
+    it('should return function details in full level with definition', async () => {
+      vi.mocked(mockConnector.getStoredProcedureDetail).mockResolvedValue({
+        procedure_name: 'calc_total',
+        procedure_type: 'function',
+        language: 'plpgsql',
+        parameter_list: 'order_id INTEGER',
+        return_type: 'NUMERIC',
+        definition: 'BEGIN RETURN 42; END;',
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: 'calc_total',
+          detail_level: 'full',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'calc_total',
+        schema: 'public',
+        type: 'function',
+        parameters: 'order_id INTEGER',
+        definition: 'BEGIN RETURN 42; END;',
+      });
+    });
+
+    it('should reject table parameter for function object type', async () => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'function',
+          pattern: '%',
+          schema: 'public',
+          table: 'users',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      expect(result.isError).toBe(true);
+      const parsed = parseToolResponse(result);
+      expect(parsed.code).toBe('INVALID_TABLE_FILTER');
     });
   });
 
