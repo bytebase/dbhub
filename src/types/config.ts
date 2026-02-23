@@ -34,6 +34,8 @@ export interface ConnectionParams {
   // SQL Server authentication options
   authentication?: "ntlm" | "azure-active-directory-access-token";
   domain?: string; // Required for NTLM authentication
+  // PostgreSQL-specific options
+  search_path?: string; // Schema search path (e.g., "myschema" or "myschema,public")
 }
 
 /**
