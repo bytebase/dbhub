@@ -485,21 +485,29 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     sources.push("SSH_PROXY_JUMP from environment");
   }
 
+  const parseNonNegativeInteger = (value: string, name: string): number => {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      throw new Error(`Invalid value for ${name}: "${value}". Expected a non-negative integer.`);
+    }
+    return parsed;
+  };
+
   // SSH Keepalive Interval (optional) - seconds between keepalive packets
   if (args["ssh-keepalive-interval"]) {
-    config.keepaliveInterval = parseInt(args["ssh-keepalive-interval"], 10);
+    config.keepaliveInterval = parseNonNegativeInteger(args["ssh-keepalive-interval"], "ssh-keepalive-interval");
     sources.push("ssh-keepalive-interval from command line");
   } else if (process.env.SSH_KEEPALIVE_INTERVAL) {
-    config.keepaliveInterval = parseInt(process.env.SSH_KEEPALIVE_INTERVAL, 10);
+    config.keepaliveInterval = parseNonNegativeInteger(process.env.SSH_KEEPALIVE_INTERVAL, "SSH_KEEPALIVE_INTERVAL");
     sources.push("SSH_KEEPALIVE_INTERVAL from environment");
   }
 
   // SSH Keepalive Count Max (optional) - max missed keepalive responses
   if (args["ssh-keepalive-count-max"]) {
-    config.keepaliveCountMax = parseInt(args["ssh-keepalive-count-max"], 10);
+    config.keepaliveCountMax = parseNonNegativeInteger(args["ssh-keepalive-count-max"], "ssh-keepalive-count-max");
     sources.push("ssh-keepalive-count-max from command line");
   } else if (process.env.SSH_KEEPALIVE_COUNT_MAX) {
-    config.keepaliveCountMax = parseInt(process.env.SSH_KEEPALIVE_COUNT_MAX, 10);
+    config.keepaliveCountMax = parseNonNegativeInteger(process.env.SSH_KEEPALIVE_COUNT_MAX, "SSH_KEEPALIVE_COUNT_MAX");
     sources.push("SSH_KEEPALIVE_COUNT_MAX from environment");
   }
 
