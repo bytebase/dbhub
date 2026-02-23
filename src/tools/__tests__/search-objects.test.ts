@@ -262,6 +262,90 @@ describe('search_database_objects tool', () => {
         ],
       });
     });
+
+    it('should include table comment in summary when getTableComment returns a value', async () => {
+      const mockColumns: TableColumn[] = [
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+      ];
+
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 10 }] });
+      mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0].comment).toBe('Application users');
+    });
+
+    it('should omit table comment in summary when getTableComment returns null', async () => {
+      const mockColumns: TableColumn[] = [
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+      ];
+
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 10 }] });
+      mockConnector.getTableComment = vi.fn().mockResolvedValue(null);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0].comment).toBeUndefined();
+    });
+
+    it('should include column descriptions in full detail when present', async () => {
+      const mockColumns: TableColumn[] = [
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: 'Full name of the user' },
+        { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: 'Unique email address' },
+      ];
+
+      const mockIndexes: TableIndex[] = [];
+
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
+      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue(mockIndexes);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 50 }] });
+      mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'table',
+          pattern: 'users',
+          detail_level: 'full',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      const tableResult = parsed.data.results[0];
+
+      // Table comment should be present
+      expect(tableResult.comment).toBe('Application users');
+
+      // Column without description should not have the field
+      expect(tableResult.columns[0].description).toBeUndefined();
+
+      // Columns with descriptions should include them
+      expect(tableResult.columns[1].description).toBe('Full name of the user');
+      expect(tableResult.columns[2].description).toBe('Unique email address');
+    });
   });
 
   describe('getTableRowCount dispatch', () => {

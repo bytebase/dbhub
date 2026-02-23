@@ -274,17 +274,15 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
       if (this.config.supportsComments) {
         it('should return table comment via getTableComment', async () => {
-          if (this.connector.getTableComment) {
-            const comment = await this.connector.getTableComment('users');
-            expect(comment).toBe('Application users');
-          }
+          expect(this.connector.getTableComment).toBeDefined();
+          const comment = await this.connector.getTableComment!('users');
+          expect(comment).toBe('Application users');
         });
 
         it('should return null for table without comment', async () => {
-          if (this.connector.getTableComment) {
-            const comment = await this.connector.getTableComment('orders');
-            expect(comment).toBeNull();
-          }
+          expect(this.connector.getTableComment).toBeDefined();
+          const comment = await this.connector.getTableComment!('orders');
+          expect(comment).toBeNull();
         });
       }
     });
