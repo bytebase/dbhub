@@ -94,7 +94,9 @@ export class SSHTunnel {
           privateKey,
           targetConfig.passphrase,
           previousStream,
-          `jump host ${i + 1}`
+          `jump host ${i + 1}`,
+          targetConfig.keepaliveInterval,
+          targetConfig.keepaliveCountMax
         );
 
         // Forward to the next host
@@ -126,7 +128,9 @@ export class SSHTunnel {
       privateKey,
       targetConfig.passphrase,
       previousStream,
-      jumpHosts.length > 0 ? 'target host' : undefined
+      jumpHosts.length > 0 ? 'target host' : undefined,
+      targetConfig.keepaliveInterval,
+      targetConfig.keepaliveCountMax
     );
 
     this.sshClients.push(finalClient);
@@ -142,7 +146,9 @@ export class SSHTunnel {
     privateKey: Buffer | undefined,
     passphrase: string | undefined,
     sock: Duplex | undefined,
-    label: string | undefined
+    label: string | undefined,
+    keepaliveInterval?: number,
+    keepaliveCountMax?: number
   ): Promise<Client> {
     return new Promise((resolve, reject) => {
       const client = new Client();
@@ -164,6 +170,10 @@ export class SSHTunnel {
       }
       if (sock) {
         sshConfig.sock = sock;
+      }
+      if (keepaliveInterval !== undefined && keepaliveInterval > 0) {
+        sshConfig.keepaliveInterval = keepaliveInterval * 1000; // Convert seconds to milliseconds
+        sshConfig.keepaliveCountMax = keepaliveCountMax ?? 3;
       }
 
       const onError = (err: Error) => {

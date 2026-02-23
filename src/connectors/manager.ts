@@ -157,6 +157,8 @@ export class ConnectorManager {
         privateKey: source.ssh_key,
         passphrase: source.ssh_passphrase,
         proxyJump: source.ssh_proxy_jump,
+        keepaliveInterval: source.ssh_keepalive_interval,
+        keepaliveCountMax: source.ssh_keepalive_count_max,
       };
 
       // Validate SSH auth

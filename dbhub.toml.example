@@ -56,6 +56,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # ssh_user = "deploy"
 # ssh_key = "~/.ssh/id_ed25519"
 # # ssh_passphrase = "your_key_passphrase"  # If key is encrypted
+# # ssh_keepalive_interval = 60  # Send keepalive every 60 seconds to prevent idle disconnects
+# # ssh_keepalive_count_max = 3  # Disconnect after 3 missed responses
 
 # Production PostgreSQL (multi-hop SSH through multiple jump hosts)
 # [[sources]]
@@ -279,6 +281,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_key (path to private key) OR ssh_password
 #   ssh_passphrase (if key is encrypted)
 #   ssh_proxy_jump (ProxyJump for multi-hop: "jump1.com,user@jump2.com:2222")
+#   ssh_keepalive_interval (seconds between keepalive packets, default: 0 = disabled)
+#   ssh_keepalive_count_max (max missed keepalive responses, default: 3)
 #
 # SSL Mode (for network databases, not SQLite):
 #   sslmode = "disable"   # No SSL

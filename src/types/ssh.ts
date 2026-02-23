@@ -28,6 +28,12 @@ export interface SSHTunnelConfig {
    * Each host can include optional user and port: "user@host:port"
    */
   proxyJump?: string;
+
+  /** Interval in seconds between keepalive packets sent to the SSH server (default: 0 = disabled) */
+  keepaliveInterval?: number;
+
+  /** Maximum number of missed keepalive responses before disconnecting (default: 3) */
+  keepaliveCountMax?: number;
 }
 
 /**
