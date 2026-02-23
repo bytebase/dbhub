@@ -32,6 +32,12 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # password = "p@ss:word/123"
 # sslmode = "disable"  # Optional: "disable" or "require"
 
+# Local PostgreSQL with custom schema (non-public schema)
+# [[sources]]
+# id = "local_pg_custom_schema"
+# dsn = "postgres://postgres:postgres@localhost:5432/myapp"
+# search_path = "myschema,public"  # Comma-separated list of schemas; first is the default for discovery
+
 # Development PostgreSQL (shared dev server)
 # [[sources]]
 # id = "dev_pg"
@@ -256,6 +262,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   description = "..."        # Optional: human-readable description
 #   dsn = "..."                # Connection string (or use individual params below)
 #   lazy = true                # Defer connection until first query (default: false)
+#   search_path = "schema1,public"  # PostgreSQL only: comma-separated schemas
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require

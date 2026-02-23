@@ -66,7 +66,12 @@ export interface ConnectorConfig {
    * Note: Application-level validation is done via ExecuteOptions.readonly
    */
   readonly?: boolean;
-  // Future database-specific options can be added here as optional fields
+  /**
+   * PostgreSQL search_path setting.
+   * Comma-separated list of schema names (e.g., "myschema,public").
+   * Sets the session search_path and uses the first schema as default for discovery methods.
+   */
+  searchPath?: string;
 }
 
 /**

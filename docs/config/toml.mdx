@@ -281,6 +281,27 @@ Sources define database connections. Each source represents a database that DBHu
   ```
 </ParamField>
 
+### search_path
+
+<ParamField path="search_path" type="string">
+  Comma-separated list of PostgreSQL schema names to set as the session `search_path`. The first schema in the list becomes the default schema for all discovery methods (`getTables`, `getTableSchema`, etc.).
+
+  **PostgreSQL only.**
+
+  ```toml
+  [[sources]]
+  id = "production"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+  search_path = "myschema,public"
+  ```
+
+  Without `search_path`, DBHub defaults to the `public` schema for all schema discovery operations.
+
+  <Note>
+  This option is **only available via TOML**. It is not supported as a DSN query parameter.
+  </Note>
+</ParamField>
+
 ### SSH Tunnel Options
 
 <ParamField path="ssh_*" type="group">
@@ -575,6 +596,7 @@ default = 10
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |
+| `search_path` | string | ❌ | PostgreSQL schema search path (comma-separated) |
 | `ssh_host` | string | ❌ | SSH server hostname |
 | `ssh_port` | number | ❌ | SSH server port (default: 22) |
 | `ssh_user` | string | ❌ | SSH username |
