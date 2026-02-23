@@ -7,7 +7,7 @@ description: Use when given a GitHub issue URL or number to investigate and impl
 
 ## Overview
 
-Systematic workflow for turning a GitHub issue into a working fix: fetch context, reproduce, locate root cause, plan fix, implement, verify.
+Systematic workflow for turning a GitHub issue into a working fix: fetch context, reproduce, locate root cause, plan fix, implement, verify, and create a PR.
 
 ## Workflow
 
@@ -23,8 +23,9 @@ digraph fix_bug {
     plan [label="5. Plan the fix\n(EnterPlanMode for non-trivial)"];
     implement [label="6. Implement fix"];
     verify [label="7. Verify fix\n(run tests, check repro)"];
+    pr [label="8. Create PR\n(commit, push, gh pr create)"];
 
-    fetch -> analyze -> locate -> reproduce -> plan -> implement -> verify;
+    fetch -> analyze -> locate -> reproduce -> plan -> implement -> verify -> pr;
 }
 ```
 
@@ -85,6 +86,50 @@ For simple fixes (single function, clear root cause): proceed directly.
 - Run existing tests: ensure no regressions
 - Run new test (if written in step 4): confirm it passes
 - Review the diff: does it address the issue fully?
+
+### 8. Create PR
+
+Once the fix is verified:
+
+1. **Create a branch** (if not already on one):
+   ```bash
+   git checkout -b fix/issue-123
+   ```
+
+2. **Commit changes** with a descriptive message referencing the issue:
+   ```bash
+   git add <changed-files>
+   git commit -m "Fix: <short description>
+
+   Closes #123"
+   ```
+
+3. **Push and create the PR**:
+   ```bash
+   git push -u origin fix/issue-123
+   gh pr create --title "Fix: <short description>" --body "$(cat <<'EOF'
+   ## Summary
+   <What was broken and how this fixes it>
+
+   ## Changes
+   <Bullet list of changes>
+
+   Closes #123
+
+   ## Test plan
+   - [ ] Existing tests pass
+   - [ ] New test covers the bug scenario (if applicable)
+   EOF
+   )"
+   ```
+
+4. **Return the PR URL** to the user.
+
+Key points:
+- Reference the issue number with `Closes #N` so it auto-closes on merge
+- Keep the PR title concise (under 70 characters)
+- Include a test plan in the PR body
+- If the issue is from another repo, link it manually in the body
 
 ## Parsing Issue References
 
