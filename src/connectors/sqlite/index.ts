@@ -345,7 +345,7 @@ export class SQLiteConnector implements Connector {
     }
   }
 
-  async getStoredProcedures(schema?: string): Promise<string[]> {
+  async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");
     }
@@ -360,7 +360,7 @@ export class SQLiteConnector implements Connector {
     // 2. User-defined functions cannot be listed via SQL queries
     // 3. We don't want to misrepresent triggers as stored procedures
 
-    return [];
+    return []; // routineType parameter accepted but ignored for SQLite
   }
 
   async getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure> {

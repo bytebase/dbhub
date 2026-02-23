@@ -2,11 +2,11 @@
 title: "search_objects"
 ---
 
-Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching. This unified tool supports both targeted searches and browsing all objects, implementing progressive disclosure to minimize token usage.
+Search and list database objects (schemas, tables, columns, procedures, functions, indexes) with pattern matching. This unified tool supports both targeted searches and browsing all objects, implementing progressive disclosure to minimize token usage.
 
 ## Parameters
 
-- `object_type` (required): Type of object to search - `"schema"`, `"table"`, `"column"`, `"procedure"`, or `"index"`
+- `object_type` (required): Type of object to search - `"schema"`, `"table"`, `"column"`, `"procedure"`, `"function"`, or `"index"`
 - `pattern` (optional): Search pattern using SQL LIKE syntax (`%` for wildcard, `_` for single character). Defaults to `"%"` (match all)
 - `schema` (optional): Filter results to a specific schema
 - `detail_level` (optional): Level of detail - `"names"` (default), `"summary"`, or `"full"`
@@ -117,6 +117,14 @@ Search and list database objects (schemas, tables, columns, procedures, indexes)
 ```json List all schemas with metadata
 {
   "object_type": "schema",
+  "detail_level": "summary"
+}
+```
+
+```json Search for functions
+{
+  "object_type": "function",
+  "pattern": "calc%",
   "detail_level": "summary"
 }
 ```

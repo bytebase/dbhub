@@ -150,8 +150,8 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
     ? `Search Database Objects (${dbType})`
     : `Search Database Objects on ${sourceId} (${dbType})`;
   const description = isSingleSource
-    ? `Search and list database objects (schemas, tables, columns, procedures, indexes) on the ${dbType} database`
-    : `Search and list database objects (schemas, tables, columns, procedures, indexes) on the '${sourceId}' ${dbType} database`;
+    ? `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
+    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,

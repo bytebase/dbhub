@@ -395,7 +395,7 @@ export class PostgresConnector implements Connector {
     }
   }
 
-  async getStoredProcedures(schema?: string): Promise<string[]> {
+  async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -405,16 +405,25 @@ export class PostgresConnector implements Connector {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
 
-      // Get stored procedures and functions from PostgreSQL
+      // Build query with optional routine type filter
+      const params: string[] = [schemaToUse];
+      let typeFilter = "";
+      if (routineType === "function") {
+        typeFilter = " AND routine_type = 'FUNCTION'";
+      } else if (routineType === "procedure") {
+        typeFilter = " AND routine_type = 'PROCEDURE'";
+      }
+
+      // Get stored procedures and/or functions from PostgreSQL
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           routine_name
         FROM information_schema.routines
-        WHERE routine_schema = $1
+        WHERE routine_schema = $1${typeFilter}
         ORDER BY routine_name
       `,
-        [schemaToUse]
+        params
       );
 
       return result.rows.map((row) => row.routine_name);

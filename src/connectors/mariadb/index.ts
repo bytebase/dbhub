@@ -370,7 +370,7 @@ export class MariaDBConnector implements Connector {
     }
   }
 
-  async getStoredProcedures(schema?: string): Promise<string[]> {
+  async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -381,14 +381,22 @@ export class MariaDBConnector implements Connector {
         ? "WHERE ROUTINE_SCHEMA = ?"
         : "WHERE ROUTINE_SCHEMA = DATABASE()";
 
-      const queryParams = schema ? [schema] : [];
+      const queryParams: string[] = schema ? [schema] : [];
 
-      // Get all stored procedures and functions
+      // Build optional routine type filter
+      let typeFilter = "";
+      if (routineType === "function") {
+        typeFilter = " AND ROUTINE_TYPE = 'FUNCTION'";
+      } else if (routineType === "procedure") {
+        typeFilter = " AND ROUTINE_TYPE = 'PROCEDURE'";
+      }
+
+      // Get stored procedures and/or functions
       const rows = await this.pool.query(
         `
         SELECT ROUTINE_NAME
         FROM INFORMATION_SCHEMA.ROUTINES
-        ${schemaClause}
+        ${schemaClause}${typeFilter}
         ORDER BY ROUTINE_NAME
       `,
         queryParams

@@ -172,9 +172,11 @@ export interface Connector {
   /**
    * Get stored procedures/functions in the database or in a specific schema
    * @param schema Optional schema name. If not provided, implementation should use the default schema
+   * @param routineType Optional filter: "procedure" for procedures only, "function" for functions only.
+   *   If not provided, returns both procedures and functions.
    * @returns Promise with array of stored procedure/function names
    */
-  getStoredProcedures(schema?: string): Promise<string[]>;
+  getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]>;
 
   /**
    * Get details for a specific stored procedure/function
