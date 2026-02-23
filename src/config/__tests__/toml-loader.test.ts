@@ -737,6 +737,77 @@ query_timeout = 120
         expect(result?.sources[0].query_timeout).toBe(120);
       });
     });
+
+    describe('search_path validation', () => {
+      it('should accept search_path for PostgreSQL source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+search_path = "myschema,public"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].search_path).toBe('myschema,public');
+      });
+
+      it('should accept single schema in search_path', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+search_path = "myschema"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].search_path).toBe('myschema');
+      });
+
+      it('should throw error when search_path is used with non-PostgreSQL source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+search_path = "myschema"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for PostgreSQL');
+      });
+
+      it('should throw error when search_path is used with SQLite', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlite"
+database = "/path/to/database.db"
+search_path = "myschema"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for PostgreSQL');
+      });
+
+      it('should work without search_path (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].search_path).toBeUndefined();
+      });
+    });
   });
 
   describe('buildDSNFromSource', () => {

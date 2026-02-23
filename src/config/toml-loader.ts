@@ -349,6 +349,22 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate search_path (PostgreSQL only)
+  if (source.search_path !== undefined) {
+    if (source.type !== "postgres") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'search_path' but it is only supported for PostgreSQL sources.`
+      );
+    }
+    if (typeof source.search_path !== "string" || source.search_path.trim().length === 0) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid search_path. ` +
+          `Must be a non-empty string of comma-separated schema names (e.g., "myschema,public").`
+      );
+    }
+
+  }
+
   // Reject readonly and max_rows at source level (they should be set on tools instead)
   if ((source as any).readonly !== undefined) {
     throw new Error(
