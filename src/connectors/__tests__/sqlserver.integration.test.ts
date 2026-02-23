@@ -36,7 +36,8 @@ class SQLServerIntegrationTest extends IntegrationTestBase<SQLServerTestContaine
       expectedSchemas: ['dbo', 'INFORMATION_SCHEMA'],
       expectedTables: ['users', 'orders', 'products'],
       supportsStoredProcedures: true,
-      expectedStoredProcedures: ['GetUserCount', 'CalculateTotalAge']
+      expectedStoredProcedures: ['GetUserCount', 'CalculateTotalAge'],
+      supportsComments: true,
     };
     super(config);
   }
@@ -85,9 +86,34 @@ class SQLServerIntegrationTest extends IntegrationTestBase<SQLServerTestContaine
       )
     `, {});
 
+    // Add table and column comments via extended properties
+    await connector.executeSQL(`
+      EXEC sp_addextendedproperty
+        @name = N'MS_Description',
+        @value = N'Application users',
+        @level0type = N'SCHEMA', @level0name = N'dbo',
+        @level1type = N'TABLE',  @level1name = N'users'
+    `, {});
+    await connector.executeSQL(`
+      EXEC sp_addextendedproperty
+        @name = N'MS_Description',
+        @value = N'Full name of the user',
+        @level0type = N'SCHEMA', @level0name = N'dbo',
+        @level1type = N'TABLE',  @level1name = N'users',
+        @level2type = N'COLUMN', @level2name = N'name'
+    `, {});
+    await connector.executeSQL(`
+      EXEC sp_addextendedproperty
+        @name = N'MS_Description',
+        @value = N'Unique email address',
+        @level0type = N'SCHEMA', @level0name = N'dbo',
+        @level1type = N'TABLE',  @level1name = N'users',
+        @level2type = N'COLUMN', @level2name = N'email'
+    `, {});
+
     // Insert test data
     await connector.executeSQL(`
-      INSERT INTO users (name, email, age) VALUES 
+      INSERT INTO users (name, email, age) VALUES
       ('John Doe', 'john@example.com', 30),
       ('Jane Smith', 'jane@example.com', 25),
       ('Bob Johnson', 'bob@example.com', 35)

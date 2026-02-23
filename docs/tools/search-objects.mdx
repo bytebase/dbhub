@@ -48,7 +48,8 @@ Search and list database objects (schemas, tables, columns, procedures, indexes)
       "name": "users",
       "schema": "public",
       "column_count": 8,
-      "row_count": 1523
+      "row_count": 1523,
+      "comment": "Application users"
     }
   ]
 }
@@ -61,7 +62,27 @@ Search and list database objects (schemas, tables, columns, procedures, indexes)
   "detail_level": "full"
 }
 
-// Returns complete table structure with all columns and indexes
+// Returns complete table structure with columns, indexes, and comments:
+{
+  "count": 1,
+  "results": [
+    {
+      "name": "users",
+      "schema": "public",
+      "column_count": 3,
+      "row_count": 1523,
+      "comment": "Application users",
+      "columns": [
+        { "name": "id", "type": "integer", "nullable": false, "default": null },
+        { "name": "name", "type": "varchar", "nullable": false, "default": null, "description": "Full name of the user" },
+        { "name": "email", "type": "varchar", "nullable": false, "default": null, "description": "Unique email address" }
+      ],
+      "indexes": [
+        { "name": "users_pkey", "columns": ["id"], "unique": true, "primary": true }
+      ]
+    }
+  ]
+}
 ```
 </CodeGroup>
 
@@ -128,6 +149,22 @@ This tool can reduce token usage by 90-99% compared to listing all objects:
 <Tip>
 Always start with `detail_level: "names"` and only request `"summary"` or `"full"` when you need additional information. This minimizes token usage while exploring the database.
 </Tip>
+
+## Table and Column Comments
+
+When using `detail_level: "summary"` or `"full"`, the tool includes database comments/descriptions if they exist. This helps LLMs understand the purpose of tables and columns, especially in complex or legacy databases.
+
+- **Table comments** appear as the `comment` field on table results (summary and full levels)
+- **Column descriptions** appear as the `description` field on each column (full level only)
+- Fields are omitted when no comment is set, keeping responses token-efficient
+
+| Database   | Table Comments | Column Comments |
+|------------|---------------|-----------------|
+| PostgreSQL | `COMMENT ON TABLE` | `COMMENT ON COLUMN` |
+| MySQL      | `ALTER TABLE ... COMMENT` | `ALTER TABLE ... MODIFY COLUMN ... COMMENT` |
+| MariaDB    | `ALTER TABLE ... COMMENT` | `ALTER TABLE ... MODIFY COLUMN ... COMMENT` |
+| SQL Server | `sp_addextendedproperty` (MS_Description) | `sp_addextendedproperty` (MS_Description) |
+| SQLite     | Not supported | Not supported |
 
 ## Usage Patterns
 

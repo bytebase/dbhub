@@ -21,7 +21,8 @@ class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
     const config: DatabaseTestConfig = {
       expectedSchemas: ['testdb', 'information_schema'],
       expectedTables: ['users', 'orders', 'products'],
-      supportsStoredProcedures: false // Disabled due to container privilege restrictions
+      supportsStoredProcedures: false, // Disabled due to container privilege restrictions
+      supportsComments: true,
     };
     super(config);
   }
@@ -121,9 +122,14 @@ class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
       )
     `, {});
 
+    // Add table and column comments
+    await connector.executeSQL(`ALTER TABLE users COMMENT = 'Application users'`, {});
+    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT 'Full name of the user'`, {});
+    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN email VARCHAR(100) UNIQUE NOT NULL COMMENT 'Unique email address'`, {});
+
     // Insert test data
     await connector.executeSQL(`
-      INSERT IGNORE INTO users (name, email, age) VALUES 
+      INSERT IGNORE INTO users (name, email, age) VALUES
       ('John Doe', 'john@example.com', 30),
       ('Jane Smith', 'jane@example.com', 25),
       ('Bob Johnson', 'bob@example.com', 35)

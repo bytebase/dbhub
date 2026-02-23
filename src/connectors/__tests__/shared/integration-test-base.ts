@@ -8,6 +8,7 @@ export interface DatabaseTestConfig {
   testSchema?: string;
   supportsStoredProcedures?: boolean;
   expectedStoredProcedures?: string[];
+  supportsComments?: boolean;
 }
 
 export interface TestContainer {
@@ -84,11 +85,13 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
       this.createSchemaTests();
       this.createTableTests();
       this.createSQLExecutionTests();
-      
+
       if (this.config.supportsStoredProcedures) {
         this.createStoredProcedureTests();
       }
-      
+
+      this.createCommentTests();
+
       this.createErrorHandlingTests();
     });
   }
@@ -234,6 +237,52 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
           const procedure = await this.connector.getStoredProcedureDetail(procedureName);
           expect(procedure.procedure_name).toBe(procedureName);
           expect(procedure.procedure_type).toMatch(/function|procedure/);
+        });
+      }
+    });
+  }
+
+  createCommentTests(): void {
+    describe('Table and Column Comments', () => {
+      it('should include description field in table schema columns', async () => {
+        const schema = await this.connector.getTableSchema('users');
+        expect(schema.length).toBeGreaterThan(0);
+
+        // Every column should have the description field (even if null)
+        for (const col of schema) {
+          expect(col).toHaveProperty('description');
+        }
+
+        if (this.config.supportsComments) {
+          // Databases with comments should return the descriptions we set
+          const nameColumn = schema.find(col => col.column_name === 'name');
+          expect(nameColumn?.description).toBe('Full name of the user');
+
+          const emailColumn = schema.find(col => col.column_name === 'email');
+          expect(emailColumn?.description).toBe('Unique email address');
+
+          // Columns without comments should have null description
+          const ageColumn = schema.find(col => col.column_name === 'age');
+          expect(ageColumn?.description).toBeNull();
+        } else {
+          // Databases without comment support (SQLite) should return null
+          for (const col of schema) {
+            expect(col.description).toBeNull();
+          }
+        }
+      });
+
+      if (this.config.supportsComments) {
+        it('should return table comment via getTableComment', async () => {
+          expect(this.connector.getTableComment).toBeDefined();
+          const comment = await this.connector.getTableComment!('users');
+          expect(comment).toBe('Application users');
+        });
+
+        it('should return null for table without comment', async () => {
+          expect(this.connector.getTableComment).toBeDefined();
+          const comment = await this.connector.getTableComment!('orders');
+          expect(comment).toBeNull();
         });
       }
     });

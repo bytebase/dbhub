@@ -329,12 +329,14 @@ export class SQLiteConnector implements Connector {
       const rows = this.db.prepare(`PRAGMA table_info(${quotedTableName})`).all() as SQLiteTableInfo[];
 
       // Convert SQLite schema format to our standard TableColumn format
+      // SQLite does not support column comments, so description is always null
       const columns = rows.map((row) => ({
         column_name: row.name,
         data_type: row.type,
         // In SQLite, primary key columns are automatically NOT NULL even if notnull=0
         is_nullable: (row.notnull === 1 || row.pk > 0) ? "NO" : "YES",
         column_default: row.dflt_value,
+        description: null,
       }));
 
       return columns;
