@@ -45,7 +45,7 @@ class PostgresDSNParser implements DSNParser {
       const poolConfig: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
-        database: url.pathname ? url.pathname.substring(1) : "", // Remove leading '/' if exists
+        database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
         user: url.username,
         password: url.password,
       };
@@ -90,7 +90,7 @@ class PostgresDSNParser implements DSNParser {
 
   isValidDSN(dsn: string): boolean {
     try {
-      return dsn.startsWith("postgres://") || dsn.startsWith("postgresql://");
+      return dsn.startsWith('postgres://') || dsn.startsWith('postgresql://');
     } catch (error) {
       return false;
     }
@@ -106,7 +106,6 @@ export class PostgresConnector implements Connector {
   dsnParser = new PostgresDSNParser();
 
   private pool: pg.Pool | null = null;
-  private defaultSchema = "public";
 
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
@@ -120,48 +119,15 @@ export class PostgresConnector implements Connector {
   }
 
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
-    // Reset to default so reconnects without search_path don't inherit stale state
-    this.defaultSchema = "public";
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
 
-      // Extract search_path to set discovery default and configure each pg session safely
-      const parsedUrl = new SafeURL(dsn);
-      const searchPath = parsedUrl.getSearchParam("search_path");
-      if (searchPath) {
-        // Use the first concrete schema (skip $user special token) as the discovery default
-        const firstSchema = searchPath
-          .split(",")
-          .map((s) => s.trim())
-          .find((s) => s !== "$user" && s !== '"$user"');
-        this.defaultSchema = firstSchema || "public";
-      }
-
       // SDK-level readonly enforcement: Set default_transaction_read_only for the entire connection
       if (config?.readonly) {
-        poolConfig.options = (poolConfig.options || "") + " -c default_transaction_read_only=on";
+        poolConfig.options = (poolConfig.options || '') + ' -c default_transaction_read_only=on';
       }
 
       this.pool = new Pool(poolConfig);
-
-      // Set search_path safely via a query on each new connection.
-      // We use pg.escapeIdentifier on each schema name to prevent injection,
-      // since SET does not support parameterized values.
-      // The $user special token is passed through unescaped as PostgreSQL requires it unquoted.
-      if (searchPath) {
-        const escapedSchemas = searchPath
-          .split(",")
-          .map((s) => {
-            const name = s.trim();
-            return name === "$user" ? name : pg.escapeIdentifier(name);
-          })
-          .join(", ");
-        this.pool.on("connect", (client) => {
-          client
-            .query(`SET search_path TO ${escapedSchemas}`)
-            .catch((err: Error) => console.error("Failed to set search_path:", err));
-        });
-      }
 
       // Test the connection
       const client = await this.pool.connect();
@@ -208,7 +174,7 @@ export class PostgresConnector implements Connector {
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // 'public' is the standard default schema in PostgreSQL databases
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       const result = await client.query(
         `
@@ -234,7 +200,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       const result = await client.query(
         `
@@ -261,7 +227,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       // Query to get all indexes for the table
       const result = await client.query(
@@ -316,7 +282,7 @@ export class PostgresConnector implements Connector {
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
       // Tables are created in the 'public' schema by default unless otherwise specified
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       // Get table columns
       const result = await client.query(
@@ -381,7 +347,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       // Get stored procedures and functions from PostgreSQL
       const result = await client.query(
@@ -409,7 +375,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // In PostgreSQL, use 'public' as the default schema if none specified
-      const schemaToUse = schema || this.defaultSchema;
+      const schemaToUse = schema || "public";
 
       // Get stored procedure details from PostgreSQL
       const result = await client.query(
@@ -493,6 +459,7 @@ export class PostgresConnector implements Connector {
     }
   }
 
+
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
@@ -501,10 +468,9 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // Check if this is a multi-statement query
-      const statements = sql
-        .split(";")
-        .map((statement) => statement.trim())
-        .filter((statement) => statement.length > 0);
+      const statements = sql.split(';')
+        .map(statement => statement.trim())
+        .filter(statement => statement.length > 0);
 
       if (statements.length === 1) {
         // Single statement - apply maxRows if applicable
@@ -537,7 +503,7 @@ export class PostgresConnector implements Connector {
         let totalRowCount = 0;
 
         // Execute within a transaction to ensure session consistency
-        await client.query("BEGIN");
+        await client.query('BEGIN');
         try {
           for (let statement of statements) {
             // Apply maxRows limit to SELECT queries if specified
@@ -553,9 +519,9 @@ export class PostgresConnector implements Connector {
               totalRowCount += result.rowCount;
             }
           }
-          await client.query("COMMIT");
+          await client.query('COMMIT');
         } catch (error) {
-          await client.query("ROLLBACK");
+          await client.query('ROLLBACK');
           throw error;
         }
 

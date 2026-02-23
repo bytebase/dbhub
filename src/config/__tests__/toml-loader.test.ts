@@ -1048,53 +1048,6 @@ query_timeout = 120
 
       expect(dsn).toBe('postgres://user:pass@localhost:9999/db');
     });
-
-    it('should append search_path param for PostgreSQL sources', () => {
-      const source: SourceConfig = {
-        id: 'test',
-        type: 'postgres',
-        host: 'localhost',
-        database: 'testdb',
-        user: 'testuser',
-        password: 'testpass',
-        search_path: 'myschema',
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).toBe('postgres://testuser:testpass@localhost:5432/testdb?search_path=myschema');
-    });
-
-    it('should URL-encode comma-separated search_path values', () => {
-      const source: SourceConfig = {
-        id: 'test',
-        type: 'postgres',
-        host: 'localhost',
-        database: 'testdb',
-        user: 'testuser',
-        password: 'testpass',
-        search_path: 'myschema,public',
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).toBe('postgres://testuser:testpass@localhost:5432/testdb?search_path=myschema%2Cpublic');
-    });
-
-    it('should not add search_path param when not specified', () => {
-      const source: SourceConfig = {
-        id: 'test',
-        type: 'postgres',
-        host: 'localhost',
-        database: 'testdb',
-        user: 'testuser',
-        password: 'testpass',
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).not.toContain('search_path');
-    });
   });
 
   describe('Integration scenarios', () => {
