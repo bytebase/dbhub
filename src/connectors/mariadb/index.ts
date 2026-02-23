@@ -331,6 +331,7 @@ export class MariaDBConnector implements Connector {
         queryParams
       ) as any[];
 
+      // Normalize empty string comments to null for token-efficient output
       return rows.map((row: any) => ({
         ...row,
         description: row.description || null,

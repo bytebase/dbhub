@@ -381,6 +381,7 @@ export class SQLServerConnector implements Connector {
 
       const result = await request.query(query);
 
+      // Normalize empty string comments to null for token-efficient output
       return result.recordset.map((row: any) => ({
         ...row,
         description: row.description || null,

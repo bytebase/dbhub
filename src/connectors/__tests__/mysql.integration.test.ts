@@ -125,7 +125,7 @@ class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
     // Add table and column comments
     await connector.executeSQL(`ALTER TABLE users COMMENT = 'Application users'`, {});
     await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT 'Full name of the user'`, {});
-    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN email VARCHAR(100) NOT NULL COMMENT 'Unique email address'`, {});
+    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN email VARCHAR(100) UNIQUE NOT NULL COMMENT 'Unique email address'`, {});
 
     // Insert test data
     await connector.executeSQL(`

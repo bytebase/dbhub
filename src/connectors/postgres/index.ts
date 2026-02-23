@@ -302,6 +302,7 @@ export class PostgresConnector implements Connector {
       const schemaToUse = schema || this.defaultSchema;
 
       // Get table columns with comments from pg_catalog
+      // Use pg_class + pg_namespace directly (more efficient than pg_statio_all_tables)
       const result = await client.query(
         `
         SELECT
@@ -311,10 +312,13 @@ export class PostgresConnector implements Connector {
           c.column_default,
           pgd.description
         FROM information_schema.columns c
-        LEFT JOIN pg_catalog.pg_statio_all_tables st
-          ON st.schemaname = c.table_schema AND st.relname = c.table_name
+        LEFT JOIN pg_catalog.pg_namespace nsp
+          ON nsp.nspname = c.table_schema
+        LEFT JOIN pg_catalog.pg_class cls
+          ON cls.relnamespace = nsp.oid
+          AND cls.relname = c.table_name
         LEFT JOIN pg_catalog.pg_description pgd
-          ON pgd.objoid = st.relid
+          ON pgd.objoid = cls.oid
           AND pgd.objsubid = c.ordinal_position
         WHERE c.table_schema = $1
         AND c.table_name = $2
