@@ -97,6 +97,24 @@ async function getTableRowCount(
 }
 
 /**
+ * Get table comment from the connector if supported.
+ */
+async function getTableComment(
+  connector: Connector,
+  tableName: string,
+  schemaName?: string
+): Promise<string | null> {
+  try {
+    if (connector.getTableComment) {
+      return await connector.getTableComment(tableName, schemaName);
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Search for schemas
  */
 async function searchSchemas(
@@ -172,16 +190,18 @@ async function searchTables(
             schema: schemaName,
           });
         } else if (detailLevel === "summary") {
-          // Get column count for summary
+          // Get column count and table comment for summary
           try {
             const columns = await connector.getTableSchema(tableName, schemaName);
             const rowCount = await getTableRowCount(connector, tableName, schemaName);
+            const comment = await getTableComment(connector, tableName, schemaName);
 
             results.push({
               name: tableName,
               schema: schemaName,
               column_count: columns.length,
               row_count: rowCount,
+              ...(comment ? { comment } : {}),
             });
           } catch (error) {
             results.push({
@@ -197,17 +217,20 @@ async function searchTables(
             const columns = await connector.getTableSchema(tableName, schemaName);
             const indexes = await connector.getTableIndexes(tableName, schemaName);
             const rowCount = await getTableRowCount(connector, tableName, schemaName);
+            const comment = await getTableComment(connector, tableName, schemaName);
 
             results.push({
               name: tableName,
               schema: schemaName,
               column_count: columns.length,
               row_count: rowCount,
+              ...(comment ? { comment } : {}),
               columns: columns.map((col: any) => ({
                 name: col.column_name,
                 type: col.data_type,
                 nullable: col.is_nullable === "YES",
                 default: col.column_default,
+                ...(col.description ? { description: col.description } : {}),
               })),
               indexes: indexes.map((idx: any) => ({
                 name: idx.index_name,
@@ -296,6 +319,7 @@ async function searchColumns(
                 type: column.data_type,
                 nullable: column.is_nullable === "YES",
                 default: column.column_default,
+                ...(column.description ? { description: column.description } : {}),
               });
             }
           }

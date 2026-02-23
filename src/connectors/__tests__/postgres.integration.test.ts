@@ -24,7 +24,8 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
       expectedTestSchemaTable: 'products',
       testSchema: 'test_schema',
       supportsStoredProcedures: true,
-      expectedStoredProcedures: ['get_user_count', 'calculate_total_age']
+      expectedStoredProcedures: ['get_user_count', 'calculate_total_age'],
+      supportsComments: true,
     };
     super(config);
   }
@@ -124,9 +125,14 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
       )
     `, {});
 
+    // Add table and column comments
+    await connector.executeSQL(`COMMENT ON TABLE users IS 'Application users'`, {});
+    await connector.executeSQL(`COMMENT ON COLUMN users.name IS 'Full name of the user'`, {});
+    await connector.executeSQL(`COMMENT ON COLUMN users.email IS 'Unique email address'`, {});
+
     // Insert test data
     await connector.executeSQL(`
-      INSERT INTO users (name, email, age) VALUES 
+      INSERT INTO users (name, email, age) VALUES
       ('John Doe', 'john@example.com', 30),
       ('Jane Smith', 'jane@example.com', 25),
       ('Bob Johnson', 'bob@example.com', 35)

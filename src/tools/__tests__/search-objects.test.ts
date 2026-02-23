@@ -187,8 +187,8 @@ describe('search_database_objects tool', () => {
 
     it('should return summary with metadata', async () => {
       const mockColumns: TableColumn[] = [
-        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
@@ -215,7 +215,7 @@ describe('search_database_objects tool', () => {
 
     it('should return full details with columns and indexes', async () => {
       const mockColumns: TableColumn[] = [
-        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
       ];
 
       const mockIndexes: TableIndex[] = [
@@ -269,7 +269,7 @@ describe('search_database_objects tool', () => {
       vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
       vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
-        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
       ]);
     });
 
@@ -350,14 +350,14 @@ describe('search_database_objects tool', () => {
 
     it('should search columns across tables', async () => {
       const usersColumns: TableColumn[] = [
-        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
-        { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
+        { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
       ];
 
       const ordersColumns: TableColumn[] = [
-        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-        { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+        { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockImplementation(async (table) => {
@@ -387,7 +387,7 @@ describe('search_database_objects tool', () => {
 
     it('should return column details in summary level', async () => {
       const columns: TableColumn[] = [
-        { column_name: 'email', data_type: 'VARCHAR(255)', is_nullable: 'YES', column_default: null },
+        { column_name: 'email', data_type: 'VARCHAR(255)', is_nullable: 'YES', column_default: null, description: null },
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(columns);
@@ -569,13 +569,13 @@ describe('search_database_objects tool', () => {
 
       it('should filter columns by table when table parameter is provided', async () => {
         const usersColumns: TableColumn[] = [
-          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
         ];
 
         const ordersColumns: TableColumn[] = [
-          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-          { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+          { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
         ];
 
         vi.mocked(mockConnector.getTableSchema).mockImplementation(async (table) => {
@@ -628,9 +628,9 @@ describe('search_database_objects tool', () => {
 
       it('should work with column pattern when table filter is applied', async () => {
         const usersColumns: TableColumn[] = [
-          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null },
-          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
-          { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null },
+          { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+          { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
+          { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
         ];
 
         vi.mocked(mockConnector.getTableSchema).mockResolvedValue(usersColumns);

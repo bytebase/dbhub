@@ -361,21 +361,67 @@ export class SQLServerConnector implements Connector {
         .input("schema", sql.VarChar, schemaToUse);
 
       const query = `
-          SELECT COLUMN_NAME as    column_name,
-                 DATA_TYPE as      data_type,
-                 IS_NULLABLE as    is_nullable,
-                 COLUMN_DEFAULT as column_default
-          FROM INFORMATION_SCHEMA.COLUMNS
-          WHERE TABLE_NAME = @tableName
-            AND TABLE_SCHEMA = @schema
-          ORDER BY ORDINAL_POSITION
+          SELECT c.COLUMN_NAME as    column_name,
+                 c.DATA_TYPE as      data_type,
+                 c.IS_NULLABLE as    is_nullable,
+                 c.COLUMN_DEFAULT as column_default,
+                 ep.value as         description
+          FROM INFORMATION_SCHEMA.COLUMNS c
+          LEFT JOIN sys.columns sc
+            ON sc.name = c.COLUMN_NAME
+            AND sc.object_id = OBJECT_ID(QUOTENAME(c.TABLE_SCHEMA) + '.' + QUOTENAME(c.TABLE_NAME))
+          LEFT JOIN sys.extended_properties ep
+            ON ep.major_id = sc.object_id
+            AND ep.minor_id = sc.column_id
+            AND ep.name = 'MS_Description'
+          WHERE c.TABLE_NAME = @tableName
+            AND c.TABLE_SCHEMA = @schema
+          ORDER BY c.ORDINAL_POSITION
       `;
 
       const result = await request.query(query);
 
-      return result.recordset;
+      return result.recordset.map((row: any) => ({
+        ...row,
+        description: row.description || null,
+      }));
     } catch (error) {
       throw new Error(`Failed to get schema for table ${tableName}: ${(error as Error).message}`);
+    }
+  }
+
+  async getTableComment(tableName: string, schema?: string): Promise<string | null> {
+    if (!this.connection) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    try {
+      const schemaToUse = schema || "dbo";
+
+      const request = this.connection
+        .request()
+        .input("tableName", sql.VarChar, tableName)
+        .input("schema", sql.VarChar, schemaToUse);
+
+      const query = `
+          SELECT ep.value as table_comment
+          FROM sys.extended_properties ep
+          JOIN sys.tables t ON ep.major_id = t.object_id
+          JOIN sys.schemas s ON t.schema_id = s.schema_id
+          WHERE ep.minor_id = 0
+            AND ep.name = 'MS_Description'
+            AND t.name = @tableName
+            AND s.name = @schema
+      `;
+
+      const result = await request.query(query);
+
+      if (result.recordset.length > 0) {
+        return result.recordset[0].table_comment || null;
+      }
+      return null;
+    } catch (error) {
+      return null;
     }
   }
 

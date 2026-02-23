@@ -17,6 +17,7 @@ export interface TableColumn {
   data_type: string;
   is_nullable: string;
   column_default: string | null;
+  description: string | null;
 }
 
 export interface TableIndex {
@@ -189,6 +190,13 @@ export interface Connector {
    * Optional — connectors that don't implement this fall back to COUNT(*) in search-objects.
    */
   getTableRowCount?(tableName: string, schema?: string): Promise<number | null>;
+
+  /**
+   * Get the comment/description for a table.
+   * Optional — connectors that don't support table comments (e.g. SQLite) may omit this.
+   * @returns The table comment string, or null if no comment is set
+   */
+  getTableComment?(tableName: string, schema?: string): Promise<string | null>;
 
   /** Execute a SQL query with execution options and optional parameters */
   executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;

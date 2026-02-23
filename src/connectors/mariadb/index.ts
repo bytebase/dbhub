@@ -314,14 +314,15 @@ export class MariaDBConnector implements Connector {
 
       const queryParams = schema ? [schema, tableName] : [tableName];
 
-      // Get table columns
+      // Get table columns with comments
       const rows = await this.pool.query(
         `
-        SELECT 
-          COLUMN_NAME as column_name, 
-          DATA_TYPE as data_type, 
+        SELECT
+          COLUMN_NAME as column_name,
+          DATA_TYPE as data_type,
           IS_NULLABLE as is_nullable,
-          COLUMN_DEFAULT as column_default
+          COLUMN_DEFAULT as column_default,
+          COLUMN_COMMENT as description
         FROM INFORMATION_SCHEMA.COLUMNS
         ${schemaClause}
         AND TABLE_NAME = ?
@@ -330,10 +331,41 @@ export class MariaDBConnector implements Connector {
         queryParams
       ) as any[];
 
-      return rows;
+      return rows.map((row: any) => ({
+        ...row,
+        description: row.description || null,
+      }));
     } catch (error) {
       console.error("Error getting table schema:", error);
       throw error;
+    }
+  }
+
+  async getTableComment(tableName: string, schema?: string): Promise<string | null> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    try {
+      const schemaClause = schema ? "WHERE TABLE_SCHEMA = ?" : "WHERE TABLE_SCHEMA = DATABASE()";
+      const queryParams = schema ? [schema, tableName] : [tableName];
+
+      const rows = await this.pool.query(
+        `
+        SELECT TABLE_COMMENT
+        FROM INFORMATION_SCHEMA.TABLES
+        ${schemaClause}
+        AND TABLE_NAME = ?
+      `,
+        queryParams
+      ) as any[];
+
+      if (rows.length > 0) {
+        return rows[0].TABLE_COMMENT || null;
+      }
+      return null;
+    } catch (error) {
+      return null;
     }
   }
 

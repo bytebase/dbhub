@@ -301,18 +301,24 @@ export class PostgresConnector implements Connector {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
 
-      // Get table columns
+      // Get table columns with comments from pg_catalog
       const result = await client.query(
         `
-        SELECT 
-          column_name, 
-          data_type, 
-          is_nullable,
-          column_default
-        FROM information_schema.columns
-        WHERE table_schema = $1
-        AND table_name = $2
-        ORDER BY ordinal_position
+        SELECT
+          c.column_name,
+          c.data_type,
+          c.is_nullable,
+          c.column_default,
+          pgd.description
+        FROM information_schema.columns c
+        LEFT JOIN pg_catalog.pg_statio_all_tables st
+          ON st.schemaname = c.table_schema AND st.relname = c.table_name
+        LEFT JOIN pg_catalog.pg_description pgd
+          ON pgd.objoid = st.relid
+          AND pgd.objsubid = c.ordinal_position
+        WHERE c.table_schema = $1
+        AND c.table_name = $2
+        ORDER BY c.ordinal_position
       `,
         [schemaToUse, tableName]
       );
@@ -348,6 +354,36 @@ export class PostgresConnector implements Connector {
       if (result.rows.length > 0) {
         const count = Number(result.rows[0].count);
         return count >= 0 ? count : null;
+      }
+      return null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTableComment(tableName: string, schema?: string): Promise<string | null> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    const client = await this.pool.connect();
+    try {
+      const schemaToUse = schema || this.defaultSchema;
+
+      const result = await client.query(
+        `
+        SELECT obj_description(c.oid) as table_comment
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = $1
+        AND n.nspname = $2
+        AND c.relkind IN ('r','p','m','f')
+      `,
+        [tableName, schemaToUse]
+      );
+
+      if (result.rows.length > 0) {
+        return result.rows[0].table_comment || null;
       }
       return null;
     } finally {
