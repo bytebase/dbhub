@@ -485,6 +485,32 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     sources.push("SSH_PROXY_JUMP from environment");
   }
 
+  const parseNonNegativeInteger = (value: string, name: string): number => {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 0) {
+      throw new Error(`Invalid value for ${name}: "${value}". Expected a non-negative integer.`);
+    }
+    return parsed;
+  };
+
+  // SSH Keepalive Interval (optional) - seconds between keepalive packets
+  if (args["ssh-keepalive-interval"]) {
+    config.keepaliveInterval = parseNonNegativeInteger(args["ssh-keepalive-interval"], "ssh-keepalive-interval");
+    sources.push("ssh-keepalive-interval from command line");
+  } else if (process.env.SSH_KEEPALIVE_INTERVAL) {
+    config.keepaliveInterval = parseNonNegativeInteger(process.env.SSH_KEEPALIVE_INTERVAL, "SSH_KEEPALIVE_INTERVAL");
+    sources.push("SSH_KEEPALIVE_INTERVAL from environment");
+  }
+
+  // SSH Keepalive Count Max (optional) - max missed keepalive responses
+  if (args["ssh-keepalive-count-max"]) {
+    config.keepaliveCountMax = parseNonNegativeInteger(args["ssh-keepalive-count-max"], "ssh-keepalive-count-max");
+    sources.push("ssh-keepalive-count-max from command line");
+  } else if (process.env.SSH_KEEPALIVE_COUNT_MAX) {
+    config.keepaliveCountMax = parseNonNegativeInteger(process.env.SSH_KEEPALIVE_COUNT_MAX, "SSH_KEEPALIVE_COUNT_MAX");
+    sources.push("SSH_KEEPALIVE_COUNT_MAX from environment");
+  }
+
   // Validate required fields
   if (!config.host || !config.username) {
     throw new Error("SSH tunnel configuration requires at least --ssh-host and --ssh-user");
@@ -595,6 +621,8 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.ssh_password = sshResult.config.password;
       source.ssh_key = sshResult.config.privateKey;
       source.ssh_passphrase = sshResult.config.passphrase;
+      source.ssh_keepalive_interval = sshResult.config.keepaliveInterval;
+      source.ssh_keepalive_count_max = sshResult.config.keepaliveCountMax;
     }
 
     // Add init script for demo mode

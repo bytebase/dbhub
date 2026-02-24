@@ -17,6 +17,10 @@ export interface SSHConfig {
    * Comma-separated list of jump hosts: "jump1.example.com,user@jump2.example.com:2222"
    */
   ssh_proxy_jump?: string;
+  /** Interval in seconds between keepalive packets (default: 0 = disabled) */
+  ssh_keepalive_interval?: number;
+  /** Maximum number of missed keepalive responses before disconnecting (default: 3) */
+  ssh_keepalive_count_max?: number;
 }
 
 /**
