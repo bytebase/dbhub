@@ -486,8 +486,8 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   }
 
   const parseNonNegativeInteger = (value: string, name: string): number => {
-    const parsed = Number.parseInt(value, 10);
-    if (Number.isNaN(parsed) || parsed < 0) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) {
       throw new Error(`Invalid value for ${name}: "${value}". Expected a non-negative integer.`);
     }
     return parsed;

@@ -172,13 +172,13 @@ export class SSHTunnel {
         sshConfig.sock = sock;
       }
       if (keepaliveInterval !== undefined) {
-        if (Number.isNaN(keepaliveInterval) || keepaliveInterval <= 0) {
+        if (Number.isNaN(keepaliveInterval) || keepaliveInterval < 0) {
           const desc = label || `${hostInfo.host}:${hostInfo.port}`;
           console.warn(
             `Invalid SSH keepaliveInterval (${keepaliveInterval}) for ${desc}; ` +
             'keepalive configuration will be ignored.'
           );
-        } else {
+        } else if (keepaliveInterval > 0) {
           sshConfig.keepaliveInterval = keepaliveInterval * 1000; // Convert seconds to milliseconds
           sshConfig.keepaliveCountMax = keepaliveCountMax ?? 3;
         }
