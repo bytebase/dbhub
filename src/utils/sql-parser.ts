@@ -149,7 +149,7 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
 };
 
 function getScanner(dialect?: ConnectorType): TokenScanner {
-  return dialect ? dialectScanners[dialect] : scanTokenAnsi;
+  return dialect ? (dialectScanners[dialect] ?? scanTokenAnsi) : scanTokenAnsi;
 }
 
 /**
