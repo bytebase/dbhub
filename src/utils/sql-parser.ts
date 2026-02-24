@@ -153,7 +153,7 @@ function getScanner(dialect?: ConnectorType): TokenScanner {
 }
 
 /**
- * Replace comments, string literals, and dialect-specific quoted blocks with spaces.
+ * Replace comments, string literals, and dialect-specific quoted blocks with a single space each.
  * When no dialect is specified, only ANSI SQL syntax is recognized.
  */
 export function stripCommentsAndStrings(sql: string, dialect?: ConnectorType): string {
