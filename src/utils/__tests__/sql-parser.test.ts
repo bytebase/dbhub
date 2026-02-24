@@ -34,6 +34,22 @@ describe("stripCommentsAndStrings", () => {
       const sql = "SELECT /* a */ * /* b */ FROM users";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT   *   FROM users");
     });
+
+    it("should handle nested block comments in PostgreSQL", () => {
+      const sql = "SELECT /* outer /* inner */ still comment */ 1";
+      expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT   1");
+    });
+
+    it("should NOT handle nested block comments in non-PostgreSQL dialects", () => {
+      // Non-nested scanner closes at the first */, leaving "still comment */" as plain text
+      const sql = "SELECT /* outer /* inner */ still comment */ 1";
+      expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT   still comment */ 1");
+    });
+
+    it("should handle deeply nested block comments in PostgreSQL", () => {
+      const sql = "SELECT /* a /* b /* c */ b */ a */ 1";
+      expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT   1");
+    });
   });
 
   describe("single-quoted strings", () => {

@@ -1,13 +1,9 @@
 import type { ConnectorType } from "../connectors/interface.js";
 
-const enum TokenType {
-  Plain,
-  Comment,
-  QuotedBlock,
-}
+const TokenType = { Plain: 0, Comment: 1, QuotedBlock: 2 } as const;
 
 interface SQLToken {
-  type: TokenType;
+  type: number;
   /** Position just past the end of this token (the next unprocessed character) */
   end: number;
 }
@@ -28,6 +24,18 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
   let j = i + 2;
   while (j < sql.length && !(sql[j] === "*" && sql[j + 1] === "/")) { j++; }
   if (j < sql.length) { j += 2; }
+  return { type: TokenType.Comment, end: j };
+}
+
+function scanNestedMultiLineComment(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
+  let j = i + 2;
+  let depth = 1;
+  while (j < sql.length && depth > 0) {
+    if (sql[j] === "/" && sql[j + 1] === "*") { depth++; j += 2; }
+    else if (sql[j] === "*" && sql[j + 1] === "/") { depth--; j += 2; }
+    else { j++; }
+  }
   return { type: TokenType.Comment, end: j };
 }
 
@@ -103,7 +111,7 @@ function scanTokenAnsi(sql: string, i: number): SQLToken {
 
 function scanTokenPostgres(sql: string, i: number): SQLToken {
   return scanSingleLineComment(sql, i)
-    ?? scanMultiLineComment(sql, i)
+    ?? scanNestedMultiLineComment(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)
     ?? scanDollarQuotedBlock(sql, i)
@@ -158,19 +166,31 @@ function getScanner(dialect?: ConnectorType): TokenScanner {
  */
 export function stripCommentsAndStrings(sql: string, dialect?: ConnectorType): string {
   const scanToken = getScanner(dialect);
-  let result = "";
+  const parts: string[] = [];
+  let plainStart = -1;
   let i = 0;
 
   while (i < sql.length) {
     const token = scanToken(sql, i);
 
-    if (token.type === TokenType.Plain) { result += sql[i]; }
-    else { result += " "; }
+    if (token.type === TokenType.Plain) {
+      if (plainStart === -1) { plainStart = i; }
+    } else {
+      if (plainStart !== -1) {
+        parts.push(sql.substring(plainStart, i));
+        plainStart = -1;
+      }
+      parts.push(" ");
+    }
 
     i = token.end;
   }
 
-  return result;
+  if (plainStart !== -1) {
+    parts.push(sql.substring(plainStart));
+  }
+
+  return parts.join("");
 }
 
 /**
@@ -180,24 +200,23 @@ export function stripCommentsAndStrings(sql: string, dialect?: ConnectorType): s
 export function splitSQLStatements(sql: string, dialect?: ConnectorType): string[] {
   const scanToken = getScanner(dialect);
   const statements: string[] = [];
-  let current = "";
+  let stmtStart = 0;
   let i = 0;
 
   while (i < sql.length) {
     if (sql[i] === ";") {
-      const trimmed = current.trim();
+      const trimmed = sql.substring(stmtStart, i).trim();
       if (trimmed.length > 0) { statements.push(trimmed); }
-      current = "";
+      stmtStart = i + 1;
       i++;
       continue;
     }
 
     const token = scanToken(sql, i);
-    current += sql.substring(i, token.end);
     i = token.end;
   }
 
-  const trimmed = current.trim();
+  const trimmed = sql.substring(stmtStart).trim();
   if (trimmed.length > 0) { statements.push(trimmed); }
 
   return statements;
