@@ -16,6 +16,7 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
+import { splitSQLStatements } from "../../utils/sql-parser.js";
 
 /**
  * PostgreSQL DSN Parser
@@ -533,9 +534,7 @@ export class PostgresConnector implements Connector {
     const client = await this.pool.connect();
     try {
       // Check if this is a multi-statement query
-      const statements = sql.split(';')
-        .map(statement => statement.trim())
-        .filter(statement => statement.length > 0);
+      const statements = splitSQLStatements(sql, "postgres");
 
       if (statements.length === 1) {
         // Single statement - apply maxRows if applicable
