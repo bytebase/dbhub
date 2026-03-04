@@ -11,6 +11,12 @@
 </a>
 </p>
 
+<p align="center">
+
+[![MCP Shield](https://img.shields.io/badge/MCP_Shield-A--_(87)-brightgreen)](https://github.com/thuggeelya/mcp-shield)
+
+</p>
+
 ```bash
             +------------------+    +--------------+    +------------------+
             |                  |    |              |    |                  |
