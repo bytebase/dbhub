@@ -511,9 +511,12 @@ export function buildDSNFromSource(source: SourceConfig): string {
 
   // For other databases, require host, user, database
   // Password is optional for Azure AD access token authentication and AWS IAM auth
+  const isAwsIamPasswordless =
+    source.aws_iam_auth === true &&
+    ["postgres", "mysql", "mariadb"].includes(source.type);
   const passwordRequired =
     source.authentication !== "azure-active-directory-access-token" &&
-    source.aws_iam_auth !== true;
+    !isAwsIamPasswordless;
   if (!source.host || !source.user || !source.database) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +

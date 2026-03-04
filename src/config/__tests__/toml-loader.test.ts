@@ -1181,6 +1181,20 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       expect(dsn).toBe('postgres://dbuser%40example.com:@mydb.abc123.eu-west-1.rds.amazonaws.com:5432/mydb');
     });
 
+    it('should still require password for unsupported aws_iam_auth types', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'sqlserver',
+        host: 'localhost',
+        database: 'master',
+        user: 'sa',
+        aws_iam_auth: true,
+        aws_region: 'eu-west-1',
+      };
+
+      expect(() => buildDSNFromSource(source)).toThrow('password is required');
+    });
+
     it('should use custom port when provided', () => {
       const source: SourceConfig = {
         id: 'test',
