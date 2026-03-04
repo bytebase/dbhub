@@ -5,6 +5,8 @@ import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { redactDSN } from "../config/env.js";
+import { SafeURL } from "../utils/safe-url.js";
+import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -136,7 +138,7 @@ export class ConnectorManager {
   private async connectSource(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
     // Build DSN from source config
-    const dsn = buildDSNFromSource(source);
+    const dsn = await this.buildConnectionDSN(source);
     console.error(`  - ${sourceId}: ${redactDSN(dsn)}`);
 
     // Setup SSH tunnel if needed
@@ -384,5 +386,67 @@ export class ConnectorManager {
       return 0;
     }
     return getDefaultPortForType(type) ?? 0;
+  }
+
+  /**
+   * Build a connection DSN, optionally replacing password with
+   * an AWS RDS IAM auth token when aws_iam_auth is enabled.
+   */
+  private async buildConnectionDSN(source: SourceConfig): Promise<string> {
+    const dsn = buildDSNFromSource(source);
+
+    if (!source.aws_iam_auth) {
+      return dsn;
+    }
+
+    const supportedIamTypes = ["postgres", "mysql", "mariadb"];
+    if (!source.type || !supportedIamTypes.includes(source.type)) {
+      throw new Error(
+        `Source '${source.id}': aws_iam_auth is only supported for postgres, mysql, and mariadb`
+      );
+    }
+    if (!source.aws_region) {
+      throw new Error(
+        `Source '${source.id}': aws_region is required when aws_iam_auth is enabled`
+      );
+    }
+
+    const parsed = new SafeURL(dsn);
+    const hostname = parsed.hostname;
+    const username = source.user || parsed.username;
+    const defaultPort = getDefaultPortForType(source.type);
+    const port = parsed.port ? parseInt(parsed.port) : defaultPort;
+
+    if (!hostname || !username || !port) {
+      throw new Error(
+        `Source '${source.id}': unable to resolve host, username, or port for AWS IAM authentication`
+      );
+    }
+
+    const token = await generateRdsAuthToken({
+      hostname,
+      port,
+      username,
+      region: source.aws_region,
+    });
+
+    const queryParams = new Map(parsed.searchParams);
+    // IAM DB authentication requires SSL/TLS.
+    queryParams.set("sslmode", "require");
+
+    const protocol = parsed.protocol.endsWith(":")
+      ? parsed.protocol.slice(0, -1)
+      : parsed.protocol;
+    const encodedUser = encodeURIComponent(username);
+    const encodedToken = encodeURIComponent(token);
+    const path = parsed.pathname || "/";
+    const query = Array.from(queryParams.entries())
+      .map(
+        ([key, value]) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+      )
+      .join("&");
+
+    return `${protocol}://${encodedUser}:${encodedToken}@${hostname}:${port}${path}${query ? `?${query}` : ""}`;
   }
 }
