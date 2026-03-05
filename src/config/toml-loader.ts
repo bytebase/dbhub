@@ -52,7 +52,7 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
  * Resolve the path to the TOML configuration file
  * Priority: --config flag > ./dbhub.toml
  */
-function resolveTomlConfigPath(): string | null {
+export function resolveTomlConfigPath(): string | null {
   const args = parseCommandLineArgs();
 
   // 1. Check for --config flag (highest priority)

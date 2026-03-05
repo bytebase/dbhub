@@ -14,6 +14,7 @@ import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
 import { getToolsForSource } from "./utils/tool-metadata.js";
+import { startConfigWatcher } from "./utils/config-watcher.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -101,6 +102,15 @@ See documentation for more details on configuring database connections.
     });
     console.error("Tool registry initialized");
 
+    // Start watching TOML config file for hot reload (only when using TOML config).
+    // In STDIO mode, tool list is registered once — hot reload updates connections and
+    // tool registry, but STDIO clients won't see added/removed tools without restart.
+    // HTTP transport creates a new server per request, so tool changes apply immediately.
+    const stopConfigWatcher = startConfigWatcher({
+      connectorManager,
+      initialTools: sourceConfigsData.tools,
+    });
+
     // Create MCP server factory function for HTTP transport
     // Note: This must be created AFTER ConnectorManager is initialized
     const createServer = () => {
@@ -147,6 +157,9 @@ See documentation for more details on configuring database connections.
       isDemo
     );
     console.error(generateStartupTable(sourceDisplayInfos));
+
+    // Clean up config watcher when the process is exiting (covers both transports)
+    process.on("exit", () => { stopConfigWatcher?.(); });
 
     // Set up transport-specific server
     if (transportData.type === "http") {
