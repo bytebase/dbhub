@@ -140,7 +140,17 @@ Try these example prompts in your AI tool:
   </Accordion>
 </AccordionGroup>
 
-## Step 4: Connect to Your Own Database
+## Step 4: Install the Agent Skill (Optional)
+
+DBHub provides an [agent skill](/skills/dbhub) that teaches your AI tool the best-practice workflow for database querying — explore the schema first, then write precise SQL. This reduces errors and back-and-forth.
+
+```bash
+npx skills add bytebase/dbhub
+```
+
+The skill guides the AI to follow the **explore-then-query** pattern: discover schemas, find tables, inspect table structure, then write targeted queries. It works with all supported AI tools.
+
+## Step 5: Connect to Your Own Database
 
 Once you've verified DBHub works in demo mode, connect it to your actual database.
 
