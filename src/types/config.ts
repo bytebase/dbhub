@@ -33,6 +33,8 @@ export interface ConnectionParams {
   database?: string;
   user?: string;
   password?: string;
+  aws_iam_auth?: boolean; // Enable AWS IAM auth token generation for RDS
+  aws_region?: string; // AWS region required when aws_iam_auth is enabled
   instanceName?: string; // SQL Server named instance support
   sslmode?: "disable" | "require"; // SSL mode for network databases (not applicable to SQLite)
   // SQL Server authentication options

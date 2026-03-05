@@ -246,6 +246,45 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate AWS IAM auth fields
+  if (
+    source.aws_iam_auth !== undefined &&
+    typeof source.aws_iam_auth !== "boolean"
+  ) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has invalid aws_iam_auth. ` +
+        `Must be a boolean (true or false).`
+    );
+  }
+
+  if (source.aws_region !== undefined) {
+    if (
+      typeof source.aws_region !== "string" ||
+      source.aws_region.trim().length === 0
+    ) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid aws_region. ` +
+          `Must be a non-empty string (e.g., "eu-west-1").`
+      );
+    }
+  }
+
+  if (source.aws_iam_auth === true) {
+    const validIamTypes = ["postgres", "mysql", "mariadb"];
+    if (!source.type || !validIamTypes.includes(source.type)) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has aws_iam_auth enabled, ` +
+          `but this is only supported for postgres, mysql, and mariadb sources.`
+      );
+    }
+    if (!source.aws_region) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has aws_iam_auth enabled ` +
+          `but aws_region is not specified.`
+      );
+    }
+  }
+
   // Validate connection_timeout if provided
   if (source.connection_timeout !== undefined) {
     if (typeof source.connection_timeout !== "number" || source.connection_timeout <= 0) {
@@ -471,8 +510,13 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   // For other databases, require host, user, database
-  // Password is optional for Azure AD access token authentication
-  const passwordRequired = source.authentication !== "azure-active-directory-access-token";
+  // Password is optional for Azure AD access token authentication and AWS IAM auth
+  const isAwsIamPasswordless =
+    source.aws_iam_auth === true &&
+    ["postgres", "mysql", "mariadb"].includes(source.type);
+  const passwordRequired =
+    source.authentication !== "azure-active-directory-access-token" &&
+    !isAwsIamPasswordless;
   if (!source.host || !source.user || !source.database) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +
@@ -482,7 +526,8 @@ export function buildDSNFromSource(source: SourceConfig): string {
   if (passwordRequired && !source.password) {
     throw new Error(
       `Source '${source.id}': password is required. ` +
-        `(Password is optional only for azure-active-directory-access-token authentication)`
+        `(Password is optional for azure-active-directory-access-token authentication ` +
+        `or when aws_iam_auth=true)`
     );
   }
 

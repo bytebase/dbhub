@@ -5,9 +5,12 @@ import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { redactDSN } from "../config/env.js";
+import { SafeURL } from "../utils/safe-url.js";
+import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
+const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000; // refresh before 15-minute token expiry
 
 /**
  * Manages database connectors and provides a unified interface to work with them
@@ -19,6 +22,7 @@ export class ConnectorManager {
   private sshTunnels: Map<string, SSHTunnel> = new Map();
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
+  private iamRefreshTimers: Map<string, NodeJS.Timeout> = new Map();
 
   // Lazy connection support
   private lazySources: Map<string, SourceConfig> = new Map(); // Sources pending lazy connection
@@ -136,7 +140,7 @@ export class ConnectorManager {
   private async connectSource(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
     // Build DSN from source config
-    const dsn = buildDSNFromSource(source);
+    const dsn = await this.buildConnectionDSN(source);
     console.error(`  - ${sourceId}: ${redactDSN(dsn)}`);
 
     // Setup SSH tunnel if needed
@@ -239,6 +243,9 @@ export class ConnectorManager {
 
     // Store source config (for API exposure)
     this.sourceConfigs.set(sourceId, source);
+
+    // Keep AWS IAM auth sources fresh by rotating pool credentials before token expiry.
+    this.scheduleIamRefresh(source);
   }
 
   /**
@@ -264,10 +271,16 @@ export class ConnectorManager {
       }
     }
 
+    // Stop all IAM refresh timers
+    for (const timer of this.iamRefreshTimers.values()) {
+      clearTimeout(timer);
+    }
+
     // Clear multi-source state
     this.connectors.clear();
     this.sshTunnels.clear();
     this.sourceConfigs.clear();
+    this.iamRefreshTimers.clear();
     this.lazySources.clear();
     this.pendingConnections.clear();
     this.sourceIds = [];
@@ -384,5 +397,120 @@ export class ConnectorManager {
       return 0;
     }
     return getDefaultPortForType(type) ?? 0;
+  }
+
+  private scheduleIamRefresh(source: SourceConfig): void {
+    const sourceId = source.id;
+    const existingTimer = this.iamRefreshTimers.get(sourceId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.iamRefreshTimers.delete(sourceId);
+    }
+    if (!source.aws_iam_auth) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        await this.refreshIamSourceConnection(source);
+      } catch (error) {
+        console.error(
+          `Error refreshing AWS IAM auth token for source '${sourceId}':`,
+          error
+        );
+      } finally {
+        // Continue rotating as long as source remains configured.
+        if (this.sourceConfigs.has(sourceId)) {
+          this.scheduleIamRefresh(source);
+        }
+      }
+    }, AWS_IAM_TOKEN_REFRESH_MS);
+    timer.unref?.();
+    this.iamRefreshTimers.set(sourceId, timer);
+  }
+
+  private async refreshIamSourceConnection(source: SourceConfig): Promise<void> {
+    const sourceId = source.id;
+    if (!source.aws_iam_auth || !this.connectors.has(sourceId)) {
+      return;
+    }
+
+    console.error(`Refreshing AWS IAM auth connection for source '${sourceId}'...`);
+
+    const existingConnector = this.connectors.get(sourceId);
+    if (existingConnector) {
+      await existingConnector.disconnect();
+      this.connectors.delete(sourceId);
+    }
+
+    const existingTunnel = this.sshTunnels.get(sourceId);
+    if (existingTunnel) {
+      await existingTunnel.close();
+      this.sshTunnels.delete(sourceId);
+    }
+
+    await this.connectSource(source);
+  }
+
+  /**
+   * Build a connection DSN, optionally replacing password with
+   * an AWS RDS IAM auth token when aws_iam_auth is enabled.
+   */
+  private async buildConnectionDSN(source: SourceConfig): Promise<string> {
+    const dsn = buildDSNFromSource(source);
+
+    if (!source.aws_iam_auth) {
+      return dsn;
+    }
+
+    const supportedIamTypes = ["postgres", "mysql", "mariadb"];
+    if (!source.type || !supportedIamTypes.includes(source.type)) {
+      throw new Error(
+        `Source '${source.id}': aws_iam_auth is only supported for postgres, mysql, and mariadb`
+      );
+    }
+    if (!source.aws_region) {
+      throw new Error(
+        `Source '${source.id}': aws_region is required when aws_iam_auth is enabled`
+      );
+    }
+
+    const parsed = new SafeURL(dsn);
+    const hostname = parsed.hostname;
+    const username = source.user || parsed.username;
+    const defaultPort = getDefaultPortForType(source.type);
+    const port = parsed.port ? parseInt(parsed.port) : defaultPort;
+
+    if (!hostname || !username || !port) {
+      throw new Error(
+        `Source '${source.id}': unable to resolve host, username, or port for AWS IAM authentication`
+      );
+    }
+
+    const token = await generateRdsAuthToken({
+      hostname,
+      port,
+      username,
+      region: source.aws_region,
+    });
+
+    const queryParams = new Map(parsed.searchParams);
+    // IAM DB authentication requires SSL/TLS.
+    queryParams.set("sslmode", "require");
+
+    const protocol = parsed.protocol.endsWith(":")
+      ? parsed.protocol.slice(0, -1)
+      : parsed.protocol;
+    const encodedUser = encodeURIComponent(username);
+    const encodedToken = encodeURIComponent(token);
+    const path = parsed.pathname || "/";
+    const query = Array.from(queryParams.entries())
+      .map(
+        ([key, value]) =>
+          `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+      )
+      .join("&");
+
+    return `${protocol}://${encodedUser}:${encodedToken}@${hostname}:${port}${path}${query ? `?${query}` : ""}`;
   }
 }

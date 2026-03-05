@@ -680,6 +680,67 @@ domain = "MYDOMAIN"
       });
     });
 
+    describe('AWS IAM auth validation', () => {
+      it('should accept aws_iam_auth for MySQL without password', () => {
+        const tomlContent = `
+[[sources]]
+id = "mysql_iam"
+type = "mysql"
+host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+database = "mydb"
+user = "dbuser@example.com"
+aws_iam_auth = true
+aws_region = "eu-west-1"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0]).toMatchObject({
+          id: 'mysql_iam',
+          type: 'mysql',
+          host: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
+          database: 'mydb',
+          user: 'dbuser@example.com',
+          aws_iam_auth: true,
+          aws_region: 'eu-west-1',
+        });
+        expect(result?.sources[0].password).toBeUndefined();
+      });
+
+      it('should throw error when aws_iam_auth is enabled without aws_region', () => {
+        const tomlContent = `
+[[sources]]
+id = "mysql_iam_missing_region"
+type = "mysql"
+host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+database = "mydb"
+user = "dbuser@example.com"
+aws_iam_auth = true
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('aws_region is not specified');
+      });
+
+      it('should throw error when aws_iam_auth is used with unsupported database type', () => {
+        const tomlContent = `
+[[sources]]
+id = "sqlserver_iam"
+type = "sqlserver"
+host = "localhost"
+database = "master"
+user = "sa"
+aws_iam_auth = true
+aws_region = "eu-west-1"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for postgres, mysql, and mariadb');
+      });
+    });
+
     describe('query_timeout validation', () => {
       it('should accept valid query_timeout', () => {
         const tomlContent = `
@@ -1102,6 +1163,36 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
 
       expect(dsn).toContain('sqlserver://');
       expect(dsn).toContain(':@'); // empty password
+    });
+
+    it('should allow missing password when aws_iam_auth is enabled', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        host: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
+        database: 'mydb',
+        user: 'dbuser@example.com',
+        aws_iam_auth: true,
+        aws_region: 'eu-west-1',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://dbuser%40example.com:@mydb.abc123.eu-west-1.rds.amazonaws.com:5432/mydb');
+    });
+
+    it('should still require password for unsupported aws_iam_auth types', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'sqlserver',
+        host: 'localhost',
+        database: 'master',
+        user: 'sa',
+        aws_iam_auth: true,
+        aws_region: 'eu-west-1',
+      };
+
+      expect(() => buildDSNFromSource(source)).toThrow('password is required');
     });
 
     it('should use custom port when provided', () => {

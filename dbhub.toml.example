@@ -44,6 +44,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "postgres://dev_user:dev_password@dev-db.internal.company.com:5432/myapp_dev?sslmode=require"
 # connection_timeout = 30
 
+# PostgreSQL on AWS RDS with IAM authentication (no password in config)
+# [[sources]]
+# id = "rds_pg_iam"
+# type = "postgres"
+# host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+# port = 5432
+# database = "myapp"
+# user = "dbuser@example.com"
+# aws_iam_auth = true
+# aws_region = "eu-west-1"
+# sslmode = "require"
+
 # Production PostgreSQL (behind SSH bastion, lazy connection)
 # [[sources]]
 # id = "prod_pg"
@@ -81,6 +93,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # id = "local_mysql"
 # dsn = "mysql://root:mysql@localhost:3306/myapp"
 
+# MySQL on AWS RDS with IAM authentication (no password in config)
+# [[sources]]
+# id = "rds_mysql_iam"
+# type = "mysql"
+# host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+# port = 3306
+# database = "myapp"
+# user = "dbuser@example.com"
+# aws_iam_auth = true
+# aws_region = "eu-west-1"
+# sslmode = "require"
+
 # ============================================================================
 # MARIADB (Local development)
 # ============================================================================
@@ -88,6 +112,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # [[sources]]
 # id = "local_mariadb"
 # dsn = "mariadb://root:mariadb@localhost:3306/myapp"
+
+# MariaDB on AWS RDS with IAM authentication (no password in config)
+# [[sources]]
+# id = "rds_mariadb_iam"
+# type = "mariadb"
+# host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+# port = 3306
+# database = "myapp"
+# user = "dbuser@example.com"
+# aws_iam_auth = true
+# aws_region = "eu-west-1"
+# sslmode = "require"
 
 # ============================================================================
 # SQL SERVER (Local development)
@@ -265,6 +301,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   dsn = "..."                # Connection string (or use individual params below)
 #   lazy = true                # Defer connection until first query (default: false)
 #   search_path = "schema1,public"  # PostgreSQL only: comma-separated schemas
+#   aws_iam_auth = true         # Optional: enable AWS RDS IAM auth (postgres/mysql/mariadb)
+#   aws_region = "eu-west-1"    # Required when aws_iam_auth = true
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require
