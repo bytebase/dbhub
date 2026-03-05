@@ -443,7 +443,7 @@ export class ConnectorManager {
 
   private async refreshIamSourceConnection(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
-    if (!source.aws_iam_auth || !this.connectors.has(sourceId)) {
+    if (this.isDisconnecting || !source.aws_iam_auth || !this.connectors.has(sourceId)) {
       return;
     }
 
@@ -459,6 +459,10 @@ export class ConnectorManager {
     if (existingTunnel) {
       await existingTunnel.close();
       this.sshTunnels.delete(sourceId);
+    }
+
+    if (this.isDisconnecting) {
+      return;
     }
 
     await this.connectSource(source);
