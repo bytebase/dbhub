@@ -32,6 +32,9 @@
     "test:watch": "vitest",
     "test:integration": "vitest run --project integration"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [],
   "author": "",
   "license": "MIT",
