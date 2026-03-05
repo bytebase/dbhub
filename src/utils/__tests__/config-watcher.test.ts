@@ -207,7 +207,7 @@ describe("startConfigWatcher", () => {
     expect(mockManager.disconnect).toHaveBeenCalledTimes(2);
   });
 
-  it("should re-establish watcher on error", () => {
+  it("should re-establish watcher on error after retry delay", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
 
     // Capture error handlers per watcher instance
@@ -226,14 +226,16 @@ describe("startConfigWatcher", () => {
     });
 
     startConfigWatcher(createOptions(createMockManager()));
-
     const watchCallsBefore = vi.mocked(fs.watch).mock.calls.length;
 
     // Simulate a watcher error
     errorHandlers[0](new Error("ENOENT"));
 
-    // Old watcher closed, new one created (one additional fs.watch call)
+    // Old watcher closed immediately
     expect(watchers[0].close).toHaveBeenCalled();
+
+    // New watcher created after retry delay (1000ms)
+    await vi.advanceTimersByTimeAsync(1000);
     expect(vi.mocked(fs.watch).mock.calls.length - watchCallsBefore).toBe(1);
     expect(watchers).toHaveLength(2);
   });
