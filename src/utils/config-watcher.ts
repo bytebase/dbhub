@@ -6,6 +6,11 @@ import type { SourceConfig, ToolConfig } from "../types/config.js";
 
 const DEBOUNCE_MS = 500;
 
+interface ConfigWatcherOptions {
+  connectorManager: ConnectorManager;
+  initialTools?: ToolConfig[];
+}
+
 /**
  * Watch the TOML configuration file for changes and reload sources automatically.
  * Only applicable when using TOML-based configuration.
@@ -15,7 +20,8 @@ const DEBOUNCE_MS = 500;
  * but STDIO clients won't see added/removed tools until a full server restart.
  * HTTP transport creates a fresh server per request, so tool changes take effect immediately.
  */
-export function startConfigWatcher(connectorManager: ConnectorManager): (() => void) | null {
+export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) | null {
+  const { connectorManager, initialTools } = options;
   const configPath = resolveTomlConfigPath();
   if (!configPath) {
     return null;
@@ -27,7 +33,7 @@ export function startConfigWatcher(connectorManager: ConnectorManager): (() => v
 
   // Track last known-good config for rollback (sources + tools)
   let lastGoodSources: SourceConfig[] = connectorManager.getAllSourceConfigs();
-  let lastGoodTools: ToolConfig[] | undefined;
+  let lastGoodTools: ToolConfig[] | undefined = initialTools;
 
   const scheduleReload = () => {
     if (debounceTimer) {
@@ -78,6 +84,8 @@ export function startConfigWatcher(connectorManager: ConnectorManager): (() => v
         console.error("Configuration reloaded successfully.");
       } catch (connectError) {
         console.error("Failed to connect with new config, rolling back:", connectError);
+        // Clean up any partial connections before rollback
+        try { await connectorManager.disconnect(); } catch { /* best effort */ }
         try {
           await connectorManager.connectWithSources(oldSources);
           initializeToolRegistry({ sources: oldSources, tools: oldTools });
@@ -103,22 +111,22 @@ export function startConfigWatcher(connectorManager: ConnectorManager): (() => v
     }
   };
 
-  let watcher = fs.watch(configPath, onWatchEvent);
-  watcher.unref?.();
-
-  // Re-establish watch on error (e.g., file replaced by atomic rename)
-  watcher.on("error", () => {
-    try {
-      watcher.close();
-      watcher = fs.watch(configPath, onWatchEvent);
-      watcher.unref?.();
-      watcher.on("error", (err) => {
-        console.error("Config file watcher error:", err);
-      });
-    } catch (rewatchError) {
-      console.error("Failed to re-establish config file watcher:", rewatchError);
-    }
-  });
+  // Create watcher with recursive re-watch on error (file replaced by atomic rename)
+  let watcher: fs.FSWatcher;
+  const createWatcher = () => {
+    watcher = fs.watch(configPath, onWatchEvent);
+    watcher.unref?.();
+    watcher.on("error", (err) => {
+      console.error("Config file watcher error:", err);
+      try {
+        watcher.close();
+        createWatcher();
+      } catch (rewatchError) {
+        console.error("Failed to re-establish config file watcher:", rewatchError);
+      }
+    });
+  };
+  createWatcher();
 
   console.error(`Watching ${configPath} for changes (hot reload enabled)`);
 

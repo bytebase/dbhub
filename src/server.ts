@@ -106,7 +106,10 @@ See documentation for more details on configuring database connections.
     // In STDIO mode, tool list is registered once — hot reload updates connections and
     // tool registry, but STDIO clients won't see added/removed tools without restart.
     // HTTP transport creates a new server per request, so tool changes apply immediately.
-    const stopConfigWatcher = startConfigWatcher(connectorManager);
+    const stopConfigWatcher = startConfigWatcher({
+      connectorManager,
+      initialTools: sourceConfigsData.tools,
+    });
 
     // Create MCP server factory function for HTTP transport
     // Note: This must be created AFTER ConnectorManager is initialized

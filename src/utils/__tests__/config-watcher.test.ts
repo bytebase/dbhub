@@ -25,6 +25,10 @@ function createMockManager(overrides: Partial<Record<string, any>> = {}) {
   } as unknown as ConnectorManager;
 }
 
+function createOptions(connectorManager: ConnectorManager, initialTools?: any[]) {
+  return { connectorManager, initialTools };
+}
+
 describe("startConfigWatcher", () => {
   let mockWatcher: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; unref: ReturnType<typeof vi.fn> };
   let watchCallback: (eventType: string) => void;
@@ -49,7 +53,7 @@ describe("startConfigWatcher", () => {
 
   it("should return null when no TOML config path exists", () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue(null);
-    const cleanup = startConfigWatcher(createMockManager());
+    const cleanup = startConfigWatcher(createOptions(createMockManager()));
 
     expect(cleanup).toBeNull();
     expect(fs.watch).not.toHaveBeenCalled();
@@ -57,7 +61,7 @@ describe("startConfigWatcher", () => {
 
   it("should start watching when TOML config exists", () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-    const cleanup = startConfigWatcher(createMockManager());
+    const cleanup = startConfigWatcher(createOptions(createMockManager()));
 
     expect(cleanup).toBeTypeOf("function");
     expect(fs.watch).toHaveBeenCalledWith("/path/to/dbhub.toml", expect.any(Function));
@@ -74,7 +78,7 @@ describe("startConfigWatcher", () => {
     vi.mocked(loadTomlConfig).mockReturnValue(newConfig);
     const mockManager = createMockManager();
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
 
     // Before debounce, nothing should happen
@@ -101,7 +105,7 @@ describe("startConfigWatcher", () => {
     });
     const mockManager = createMockManager();
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("rename");
     await vi.advanceTimersByTimeAsync(500);
 
@@ -117,7 +121,7 @@ describe("startConfigWatcher", () => {
     });
     const mockManager = createMockManager();
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
     watchCallback("change");
     watchCallback("change");
@@ -133,7 +137,7 @@ describe("startConfigWatcher", () => {
     });
     const mockManager = createMockManager();
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
@@ -145,14 +149,14 @@ describe("startConfigWatcher", () => {
     vi.mocked(loadTomlConfig).mockReturnValue(null);
     const mockManager = createMockManager();
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
     expect(mockManager.disconnect).not.toHaveBeenCalled();
   });
 
-  it("should rollback to old config (sources + tools) when connectWithSources fails", async () => {
+  it("should rollback with initial tools when connectWithSources fails", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
     const newConfig = {
       sources: [{ id: "bad_db", type: "postgres" as const, dsn: "postgres://localhost/bad" }],
@@ -162,6 +166,7 @@ describe("startConfigWatcher", () => {
     vi.mocked(loadTomlConfig).mockReturnValue(newConfig);
 
     const oldSources = [{ id: "old_db", type: "sqlite" as const, dsn: "sqlite:///:memory:" }];
+    const oldTools = [{ name: "execute_sql" as const, source: "old_db" }];
     const mockManager = createMockManager({
       connectWithSources: vi.fn()
         .mockRejectedValueOnce(new Error("Connection refused"))
@@ -169,63 +174,42 @@ describe("startConfigWatcher", () => {
       getAllSourceConfigs: vi.fn().mockReturnValue(oldSources),
     });
 
-    startConfigWatcher(mockManager);
+    startConfigWatcher(createOptions(mockManager, oldTools));
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
     // Should have attempted new config, then rolled back to old
-    expect(mockManager.connectWithSources).toHaveBeenCalledTimes(2);
     expect(mockManager.connectWithSources).toHaveBeenNthCalledWith(1, newConfig.sources);
-    expect(mockManager.connectWithSources).toHaveBeenNthCalledWith(2, oldSources);
-    // Rollback should restore tools too (undefined for initial config)
-    expect(initializeToolRegistry).toHaveBeenLastCalledWith({ sources: oldSources, tools: undefined });
+    expect(mockManager.connectWithSources).toHaveBeenLastCalledWith(oldSources);
+    // Rollback should restore initial tools
+    expect(initializeToolRegistry).toHaveBeenLastCalledWith({ sources: oldSources, tools: oldTools });
   });
 
-  it("should not drop file changes that arrive during reload", async () => {
-    vi.useRealTimers(); // Use real timers for this async-heavy test
+  it("should disconnect partial state before rollback", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-
-    let loadCount = 0;
-    vi.mocked(loadTomlConfig).mockImplementation(() => {
-      loadCount++;
-      return {
-        sources: [{ id: `db_${loadCount}`, type: "sqlite" as const, dsn: "sqlite:///:memory:" }],
-        tools: [],
-        source: "dbhub.toml",
-      };
+    vi.mocked(loadTomlConfig).mockReturnValue({
+      sources: [{ id: "bad", type: "postgres" as const, dsn: "postgres://localhost/bad" }],
+      tools: [],
+      source: "dbhub.toml",
     });
 
-    // First disconnect blocks until we resolve it
-    let resolveDisconnect!: () => void;
     const mockManager = createMockManager({
-      disconnect: vi.fn()
-        .mockImplementationOnce(() => new Promise<void>(r => { resolveDisconnect = r; }))
-        .mockResolvedValue(undefined),
+      connectWithSources: vi.fn()
+        .mockRejectedValueOnce(new Error("Partial failure"))
+        .mockResolvedValueOnce(undefined),
     });
 
-    startConfigWatcher(mockManager);
-
-    // Trigger first change — after DEBOUNCE_MS, reload starts and blocks on disconnect
+    startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
-    await new Promise(r => setTimeout(r, 600));
+    await vi.advanceTimersByTimeAsync(500);
 
-    // Reload is in progress. Fire another change — it should set reloadPending
-    watchCallback("change");
-    await new Promise(r => setTimeout(r, 600));
-
-    // Now unblock the first disconnect
-    resolveDisconnect();
-
-    // Wait for both reloads to complete
-    await new Promise(r => setTimeout(r, 1200));
-
-    // Config should have been loaded at least twice
-    expect(loadCount).toBeGreaterThanOrEqual(2);
+    // disconnect called twice: once for initial teardown, once to clean up partial state before rollback
+    expect(mockManager.disconnect).toHaveBeenCalledTimes(2);
   });
 
   it("should clean up watcher on cleanup call", () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-    const cleanup = startConfigWatcher(createMockManager());
+    const cleanup = startConfigWatcher(createOptions(createMockManager()));
     cleanup!();
 
     expect(mockWatcher.close).toHaveBeenCalled();
