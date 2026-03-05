@@ -23,6 +23,7 @@ export class ConnectorManager {
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
   private iamRefreshTimers: Map<string, NodeJS.Timeout> = new Map();
+  private isDisconnecting = false;
 
   // Lazy connection support
   private lazySources: Map<string, SourceConfig> = new Map(); // Sources pending lazy connection
@@ -252,6 +253,15 @@ export class ConnectorManager {
    * Close all database connections
    */
   async disconnect(): Promise<void> {
+    // Set shutdown flag first to prevent IAM refresh timers from firing during teardown
+    this.isDisconnecting = true;
+
+    // Stop all IAM refresh timers before disconnecting connectors
+    for (const timer of this.iamRefreshTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.iamRefreshTimers.clear();
+
     // Disconnect multi-source connections
     for (const [sourceId, connector] of this.connectors.entries()) {
       try {
@@ -271,19 +281,14 @@ export class ConnectorManager {
       }
     }
 
-    // Stop all IAM refresh timers
-    for (const timer of this.iamRefreshTimers.values()) {
-      clearTimeout(timer);
-    }
-
     // Clear multi-source state
     this.connectors.clear();
     this.sshTunnels.clear();
     this.sourceConfigs.clear();
-    this.iamRefreshTimers.clear();
     this.lazySources.clear();
     this.pendingConnections.clear();
     this.sourceIds = [];
+    this.isDisconnecting = false;
   }
 
   /**
@@ -400,6 +405,10 @@ export class ConnectorManager {
   }
 
   private scheduleIamRefresh(source: SourceConfig): void {
+    if (this.isDisconnecting) {
+      return;
+    }
+
     const sourceId = source.id;
     const existingTimer = this.iamRefreshTimers.get(sourceId);
     if (existingTimer) {
@@ -411,6 +420,9 @@ export class ConnectorManager {
     }
 
     const timer = setTimeout(async () => {
+      if (this.isDisconnecting) {
+        return;
+      }
       try {
         await this.refreshIamSourceConnection(source);
       } catch (error) {
@@ -419,8 +431,8 @@ export class ConnectorManager {
           error
         );
       } finally {
-        // Continue rotating as long as source remains configured.
-        if (this.sourceConfigs.has(sourceId)) {
+        // Continue rotating as long as source remains configured and not shutting down.
+        if (!this.isDisconnecting && this.sourceConfigs.has(sourceId)) {
           this.scheduleIamRefresh(source);
         }
       }
@@ -431,7 +443,7 @@ export class ConnectorManager {
 
   private async refreshIamSourceConnection(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
-    if (!source.aws_iam_auth || !this.connectors.has(sourceId)) {
+    if (this.isDisconnecting || !source.aws_iam_auth || !this.connectors.has(sourceId)) {
       return;
     }
 
@@ -447,6 +459,10 @@ export class ConnectorManager {
     if (existingTunnel) {
       await existingTunnel.close();
       this.sshTunnels.delete(sourceId);
+    }
+
+    if (this.isDisconnecting) {
+      return;
     }
 
     await this.connectSource(source);
