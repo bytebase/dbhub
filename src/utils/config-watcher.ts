@@ -112,14 +112,14 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
   };
 
   // Create watcher with recursive re-watch on error (file replaced by atomic rename)
-  let watcher: fs.FSWatcher;
+  let watcher: fs.FSWatcher | null = null;
   const createWatcher = () => {
     watcher = fs.watch(configPath, onWatchEvent);
     watcher.unref?.();
     watcher.on("error", (err) => {
       console.error("Config file watcher error:", err);
       try {
-        watcher.close();
+        watcher?.close();
         createWatcher();
       } catch (rewatchError) {
         console.error("Failed to re-establish config file watcher:", rewatchError);
@@ -135,6 +135,6 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
-    watcher.close();
+    watcher?.close();
   };
 }
