@@ -102,7 +102,10 @@ See documentation for more details on configuring database connections.
     });
     console.error("Tool registry initialized");
 
-    // Start watching TOML config file for hot reload (only when using TOML config)
+    // Start watching TOML config file for hot reload (only when using TOML config).
+    // In STDIO mode, tool list is registered once — hot reload updates connections and
+    // tool registry, but STDIO clients won't see added/removed tools without restart.
+    // HTTP transport creates a new server per request, so tool changes apply immediately.
     const stopConfigWatcher = startConfigWatcher(connectorManager);
 
     // Create MCP server factory function for HTTP transport
@@ -152,10 +155,8 @@ See documentation for more details on configuring database connections.
     );
     console.error(generateStartupTable(sourceDisplayInfos));
 
-    // Clean up config watcher on process exit (covers both transports)
-    const cleanupOnExit = () => { stopConfigWatcher?.(); };
-    process.on("SIGINT", cleanupOnExit);
-    process.on("SIGTERM", cleanupOnExit);
+    // Clean up config watcher when the process is exiting (covers both transports)
+    process.on("exit", () => { stopConfigWatcher?.(); });
 
     // Set up transport-specific server
     if (transportData.type === "http") {
