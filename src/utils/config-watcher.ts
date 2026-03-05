@@ -132,7 +132,11 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
   };
   createWatcher();
 
-  console.error(`Watching ${configPath} for changes (hot reload enabled)`);
+  if (watcher) {
+    console.error(`Watching ${configPath} for changes (hot reload enabled)`);
+  } else {
+    console.error(`Hot reload disabled: failed to watch ${configPath} (see errors above)`);
+  }
 
   // Return cleanup function
   return () => {
