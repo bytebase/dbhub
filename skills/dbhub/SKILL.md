@@ -16,7 +16,7 @@ DBHub provides two MCP tools:
 | `search_objects` | Explore database structure — schemas, tables, columns, indexes, procedures, functions |
 | `execute_sql` | Run SQL statements against the database |
 
-If multiple databases are configured, both tools accept an optional `source_id` parameter to target a specific database.
+If multiple databases are configured, DBHub registers separate tools for each source (for example, `search_objects_prod_pg`, `execute_sql_staging_mysql`). Select the desired database by calling the correspondingly named tool.
 
 ## The Explore-Then-Query Workflow
 
@@ -86,14 +86,19 @@ The `detail_level` parameter controls how much information `search_objects` retu
 
 ## Working with Multiple Databases
 
-When DBHub is configured with multiple database sources, each tool call can target a specific database using `source_id`:
+When DBHub is configured with multiple database sources, it registers separate tool instances for each source. The tool names follow the pattern `{tool}_{source_id}`:
 
 ```
-search_objects(object_type="table", schema="public", detail_level="names", source_id="prod_pg")
-execute_sql(sql="SELECT count(*) FROM orders", source_id="staging_mysql")
+# Query the production PostgreSQL database
+search_objects_prod_pg(object_type="table", schema="public", detail_level="names")
+execute_sql_prod_pg(sql="SELECT count(*) FROM orders")
+
+# Query the staging MySQL database
+search_objects_staging_mysql(object_type="table", detail_level="names")
+execute_sql_staging_mysql(sql="SELECT count(*) FROM orders")
 ```
 
-If you omit `source_id`, the default (first configured) database is used. When the user's request involves a specific database, always pass the appropriate `source_id`.
+In single-database setups, the tools are simply `search_objects` and `execute_sql` without any suffix. When the user mentions a specific database or environment, call the correspondingly named tool.
 
 ## Searching for Specific Objects
 
@@ -139,5 +144,5 @@ When a query fails:
 
 - **Don't guess table or column names.** Always verify with `search_objects` first. A wrong guess wastes a round trip and confuses the conversation.
 - **Don't dump entire schemas upfront.** Use progressive disclosure — start with `names`, drill into `full` only for tables you'll actually query.
-- **Don't ignore `source_id` in multi-database setups.** If the user mentions a specific database or environment, route your calls accordingly.
+- **Don't use the wrong tool in multi-database setups.** If the user mentions a specific database, call the source-specific tool variant (e.g., `execute_sql_prod_pg`) rather than the generic `execute_sql`.
 - **Don't retry failed queries blindly.** If SQL fails, investigate the schema to understand why before retrying.
