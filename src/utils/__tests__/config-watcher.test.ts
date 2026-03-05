@@ -96,22 +96,6 @@ describe("startConfigWatcher", () => {
     });
   });
 
-  it("should reload on rename events (atomic editor writes)", async () => {
-    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-    vi.mocked(loadTomlConfig).mockReturnValue({
-      sources: [{ id: "db", type: "sqlite" as const, dsn: "sqlite:///:memory:" }],
-      tools: [],
-      source: "dbhub.toml",
-    });
-    const mockManager = createMockManager();
-
-    startConfigWatcher(createOptions(mockManager));
-    watchCallback("rename");
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(mockManager.disconnect).toHaveBeenCalled();
-  });
-
   it("should debounce rapid file changes", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
     vi.mocked(loadTomlConfig).mockReturnValue({
@@ -178,10 +162,8 @@ describe("startConfigWatcher", () => {
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
-    // Should have attempted new config, then rolled back to old
     expect(mockManager.connectWithSources).toHaveBeenNthCalledWith(1, newConfig.sources);
     expect(mockManager.connectWithSources).toHaveBeenLastCalledWith(oldSources);
-    // Rollback should restore initial tools
     expect(initializeToolRegistry).toHaveBeenLastCalledWith({ sources: oldSources, tools: oldTools });
   });
 
@@ -205,39 +187,6 @@ describe("startConfigWatcher", () => {
 
     // disconnect called twice: once for initial teardown, once to clean up partial state before rollback
     expect(mockManager.disconnect).toHaveBeenCalledTimes(2);
-  });
-
-  it("should re-establish watcher on error after retry delay", async () => {
-    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-
-    // Capture error handlers per watcher instance
-    const errorHandlers: ((err: Error) => void)[] = [];
-    const watchers: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; unref: ReturnType<typeof vi.fn> }[] = [];
-
-    vi.mocked(fs.watch).mockImplementation((_path: any, cb: any) => {
-      const w = { on: vi.fn().mockReturnThis(), close: vi.fn(), unref: vi.fn() };
-      w.on.mockImplementation((event: string, handler: any) => {
-        if (event === "error") errorHandlers.push(handler);
-        return w;
-      });
-      watchers.push(w);
-      watchCallback = cb;
-      return w as any;
-    });
-
-    startConfigWatcher(createOptions(createMockManager()));
-    const watchCallsBefore = vi.mocked(fs.watch).mock.calls.length;
-
-    // Simulate a watcher error
-    errorHandlers[0](new Error("ENOENT"));
-
-    // Old watcher closed immediately
-    expect(watchers[0].close).toHaveBeenCalled();
-
-    // New watcher created after retry delay (1000ms)
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(vi.mocked(fs.watch).mock.calls.length - watchCallsBefore).toBe(1);
-    expect(watchers).toHaveLength(2);
   });
 
   it("should clean up watcher on cleanup call", () => {

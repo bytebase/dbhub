@@ -105,56 +105,23 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
     }
   };
 
-  const onWatchEvent = (eventType: string) => {
-    if (eventType === "change" || eventType === "rename") {
+  const watcher = fs.watch(configPath, (eventType) => {
+    if (eventType === "change") {
       scheduleReload();
     }
-  };
+  });
+  watcher.unref?.();
+  watcher.on("error", (err) => {
+    console.error("Config file watcher error:", err);
+  });
 
-  // Create watcher with re-watch on error (file replaced by atomic rename).
-  // Uses delayed retry to avoid tight loops on persistent failures.
-  const WATCHER_RETRY_MS = 1000;
-  let watcher: fs.FSWatcher | null = null;
-  let stopped = false;
-
-  const retryCreateWatcher = () => {
-    if (stopped) return;
-    const timer = setTimeout(createWatcher, WATCHER_RETRY_MS);
-    timer.unref?.();
-  };
-
-  const createWatcher = () => {
-    if (stopped) return;
-    try {
-      watcher = fs.watch(configPath, onWatchEvent);
-      watcher.unref?.();
-      watcher.on("error", (err) => {
-        console.error("Config file watcher error:", err);
-        try { watcher?.close(); } catch { /* best effort */ }
-        watcher = null;
-        retryCreateWatcher();
-      });
-    } catch (watchError) {
-      console.error("Failed to establish config file watcher:", watchError);
-      watcher = null;
-      retryCreateWatcher();
-    }
-  };
-  createWatcher();
-
-  if (watcher) {
-    console.error(`Watching ${configPath} for changes (hot reload enabled)`);
-  } else {
-    console.error(`Hot reload disabled: failed to watch ${configPath} (see errors above)`);
-  }
+  console.error(`Watching ${configPath} for changes (hot reload enabled)`);
 
   // Return cleanup function
   return () => {
-    stopped = true;
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
-    watcher?.close();
-    watcher = null;
+    watcher.close();
   };
 }
