@@ -207,6 +207,37 @@ describe("startConfigWatcher", () => {
     expect(mockManager.disconnect).toHaveBeenCalledTimes(2);
   });
 
+  it("should re-establish watcher on error", () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+
+    // Capture error handlers per watcher instance
+    const errorHandlers: ((err: Error) => void)[] = [];
+    const watchers: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; unref: ReturnType<typeof vi.fn> }[] = [];
+
+    vi.mocked(fs.watch).mockImplementation((_path: any, cb: any) => {
+      const w = { on: vi.fn().mockReturnThis(), close: vi.fn(), unref: vi.fn() };
+      w.on.mockImplementation((event: string, handler: any) => {
+        if (event === "error") errorHandlers.push(handler);
+        return w;
+      });
+      watchers.push(w);
+      watchCallback = cb;
+      return w as any;
+    });
+
+    startConfigWatcher(createOptions(createMockManager()));
+
+    const watchCallsBefore = vi.mocked(fs.watch).mock.calls.length;
+
+    // Simulate a watcher error
+    errorHandlers[0](new Error("ENOENT"));
+
+    // Old watcher closed, new one created (one additional fs.watch call)
+    expect(watchers[0].close).toHaveBeenCalled();
+    expect(vi.mocked(fs.watch).mock.calls.length - watchCallsBefore).toBe(1);
+    expect(watchers).toHaveLength(2);
+  });
+
   it("should clean up watcher on cleanup call", () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
     const cleanup = startConfigWatcher(createOptions(createMockManager()));
