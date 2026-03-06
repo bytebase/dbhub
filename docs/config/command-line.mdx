@@ -247,12 +247,15 @@ npx @bytebase/dbhub@latest --dsn "..." \
 # ProxyJump (multi-hop: bastion1 → bastion2 → target)
 npx @bytebase/dbhub@latest --dsn "..." \
   --ssh-host target.internal --ssh-proxy-jump "bastion1.com,admin@bastion2:2222"
+
+# SSH config alias (resolves host, user, key, and ProxyJump from ~/.ssh/config)
+npx @bytebase/dbhub@latest --dsn "..." --ssh-host mybastion
 ```
 
 <Note>
-- ProxyJump is automatically read from `~/.ssh/config` when using SSH host aliases
-- ProxyCommand is not supported (requires shell execution). Use ProxyJump instead
-- Path expansion for `~/` is supported in file paths
+- When `--ssh-host` is a plain alias (no dots, not an IP address), DBHub automatically resolves it from `~/.ssh/config`, reading the `Hostname`, `User`, `IdentityFile`, and `ProxyJump` directives. Explicit flags always override values from the config file.
+- ProxyCommand is not supported (requires shell execution). Use ProxyJump instead.
+- Path expansion for `~/` is supported in file paths.
 </Note>
 
 ## Quick Reference

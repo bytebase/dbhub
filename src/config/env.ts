@@ -2,9 +2,9 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { homedir } from "os";
+
 import type { SSHTunnelConfig } from "../types/ssh.js";
-import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
+import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
@@ -411,7 +411,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   // Check if the host looks like an SSH config alias
   if (sshConfigHost && looksLikeSSHAlias(sshConfigHost)) {
     // Try to parse SSH config for this host, default to ~/.ssh/config
-    const sshConfigPath = path.join(homedir(), '.ssh', 'config');
+    const sshConfigPath = getDefaultSSHConfigPath();
     console.error(`Attempting to parse SSH config for host '${sshConfigHost}' from: ${sshConfigPath}`);
     const sshConfigData = parseSSHConfig(sshConfigHost, sshConfigPath);
     if (sshConfigData) {

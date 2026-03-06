@@ -5,6 +5,13 @@ import SSHConfig from 'ssh-config';
 import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
 
 /**
+ * Default path to the user's SSH config file
+ */
+export function getDefaultSSHConfigPath(): string {
+  return join(homedir(), '.ssh', 'config');
+}
+
+/**
  * Default SSH key paths to check if no IdentityFile is specified
  */
 const DEFAULT_SSH_KEYS = [
