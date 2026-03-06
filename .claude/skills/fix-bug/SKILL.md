@@ -1,39 +1,17 @@
 ---
 name: fix-bug
-description: Use when given a GitHub issue URL or number to investigate and implement a fix. Triggers on "fix issue", "fix bug", "fix #123", GitHub issue URLs, or any request to resolve a reported problem from a GitHub issue.
+description: Use when given a GitHub issue URL or number to investigate and implement a fix. Triggers on "fix issue", "fix bug", "fix #123", GitHub issue URLs, or any request to resolve a reported problem from a GitHub issue. Also triggers when asked to investigate errors, diagnose failures, or debug unexpected behavior in DBHub.
 ---
 
 # Fix Bug from GitHub Issue
 
-## Overview
-
-Systematic workflow for turning a GitHub issue into a working fix: fetch context, reproduce, locate root cause, plan fix, implement, verify, and create a PR.
+Systematic workflow for turning a GitHub issue into a working fix in the DBHub codebase.
 
 ## Workflow
 
-```dot
-digraph fix_bug {
-    rankdir=TB;
-    node [shape=box];
+1. **Fetch** → 2. **Analyze** → 3. **Locate** → 4. **Reproduce** → 5. **Plan** → 6. **Implement** → 7. **Verify** → 8. **PR**
 
-    fetch [label="1. Fetch issue details\n(gh issue view)"];
-    analyze [label="2. Analyze issue\n(symptoms, repro steps, labels)"];
-    locate [label="3. Locate relevant code\n(Grep/Glob/Explore agents)"];
-    reproduce [label="4. Reproduce if possible\n(write failing test or manual check)"];
-    plan [label="5. Plan the fix\n(EnterPlanMode for non-trivial)"];
-    implement [label="6. Implement fix"];
-    verify [label="7. Verify fix\n(run tests, check repro)"];
-    pr [label="8. Create PR\n(commit, push, gh pr create)"];
-
-    fetch -> analyze -> locate -> reproduce -> plan -> implement -> verify -> pr;
-}
-```
-
-## Step Details
-
-### 1. Fetch Issue
-
-Extract issue info using `gh`:
+## Step 1: Fetch Issue
 
 ```bash
 # From URL: https://github.com/owner/repo/issues/123
@@ -43,65 +21,101 @@ gh issue view 123 --json title,body,labels,comments,state
 gh issue view 123 --repo owner/repo --json title,body,labels,comments,state
 ```
 
-If given a URL, parse the owner/repo/number from it. If given just `#123` or `123`, use the current repo.
+| Input | How to fetch |
+|-------|-------------|
+| `https://github.com/owner/repo/issues/42` | `gh issue view 42 --repo owner/repo` |
+| `#42` or `42` | `gh issue view 42` (current repo) |
+| `owner/repo#42` | `gh issue view 42 --repo owner/repo` |
 
-### 2. Analyze Issue
+## Step 2: Analyze Issue
 
 Extract from the issue:
 - **What's broken**: Expected vs actual behavior
 - **Reproduction steps**: How to trigger the bug
-- **Environment**: Version, OS, config if mentioned
-- **Labels/comments**: May reveal affected area, priority, prior investigation
+- **Environment**: Database type, connection method (DSN, SSH tunnel, TOML config), transport (stdio/HTTP)
+- **Labels/comments**: May reveal affected area or prior investigation
 - **Linked PRs/issues**: Check for related context
 
-### 3. Locate Relevant Code
+## Step 3: Locate Relevant Code
 
-Use the issue details to search the codebase:
-- Search for error messages, function names, or file paths mentioned in the issue
-- Use Explore agents for broad searches, Grep/Glob for targeted ones
-- Trace the code path from entry point to the failure
+Use the issue details to identify which part of the codebase is affected. DBHub has a clear modular structure — most bugs fall into one of these areas:
 
-### 4. Reproduce
+| Bug Category | Where to Look | Key Files |
+|-------------|--------------|-----------|
+| Connection failures | Connector implementations | `src/connectors/{db-type}/index.ts`, `src/connectors/manager.ts` |
+| SQL execution errors | Tool handlers | `src/tools/execute-sql.ts`, `src/utils/allowed-keywords.ts` |
+| Schema/table listing | Search tool | `src/tools/search-objects.ts` |
+| DSN parsing issues | Parser logic | `src/connectors/{db-type}/index.ts` (DSNParser), `src/utils/dsn-obfuscate.ts`, `src/utils/safe-url.ts` |
+| SSH tunnel problems | Tunnel utilities | `src/utils/ssh-tunnel.ts`, `src/utils/ssh-config-parser.ts` |
+| TOML config issues | Config loading | `src/config/toml-loader.ts`, `src/types/config.ts` |
+| Multi-database routing | Manager & tools | `src/connectors/manager.ts`, `src/utils/tool-handler-helpers.ts` |
+| Custom tool issues | Custom handler | `src/tools/custom-tool-handler.ts`, `src/tools/registry.ts` |
+| HTTP transport | Server setup | `src/server.ts` |
+| Read-only violations | SQL validation | `src/utils/allowed-keywords.ts`, `src/utils/sql-parser.ts` |
+| Row limiting | SQL rewriting | `src/utils/sql-row-limiter.ts` |
+| API endpoint issues | API handlers | `src/api/sources.ts`, `src/api/requests.ts` |
+| AWS IAM auth | Token signing | `src/utils/aws-rds-signer.ts` |
 
-If tests exist:
-- Write a failing test that captures the bug (TDD approach)
+Search for error messages, function names, or file paths mentioned in the issue. Trace the code path from entry point to the failure.
 
-If no test infrastructure applies:
-- Identify the code path and confirm the logic flaw by reading
+## Step 4: Reproduce
 
-### 5. Plan the Fix
+**If integration tests exist for the area:**
+Write a failing test that captures the bug. DBHub's test infrastructure makes this straightforward:
+- Database connector bugs → extend existing integration test in `src/connectors/__tests__/`
+- Utility bugs → add cases to existing unit tests in `src/utils/__tests__/`
+- Tool handler bugs → add to `src/tools/__tests__/`
+- Config bugs → add to `src/config/__tests__/`
+
+Use the test fixtures in `src/__fixtures__/` for multi-database or readonly/max_rows scenarios.
+
+**If no test infrastructure applies:**
+Trace the code path and confirm the logic flaw by reading.
+
+## Step 5: Plan the Fix
 
 For non-trivial fixes (multi-file, architectural impact): use `EnterPlanMode`.
 
 For simple fixes (single function, clear root cause): proceed directly.
 
-### 6. Implement
+## Step 6: Implement
 
 - Fix the root cause, not just the symptom
 - Keep changes minimal and focused
-- Follow existing code conventions
+- Follow existing code conventions (see CLAUDE.md for style guide)
+- Use parameterized queries for any database operations
+- Validate inputs with zod schemas where appropriate
 
-### 7. Verify
+## Step 7: Verify
 
-- Run existing tests: ensure no regressions
-- Run new test (if written in step 4): confirm it passes
-- Review the diff: does it address the issue fully?
+Run the relevant tests to confirm the fix:
+```bash
+pnpm test:unit                    # Quick check — no Docker needed
+pnpm test src/path/to/test.ts     # Run the specific test file
+pnpm test:integration             # Full integration suite if needed
+```
 
-### 8. Create PR
+Check that:
+- The failing test (if written) now passes
+- No existing tests regressed
+- The diff fully addresses the issue
 
-Once the fix is verified:
+## Step 8: Create PR
 
-1. **Create a branch** (if not already on one):
+1. **Create a branch**:
    ```bash
    git checkout -b fix/issue-123
    ```
 
-2. **Commit changes** with a descriptive message referencing the issue:
+2. **Commit changes** referencing the issue:
    ```bash
    git add <changed-files>
-   git commit -m "Fix: <short description>
+   git commit -m "$(cat <<'EOF'
+   Fix: <short description>
 
-   Closes #123"
+   Closes #123
+   EOF
+   )"
    ```
 
 3. **Push and create the PR**:
@@ -125,23 +139,10 @@ Once the fix is verified:
 
 4. **Return the PR URL** to the user.
 
-Key points:
-- Reference the issue number with `Closes #N` so it auto-closes on merge
-- Keep the PR title concise (under 70 characters)
-- Include a test plan in the PR body
-- If the issue is from another repo, link it manually in the body
-
-## Parsing Issue References
-
-| Input | How to fetch |
-|-------|-------------|
-| `https://github.com/owner/repo/issues/42` | `gh issue view 42 --repo owner/repo` |
-| `#42` or `42` | `gh issue view 42` (current repo) |
-| `owner/repo#42` | `gh issue view 42 --repo owner/repo` |
-
 ## Common Mistakes
 
 - **Fixing symptoms instead of root cause**: Trace the full code path before patching
 - **Skipping reproduction**: A fix without a repro is a guess
 - **Scope creep**: Fix the reported issue, don't refactor surrounding code
 - **Missing edge cases**: Check if the fix handles related scenarios mentioned in comments
+- **Not testing with the right database**: If the bug is database-specific, test with that connector
