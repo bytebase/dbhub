@@ -7,6 +7,9 @@ import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfu
 import { redactDSN } from "../config/env.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
+import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
+import { homedir } from "os";
+import { join } from "path";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -147,29 +150,43 @@ export class ConnectorManager {
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
     if (source.ssh_host) {
-      // Validate required SSH fields
-      if (!source.ssh_user) {
-        throw new Error(
-          `Source '${sourceId}': SSH tunnel requires ssh_user`
-        );
+      // If ssh_host looks like an SSH config alias, resolve from ~/.ssh/config
+      let resolvedSSHConfig: SSHTunnelConfig | null = null;
+      if (looksLikeSSHAlias(source.ssh_host)) {
+        const sshConfigPath = join(homedir(), '.ssh', 'config');
+        console.error(`  Resolving SSH config for host '${source.ssh_host}' from: ${sshConfigPath}`);
+        resolvedSSHConfig = parseSSHConfig(source.ssh_host, sshConfigPath);
       }
 
+      // Build SSH config: explicit TOML fields override SSH config values
       const sshConfig: SSHTunnelConfig = {
         host: source.ssh_host,
-        port: source.ssh_port || 22,
-        username: source.ssh_user,
+        port: source.ssh_port || resolvedSSHConfig?.port || 22,
+        username: source.ssh_user || resolvedSSHConfig?.username || '',
         password: source.ssh_password,
-        privateKey: source.ssh_key,
+        privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
         passphrase: source.ssh_passphrase,
-        proxyJump: source.ssh_proxy_jump,
+        proxyJump: source.ssh_proxy_jump || resolvedSSHConfig?.proxyJump,
         keepaliveInterval: source.ssh_keepalive_interval,
         keepaliveCountMax: source.ssh_keepalive_count_max,
       };
 
+      // Use resolved hostname if SSH config provided one
+      if (resolvedSSHConfig?.host) {
+        sshConfig.host = resolvedSSHConfig.host;
+      }
+
+      // Validate required SSH fields
+      if (!sshConfig.username) {
+        throw new Error(
+          `Source '${sourceId}': SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)`
+        );
+      }
+
       // Validate SSH auth
       if (!sshConfig.password && !sshConfig.privateKey) {
         throw new Error(
-          `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key`
+          `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)`
         );
       }
 
