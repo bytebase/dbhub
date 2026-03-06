@@ -93,6 +93,19 @@ Sources define database connections. Each source represents a database that DBHu
   ```
 </ParamField>
 
+### description
+
+<ParamField path="description" type="string">
+  Human-readable description of this data source. Helps AI models understand the purpose and contents of each database when multiple sources are configured.
+
+  ```toml
+  [[sources]]
+  id = "production"
+  description = "Production PostgreSQL database containing customer and order data"
+  dsn = "postgres://user:pass@localhost:5432/mydb"
+  ```
+</ParamField>
+
 ### dsn
 
 <ParamField path="dsn" type="string" required>
@@ -611,6 +624,7 @@ default = 10
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | string | ✅ | Unique source identifier |
+| `description` | string | ❌ | Human-readable description of the data source |
 | `dsn` | string | ✅ | Database connection string |
 | `lazy` | boolean | ❌ | Defer connection until first query (default: `false`) |
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
