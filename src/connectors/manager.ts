@@ -7,9 +7,7 @@ import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfu
 import { redactDSN } from "../config/env.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
-import { parseSSHConfig, looksLikeSSHAlias } from "../utils/ssh-config-parser.js";
-import { homedir } from "os";
-import { join } from "path";
+import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -153,16 +151,17 @@ export class ConnectorManager {
       // If ssh_host looks like an SSH config alias, resolve from ~/.ssh/config
       let resolvedSSHConfig: SSHTunnelConfig | null = null;
       if (looksLikeSSHAlias(source.ssh_host)) {
-        const sshConfigPath = join(homedir(), '.ssh', 'config');
+        const sshConfigPath = getDefaultSSHConfigPath();
         console.error(`  Resolving SSH config for host '${source.ssh_host}' from: ${sshConfigPath}`);
         resolvedSSHConfig = parseSSHConfig(source.ssh_host, sshConfigPath);
       }
 
       // Build SSH config: explicit TOML fields override SSH config values
+      const username = source.ssh_user || resolvedSSHConfig?.username;
       const sshConfig: SSHTunnelConfig = {
-        host: source.ssh_host,
+        host: resolvedSSHConfig?.host || source.ssh_host,
         port: source.ssh_port || resolvedSSHConfig?.port || 22,
-        username: source.ssh_user || resolvedSSHConfig?.username || '',
+        username: username || '',
         password: source.ssh_password,
         privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
         passphrase: source.ssh_passphrase,
@@ -171,13 +170,8 @@ export class ConnectorManager {
         keepaliveCountMax: source.ssh_keepalive_count_max,
       };
 
-      // Use resolved hostname if SSH config provided one
-      if (resolvedSSHConfig?.host) {
-        sshConfig.host = resolvedSSHConfig.host;
-      }
-
       // Validate required SSH fields
-      if (!sshConfig.username) {
+      if (!username) {
         throw new Error(
           `Source '${sourceId}': SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)`
         );
