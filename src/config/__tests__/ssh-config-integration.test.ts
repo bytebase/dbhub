@@ -7,7 +7,8 @@ import * as sshConfigParser from '../../utils/ssh-config-parser.js';
 // Mock the ssh-config-parser module
 vi.mock('../../utils/ssh-config-parser.js', () => ({
   parseSSHConfig: vi.fn(),
-  looksLikeSSHAlias: vi.fn()
+  looksLikeSSHAlias: vi.fn(),
+  getDefaultSSHConfigPath: vi.fn(() => join(homedir(), '.ssh', 'config'))
 }));
 
 describe('SSH Config Integration', () => {
