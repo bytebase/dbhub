@@ -115,6 +115,35 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("SHOW CREATE and metadata queries", () => {
+    it("should allow SHOW CREATE TABLE in MySQL", () => {
+      expect(isReadOnlySQL("SHOW CREATE TABLE users", "mysql")).toBe(true);
+    });
+
+    it("should allow SHOW CREATE PROCEDURE in MariaDB", () => {
+      expect(isReadOnlySQL("SHOW CREATE PROCEDURE my_proc", "mariadb")).toBe(true);
+    });
+
+    it("should allow EXPLAIN with mutating statement", () => {
+      // EXPLAIN doesn't execute the statement, just shows the plan
+      expect(isReadOnlySQL("EXPLAIN DELETE FROM users", "postgres")).toBe(true);
+    });
+  });
+
+  describe("SELECT INTO", () => {
+    it("should reject SELECT INTO (Postgres table creation)", () => {
+      expect(isReadOnlySQL("SELECT * INTO new_table FROM users", "postgres")).toBe(false);
+    });
+
+    it("should reject SELECT INTO OUTFILE (MySQL)", () => {
+      expect(isReadOnlySQL("SELECT * INTO OUTFILE '/tmp/data.csv' FROM users", "mysql")).toBe(false);
+    });
+
+    it("should reject SELECT INTO with WHERE clause", () => {
+      expect(isReadOnlySQL("SELECT id, name INTO backup_table FROM users WHERE active = true", "sqlserver")).toBe(false);
+    });
+  });
+
   describe("edge cases", () => {
     it("should treat empty SQL after comment stripping as not read-only", () => {
       expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(false);
