@@ -109,9 +109,19 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL(sql, "postgres")).toBe(true);
     });
 
+    it("should allow REPLACE() as a string function inside a WITH CTE", () => {
+      const sql = "WITH cte AS (SELECT REPLACE(name, 'a', 'b') AS name FROM users) SELECT * FROM cte";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+
     it("should reject REPLACE INTO as a mutating statement", () => {
       const sql = "REPLACE INTO users (id, name) VALUES (1, 'test')";
       expect(isReadOnlySQL(sql, "mysql")).toBe(false);
+    });
+
+    it("should reject WITH ... SELECT INTO", () => {
+      const sql = "WITH cte AS (SELECT * FROM users) SELECT * INTO new_table FROM cte";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
     });
   });
 
@@ -127,6 +137,18 @@ describe("isReadOnlySQL", () => {
     it("should allow EXPLAIN with mutating statement", () => {
       // EXPLAIN doesn't execute the statement, just shows the plan
       expect(isReadOnlySQL("EXPLAIN DELETE FROM users", "postgres")).toBe(true);
+    });
+
+    it("should reject EXPLAIN ANALYZE with DML (Postgres executes the statement)", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYZE DELETE FROM users", "postgres")).toBe(false);
+    });
+
+    it("should reject EXPLAIN (ANALYZE) with DML", () => {
+      expect(isReadOnlySQL("EXPLAIN (ANALYZE) DELETE FROM users", "postgres")).toBe(false);
+    });
+
+    it("should allow EXPLAIN ANALYZE with SELECT", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYZE SELECT * FROM users", "postgres")).toBe(true);
     });
   });
 
