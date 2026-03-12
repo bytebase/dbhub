@@ -154,6 +154,14 @@ describe("isReadOnlySQL", () => {
     it("should reject EXPLAIN ANALYZE with SELECT INTO", () => {
       expect(isReadOnlySQL("EXPLAIN ANALYZE SELECT * INTO new_table FROM users", "postgres")).toBe(false);
     });
+
+    it("should allow EXPLAIN ANALYZE VERBOSE with SELECT", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYZE VERBOSE SELECT * FROM users", "postgres")).toBe(true);
+    });
+
+    it("should reject EXPLAIN ANALYZE VERBOSE with DML", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYZE VERBOSE DELETE FROM users", "postgres")).toBe(false);
+    });
   });
 
   describe("SELECT INTO", () => {
