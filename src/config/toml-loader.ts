@@ -480,9 +480,10 @@ function processSourceConfigs(
  * Supports ${VAR_NAME} syntax, resolved from process.env at load time.
  * Unresolved variables are left as-is (no error thrown).
  */
+const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
 export function interpolateEnvVars(value: unknown): unknown {
   if (typeof value === "string") {
-    return value.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+    return value.replace(ENV_VAR_PATTERN, (match, varName) => {
       const envValue = process.env[varName];
       return envValue !== undefined ? envValue : match;
     });
@@ -490,7 +491,7 @@ export function interpolateEnvVars(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => interpolateEnvVars(item));
   }
-  if (value !== null && typeof value === "object") {
+  if (value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
       result[key] = interpolateEnvVars(val);

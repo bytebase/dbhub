@@ -1505,14 +1505,14 @@ max_rows = 0
   });
 
   describe('environment variable interpolation', () => {
-    const originalEnv = process.env;
+    const originalEnv = { ...process.env };
 
     beforeEach(() => {
       process.env = { ...originalEnv };
     });
 
     afterEach(() => {
-      process.env = originalEnv;
+      process.env = { ...originalEnv };
     });
 
     it('should interpolate ${VAR} in DSN strings', () => {
@@ -1598,6 +1598,13 @@ dsn = "postgres://user:\${NONEXISTENT_VAR}@localhost:5432/testdb"
     it('should not affect non-string values', () => {
       const result = interpolateEnvVars({ port: 5432, enabled: true, items: [1, 2] });
       expect(result).toEqual({ port: 5432, enabled: true, items: [1, 2] });
+    });
+
+    it('should preserve Date objects from TOML datetime fields', () => {
+      const date = new Date('2024-01-01T00:00:00Z');
+      const result = interpolateEnvVars({ name: 'test', created: date });
+      expect((result as any).created).toBeInstanceOf(Date);
+      expect((result as any).created.toISOString()).toBe('2024-01-01T00:00:00.000Z');
     });
 
     it('should interpolate variables in custom tool statements', () => {
