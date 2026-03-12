@@ -7,10 +7,10 @@ import { stripCommentsAndStrings } from "./sql-parser.js";
  * but also other queries that are not destructive
  */
 export const allowedKeywords: Record<ConnectorType, string[]> = {
-  postgres: ["select", "with", "explain", "analyze", "show"],
-  mysql: ["select", "with", "explain", "analyze", "show", "describe", "desc"],
-  mariadb: ["select", "with", "explain", "analyze", "show", "describe", "desc"],
-  sqlite: ["select", "with", "explain", "analyze", "pragma"],
+  postgres: ["select", "with", "explain", "show"],
+  mysql: ["select", "with", "explain", "show", "describe", "desc"],
+  mariadb: ["select", "with", "explain", "show", "describe", "desc"],
+  sqlite: ["select", "with", "explain", "pragma"],
   sqlserver: ["select", "with", "explain", "showplan"],
 };
 
@@ -58,8 +58,10 @@ function getMutatingPattern(connectorType: ConnectorType | string): RegExp {
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
 /** Detects EXPLAIN ANALYZE which actually executes the statement.
- *  Matches both `EXPLAIN ANALYZE ...` and `EXPLAIN (ANALYZE) ...` / `EXPLAIN (ANALYZE, ...) ...` */
-const explainAnalyzePattern = /^explain\s+(?:\([^)]*\banalyze\b[^)]*\)|\banalyze\b(?:\s+verbose\b)?)/i;
+ *  Matches both `EXPLAIN ANALYZE ...` and `EXPLAIN (ANALYZE) ...` / `EXPLAIN (ANALYZE, ...) ...`.
+ *  Excludes explicitly disabled forms: ANALYZE false/off/0 */
+const explainAnalyzePattern =
+  /^explain\s+(?:\([^)]*\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)[^)]*\)|\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)(?:\s+verbose\b)?)/i;
 
 /**
  * Check if a SQL query is read-only.

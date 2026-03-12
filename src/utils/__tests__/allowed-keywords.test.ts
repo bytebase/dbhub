@@ -66,6 +66,20 @@ describe("isReadOnlySQL", () => {
     it("should not recognize SHOW as read-only for SQLite", () => {
       expect(isReadOnlySQL("SHOW TABLES", "sqlite")).toBe(false);
     });
+
+    it("should reject standalone ANALYZE (updates statistics)", () => {
+      expect(isReadOnlySQL("ANALYZE users", "postgres")).toBe(false);
+      expect(isReadOnlySQL("ANALYZE", "mysql")).toBe(false);
+    });
+
+    it("should allow REPLACE() as a function in MySQL SELECT", () => {
+      expect(isReadOnlySQL("SELECT REPLACE(name, 'a', 'b') FROM users", "mysql")).toBe(true);
+    });
+
+    it("should allow REPLACE() inside a WITH CTE in MySQL", () => {
+      const sql = "WITH cte AS (SELECT REPLACE(name, 'a', 'b') AS cleaned FROM users) SELECT * FROM cte";
+      expect(isReadOnlySQL(sql, "mysql")).toBe(true);
+    });
   });
 
   describe("CTE with mutating operations", () => {
@@ -171,6 +185,14 @@ describe("isReadOnlySQL", () => {
 
     it("should reject EXPLAIN ANALYZE VERBOSE with DML", () => {
       expect(isReadOnlySQL("EXPLAIN ANALYZE VERBOSE DELETE FROM users", "postgres")).toBe(false);
+    });
+
+    it("should allow EXPLAIN (ANALYZE false) with DML (not executed)", () => {
+      expect(isReadOnlySQL("EXPLAIN (ANALYZE false) DELETE FROM users", "postgres")).toBe(true);
+    });
+
+    it("should allow EXPLAIN (ANALYZE off) with DML (not executed)", () => {
+      expect(isReadOnlySQL("EXPLAIN (ANALYZE off) DELETE FROM users", "postgres")).toBe(true);
     });
   });
 
