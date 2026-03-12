@@ -33,9 +33,14 @@ const mutatingKeywords = [
   "rename",
 ];
 
-/** Matches any of the mutating keywords as whole words */
+/**
+ * Matches any of the mutating keywords as whole words.
+ * Special-cases REPLACE so that function calls like REPLACE(...)
+ * in SELECT queries are not treated as mutating.
+ */
+const nonReplaceKeywords = mutatingKeywords.filter(k => k !== "replace");
 const mutatingPattern = new RegExp(
-  `\\b(?:${mutatingKeywords.join("|")})\\b`,
+  `\\b(?:${nonReplaceKeywords.join("|")}|replace(?!\\s*\\())\\b`,
   "i",
 );
 
