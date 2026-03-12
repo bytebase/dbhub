@@ -68,6 +68,43 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("CTE with mutating operations", () => {
+    it("should reject UPDATE inside a CTE", () => {
+      const sql = "WITH updated AS (UPDATE contracts SET site_location_postcode = 'SW11' WHERE id = 1 RETURNING id) SELECT * FROM updated";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should reject DELETE inside a CTE", () => {
+      const sql = "WITH deleted AS (DELETE FROM users WHERE id = 1 RETURNING *) SELECT * FROM deleted";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should reject INSERT inside a CTE", () => {
+      const sql = "WITH inserted AS (INSERT INTO users (name) VALUES ('test') RETURNING *) SELECT * FROM inserted";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should allow a pure SELECT CTE", () => {
+      const sql = "WITH cte AS (SELECT * FROM users) SELECT * FROM cte";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+
+    it("should reject DROP inside a CTE-like construct", () => {
+      const sql = "WITH x AS (SELECT 1) DROP TABLE users";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should not be fooled by mutating keywords in string literals", () => {
+      const sql = "SELECT * FROM users WHERE name = 'UPDATE me'";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+
+    it("should not be fooled by mutating keywords in comments", () => {
+      const sql = "/* UPDATE users SET x = 1 */ SELECT * FROM users";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+  });
+
   describe("edge cases", () => {
     it("should treat empty SQL after comment stripping as read-only", () => {
       expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(true);

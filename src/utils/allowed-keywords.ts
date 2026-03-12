@@ -15,11 +15,38 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
 };
 
 /**
- * Check if a SQL query is read-only based on its first keyword.
- * Strips comments and strings before analyzing to avoid false positives.
+ * Keywords that indicate data-modifying operations.
+ * Used to detect DML/DDL hidden inside CTEs or other constructs.
+ */
+const mutatingKeywords = [
+  "insert",
+  "update",
+  "delete",
+  "drop",
+  "alter",
+  "create",
+  "truncate",
+  "replace",
+  "merge",
+  "grant",
+  "revoke",
+  "rename",
+];
+
+/** Matches any of the mutating keywords as whole words */
+const mutatingPattern = new RegExp(
+  `\\b(?:${mutatingKeywords.join("|")})\\b`,
+  "i",
+);
+
+/**
+ * Check if a SQL query is read-only.
+ * 1. Strips comments and string literals before analyzing.
+ * 2. Verifies the first keyword is in the allow-list.
+ * 3. Scans the full statement for mutating keywords (e.g. UPDATE inside a CTE).
  * @param sql The SQL query to check
  * @param connectorType The database type to check against
- * @returns True if the query is read-only (starts with allowed keywords)
+ * @returns True if the query is read-only
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
   // Strip comments and strings before analyzing
@@ -36,5 +63,15 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   const keywordList =
     allowedKeywords[connectorType as ConnectorType] || [];
 
-  return keywordList.includes(firstWord);
+  if (!keywordList.includes(firstWord)) {
+    return false;
+  }
+
+  // Even if the first keyword is allowed (e.g. WITH), reject if the statement
+  // contains data-modifying keywords anywhere (e.g. WITH cte AS (UPDATE ...))
+  if (mutatingPattern.test(cleanedSQL)) {
+    return false;
+  }
+
+  return true;
 }
