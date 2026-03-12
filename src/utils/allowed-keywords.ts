@@ -26,23 +26,33 @@ const mutatingKeywords = [
   "alter",
   "create",
   "truncate",
-  "replace",
   "merge",
   "grant",
   "revoke",
   "rename",
 ];
 
-/**
- * Matches any of the mutating keywords as whole words.
- * Special-cases REPLACE so that function calls like REPLACE(...)
- * in SELECT queries are not treated as mutating.
- */
-const nonReplaceKeywords = mutatingKeywords.filter(k => k !== "replace");
+/** Base pattern: matches any mutating keyword as a whole word */
 const mutatingPattern = new RegExp(
-  `\\b(?:${nonReplaceKeywords.join("|")}|replace(?!\\s*\\())\\b`,
+  `\\b(?:${mutatingKeywords.join("|")})\\b`,
   "i",
 );
+
+/**
+ * Extended pattern for MySQL/MariaDB that also detects REPLACE as a statement.
+ * REPLACE(...) function calls are excluded via negative lookahead.
+ */
+const mutatingPatternMySQL = new RegExp(
+  `\\b(?:${mutatingKeywords.join("|")}|replace(?!\\s*\\())\\b`,
+  "i",
+);
+
+function getMutatingPattern(connectorType: ConnectorType | string): RegExp {
+  if (connectorType === "mysql" || connectorType === "mariadb") {
+    return mutatingPatternMySQL;
+  }
+  return mutatingPattern;
+}
 
 /** Detects SELECT ... INTO which writes data despite starting with SELECT */
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
@@ -85,7 +95,7 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   // WITH statements can embed DML in CTEs (e.g. WITH cte AS (UPDATE ...))
   // or use SELECT ... INTO in the final query.
   if (firstWord === "with") {
-    if (mutatingPattern.test(cleanedSQL)) {
+    if (getMutatingPattern(connectorType).test(cleanedSQL)) {
       return false;
     }
     if (selectIntoPattern.test(cleanedSQL)) {
