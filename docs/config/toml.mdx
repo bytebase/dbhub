@@ -11,6 +11,7 @@ TOML configuration enables:
 - **Per-source settings**: Configure timeouts, SSL, SSH tunnels, and lazy connections individually per database
 - **Per-tool settings**: Apply different restrictions (readonly, max_rows) per tool
 - **Custom tools**: Define reusable, parameterized SQL operations as MCP tools
+- **Environment variable interpolation**: Use `${VAR}` syntax to avoid hardcoding credentials
 - **Hot reload**: Automatically detect config changes and reload connections without restarting
 
 ## Hot Reload
@@ -33,6 +34,41 @@ When using TOML configuration, DBHub automatically watches `dbhub.toml` for chan
 **STDIO transport limitation:** In STDIO mode (the default for Claude Desktop, Cursor, etc.), hot reload updates the underlying database connections and tool settings, but clients won't see newly added or removed tools until a full server restart. This is because STDIO clients discover tools once at startup.
 
 HTTP transport (`--transport http`) creates a fresh server per request, so all changes — including added/removed tools — take effect immediately.
+</Note>
+
+## Environment Variable Interpolation
+
+Use `${VAR_NAME}` syntax to reference environment variables in any string value. Variables are resolved from the process environment at config load time.
+
+This lets teams share a single `dbhub.toml` without hardcoding credentials:
+
+```toml dbhub.toml
+[[sources]]
+id = "production"
+dsn = "postgres://readonly_user:${DB_PASSWORD}@db.example.com:5432/mydb"
+
+[[sources]]
+id = "staging"
+type = "mysql"
+host = "${STAGING_HOST}"
+database = "myapp"
+user = "root"
+password = "${STAGING_PASSWORD}"
+ssh_host = "bastion.example.com"
+ssh_password = "${SSH_PASSWORD}"
+```
+
+```bash
+# Set env vars, then start DBHub
+export DB_PASSWORD="s3cret"
+export STAGING_HOST="staging.example.com"
+export STAGING_PASSWORD="staging_pass"
+export SSH_PASSWORD="ssh_pass"
+npx @bytebase/dbhub@latest --config dbhub.toml
+```
+
+<Note>
+Unresolved variables (where the environment variable is not set) are left as the literal `${VAR_NAME}` string. No error is thrown for missing variables.
 </Note>
 
 ## Configuration Structure
