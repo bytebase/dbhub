@@ -44,11 +44,15 @@ const mutatingPattern = new RegExp(
   "i",
 );
 
+/** Detects SELECT ... INTO which writes data despite starting with SELECT */
+const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
+
 /**
  * Check if a SQL query is read-only.
  * 1. Strips comments and string literals before analyzing.
  * 2. Verifies the first keyword is in the allow-list.
- * 3. Scans the full statement for mutating keywords (e.g. UPDATE inside a CTE).
+ * 3. For WITH statements, scans for mutating keywords (e.g. UPDATE inside a CTE).
+ * 4. For SELECT statements, checks for SELECT ... INTO.
  * @param sql The SQL query to check
  * @param connectorType The database type to check against
  * @returns True if the query is read-only
@@ -72,9 +76,14 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
     return false;
   }
 
-  // Even if the first keyword is allowed (e.g. WITH), reject if the statement
-  // contains data-modifying keywords anywhere (e.g. WITH cte AS (UPDATE ...))
-  if (mutatingPattern.test(cleanedSQL)) {
+  // WITH statements can embed DML in CTEs (e.g. WITH cte AS (UPDATE ...))
+  // Scan the full statement for mutating keywords.
+  if (firstWord === "with" && mutatingPattern.test(cleanedSQL)) {
+    return false;
+  }
+
+  // SELECT ... INTO writes data (creates tables or writes to files)
+  if (firstWord === "select" && selectIntoPattern.test(cleanedSQL)) {
     return false;
   }
 
