@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadTomlConfig, buildDSNFromSource } from '../toml-loader.js';
+import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import fs from 'fs';
 import path from 'path';
@@ -1501,6 +1501,126 @@ max_rows = 0
       fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
       expect(() => loadTomlConfig()).toThrow('invalid max_rows');
+    });
+  });
+
+  describe('environment variable interpolation', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('should interpolate ${VAR} in DSN strings', () => {
+      process.env.TEST_DB_PASSWORD = 's3cret';
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:\${TEST_DB_PASSWORD}@localhost:5432/testdb"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].dsn).toBe('postgres://user:s3cret@localhost:5432/testdb');
+    });
+
+    it('should interpolate multiple variables in a single string', () => {
+      process.env.TEST_DB_USER = 'admin';
+      process.env.TEST_DB_PASSWORD = 'p@ss';
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://\${TEST_DB_USER}:\${TEST_DB_PASSWORD}@localhost:5432/testdb"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].dsn).toBe('postgres://admin:p@ss@localhost:5432/testdb');
+    });
+
+    it('should interpolate variables in connection parameter fields', () => {
+      process.env.TEST_DB_HOST = 'db.example.com';
+      process.env.TEST_DB_PASSWORD = 'secret';
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "\${TEST_DB_HOST}"
+database = "mydb"
+user = "admin"
+password = "\${TEST_DB_PASSWORD}"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].host).toBe('db.example.com');
+      expect(result?.sources[0].password).toBe('secret');
+    });
+
+    it('should interpolate variables in SSH fields', () => {
+      process.env.TEST_SSH_PASSWORD = 'sshpass';
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+ssh_host = "bastion.example.com"
+ssh_user = "tunnel"
+ssh_password = "\${TEST_SSH_PASSWORD}"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].ssh_password).toBe('sshpass');
+    });
+
+    it('should leave unresolved variables as-is', () => {
+      delete process.env.NONEXISTENT_VAR;
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:\${NONEXISTENT_VAR}@localhost:5432/testdb"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].dsn).toBe('postgres://user:${NONEXISTENT_VAR}@localhost:5432/testdb');
+    });
+
+    it('should not affect non-string values', () => {
+      const result = interpolateEnvVars({ port: 5432, enabled: true, items: [1, 2] });
+      expect(result).toEqual({ port: 5432, enabled: true, items: [1, 2] });
+    });
+
+    it('should interpolate variables in custom tool statements', () => {
+      process.env.TEST_SCHEMA = 'production';
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "my_tool"
+source = "test_db"
+description = "Query \${TEST_SCHEMA} schema"
+statement = "SELECT * FROM \${TEST_SCHEMA}.users"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools?.[0]).toMatchObject({
+        description: 'Query production schema',
+        statement: 'SELECT * FROM production.users',
+      });
     });
   });
 });

@@ -19,7 +19,10 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 
   try {
     const fileContent = fs.readFileSync(configPath, "utf-8");
-    const parsedToml = toml.parse(fileContent) as unknown as TomlConfig;
+    const rawToml = toml.parse(fileContent) as unknown as TomlConfig;
+
+    // Interpolate environment variables (e.g., ${DB_PASSWORD}) in all string values
+    const parsedToml = interpolateEnvVars(rawToml) as TomlConfig;
 
     // Basic structure check before processing
     if (!Array.isArray(parsedToml.sources)) {
@@ -470,6 +473,31 @@ function processSourceConfigs(
 
     return processed;
   });
+}
+
+/**
+ * Interpolate environment variables in configuration values.
+ * Supports ${VAR_NAME} syntax, resolved from process.env at load time.
+ * Unresolved variables are left as-is (no error thrown).
+ */
+export function interpolateEnvVars(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(/\$\{([^}]+)\}/g, (match, varName) => {
+      const envValue = process.env[varName];
+      return envValue !== undefined ? envValue : match;
+    });
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => interpolateEnvVars(item));
+  }
+  if (value !== null && typeof value === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = interpolateEnvVars(val);
+    }
+    return result;
+  }
+  return value;
 }
 
 /**
