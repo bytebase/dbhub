@@ -103,6 +103,16 @@ describe("isReadOnlySQL", () => {
       const sql = "/* UPDATE users SET x = 1 */ SELECT * FROM users";
       expect(isReadOnlySQL(sql, "postgres")).toBe(true);
     });
+
+    it("should allow REPLACE() as a string function in SELECT", () => {
+      const sql = "SELECT REPLACE(name, 'a', 'b') FROM users";
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+
+    it("should reject REPLACE INTO as a mutating statement", () => {
+      const sql = "REPLACE INTO users (id, name) VALUES (1, 'test')";
+      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
+    });
   });
 
   describe("edge cases", () => {
