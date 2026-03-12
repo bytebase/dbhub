@@ -150,6 +150,10 @@ describe("isReadOnlySQL", () => {
     it("should allow EXPLAIN ANALYZE with SELECT", () => {
       expect(isReadOnlySQL("EXPLAIN ANALYZE SELECT * FROM users", "postgres")).toBe(true);
     });
+
+    it("should reject EXPLAIN ANALYZE with SELECT INTO", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYZE SELECT * INTO new_table FROM users", "postgres")).toBe(false);
+    });
   });
 
   describe("SELECT INTO", () => {

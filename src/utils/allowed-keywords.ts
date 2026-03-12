@@ -98,11 +98,10 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   }
 
   // EXPLAIN ANALYZE actually executes the statement (Postgres)
-  // Reject if it contains DML after the ANALYZE keyword
+  // Validate the inner statement using the same read-only logic
   if (firstWord === "explain" && explainAnalyzePattern.test(cleanedSQL)) {
-    // Extract the part after EXPLAIN [ANALYZE|(...)] and check for DML
     const afterExplain = cleanedSQL.replace(explainAnalyzePattern, "").trim();
-    if (afterExplain && mutatingPattern.test(afterExplain)) {
+    if (afterExplain && !isReadOnlySQL(afterExplain, connectorType)) {
       return false;
     }
   }
