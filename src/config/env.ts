@@ -26,35 +26,6 @@ export function parseCommandLineArgs() {
       const parts = arg.substring(2).split("=");
       const key = parts[0];
 
-      // Fail immediately on deprecated flags
-      if (key === "readonly") {
-        console.error("\nERROR: --readonly flag is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  readonly = true\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
-        process.exit(1);
-      }
-
-      if (key === "max-rows") {
-        console.error("\nERROR: --max-rows flag is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  max_rows = 1000\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
-        process.exit(1);
-      }
-
       const value = parts.length > 1 ? parts.slice(1).join("=") : undefined;
       if (value) {
         // Handle --key=value format
@@ -102,35 +73,6 @@ export function loadEnvFiles(): string | null {
     console.error(`Checking for env file: ${envPath}`);
     if (fs.existsSync(envPath)) {
       dotenv.config({ path: envPath });
-
-      // Check for deprecated environment variables
-      if (process.env.READONLY !== undefined) {
-        console.error("\nERROR: READONLY environment variable is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  readonly = true\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
-        process.exit(1);
-      }
-
-      if (process.env.MAX_ROWS !== undefined) {
-        console.error("\nERROR: MAX_ROWS environment variable is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  max_rows = 1000\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
-        process.exit(1);
-      }
 
       // Return the name of the file that was loaded
       return path.basename(envPath);
@@ -546,8 +488,6 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
           "Either remove the --id flag or use command-line DSN configuration instead."
         );
       }
-      // Note: --readonly flag is deprecated but no longer blocks TOML usage
-      // The warning is shown in isReadOnlyMode() function
       return tomlConfig;
     }
   }

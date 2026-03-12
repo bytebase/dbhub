@@ -123,8 +123,6 @@ DBHub supports three configuration methods (in priority order):
 - `--port`: HTTP server port (default: 8080)
 - `--config`: Path to TOML configuration file
 - `--demo`: Use bundled SQLite employee database
-- `--readonly`: Restrict to read-only SQL operations (deprecated - use TOML configuration instead)
-- `--max-rows`: Limit rows returned from SELECT queries (deprecated - use TOML configuration instead)
 - SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
 - Documentation: https://dbhub.ai/config/command-line
 
