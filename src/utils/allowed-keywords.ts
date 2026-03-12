@@ -47,12 +47,17 @@ const mutatingPattern = new RegExp(
 /** Detects SELECT ... INTO which writes data despite starting with SELECT */
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
+/** Detects EXPLAIN ANALYZE which actually executes the statement.
+ *  Matches both `EXPLAIN ANALYZE ...` and `EXPLAIN (ANALYZE) ...` / `EXPLAIN (ANALYZE, ...) ...` */
+const explainAnalyzePattern = /^explain\s+(?:\([^)]*\banalyze\b[^)]*\)|\banalyze\b)/i;
+
 /**
  * Check if a SQL query is read-only.
  * 1. Strips comments and string literals before analyzing.
  * 2. Verifies the first keyword is in the allow-list.
- * 3. For WITH statements, scans for mutating keywords (e.g. UPDATE inside a CTE).
+ * 3. For WITH statements, scans for mutating keywords and SELECT INTO.
  * 4. For SELECT statements, checks for SELECT ... INTO.
+ * 5. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
  * @param sql The SQL query to check
  * @param connectorType The database type to check against
  * @returns True if the query is read-only
@@ -77,14 +82,29 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   }
 
   // WITH statements can embed DML in CTEs (e.g. WITH cte AS (UPDATE ...))
-  // Scan the full statement for mutating keywords.
-  if (firstWord === "with" && mutatingPattern.test(cleanedSQL)) {
-    return false;
+  // or use SELECT ... INTO in the final query.
+  if (firstWord === "with") {
+    if (mutatingPattern.test(cleanedSQL)) {
+      return false;
+    }
+    if (selectIntoPattern.test(cleanedSQL)) {
+      return false;
+    }
   }
 
   // SELECT ... INTO writes data (creates tables or writes to files)
   if (firstWord === "select" && selectIntoPattern.test(cleanedSQL)) {
     return false;
+  }
+
+  // EXPLAIN ANALYZE actually executes the statement (Postgres)
+  // Reject if it contains DML after the ANALYZE keyword
+  if (firstWord === "explain" && explainAnalyzePattern.test(cleanedSQL)) {
+    // Extract the part after EXPLAIN [ANALYZE|(...)] and check for DML
+    const afterExplain = cleanedSQL.replace(explainAnalyzePattern, "").trim();
+    if (afterExplain && mutatingPattern.test(afterExplain)) {
+      return false;
+    }
   }
 
   return true;
