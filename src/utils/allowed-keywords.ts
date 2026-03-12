@@ -49,7 +49,7 @@ const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
 /** Detects EXPLAIN ANALYZE which actually executes the statement.
  *  Matches both `EXPLAIN ANALYZE ...` and `EXPLAIN (ANALYZE) ...` / `EXPLAIN (ANALYZE, ...) ...` */
-const explainAnalyzePattern = /^explain\s+(?:\([^)]*\banalyze\b[^)]*\)|\banalyze\b)/i;
+const explainAnalyzePattern = /^explain\s+(?:\([^)]*\banalyze\b[^)]*\)|\banalyze\b(?:\s+verbose\b)?)/i;
 
 /**
  * Check if a SQL query is read-only.
