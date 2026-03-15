@@ -3,6 +3,7 @@
  * Central location for built-in tool names used throughout the codebase
  */
 
+export const BUILTIN_TOOL_LIST_SOURCES = "list_sources"; // meta-tool, not per-source
 export const BUILTIN_TOOL_EXECUTE_SQL = "execute_sql";
 export const BUILTIN_TOOL_SEARCH_OBJECTS = "search_objects";
 

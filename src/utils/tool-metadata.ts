@@ -2,7 +2,8 @@ import { z } from "zod";
 import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
-import { executeSqlSchema } from "../tools/execute-sql.js";
+import { executeSqlSchema, executeSqlMultiSourceSchema } from "../tools/execute-sql.js";
+import { searchDatabaseObjectsSchema, searchDatabaseObjectsMultiSourceSchema } from "../tools/search-objects.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -84,34 +85,52 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
  * @param sourceId - The source ID to get tool metadata for
  * @returns Tool metadata with name, description, and Zod schema
  */
-export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
+export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const dbType = sourceConfig.type;
   const isSingleSource = sourceIds.length === 1;
+
+  // Multi-source generic mode: no sourceId means register a single generic tool
+  if (!isSingleSource && sourceId === undefined) {
+    return {
+      name: "execute_sql",
+      description: "Execute SQL queries on a database source. Use list_sources to discover available source IDs, then pass source_id.",
+      schema: executeSqlMultiSourceSchema,
+      annotations: {
+        title: "Execute SQL",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    };
+  }
+
+  const effectiveSourceId = sourceId ?? sourceIds[0];
+  const sourceConfig = ConnectorManager.getSourceConfig(effectiveSourceId)!;
+  const dbType = sourceConfig.type;
 
   // Get tool configuration from registry to extract readonly/max_rows
   const registry = getToolRegistry();
-  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, sourceId);
+  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, effectiveSourceId);
   const executeOptions = {
     readonly: toolConfig?.readonly,
     maxRows: toolConfig?.max_rows,
   };
 
   // Determine tool name based on single vs multi-source configuration
-  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
+  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(effectiveSourceId)}`;
 
   // Determine title (human-readable display name)
   const title = isSingleSource
     ? `Execute SQL (${dbType})`
-    : `Execute SQL on ${sourceId} (${dbType})`;
+    : `Execute SQL on ${effectiveSourceId} (${dbType})`;
 
   // Determine description with more context
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
   const description = isSingleSource
     ? `Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
-    : `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
+    : `Execute SQL queries on the '${effectiveSourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -137,26 +156,51 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
 /**
  * Get search_objects tool metadata for a specific source
  * @param sourceId - The source ID to get tool metadata for
- * @returns Tool name, description, and annotations
+ * @returns Tool metadata with name, description, schema, and annotations
  */
-export function getSearchObjectsMetadata(sourceId: string): { name: string; description: string; title: string } {
+export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const dbType = sourceConfig.type;
   const isSingleSource = sourceIds.length === 1;
 
-  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
+  // Multi-source generic mode: no sourceId means register a single generic tool
+  if (!isSingleSource && sourceId === undefined) {
+    return {
+      name: "search_objects",
+      description: "Search and list database objects (schemas, tables, columns, procedures, functions, indexes). Use list_sources to discover source IDs, then pass source_id.",
+      schema: searchDatabaseObjectsMultiSourceSchema,
+      annotations: {
+        title: "Search Database Objects",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    };
+  }
+
+  const effectiveSourceId = sourceId ?? sourceIds[0];
+  const sourceConfig = ConnectorManager.getSourceConfig(effectiveSourceId)!;
+  const dbType = sourceConfig.type;
+
+  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(effectiveSourceId)}`;
   const title = isSingleSource
     ? `Search Database Objects (${dbType})`
-    : `Search Database Objects on ${sourceId} (${dbType})`;
+    : `Search Database Objects on ${effectiveSourceId} (${dbType})`;
   const description = isSingleSource
     ? `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
+    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${effectiveSourceId}' ${dbType} database`;
 
   return {
     name: toolName,
     description,
-    title,
+    schema: searchDatabaseObjectsSchema,
+    annotations: {
+      title,
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   };
 }
 

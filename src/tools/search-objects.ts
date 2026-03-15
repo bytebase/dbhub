@@ -52,6 +52,14 @@ export const searchDatabaseObjectsSchema = {
     .describe("Max results (default: 100, max: 1000)"),
 };
 
+// Schema for multi-source mode — source_id is required
+export const searchDatabaseObjectsMultiSourceSchema = {
+  ...searchDatabaseObjectsSchema,
+  source_id: z.string().describe(
+    "Database source ID. Use list_sources to discover available IDs."
+  ),
+};
+
 /**
  * Convert SQL LIKE pattern to JavaScript regex
  * Supports % (any chars) and _ (single char)
@@ -499,6 +507,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       table,
       detail_level = "names",
       limit = 100,
+      source_id: argSourceId,
     } = args as {
       object_type: DatabaseObjectType;
       pattern?: string;
@@ -506,18 +515,20 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       table?: string;
       detail_level: DetailLevel;
       limit: number;
+      source_id?: string;
     };
 
+    const resolvedSourceId = sourceId ?? argSourceId;
     const startTime = Date.now();
-    const effectiveSourceId = getEffectiveSourceId(sourceId);
+    const effectiveSourceId = getEffectiveSourceId(resolvedSourceId);
     let success = true;
     let errorMessage: string | undefined;
 
     try {
       // Ensure source is connected (handles lazy connections)
-      await ConnectorManager.ensureConnected(sourceId);
+      await ConnectorManager.ensureConnected(resolvedSourceId);
 
-      const connector = ConnectorManager.getCurrentConnector(sourceId);
+      const connector = ConnectorManager.getCurrentConnector(resolvedSourceId);
 
       // Tool is already registered, so it's enabled (no need to check)
 

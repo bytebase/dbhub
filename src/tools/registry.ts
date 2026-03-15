@@ -23,7 +23,7 @@ export class ToolRegistry {
    * Check if a tool name is a built-in tool
    */
   private isBuiltinTool(toolName: string): boolean {
-    return BUILTIN_TOOLS.includes(toolName);
+    return (BUILTIN_TOOLS as readonly string[]).includes(toolName);
   }
 
   /**
@@ -245,6 +245,15 @@ export class ToolRegistry {
    */
   getCustomTools(): ToolConfig[] {
     return this.getAllTools().filter((tool) => !this.isBuiltinTool(tool.name));
+  }
+
+  /**
+   * Get custom tools (non-builtin) for a specific source
+   */
+  getCustomToolsForSource(sourceId: string): ToolConfig[] {
+    return this.getEnabledToolConfigs(sourceId).filter(
+      (tool) => !BUILTIN_TOOLS.includes(tool.name as any)
+    );
   }
 
   /**
