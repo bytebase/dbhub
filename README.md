@@ -8,6 +8,8 @@
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-light.svg" width="75%">
   <img src="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-light.svg" width="75%" alt="DBHub Logo">
 </picture>
+[![AgentRank](https://agentrank-ai.com/api/badge/tool/bytebase--dbhub)](https://agentrank-ai.com/tool/bytebase--dbhub/)
+
 </a>
 </p>
 
