@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema, executeSqlMultiSourceSchema } from "../tools/execute-sql.js";
 import { searchDatabaseObjectsSchema, searchDatabaseObjectsMultiSourceSchema } from "../tools/search-objects.js";
 import { getToolRegistry } from "../tools/registry.js";
@@ -100,11 +99,7 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
  * @returns Tool metadata with name, description, and Zod schema
  */
 export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const isSingleSource = sourceIds.length === 1;
-
-  // Multi-source generic mode: no sourceId means register a single generic tool
-  if (!isSingleSource && sourceId === undefined) {
+  if (sourceId === undefined) {
     return {
       name: "execute_sql",
       description: "Execute SQL queries on a database source. Use list_sources to discover available source IDs, then pass source_id.",
@@ -119,51 +114,28 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
     };
   }
 
-  const effectiveSourceId = sourceId ?? sourceIds[0];
-  const sourceConfig = ConnectorManager.getSourceConfig(effectiveSourceId)!;
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
 
-  // Get tool configuration from registry to extract readonly/max_rows
   const registry = getToolRegistry();
-  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, effectiveSourceId);
-  const executeOptions = {
-    readonly: toolConfig?.readonly,
-    maxRows: toolConfig?.max_rows,
-  };
+  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, sourceId);
+  const isReadonly = toolConfig?.readonly === true;
+  const maxRows = toolConfig?.max_rows;
 
-  // Determine tool name based on single vs multi-source configuration
-  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(effectiveSourceId)}`;
-
-  // Determine title (human-readable display name)
-  const title = isSingleSource
-    ? `Execute SQL (${dbType})`
-    : `Execute SQL on ${effectiveSourceId} (${dbType})`;
-
-  // Determine description with more context
-  const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
-  const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
-  const description = isSingleSource
-    ? `Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
-    : `Execute SQL queries on the '${effectiveSourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
-
-  // Build annotations object with all standard MCP hints
-  const isReadonly = executeOptions.readonly === true;
-  const annotations = {
-    title,
-    readOnlyHint: isReadonly,
-    destructiveHint: !isReadonly, // Can be destructive if not readonly
-    // In readonly mode, queries are more predictable (though still not strictly idempotent due to data changes)
-    // In write mode, queries are definitely not idempotent
-    idempotentHint: false,
-    // Database operations are always against internal/closed systems, not open-world
-    openWorldHint: false,
-  };
+  const readonlyNote = isReadonly ? " [READ-ONLY MODE]" : "";
+  const maxRowsNote = maxRows ? ` (limited to ${maxRows} rows)` : "";
 
   return {
-    name: toolName,
-    description,
+    name: "execute_sql",
+    description: `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`,
     schema: executeSqlSchema,
-    annotations,
+    annotations: {
+      title: `Execute SQL - ${sourceId} (${dbType})`,
+      readOnlyHint: isReadonly,
+      destructiveHint: !isReadonly,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
   };
 }
 
@@ -173,11 +145,7 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
  * @returns Tool metadata with name, description, schema, and annotations
  */
 export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const isSingleSource = sourceIds.length === 1;
-
-  // Multi-source generic mode: no sourceId means register a single generic tool
-  if (!isSingleSource && sourceId === undefined) {
+  if (sourceId === undefined) {
     return {
       name: "search_objects",
       description: "Search and list database objects (schemas, tables, columns, procedures, functions, indexes). Use list_sources to discover source IDs, then pass source_id.",
@@ -192,24 +160,15 @@ export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
     };
   }
 
-  const effectiveSourceId = sourceId ?? sourceIds[0];
-  const sourceConfig = ConnectorManager.getSourceConfig(effectiveSourceId)!;
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
 
-  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(effectiveSourceId)}`;
-  const title = isSingleSource
-    ? `Search Database Objects (${dbType})`
-    : `Search Database Objects on ${effectiveSourceId} (${dbType})`;
-  const description = isSingleSource
-    ? `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${effectiveSourceId}' ${dbType} database`;
-
   return {
-    name: toolName,
-    description,
+    name: "search_objects",
+    description: `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`,
     schema: searchDatabaseObjectsSchema,
     annotations: {
-      title,
+      title: `Search Database Objects - ${sourceId} (${dbType})`,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
