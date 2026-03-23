@@ -49,24 +49,38 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
   const parameters: ToolParameter[] = [];
 
   for (const [key, zodType] of Object.entries(schema)) {
-    // Extract description from Zod schema
+    // Read description from the outermost type before unwrapping
     const description = zodType.description || "";
 
-    // Determine if required (Zod types are required by default unless optional)
-    const required = !(zodType instanceof z.ZodOptional);
+    let innerType = zodType;
+    let required = true;
 
-    // Determine type from Zod type
-    let type = "string"; // default
-    if (zodType instanceof z.ZodString) {
+    // Unwrap ZodDefault/ZodOptional
+    if (innerType instanceof z.ZodDefault) {
+      required = false;
+      innerType = (innerType as z.ZodDefault<any>)._def.innerType;
+    }
+
+    if (innerType instanceof z.ZodOptional) {
+      required = false;
+      innerType = (innerType as z.ZodOptional<any>).unwrap();
+    }
+
+    // Determine type from unwrapped inner type
+    let type = "string";
+
+    if (innerType instanceof z.ZodString) {
       type = "string";
-    } else if (zodType instanceof z.ZodNumber) {
+    } else if (innerType instanceof z.ZodNumber) {
       type = "number";
-    } else if (zodType instanceof z.ZodBoolean) {
+    } else if (innerType instanceof z.ZodBoolean) {
       type = "boolean";
-    } else if (zodType instanceof z.ZodArray) {
+    } else if (innerType instanceof z.ZodArray) {
       type = "array";
-    } else if (zodType instanceof z.ZodObject) {
+    } else if (innerType instanceof z.ZodObject) {
       type = "object";
+    } else if (innerType instanceof z.ZodEnum) {
+      type = "string";
     }
 
     parameters.push({
@@ -231,8 +245,8 @@ function buildExecuteSqlTool(sourceId: string, toolConfig?: ToolConfig): Tool {
 
   // Extract readonly and max_rows from toolConfig
   // ToolConfig is a union type, but ExecuteSqlToolConfig and CustomToolConfig both have these fields
-  const readonly = toolConfig && 'readonly' in toolConfig ? toolConfig.readonly : undefined;
-  const max_rows = toolConfig && 'max_rows' in toolConfig ? toolConfig.max_rows : undefined;
+  const readonly = toolConfig && "readonly" in toolConfig ? toolConfig.readonly : undefined;
+  const max_rows = toolConfig && "max_rows" in toolConfig ? toolConfig.max_rows : undefined;
 
   return {
     name: executeSqlMetadata.name,
@@ -252,44 +266,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
   return {
     name: searchMetadata.name,
     description: searchMetadata.description,
-    parameters: [
-      {
-        name: "object_type",
-        type: "string",
-        required: true,
-        description: "Object type to search",
-      },
-      {
-        name: "pattern",
-        type: "string",
-        required: false,
-        description: "LIKE pattern (% = any chars, _ = one char). Default: %",
-      },
-      {
-        name: "schema",
-        type: "string",
-        required: false,
-        description: "Filter to schema",
-      },
-      {
-        name: "table",
-        type: "string",
-        required: false,
-        description: "Filter to table (requires schema; column/index only)",
-      },
-      {
-        name: "detail_level",
-        type: "string",
-        required: false,
-        description: "Detail: names (minimal), summary (metadata), full (all)",
-      },
-      {
-        name: "limit",
-        type: "integer",
-        required: false,
-        description: "Max results (default: 100, max: 1000)",
-      },
-    ],
+    parameters: zodToParameters(searchMetadata.schema),
     readonly: true, // search_objects is always readonly
   };
 }
