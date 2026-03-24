@@ -49,6 +49,7 @@ class MySQLDSNParser implements DSNParser {
         user: url.username,
         password: url.password,
         multipleStatements: true, // Enable native multi-statement support
+        supportBigNumbers: true, // Return BIGINT as string when value exceeds Number.MAX_SAFE_INTEGER
       };
 
       // Handle query parameters
