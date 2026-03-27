@@ -47,17 +47,17 @@ function isMultiStatementResult(results: any): boolean {
 /**
  * Extracts row arrays from multi-statement results, filtering out metadata objects.
  *
- * @param results - The raw results from a multi-statement query
+ * @param multiStmntResults - The raw results from a multi-statement query
  * @returns Array containing only the rows from SELECT queries
  */
-export function extractRowsFromMultiStatement(results: any): any[] {
-  if (!Array.isArray(results)) {
+export function extractRowsFromMultiStatement(multiStmntResults: any): any[] {
+  if (!Array.isArray(multiStmntResults)) {
     return [];
   }
 
   const allRows: any[] = [];
 
-  for (const result of results) {
+  for (const result of multiStmntResults) {
     if (Array.isArray(result)) {
       // This is a row array from a SELECT query - add all rows
       allRows.push(...result);
@@ -74,24 +74,24 @@ export function extractRowsFromMultiStatement(results: any): any[] {
  * For INSERT/UPDATE/DELETE operations, returns the sum of affectedRows.
  * For SELECT operations, returns the number of rows.
  *
- * @param results - Raw results from the database driver
+ * @param affectedRows - Raw results from the database driver
  * @returns Total number of affected/returned rows
  */
-export function extractAffectedRows(results: any): number {
+export function extractAffectedRows(affectedRows: any): number {
   // Handle metadata object (single INSERT/UPDATE/DELETE)
-  if (isMetadataObject(results)) {
-    return results.affectedRows || 0;
+  if (isMetadataObject(affectedRows)) {
+    return affectedRows.affectedRows || 0;
   }
 
   // Handle non-array results
-  if (!Array.isArray(results)) {
+  if (!Array.isArray(affectedRows)) {
     return 0;
   }
 
   // Check if this is a multi-statement result
-  if (isMultiStatementResult(results)) {
+  if (isMultiStatementResult(affectedRows)) {
     let totalAffected = 0;
-    for (const result of results) {
+    for (const result of affectedRows) {
       if (isMetadataObject(result)) {
         totalAffected += result.affectedRows || 0;
       } else if (Array.isArray(result)) {
@@ -102,7 +102,7 @@ export function extractAffectedRows(results: any): number {
   }
 
   // Single statement result - results is the rows array directly
-  return results.length;
+  return affectedRows.length;
 }
 
 /**
@@ -111,20 +111,20 @@ export function extractAffectedRows(results: any): number {
  * This function unifies the result parsing logic for MariaDB and MySQL2 drivers,
  * which have similar but slightly different result formats.
  *
- * @param results - Raw results from the database driver
+ * @param queryResults - Raw results from the database driver
  * @returns Array of row objects from SELECT queries
  */
-export function parseQueryResults(results: any): any[] {
+export function parseQueryResults(queryResults: any): any[] {
   // Handle non-array results (e.g., from INSERT/UPDATE/DELETE without RETURNING)
-  if (!Array.isArray(results)) {
+  if (!Array.isArray(queryResults)) {
     return [];
   }
 
   // Check if this is a multi-statement result
-  if (isMultiStatementResult(results)) {
-    return extractRowsFromMultiStatement(results);
+  if (isMultiStatementResult(queryResults)) {
+    return extractRowsFromMultiStatement(queryResults);
   }
 
   // Single statement result - results is the rows array directly
-  return results;
+  return queryResults;
 }
