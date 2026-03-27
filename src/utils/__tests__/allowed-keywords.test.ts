@@ -69,13 +69,41 @@ describe("isReadOnlySQL", () => {
   });
 
   describe("edge cases", () => {
-    it("should treat empty SQL after comment stripping as read-only", () => {
-      expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(true);
+    it("should treat empty SQL after comment stripping as not read-only", () => {
+      expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(false);
     });
 
     it("should be case-insensitive", () => {
       expect(isReadOnlySQL("select * from users", "postgres")).toBe(true);
       expect(isReadOnlySQL("SELECT * FROM users", "postgres")).toBe(true);
+    });
+  });
+
+  describe("MySQL conditional comment bypass prevention", () => {
+    it("should reject MySQL conditional comment containing DELETE", () => {
+      expect(isReadOnlySQL("/*!50000 DELETE FROM users WHERE 1=1 */", "mysql")).toBe(false);
+    });
+
+    it("should reject MySQL conditional comment containing DROP", () => {
+      expect(isReadOnlySQL("/*!50000 DROP TABLE users */", "mysql")).toBe(false);
+    });
+
+    it("should reject MariaDB conditional comment containing DELETE", () => {
+      expect(isReadOnlySQL("/*!50000 DELETE FROM users */", "mariadb")).toBe(false);
+    });
+
+    it("should reject even SELECT inside MySQL conditional comment (safe default)", () => {
+      // Conditional comment syntax is preserved as plain text, so the first
+      // word includes the /*! prefix — safer to deny than to parse the body.
+      expect(isReadOnlySQL("/*!50000 SELECT 1 */", "mysql")).toBe(false);
+    });
+
+    it("should still strip regular comments for MySQL", () => {
+      expect(isReadOnlySQL("/* comment */ SELECT 1", "mysql")).toBe(true);
+    });
+
+    it("should reject conditional comment without version number", () => {
+      expect(isReadOnlySQL("/*! DELETE FROM users */", "mysql")).toBe(false);
     });
   });
 });

@@ -196,7 +196,6 @@ describe('execute-sql tool', () => {
       ['single-line comment', '-- Fetch users\nSELECT * FROM users'],
       ['multi-line comment', '/* Fetch all */\nSELECT * FROM products'],
       ['inline comments', 'SELECT id, -- user id\n       name FROM users'],
-      ['only comments', '-- Just a comment\n/* Another */'],
     ])('should allow SELECT with %s', async (_, sql) => {
       const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
@@ -205,6 +204,14 @@ describe('execute-sql tool', () => {
       const result = await handler({ sql }, null);
 
       expect(parseToolResponse(result).success).toBe(true);
+    });
+
+    it('should reject comment-only SQL in readonly mode', async () => {
+      const sql = '-- Just a comment\n/* Another */';
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
     it('should reject write statement hidden after comment', async () => {

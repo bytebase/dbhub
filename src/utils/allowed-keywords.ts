@@ -25,9 +25,11 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   // Strip comments and strings before analyzing
   const cleanedSQL = stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase();
 
-  // If the statement is empty after removing comments, consider it read-only
+  // If the statement is empty after removing comments, deny it.
+  // An empty result may indicate that executable content was stripped
+  // (e.g. MySQL conditional comments), so the safe default is to reject.
   if (!cleanedSQL) {
-    return true;
+    return false;
   }
 
   const firstWord = cleanedSQL.split(/\s+/)[0];

@@ -27,6 +27,19 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
   return { type: TokenType.Comment, end: j };
 }
 
+/**
+ * MySQL-specific multi-line comment scanner that preserves conditional comments.
+ * MySQL conditional comments (/*!nnnnn ... * /) are executable — MySQL runs
+ * the body if its version >= nnnnn. Stripping them would let malicious SQL
+ * bypass read-only checks, so we return null to let them pass through as plain text.
+ */
+function scanMultiLineCommentMySQL(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
+  // Conditional comment: /*! or /*!nnnnn — MySQL executes the body
+  if (sql[i + 2] === "!") { return null; }
+  return scanMultiLineComment(sql, i);
+}
+
 function scanNestedMultiLineComment(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
   let j = i + 2;
@@ -120,7 +133,7 @@ function scanTokenPostgres(sql: string, i: number): SQLToken {
 
 function scanTokenMySQL(sql: string, i: number): SQLToken {
   return scanSingleLineComment(sql, i)
-    ?? scanMultiLineComment(sql, i)
+    ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)
     ?? scanBacktickQuotedIdentifier(sql, i)
