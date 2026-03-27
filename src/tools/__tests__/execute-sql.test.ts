@@ -196,7 +196,6 @@ describe('execute-sql tool', () => {
       ['single-line comment', '-- Fetch users\nSELECT * FROM users'],
       ['multi-line comment', '/* Fetch all */\nSELECT * FROM products'],
       ['inline comments', 'SELECT id, -- user id\n       name FROM users'],
-      ['only comments', '-- Just a comment\n/* Another */'],
     ])('should allow SELECT with %s', async (_, sql) => {
       const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
@@ -205,6 +204,36 @@ describe('execute-sql tool', () => {
       const result = await handler({ sql }, null);
 
       expect(parseToolResponse(result).success).toBe(true);
+    });
+
+    it('should reject comment-only SQL in readonly mode', async () => {
+      const sql = '-- Just a comment\n/* Another */';
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+
+    it('should reject MySQL conditional comment bypass with mysql connector', async () => {
+      const mysqlConnector = createMockConnector('mysql', 'mysql_source');
+      mockGetCurrentConnector.mockReturnValue(mysqlConnector);
+
+      const sql = 'SELECT 1; /*!50000 DROP TABLE users */';
+      const handler = createExecuteSqlToolHandler('mysql_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+
+    it('should reject MariaDB M-bang comment bypass with mariadb connector', async () => {
+      const mariadbConnector = createMockConnector('mariadb', 'mariadb_source');
+      mockGetCurrentConnector.mockReturnValue(mariadbConnector);
+
+      const sql = 'SELECT 1; /*M! DELETE FROM users */';
+      const handler = createExecuteSqlToolHandler('mariadb_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
     it('should reject write statement hidden after comment', async () => {

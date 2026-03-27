@@ -46,6 +46,45 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT   still comment */ 1");
     });
 
+    it("should preserve MySQL conditional comments for MySQL dialect", () => {
+      const sql = "SELECT 1; /*!50000 DELETE FROM users */";
+      // Conditional comments are executable in MySQL — must not be stripped
+      expect(stripCommentsAndStrings(sql, "mysql")).toContain("DELETE FROM users");
+    });
+
+    it("should preserve MySQL conditional comments without version number", () => {
+      const sql = "/*! DROP TABLE users */";
+      expect(stripCommentsAndStrings(sql, "mysql")).toContain("DROP TABLE users");
+    });
+
+    it("should preserve MySQL conditional comments for MariaDB dialect", () => {
+      const sql = "/*!50000 DELETE FROM users */";
+      expect(stripCommentsAndStrings(sql, "mariadb")).toContain("DELETE FROM users");
+    });
+
+    it("should preserve MariaDB M-bang executable comments for MariaDB dialect", () => {
+      const sql = "SELECT 1; /*M! DROP TABLE users; DELETE FROM audit_log */";
+      expect(stripCommentsAndStrings(sql, "mariadb")).toContain("DROP TABLE users");
+    });
+
+    it("should preserve MariaDB M-bang executable comments for MySQL dialect", () => {
+      const sql = "/*M! DELETE FROM users */";
+      expect(stripCommentsAndStrings(sql, "mysql")).toContain("DELETE FROM users");
+    });
+
+    it("should still strip regular comments for MySQL dialect", () => {
+      const sql = "SELECT /* comment */ 1";
+      expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT   1");
+    });
+
+    it("should strip conditional comments for non-MySQL dialects", () => {
+      // PostgreSQL/SQLite/SQL Server don't execute conditional comments
+      const sql = "/*!50000 DELETE FROM users */";
+      expect(stripCommentsAndStrings(sql, "postgres")).toBe(" ");
+      expect(stripCommentsAndStrings(sql, "sqlite")).toBe(" ");
+      expect(stripCommentsAndStrings(sql, "sqlserver")).toBe(" ");
+    });
+
     it("should handle deeply nested block comments in PostgreSQL", () => {
       const sql = "SELECT /* a /* b /* c */ b */ a */ 1";
       expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT   1");
