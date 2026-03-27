@@ -20,27 +20,12 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.25.1
         version: 1.25.1(hono@4.11.1)(zod@3.25.64)
-      better-sqlite3:
-        specifier: ^11.9.0
-        version: 11.10.0
       dotenv:
         specifier: ^16.4.7
         version: 16.5.0
       express:
         specifier: ^4.18.2
         version: 4.21.2
-      mariadb:
-        specifier: ^3.4.0
-        version: 3.4.2
-      mssql:
-        specifier: ^11.0.1
-        version: 11.0.1
-      mysql2:
-        specifier: ^3.13.0
-        version: 3.14.1
-      pg:
-        specifier: ^8.13.3
-        version: 8.16.0
       ssh-config:
         specifier: ^5.0.3
         version: 5.0.3
@@ -111,6 +96,22 @@ importers:
       vitest:
         specifier: ^4.0.6
         version: 4.0.6(@types/node@22.15.31)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3)(yaml@2.8.0)
+    optionalDependencies:
+      better-sqlite3:
+        specifier: ^11.9.0
+        version: 11.10.0
+      mariadb:
+        specifier: ^3.4.0
+        version: 3.4.2
+      mssql:
+        specifier: ^11.0.1
+        version: 11.0.1
+      mysql2:
+        specifier: ^3.13.0
+        version: 3.14.1
+      pg:
+        specifier: ^8.13.3
+        version: 8.16.0
 
   frontend:
     dependencies:
@@ -4679,7 +4680,8 @@ snapshots:
 
   '@tanstack/virtual-core@3.13.13': {}
 
-  '@tediousjs/connection-string@0.5.0': {}
+  '@tediousjs/connection-string@0.5.0':
+    optional: true
 
   '@testcontainers/mariadb@11.0.3':
     dependencies:
@@ -4787,7 +4789,8 @@ snapshots:
       '@types/qs': 6.14.0
       '@types/serve-static': 1.15.8
 
-  '@types/geojson@7946.0.16': {}
+  '@types/geojson@7946.0.16':
+    optional: true
 
   '@types/http-errors@2.0.5': {}
 
@@ -5000,7 +5003,8 @@ snapshots:
 
   async@3.2.6: {}
 
-  aws-ssl-profiles@1.1.2: {}
+  aws-ssl-profiles@1.1.2:
+    optional: true
 
   b4a@1.6.7: {}
 
@@ -5043,10 +5047,12 @@ snapshots:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
+    optional: true
 
   bindings@1.5.0:
     dependencies:
       file-uri-to-path: 1.0.0
+    optional: true
 
   bl@4.1.0:
     dependencies:
@@ -5195,7 +5201,8 @@ snapshots:
 
   colorette@1.4.0: {}
 
-  commander@11.1.0: {}
+  commander@11.1.0:
+    optional: true
 
   commander@4.1.1: {}
 
@@ -5295,8 +5302,10 @@ snapshots:
   decompress-response@6.0.0:
     dependencies:
       mimic-response: 3.1.0
+    optional: true
 
-  deep-extend@0.6.0: {}
+  deep-extend@0.6.0:
+    optional: true
 
   default-browser-id@5.0.0: {}
 
@@ -5307,7 +5316,8 @@ snapshots:
 
   define-lazy-prop@3.0.0: {}
 
-  denque@2.1.0: {}
+  denque@2.1.0:
+    optional: true
 
   depd@2.0.0: {}
 
@@ -5435,7 +5445,8 @@ snapshots:
     dependencies:
       eventsource-parser: 3.0.2
 
-  expand-template@2.0.3: {}
+  expand-template@2.0.3:
+    optional: true
 
   expect-type@1.2.2: {}
 
@@ -5532,7 +5543,8 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.3
 
-  file-uri-to-path@1.0.0: {}
+  file-uri-to-path@1.0.0:
+    optional: true
 
   finalhandler@1.3.1:
     dependencies:
@@ -5584,6 +5596,7 @@ snapshots:
   generate-function@2.3.1:
     dependencies:
       is-property: 1.0.2
+    optional: true
 
   gensync@1.0.0-beta.2: {}
 
@@ -5613,7 +5626,8 @@ snapshots:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
-  github-from-package@0.0.0: {}
+  github-from-package@0.0.0:
+    optional: true
 
   glob@10.4.5:
     dependencies:
@@ -5674,7 +5688,8 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ini@1.3.8: {}
+  ini@1.3.8:
+    optional: true
 
   ipaddr.js@1.9.1: {}
 
@@ -5688,7 +5703,8 @@ snapshots:
 
   is-promise@4.0.0: {}
 
-  is-property@1.0.2: {}
+  is-property@1.0.2:
+    optional: true
 
   is-stream@2.0.1: {}
 
@@ -5845,9 +5861,11 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lru-cache@7.18.3: {}
+  lru-cache@7.18.3:
+    optional: true
 
-  lru.min@1.1.2: {}
+  lru.min@1.1.2:
+    optional: true
 
   lucide-react@0.562.0(react@18.3.1):
     dependencies:
@@ -5870,6 +5888,7 @@ snapshots:
       denque: 2.1.0
       iconv-lite: 0.6.3
       lru-cache: 10.4.3
+    optional: true
 
   math-intrinsics@1.1.0: {}
 
@@ -5897,7 +5916,8 @@ snapshots:
 
   mime@1.6.0: {}
 
-  mimic-response@3.1.0: {}
+  mimic-response@3.1.0:
+    optional: true
 
   minimatch@5.1.6:
     dependencies:
@@ -5907,7 +5927,8 @@ snapshots:
     dependencies:
       brace-expansion: 2.0.2
 
-  minimist@1.2.8: {}
+  minimist@1.2.8:
+    optional: true
 
   minipass@7.1.2: {}
 
@@ -5936,6 +5957,7 @@ snapshots:
       tedious: 18.6.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   mysql2@3.14.1:
     dependencies:
@@ -5948,6 +5970,7 @@ snapshots:
       named-placeholders: 1.1.3
       seq-queue: 0.0.5
       sqlstring: 2.3.3
+    optional: true
 
   mz@2.7.0:
     dependencies:
@@ -5958,13 +5981,15 @@ snapshots:
   named-placeholders@1.1.3:
     dependencies:
       lru-cache: 7.18.3
+    optional: true
 
   nan@2.22.2:
     optional: true
 
   nanoid@3.3.11: {}
 
-  napi-build-utils@2.0.0: {}
+  napi-build-utils@2.0.0:
+    optional: true
 
   native-duplexpair@1.0.0: {}
 
@@ -5975,6 +6000,7 @@ snapshots:
   node-abi@3.75.0:
     dependencies:
       semver: 7.7.2
+    optional: true
 
   node-releases@2.0.27: {}
 
@@ -6035,13 +6061,15 @@ snapshots:
   pg-cloudflare@1.2.5:
     optional: true
 
-  pg-connection-string@2.9.0: {}
+  pg-connection-string@2.9.0:
+    optional: true
 
   pg-int8@1.0.1: {}
 
   pg-pool@3.10.0(pg@8.16.0):
     dependencies:
       pg: 8.16.0
+    optional: true
 
   pg-protocol@1.10.0: {}
 
@@ -6062,10 +6090,12 @@ snapshots:
       pgpass: 1.0.5
     optionalDependencies:
       pg-cloudflare: 1.2.5
+    optional: true
 
   pgpass@1.0.5:
     dependencies:
       split2: 4.2.0
+    optional: true
 
   picocolors@1.1.1: {}
 
@@ -6124,6 +6154,7 @@ snapshots:
       simple-get: 4.0.1
       tar-fs: 2.1.3
       tunnel-agent: 0.6.0
+    optional: true
 
   prettier@3.5.3: {}
 
@@ -6198,6 +6229,7 @@ snapshots:
       ini: 1.3.8
       minimist: 1.2.8
       strip-json-comments: 2.0.1
+    optional: true
 
   react-dom@18.3.1(react@18.3.1):
     dependencies:
@@ -6267,7 +6299,8 @@ snapshots:
 
   retry@0.12.0: {}
 
-  rfdc@1.4.1: {}
+  rfdc@1.4.1:
+    optional: true
 
   rollup@4.43.0:
     dependencies:
@@ -6359,7 +6392,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  seq-queue@0.0.5: {}
+  seq-queue@0.0.5:
+    optional: true
 
   serve-static@1.16.2:
     dependencies:
@@ -6425,13 +6459,15 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
-  simple-concat@1.0.1: {}
+  simple-concat@1.0.1:
+    optional: true
 
   simple-get@4.0.1:
     dependencies:
       decompress-response: 6.0.0
       once: 1.4.0
       simple-concat: 1.0.1
+    optional: true
 
   source-map-js@1.2.1: {}
 
@@ -6441,11 +6477,13 @@ snapshots:
 
   split-ca@1.0.1: {}
 
-  split2@4.2.0: {}
+  split2@4.2.0:
+    optional: true
 
   sprintf-js@1.1.3: {}
 
-  sqlstring@2.3.3: {}
+  sqlstring@2.3.3:
+    optional: true
 
   ssh-config@5.0.3: {}
 
@@ -6505,7 +6543,8 @@ snapshots:
     dependencies:
       ansi-regex: 6.1.0
 
-  strip-json-comments@2.0.1: {}
+  strip-json-comments@2.0.1:
+    optional: true
 
   strnum@2.2.0: {}
 
@@ -6706,6 +6745,7 @@ snapshots:
   tunnel-agent@0.6.0:
     dependencies:
       safe-buffer: 5.2.1
+    optional: true
 
   tw-animate-css@1.4.0: {}
 
