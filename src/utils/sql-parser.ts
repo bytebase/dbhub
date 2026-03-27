@@ -35,7 +35,6 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
  */
 function scanMultiLineCommentMySQL(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
-  // Conditional comment: /*! or /*!nnnnn — MySQL executes the body
   if (sql[i + 2] === "!") { return null; }
   return scanMultiLineComment(sql, i);
 }
