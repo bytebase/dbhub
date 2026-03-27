@@ -34,9 +34,9 @@ title: "Installation"
 
 ### Minimal Installation
 
-By default, DBHub installs drivers for all supported databases (PostgreSQL, MySQL, MariaDB, SQL Server, SQLite). If you only need specific databases, you can skip the unnecessary drivers to reduce installation size.
+By default, DBHub attempts to install drivers for all supported databases (PostgreSQL, MySQL, MariaDB, SQL Server, SQLite). If you only need specific databases, you can skip the unnecessary drivers to reduce installation size.
 
-This applies to `npm install` (global or local). When using `npx`, all optional dependencies are installed automatically.
+This applies to `npm install` (global or local). When using `npx`, npm will attempt to install all optional dependencies, but some drivers may be skipped if installation fails or is not supported on your platform.
 
 ```bash
 # Install with only the PostgreSQL driver
