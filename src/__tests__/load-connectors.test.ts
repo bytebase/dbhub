@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { isDriverNotInstalled } from "../utils/module-loader.js";
 
 describe("isDriverNotInstalled", () => {
@@ -20,13 +20,13 @@ describe("isDriverNotInstalled", () => {
     expect(isDriverNotInstalled(err, "mysql2")).toBe(false);
   });
 
-  it("should return true for driver subpath imports", () => {
+  it("should return false for driver subpath imports", () => {
     const err = new Error(
       "Cannot find package 'mysql2/promise' imported from /fake/path"
     );
     (err as NodeJS.ErrnoException).code = "ERR_MODULE_NOT_FOUND";
 
-    expect(isDriverNotInstalled(err, "mysql2")).toBe(true);
+    expect(isDriverNotInstalled(err, "mysql2")).toBe(false);
   });
 
   it("should return false when missing module name only contains driver as a substring", () => {
@@ -57,5 +57,68 @@ describe("isDriverNotInstalled", () => {
     expect(isDriverNotInstalled("string error", "pg")).toBe(false);
     expect(isDriverNotInstalled(null, "pg")).toBe(false);
     expect(isDriverNotInstalled(undefined, "pg")).toBe(false);
+  });
+});
+
+describe("loadConnectors", () => {
+  it("should log and continue when a driver is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Mock a connector module that throws ERR_MODULE_NOT_FOUND for its driver
+    const driverErr = new Error("Cannot find package 'pg' imported from /fake/path");
+    (driverErr as NodeJS.ErrnoException).code = "ERR_MODULE_NOT_FOUND";
+
+    const connectorModules = [
+      { load: () => Promise.reject(driverErr), name: "PostgreSQL", driver: "pg" },
+    ];
+
+    // Inline the loadConnectors logic to test without importing index.ts
+    // (which triggers side effects)
+    await Promise.all(
+      connectorModules.map(async ({ load, name, driver }) => {
+        try {
+          await load();
+        } catch (err) {
+          if (isDriverNotInstalled(err, driver)) {
+            console.error(
+              `Skipping ${name} connector: driver package "${driver}" not installed.`
+            );
+          } else {
+            throw err;
+          }
+        }
+      })
+    );
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Skipping PostgreSQL connector: driver package "pg" not installed.'
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("should rethrow non-driver errors", async () => {
+    const runtimeErr = new Error("Unexpected syntax error");
+
+    const connectorModules = [
+      { load: () => Promise.reject(runtimeErr), name: "PostgreSQL", driver: "pg" },
+    ];
+
+    await expect(
+      Promise.all(
+        connectorModules.map(async ({ load, name, driver }) => {
+          try {
+            await load();
+          } catch (err) {
+            if (isDriverNotInstalled(err, driver)) {
+              console.error(
+                `Skipping ${name} connector: driver package "${driver}" not installed.`
+              );
+            } else {
+              throw err;
+            }
+          }
+        })
+      )
+    ).rejects.toThrow("Unexpected syntax error");
   });
 });

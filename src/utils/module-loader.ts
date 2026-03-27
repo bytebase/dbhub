@@ -23,9 +23,5 @@ export function isDriverNotInstalled(err: unknown, driver: string): boolean {
   }
 
   const missingSpecifier = match[1];
-  // Match the exact driver package or a subpath import (e.g. "mysql2/promise")
-  return (
-    missingSpecifier === driver ||
-    missingSpecifier.startsWith(`${driver}/`)
-  );
+  return missingSpecifier === driver;
 }
