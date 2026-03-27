@@ -125,6 +125,10 @@ In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub
 - `EXPLAIN` queries
 - Other read-only operations
 
+<Note>
+Read-only mode validates the **first keyword** of each statement after stripping comments and strings. It is a safety net to prevent accidental modifications, not a security boundary. For untrusted environments, use database-level read-only users or permissions instead.
+</Note>
+
 ## Row Limiting
 
 Limit the number of rows returned from SELECT queries to prevent accidentally retrieving too much data:
