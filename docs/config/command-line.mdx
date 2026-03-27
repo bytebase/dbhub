@@ -225,7 +225,7 @@ SSH tunnel configuration for connecting to databases through bastion/jump hosts.
 | `--ssh-port` | `SSH_PORT` | number | SSH server port (default: `22`) |
 | `--ssh-user` | `SSH_USER` | string | SSH username |
 | `--ssh-password` | `SSH_PASSWORD` | string | SSH password (for password auth) |
-| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key file. Auto-detects `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc. if not specified |
+| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key file, or a base64-encoded private key. Auto-detects `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc. if not specified |
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | Passphrase for encrypted SSH key |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts for multi-hop SSH. Format: `[user@]host[:port]` (comma-separated for chains) |
 
@@ -250,9 +250,15 @@ npx @bytebase/dbhub@latest --dsn "..." \
 
 # SSH config alias (resolves host, user, key, and ProxyJump from ~/.ssh/config)
 npx @bytebase/dbhub@latest --dsn "..." --ssh-host mybastion
+
+# Base64-encoded private key (useful in containerized/cloud environments)
+export SSH_KEY=$(base64 < ~/.ssh/id_rsa)
+npx @bytebase/dbhub@latest --dsn "..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu
 ```
 
 <Note>
+- `--ssh-key` / `SSH_KEY` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format: it first tries to read the value as a file path, and if that fails, decodes it as base64.
 - When `--ssh-host` is a plain alias (no dots, not an IP address), DBHub automatically resolves it from `~/.ssh/config`, reading the `Hostname`, `User`, `IdentityFile`, and `ProxyJump` directives. Explicit flags always override values from the config file.
 - ProxyCommand is not supported (requires shell execution). Use ProxyJump instead.
 - Path expansion for `~/` is supported in file paths.
@@ -278,6 +284,6 @@ npx @bytebase/dbhub@latest --dsn "..." --ssh-host mybastion
 | `--ssh-port` | `SSH_PORT` | number | SSH server port (default: `22`) |
 | `--ssh-user` | `SSH_USER` | string | SSH username |
 | `--ssh-password` | `SSH_PASSWORD` | string | SSH password |
-| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key |
+| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key or base64-encoded key |
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | SSH key passphrase |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts |
