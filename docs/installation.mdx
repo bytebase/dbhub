@@ -32,6 +32,29 @@ title: "Installation"
   </Tab>
 </Tabs>
 
+### Minimal Installation
+
+By default, DBHub installs drivers for all supported databases (PostgreSQL, MySQL, MariaDB, SQL Server, SQLite). If you only need specific databases, you can skip the unnecessary drivers to reduce installation size:
+
+```bash
+# Install with only the PostgreSQL driver
+npm install -g @bytebase/dbhub@latest --omit=optional && npm install -g pg
+
+# Install with only PostgreSQL and MySQL drivers
+npm install -g @bytebase/dbhub@latest --omit=optional && npm install -g pg mysql2
+```
+
+Available driver packages:
+- `pg` — PostgreSQL
+- `mysql2` — MySQL
+- `mariadb` — MariaDB
+- `mssql` — SQL Server
+- `better-sqlite3` — SQLite
+
+<Note>
+When a driver is not installed, DBHub will skip that connector at startup and log a message. All other connectors will work normally.
+</Note>
+
 ## Docker
 
 <Tabs>
