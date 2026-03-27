@@ -29,8 +29,8 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
 
 /**
  * MySQL/MariaDB-specific multi-line comment scanner that preserves conditional comments.
- * MySQL conditional comments (/*!nnnnn ... * /) and MariaDB-specific comments
- * (/*M! ... * /) are executable. Stripping them would let malicious SQL bypass
+ * MySQL conditional comments (`/*!nnnnn ... *\/`) and MariaDB-specific comments
+ * (`/*M! ... *\/`) are executable. Stripping them would let malicious SQL bypass
  * read-only checks, so we return null to let them pass through as plain text.
  */
 function scanMultiLineCommentMySQL(sql: string, i: number): SQLToken | null {

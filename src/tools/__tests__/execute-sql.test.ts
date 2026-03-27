@@ -214,6 +214,28 @@ describe('execute-sql tool', () => {
       expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
+    it('should reject MySQL conditional comment bypass with mysql connector', async () => {
+      const mysqlConnector = createMockConnector('mysql', 'mysql_source');
+      mockGetCurrentConnector.mockReturnValue(mysqlConnector);
+
+      const sql = 'SELECT 1; /*!50000 DROP TABLE users */';
+      const handler = createExecuteSqlToolHandler('mysql_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+
+    it('should reject MariaDB M-bang comment bypass with mariadb connector', async () => {
+      const mariadbConnector = createMockConnector('mariadb', 'mariadb_source');
+      mockGetCurrentConnector.mockReturnValue(mariadbConnector);
+
+      const sql = 'SELECT 1; /*M! DELETE FROM users */';
+      const handler = createExecuteSqlToolHandler('mariadb_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+
     it('should reject write statement hidden after comment', async () => {
       const sql = '-- Insert new user\nINSERT INTO users (name) VALUES (\'test\')';
       const handler = createExecuteSqlToolHandler('test_source');
