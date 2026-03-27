@@ -28,14 +28,16 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
 }
 
 /**
- * MySQL-specific multi-line comment scanner that preserves conditional comments.
- * MySQL conditional comments (/*!nnnnn ... * /) are executable — MySQL runs
- * the body if its version >= nnnnn. Stripping them would let malicious SQL
- * bypass read-only checks, so we return null to let them pass through as plain text.
+ * MySQL/MariaDB-specific multi-line comment scanner that preserves conditional comments.
+ * MySQL conditional comments (/*!nnnnn ... * /) and MariaDB-specific comments
+ * (/*M! ... * /) are executable. Stripping them would let malicious SQL bypass
+ * read-only checks, so we return null to let them pass through as plain text.
  */
 function scanMultiLineCommentMySQL(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
-  if (sql[i + 2] === "!") { return null; }
+  const next = sql[i + 2];
+  const nextNext = sql[i + 3];
+  if (next === "!" || (next === "M" && nextNext === "!")) { return null; }
   return scanMultiLineComment(sql, i);
 }
 

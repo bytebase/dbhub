@@ -105,5 +105,13 @@ describe("isReadOnlySQL", () => {
     it("should reject conditional comment without version number", () => {
       expect(isReadOnlySQL("/*! DELETE FROM users */", "mysql")).toBe(false);
     });
+
+    it("should reject MariaDB M-bang executable comment", () => {
+      expect(isReadOnlySQL("/*M! DELETE FROM users */", "mariadb")).toBe(false);
+    });
+
+    it("should reject MariaDB M-bang executable comment on MySQL dialect", () => {
+      expect(isReadOnlySQL("/*M! DROP TABLE users */", "mysql")).toBe(false);
+    });
   });
 });

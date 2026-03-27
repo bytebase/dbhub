@@ -62,6 +62,16 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "mariadb")).toContain("DELETE FROM users");
     });
 
+    it("should preserve MariaDB M-bang executable comments for MariaDB dialect", () => {
+      const sql = "SELECT 1; /*M! DROP TABLE users; DELETE FROM audit_log */";
+      expect(stripCommentsAndStrings(sql, "mariadb")).toContain("DROP TABLE users");
+    });
+
+    it("should preserve MariaDB M-bang executable comments for MySQL dialect", () => {
+      const sql = "/*M! DELETE FROM users */";
+      expect(stripCommentsAndStrings(sql, "mysql")).toContain("DELETE FROM users");
+    });
+
     it("should still strip regular comments for MySQL dialect", () => {
       const sql = "SELECT /* comment */ 1";
       expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT   1");
