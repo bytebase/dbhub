@@ -138,9 +138,19 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL(sql, "postgres")).toBe(true);
     });
 
-    it("should allow a CTE named 'replace' in MySQL", () => {
+    it("should reject a CTE named 'replace' in MySQL (accepted false positive for security)", () => {
       const sql = "WITH replace AS (SELECT 1) SELECT * FROM replace";
-      expect(isReadOnlySQL(sql, "mysql")).toBe(true);
+      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
+    });
+
+    it("should reject REPLACE without INTO in MySQL (REPLACE tbl SET ...)", () => {
+      const sql = "REPLACE users SET name = 'test'";
+      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
+    });
+
+    it("should reject REPLACE without INTO inside WITH in MySQL", () => {
+      const sql = "WITH cte AS (SELECT 1) REPLACE users SET name = 'test'";
+      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
     });
 
     it("should reject REPLACE (non-function) inside WITH in MySQL", () => {

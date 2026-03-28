@@ -39,12 +39,12 @@ const mutatingPattern = new RegExp(
 );
 
 /**
- * Extended pattern for dialects that support REPLACE INTO (MySQL/MariaDB/SQLite).
- * Only matches `REPLACE INTO` (with optional LOW_PRIORITY/DELAYED), not
- * REPLACE() function calls or identifiers named `replace`.
+ * Extended pattern for dialects that support REPLACE (MySQL/MariaDB/SQLite).
+ * Matches REPLACE statements (including those without INTO, e.g. REPLACE tbl SET ...)
+ * but not REPLACE() function calls (excluded via negative lookahead for `(`).
  */
 const mutatingPatternWithReplace = new RegExp(
-  `\\b(?:${mutatingKeywords.join("|")}|replace\\s+(?:(?:low_priority|delayed)\\s+)?into)\\b`,
+  `\\b(?:${mutatingKeywords.join("|")}|replace(?!\\s*\\())\\b`,
   "i",
 );
 
