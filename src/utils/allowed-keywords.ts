@@ -39,40 +39,27 @@ const mutatingPattern = new RegExp(
 );
 
 /**
- * Extended pattern for MySQL/MariaDB that also detects REPLACE as a statement.
+ * Extended pattern for dialects that support REPLACE INTO (MySQL/MariaDB/SQLite).
  * Only matches `REPLACE INTO` (with optional LOW_PRIORITY/DELAYED), not
  * REPLACE() function calls or identifiers named `replace`.
  */
-const mutatingPatternMySQL = new RegExp(
+const mutatingPatternWithReplace = new RegExp(
   `\\b(?:${mutatingKeywords.join("|")}|replace\\s+(?:(?:low_priority|delayed)\\s+)?into)\\b`,
   "i",
 );
 
-/**
- * Extended pattern for SQLite that also detects REPLACE INTO.
- * SQLite supports REPLACE INTO but not LOW_PRIORITY/DELAYED.
- */
-const mutatingPatternSQLite = new RegExp(
-  `\\b(?:${mutatingKeywords.join("|")}|replace\\s+into)\\b`,
-  "i",
-);
+/** Per-dialect mutating keyword pattern */
+const mutatingPatterns: Record<ConnectorType, RegExp> = {
+  postgres: mutatingPattern,
+  mysql: mutatingPatternWithReplace,
+  mariadb: mutatingPatternWithReplace,
+  sqlite: mutatingPatternWithReplace,
+  sqlserver: mutatingPattern,
+};
 
-function getMutatingPattern(connectorType: ConnectorType | string): RegExp {
-  if (connectorType === "mysql" || connectorType === "mariadb") {
-    return mutatingPatternMySQL;
-  }
-  if (connectorType === "sqlite") {
-    return mutatingPatternSQLite;
-  }
-  return mutatingPattern;
-}
-
-/** Detects SELECT ... INTO which writes data despite starting with SELECT */
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
-/** Detects EXPLAIN ANALYZE which actually executes the statement.
- *  Matches both `EXPLAIN ANALYZE ...` and `EXPLAIN (ANALYZE) ...` / `EXPLAIN (ANALYZE, ...) ...`.
- *  Excludes explicitly disabled forms: ANALYZE false/off/0 */
+/** Matches EXPLAIN ANALYZE (or parenthesized form), excluding disabled forms (false/off/0) */
 const explainAnalyzePattern =
   /^explain\s+(?:\([^)]*\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)[^)]*\)|\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)(?:\s+verbose\b)?)/i;
 
@@ -80,26 +67,25 @@ const explainAnalyzePattern =
  * Check if a SQL query is read-only.
  * 1. Strips comments and string literals before analyzing.
  * 2. Verifies the first keyword is in the allow-list.
- * 3. For WITH statements, scans for mutating keywords and SELECT INTO.
- * 4. For SELECT statements, checks for SELECT ... INTO.
- * 5. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
- * @param sql The SQL query to check
- * @param connectorType The database type to check against
- * @returns True if the query is read-only
+ * 3. For WITH/SELECT statements, checks for mutating keywords and SELECT INTO.
+ * 4. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
-  // Strip comments and strings before analyzing
-  const cleanedSQL = stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase();
+  return checkReadOnly(
+    stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase(),
+    connectorType,
+  );
+}
 
+function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string): boolean {
   // Empty after stripping → deny. Attacker-crafted inputs may reduce to
   // empty strings after comment/string removal to evade keyword checks.
   if (!cleanedSQL) {
     return false;
   }
 
-  const firstWord = cleanedSQL.split(/\s+/)[0];
+  const firstWord = cleanedSQL.match(/\S+/)?.[0] ?? "";
 
-  // Get the appropriate allowed keywords list for this database type
   const keywordList =
     allowedKeywords[connectorType as ConnectorType] || [];
 
@@ -108,27 +94,26 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   }
 
   // WITH statements can embed DML in CTEs (e.g. WITH cte AS (UPDATE ...))
-  // or use SELECT ... INTO in the final query.
   if (firstWord === "with") {
-    if (getMutatingPattern(connectorType).test(cleanedSQL)) {
-      return false;
-    }
-    if (selectIntoPattern.test(cleanedSQL)) {
+    const pattern = mutatingPatterns[connectorType as ConnectorType] ?? mutatingPattern;
+    if (pattern.test(cleanedSQL)) {
       return false;
     }
   }
 
-  // SELECT ... INTO writes data (creates tables or writes to files)
-  if (firstWord === "select" && selectIntoPattern.test(cleanedSQL)) {
+  // SELECT/WITH ... INTO writes data (creates tables or writes to files)
+  if ((firstWord === "select" || firstWord === "with") && selectIntoPattern.test(cleanedSQL)) {
     return false;
   }
 
   // EXPLAIN ANALYZE actually executes the statement (Postgres)
-  // Validate the inner statement using the same read-only logic
-  if (firstWord === "explain" && explainAnalyzePattern.test(cleanedSQL)) {
-    const afterExplain = cleanedSQL.replace(explainAnalyzePattern, "").trim();
-    if (afterExplain && !isReadOnlySQL(afterExplain, connectorType)) {
-      return false;
+  if (firstWord === "explain") {
+    const m = explainAnalyzePattern.exec(cleanedSQL);
+    if (m) {
+      const afterExplain = cleanedSQL.slice(m[0].length).trim();
+      if (afterExplain && !checkReadOnly(afterExplain, connectorType)) {
+        return false;
+      }
     }
   }
 
