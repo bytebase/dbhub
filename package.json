@@ -30,7 +30,8 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:watch": "vitest",
-    "test:integration": "vitest run --project integration"
+    "test:integration": "vitest run --project integration",
+    "test:build": "node scripts/smoke-test-build.mjs"
   },
   "engines": {
     "node": ">=20"
