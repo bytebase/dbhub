@@ -40,10 +40,11 @@ const mutatingPattern = new RegExp(
 
 /**
  * Extended pattern for MySQL/MariaDB that also detects REPLACE as a statement.
- * REPLACE(...) function calls are excluded via negative lookahead.
+ * Only matches `REPLACE INTO` (with optional LOW_PRIORITY/DELAYED), not
+ * REPLACE() function calls or identifiers named `replace`.
  */
 const mutatingPatternMySQL = new RegExp(
-  `\\b(?:${mutatingKeywords.join("|")}|replace(?!\\s*\\())\\b`,
+  `\\b(?:${mutatingKeywords.join("|")}|replace\\s+(?:(?:low_priority|delayed)\\s+)?into)\\b`,
   "i",
 );
 
