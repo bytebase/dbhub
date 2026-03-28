@@ -148,6 +148,11 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL(sql, "mysql")).toBe(false);
     });
 
+    it("should reject REPLACE (non-function) inside WITH in SQLite", () => {
+      const sql = "WITH cte AS (SELECT 1) REPLACE INTO users VALUES (1, 'test')";
+      expect(isReadOnlySQL(sql, "sqlite")).toBe(false);
+    });
+
     it("should reject WITH ... SELECT INTO", () => {
       const sql = "WITH cte AS (SELECT * FROM users) SELECT * INTO new_table FROM cte";
       expect(isReadOnlySQL(sql, "postgres")).toBe(false);

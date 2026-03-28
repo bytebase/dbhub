@@ -48,9 +48,21 @@ const mutatingPatternMySQL = new RegExp(
   "i",
 );
 
+/**
+ * Extended pattern for SQLite that also detects REPLACE INTO.
+ * SQLite supports REPLACE INTO but not LOW_PRIORITY/DELAYED.
+ */
+const mutatingPatternSQLite = new RegExp(
+  `\\b(?:${mutatingKeywords.join("|")}|replace\\s+into)\\b`,
+  "i",
+);
+
 function getMutatingPattern(connectorType: ConnectorType | string): RegExp {
   if (connectorType === "mysql" || connectorType === "mariadb") {
     return mutatingPatternMySQL;
+  }
+  if (connectorType === "sqlite") {
+    return mutatingPatternSQLite;
   }
   return mutatingPattern;
 }
