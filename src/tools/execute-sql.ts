@@ -31,13 +31,13 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
 
 /**
  * Create an execute_sql tool handler for a specific source
- * @param sourceId - The source ID this handler is bound to (undefined for single-source mode)
+ * @param boundSourceId - The source ID this handler is bound to (undefined for single-source mode)
  * @returns A handler function bound to the specified source
  */
-export function createExecuteSqlToolHandler(sourceId?: string) {
+export function createExecuteSqlToolHandler(boundSourceId?: string) {
   return async (args: any, extra: any) => {
     const { sql, source_id: argSourceId } = args as { sql: string; source_id?: string };
-    const resolvedSourceId = sourceId ?? argSourceId;
+    const resolvedSourceId = boundSourceId ?? argSourceId;
     const startTime = Date.now();
     const effectiveSourceId = getEffectiveSourceId(resolvedSourceId);
     let success = true;

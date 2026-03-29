@@ -98,11 +98,11 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
 
 /**
  * Get execute_sql tool metadata for a specific source
- * @param sourceId - The source ID to get tool metadata for
+ * @param boundSourceId - The source ID this metadata is bound to (undefined for multi-source mode)
  * @returns Tool metadata with name, description, and Zod schema
  */
-export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
-  if (sourceId === undefined) {
+export function getExecuteSqlMetadata(boundSourceId?: string): ToolMetadata {
+  if (boundSourceId === undefined) {
     return {
       name: "execute_sql",
       description:
@@ -118,11 +118,11 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
     };
   }
 
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const sourceConfig = ConnectorManager.getSourceConfig(boundSourceId)!;
   const dbType = sourceConfig.type;
 
   const registry = getToolRegistry();
-  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, sourceId);
+  const toolConfig = registry.getBuiltinToolConfig(BUILTIN_TOOL_EXECUTE_SQL, boundSourceId);
   const isReadonly = toolConfig?.readonly === true;
   const maxRows = toolConfig?.max_rows;
 
@@ -131,10 +131,10 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
 
   return {
     name: "execute_sql",
-    description: `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`,
+    description: `Execute SQL queries on the '${boundSourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`,
     schema: executeSqlSchema,
     annotations: {
-      title: `Execute SQL - ${sourceId} (${dbType})`,
+      title: `Execute SQL - ${boundSourceId} (${dbType})`,
       readOnlyHint: isReadonly,
       destructiveHint: !isReadonly,
       idempotentHint: false,
@@ -145,11 +145,11 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
 
 /**
  * Get search_objects tool metadata for a specific source
- * @param sourceId - The source ID to get tool metadata for
+ * @param boundSourceId - The source ID this metadata is bound to (undefined for multi-source mode)
  * @returns Tool metadata with name, description, schema, and annotations
  */
-export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
-  if (sourceId === undefined) {
+export function getSearchObjectsMetadata(boundSourceId?: string): ToolMetadata {
+  if (boundSourceId === undefined) {
     return {
       name: "search_objects",
       description:
@@ -165,15 +165,15 @@ export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
     };
   }
 
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const sourceConfig = ConnectorManager.getSourceConfig(boundSourceId)!;
   const dbType = sourceConfig.type;
 
   return {
     name: "search_objects",
-    description: `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`,
+    description: `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${boundSourceId}' ${dbType} database`,
     schema: searchDatabaseObjectsSchema,
     annotations: {
-      title: `Search Database Objects - ${sourceId} (${dbType})`,
+      title: `Search Database Objects - ${boundSourceId} (${dbType})`,
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -203,8 +203,8 @@ function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolPa
 /**
  * Build execute_sql tool metadata for API response
  */
-function buildExecuteSqlTool(sourceId?: string, toolConfig?: ToolConfig): Tool {
-  const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
+function buildExecuteSqlTool(boundSourceId?: string, toolConfig?: ToolConfig): Tool {
+  const executeSqlMetadata = getExecuteSqlMetadata(boundSourceId);
   const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
 
   // Extract readonly and max_rows from toolConfig
@@ -224,8 +224,8 @@ function buildExecuteSqlTool(sourceId?: string, toolConfig?: ToolConfig): Tool {
 /**
  * Build search_objects tool metadata for API response
  */
-function buildSearchObjectsTool(sourceId?: string): Tool {
-  const searchMetadata = getSearchObjectsMetadata(sourceId);
+function buildSearchObjectsTool(boundSourceId?: string): Tool {
+  const searchMetadata = getSearchObjectsMetadata(boundSourceId);
 
   return {
     name: searchMetadata.name,

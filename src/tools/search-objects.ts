@@ -497,8 +497,10 @@ async function searchIndexes(
 
 /**
  * Create a search_database_objects tool handler
+ * @param boundSourceId - The source ID this handler is bound to (undefined for single-source mode)
+ * @returns A handler function bound to the specified source
  */
-export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
+export function createSearchDatabaseObjectsToolHandler(boundSourceId?: string) {
   return async (args: any, extra: any) => {
     const {
       object_type,
@@ -518,7 +520,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       source_id?: string;
     };
 
-    const resolvedSourceId = sourceId ?? argSourceId;
+    const resolvedSourceId = boundSourceId ?? argSourceId;
     const startTime = Date.now();
     const effectiveSourceId = getEffectiveSourceId(resolvedSourceId);
     let success = true;
