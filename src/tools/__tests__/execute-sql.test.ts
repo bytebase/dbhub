@@ -260,8 +260,8 @@ describe('execute-sql tool', () => {
     });
   });
 
-  describe('multi-source mode (sourceId undefined, source_id from args)', () => {
-    it('uses source_id from args when handler has no bound sourceId', async () => {
+  describe('multi-source mode (boundSourceId undefined, source_id from args)', () => {
+    it('uses source_id from args when handler has no boundSourceId', async () => {
       const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
@@ -272,7 +272,7 @@ describe('execute-sql tool', () => {
       expect(ConnectorManager.getCurrentConnector).toHaveBeenCalledWith('arg_source');
     });
 
-    it('bound sourceId takes precedence over source_id in args', async () => {
+    it('boundSourceId takes precedence over source_id in args', async () => {
       const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
@@ -282,7 +282,7 @@ describe('execute-sql tool', () => {
       expect(ConnectorManager.getCurrentConnector).toHaveBeenCalledWith('bound_source');
     });
 
-    it('falls back to default connector when no sourceId and no source_id arg', async () => {
+    it('falls back to default connector when no boundSourceId and no source_id arg', async () => {
       const mockResult: SQLResult = { rows: [], rowCount: 0 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
