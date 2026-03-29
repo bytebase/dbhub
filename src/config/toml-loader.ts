@@ -5,7 +5,7 @@ import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
-import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
+import { BUILTIN_AND_META_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
@@ -177,7 +177,7 @@ function validateToolsConfig(
     }
 
     // Validate based on tool type (built-in vs custom)
-    const isBuiltin = (BUILTIN_TOOLS as readonly string[]).includes(tool.name);
+    const isBuiltin = (BUILTIN_AND_META_TOOLS as readonly string[]).includes(tool.name);
     const isExecuteSql = tool.name === BUILTIN_TOOL_EXECUTE_SQL;
 
     if (isBuiltin) {

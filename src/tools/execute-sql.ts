@@ -5,15 +5,17 @@ import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
-import {
-  getEffectiveSourceId,
-  trackToolRequest,
-} from "../utils/tool-handler-helpers.js";
+import { getEffectiveSourceId, trackToolRequest } from "../utils/tool-handler-helpers.js";
 import { splitSQLStatements } from "../utils/sql-parser.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
   sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
+};
+
+export const executeSqlMultiSourceSchema = {
+  sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
+  source_id: z.string().describe("Database source ID. Use list_sources to discover available IDs."),
 };
 
 /**
@@ -24,7 +26,7 @@ export const executeSqlSchema = {
  */
 function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
   const statements = splitSQLStatements(sql, connectorType);
-  return statements.every(statement => isReadOnlySQL(statement, connectorType));
+  return statements.every((statement) => isReadOnlySQL(statement, connectorType));
 }
 
 /**
@@ -34,19 +36,20 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  */
 export function createExecuteSqlToolHandler(sourceId?: string) {
   return async (args: any, extra: any) => {
-    const { sql } = args as { sql: string };
+    const { sql, source_id: argSourceId } = args as { sql: string; source_id?: string };
+    const resolvedSourceId = sourceId ?? argSourceId;
     const startTime = Date.now();
-    const effectiveSourceId = getEffectiveSourceId(sourceId);
+    const effectiveSourceId = getEffectiveSourceId(resolvedSourceId);
     let success = true;
     let errorMessage: string | undefined;
     let result: any;
 
     try {
       // Ensure source is connected (handles lazy connections)
-      await ConnectorManager.ensureConnected(sourceId);
+      await ConnectorManager.ensureConnected(resolvedSourceId);
 
       // Get connector for the specified source (or default)
-      const connector = ConnectorManager.getCurrentConnector(sourceId);
+      const connector = ConnectorManager.getCurrentConnector(resolvedSourceId);
       const actualSourceId = connector.getId();
 
       // Get tool-specific configuration (tool is already registered, so it's enabled)
@@ -86,7 +89,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
+          toolName: "execute_sql",
           sql,
         },
         startTime,
