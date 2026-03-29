@@ -172,28 +172,26 @@ describe('Data Sources API Integration Tests', () => {
       });
     });
 
-    it('should include execute_sql tools with correct naming', async () => {
+    it('should use generic execute_sql tool name across all sources in multi-source mode', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
-      // Find sources by ID to avoid relying on array order
-      const readonlySource = sources.find(s => s.id === 'readonly_limited');
-      const writableSource = sources.find(s => s.id === 'writable_limited');
-      const unlimitedSource = sources.find(s => s.id === 'writable_unlimited');
-
-      expect(readonlySource?.tools[0].name).toBe('execute_sql_readonly_limited');
-      expect(writableSource?.tools[0].name).toBe('execute_sql_writable_limited');
-      expect(unlimitedSource?.tools[0].name).toBe('execute_sql_writable_unlimited');
+      // In multi-source mode, all sources share the generic execute_sql tool name
+      sources.forEach((source) => {
+        expect(source.tools[0].name).toBe('execute_sql');
+      });
     });
 
-    it('should include source ID and type in tool descriptions', async () => {
+    it('should include source_id parameter in execute_sql tool for multi-source mode', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
 
+      // In multi-source mode, execute_sql has a source_id param instead of source-specific description
       sources.forEach((source) => {
         const tool = source.tools[0];
-        expect(tool.description).toContain(source.id);
-        expect(tool.description).toContain(source.type);
+        const sourceIdParam = tool.parameters.find((p) => p.name === 'source_id');
+        expect(sourceIdParam).toBeDefined();
+        expect(sourceIdParam!.type).toBe('string');
       });
     });
 
@@ -291,13 +289,12 @@ describe('Data Sources API Integration Tests', () => {
       expect(source.tools.length).toBeGreaterThan(0);
     });
 
-    it('should include correct tool name for specific source', async () => {
+    it('should use generic execute_sql tool name in multi-source mode', async () => {
       const response = await fetch(`${BASE_URL}/api/sources/writable_limited`);
       const source = (await response.json()) as DataSource;
 
-      expect(source.tools[0].name).toBe('execute_sql_writable_limited');
-      expect(source.tools[0].description).toContain('writable_limited');
-      expect(source.tools[0].description).toContain('sqlite');
+      // In multi-source mode, generic execute_sql tool name is used
+      expect(source.tools[0].name).toBe('execute_sql');
     });
 
     it('should include complete tool metadata in single source response', async () => {
@@ -305,7 +302,7 @@ describe('Data Sources API Integration Tests', () => {
       const source = (await response.json()) as DataSource;
 
       const tool = source.tools[0];
-      expect(tool.name).toBe('execute_sql_readonly_limited');
+      expect(tool.name).toBe('execute_sql');
       expect(tool.description).toBeDefined();
       expect(tool.parameters).toBeDefined();
       expect(Array.isArray(tool.parameters)).toBe(true);

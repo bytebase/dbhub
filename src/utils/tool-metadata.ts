@@ -2,7 +2,10 @@ import { z } from "zod";
 import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { executeSqlSchema, executeSqlMultiSourceSchema } from "../tools/execute-sql.js";
-import { searchDatabaseObjectsSchema, searchDatabaseObjectsMultiSourceSchema } from "../tools/search-objects.js";
+import {
+  searchDatabaseObjectsSchema,
+  searchDatabaseObjectsMultiSourceSchema,
+} from "../tools/search-objects.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -102,7 +105,8 @@ export function getExecuteSqlMetadata(sourceId?: string): ToolMetadata {
   if (sourceId === undefined) {
     return {
       name: "execute_sql",
-      description: "Execute SQL queries on a database source. Use list_sources to discover available source IDs, then pass source_id.",
+      description:
+        "Execute SQL queries on a database source. Use list_sources to discover available source IDs, then pass source_id.",
       schema: executeSqlMultiSourceSchema,
       annotations: {
         title: "Execute SQL",
@@ -148,7 +152,8 @@ export function getSearchObjectsMetadata(sourceId?: string): ToolMetadata {
   if (sourceId === undefined) {
     return {
       name: "search_objects",
-      description: "Search and list database objects (schemas, tables, columns, procedures, functions, indexes). Use list_sources to discover source IDs, then pass source_id.",
+      description:
+        "Search and list database objects (schemas, tables, columns, procedures, functions, indexes). Use list_sources to discover source IDs, then pass source_id.",
       schema: searchDatabaseObjectsMultiSourceSchema,
       annotations: {
         title: "Search Database Objects",
@@ -198,7 +203,7 @@ function customParamsToToolParams(params: ParameterConfig[] | undefined): ToolPa
 /**
  * Build execute_sql tool metadata for API response
  */
-function buildExecuteSqlTool(sourceId: string, toolConfig?: ToolConfig): Tool {
+function buildExecuteSqlTool(sourceId?: string, toolConfig?: ToolConfig): Tool {
   const executeSqlMetadata = getExecuteSqlMetadata(sourceId);
   const executeSqlParameters = zodToParameters(executeSqlMetadata.schema);
 
@@ -219,7 +224,7 @@ function buildExecuteSqlTool(sourceId: string, toolConfig?: ToolConfig): Tool {
 /**
  * Build search_objects tool metadata for API response
  */
-function buildSearchObjectsTool(sourceId: string): Tool {
+function buildSearchObjectsTool(sourceId?: string): Tool {
   const searchMetadata = getSearchObjectsMetadata(sourceId);
 
   return {
@@ -254,14 +259,16 @@ export function getToolsForSource(sourceId: string): Tool[] {
   // Get enabled tools from registry
   const registry = getToolRegistry();
   const enabledToolConfigs = registry.getEnabledToolConfigs(sourceId);
+  const isSingleSource = ConnectorManager.getAvailableSourceIds().length === 1;
 
   // Uniform iteration: map each enabled tool config to its API representation
   return enabledToolConfigs.map((toolConfig) => {
     // Dispatch based on tool name
     if (toolConfig.name === "execute_sql") {
-      return buildExecuteSqlTool(sourceId, toolConfig);
+      // In multi-source mode, use generic metadata (undefined = generic tool with source_id param)
+      return buildExecuteSqlTool(isSingleSource ? sourceId : undefined, toolConfig);
     } else if (toolConfig.name === "search_objects") {
-      return buildSearchObjectsTool(sourceId);
+      return buildSearchObjectsTool(isSingleSource ? sourceId : undefined);
     } else {
       // Custom tool
       return buildCustomTool(toolConfig);
