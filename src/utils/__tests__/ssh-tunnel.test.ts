@@ -90,6 +90,51 @@ describe('SSHTunnel', () => {
     });
   });
 
+  describe('Private Key Resolution', () => {
+    it('should accept base64-encoded private key', async () => {
+      const tunnel = new SSHTunnel();
+      // A minimal PEM private key structure, base64-encoded
+      const fakeKey = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg==\n-----END PRIVATE KEY-----\n';
+      const base64Key = Buffer.from(fakeKey).toString('base64');
+
+      const config: SSHTunnelConfig = {
+        host: 'ssh.example.com',
+        username: 'testuser',
+        privateKey: base64Key,
+      };
+
+      const options = {
+        targetHost: 'database.local',
+        targetPort: 5432,
+      };
+
+      // Will fail at SSH connection or key parsing (not at file reading),
+      // proving the base64 key was decoded and passed to ssh2
+      await expect(tunnel.establish(config, options)).rejects.toThrow(
+        /Cannot parse privateKey|SSH connection error/
+      );
+    });
+
+    it('should reject invalid private key that is neither file nor base64', async () => {
+      const tunnel = new SSHTunnel();
+
+      const config: SSHTunnelConfig = {
+        host: 'ssh.example.com',
+        username: 'testuser',
+        privateKey: 'not-a-file-and-not-base64-key',
+      };
+
+      const options = {
+        targetHost: 'database.local',
+        targetPort: 5432,
+      };
+
+      await expect(tunnel.establish(config, options)).rejects.toThrow(
+        'SSH key is neither a valid file path nor a base64-encoded private key'
+      );
+    });
+  });
+
   describe('Configuration Validation', () => {
     it('should validate authentication requirements', () => {
       // Test that config validation logic exists

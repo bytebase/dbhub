@@ -388,10 +388,12 @@ Sources define database connections. Each source represents a database that DBHu
   ssh_host = "bastion.example.com"
   ssh_port = 22
   ssh_user = "ubuntu"
-  ssh_key = "~/.ssh/id_rsa"
+  ssh_key = "~/.ssh/id_rsa"  # File path or base64-encoded key
   ssh_passphrase = "my_key_passphrase"  # Optional
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
   ```
+
+  `ssh_key` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format.
 
   See [Command-Line Options - SSH Tunnel](/config/command-line#ssh-tunnel-options) for complete documentation and examples.
 </ParamField>
@@ -674,7 +676,7 @@ default = 10
 | `ssh_port` | number | ❌ | SSH server port (default: 22) |
 | `ssh_user` | string | ❌ | SSH username |
 | `ssh_password` | string | ❌ | SSH password |
-| `ssh_key` | string | ❌ | SSH private key path |
+| `ssh_key` | string | ❌ | SSH private key path or base64-encoded key |
 | `ssh_passphrase` | string | ❌ | SSH key passphrase |
 | `ssh_proxy_jump` | string | ❌ | ProxyJump hosts |
 

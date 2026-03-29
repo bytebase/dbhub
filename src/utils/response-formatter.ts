@@ -3,12 +3,19 @@
  * Provides formatting for resources, tools, and prompts
  */
 
+const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+
 /**
- * Custom JSON replacer function to handle BigInt serialization
- * Converts BigInt values to strings with format: "123n"
+ * Custom JSON replacer function to handle BigInt serialization.
+ * Values within Number.MAX_SAFE_INTEGER are converted to Number.
+ * Values exceeding safe range are converted to string to preserve precision.
  */
 export function bigIntReplacer(_key: string, value: any): any {
   if (typeof value === 'bigint') {
+    if (value >= MIN_SAFE_BIGINT && value <= MAX_SAFE_BIGINT) {
+      return Number(value);
+    }
     return value.toString();
   }
   return value;

@@ -132,7 +132,7 @@ describe('SQLite Connector Integration Tests', () => {
       
       expect(result.rows).toHaveLength(1);
       expect(result.rows[0].text_val).toBe('test string');
-      expect(result.rows[0].int_val).toBe(42);
+      expect(result.rows[0].int_val).toBe(BigInt(42));
       expect(result.rows[0].real_val).toBe(3.14159);
       expect(result.rows[0].null_val).toBeNull();
     });
@@ -152,7 +152,7 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.rows[0].current_time).toBeDefined();
       expect(result.rows[0].random_hex).toBeDefined();
       expect(result.rows[0].uppercase_text).toBe('HELLO WORLD');
-      expect(result.rows[0].string_length).toBe(11);
+      expect(result.rows[0].string_length).toBe(BigInt(11));
     });
 
     it('should handle SQLite transactions correctly', async () => {
@@ -548,7 +548,7 @@ describe('SQLite Connector Integration Tests', () => {
 
       const result = await connector.executeSQL('SELECT * FROM test', {});
       expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].id).toBe(1);
+      expect(result.rows[0].id).toBe(BigInt(1));
 
       await connector.disconnect();
     });

@@ -257,12 +257,24 @@ See documentation for more details on configuring database connections.
       await server.connect(transport);
       console.error("MCP server running on stdio");
 
-      // Listen for SIGINT to gracefully shut down
-      process.on("SIGINT", async () => {
+      let isShuttingDown = false;
+      const shutdown = async () => {
+        if (isShuttingDown) return;
+        isShuttingDown = true;
         console.error("Shutting down...");
         await transport.close();
+        await connectorManager.disconnect();
         process.exit(0);
-      });
+      };
+
+      // Listen for SIGINT/SIGTERM to gracefully shut down
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+
+      // Exit when stdin closes (parent process terminated).
+      // On Windows, SIGINT/SIGTERM are not reliably sent when the parent
+      // process exits — detecting stdin EOF is the portable way to handle this.
+      process.stdin.on("end", shutdown);
     }
   } catch (err) {
     console.error("Fatal error:", err);

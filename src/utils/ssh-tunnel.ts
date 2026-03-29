@@ -37,13 +37,28 @@ export class SSHTunnel {
       const jumpHosts = config.proxyJump ? parseJumpHosts(config.proxyJump) : [];
 
       // Read the private key once (shared by all connections)
+      // Supports both file paths and base64-encoded key content
       let privateKeyBuffer: Buffer | undefined;
       if (config.privateKey) {
         try {
           const resolvedKeyPath = resolveSymlink(config.privateKey);
           privateKeyBuffer = readFileSync(resolvedKeyPath);
-        } catch (error) {
-          throw new Error(`Failed to read private key file: ${error instanceof Error ? error.message : String(error)}`);
+        } catch {
+          // Not a readable file — try base64 decode
+          try {
+            const decoded = Buffer.from(config.privateKey, 'base64');
+            const text = decoded.toString('utf8');
+            if (text.includes('PRIVATE KEY')) {
+              privateKeyBuffer = decoded;
+            } else {
+              throw new Error(`SSH key is neither a valid file path nor a base64-encoded private key`);
+            }
+          } catch (decodeError) {
+            if (decodeError instanceof Error && decodeError.message.includes('neither a valid file path')) {
+              throw decodeError;
+            }
+            throw new Error(`SSH key is neither a valid file path nor a base64-encoded private key`);
+          }
         }
       }
 
