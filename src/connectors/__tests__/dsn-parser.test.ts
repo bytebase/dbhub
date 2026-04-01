@@ -33,23 +33,28 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
     expect(config.ssl).toEqual({ rejectUnauthorized: false });
   });
 
-  it('should set rejectUnauthorized = true for sslmode=verify-ca without sslrootcert', async () => {
+  it('should set rejectUnauthorized = true and skip hostname check for sslmode=verify-ca', async () => {
     const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-ca');
-    expect(config.ssl).toEqual({ rejectUnauthorized: true });
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(typeof ssl.checkServerIdentity).toBe('function');
+    expect((ssl.checkServerIdentity as Function)()).toBeUndefined();
   });
 
-  it('should set rejectUnauthorized = true for sslmode=verify-full without sslrootcert', async () => {
+  it('should set rejectUnauthorized = true and verify hostname for sslmode=verify-full', async () => {
     const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-full');
-    expect(config.ssl).toEqual({ rejectUnauthorized: true });
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.checkServerIdentity).toBeUndefined();
   });
 
   it('should read CA cert file for sslmode=verify-ca with sslrootcert', async () => {
     const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent(certPath)}`;
     const config = await parser.parse(dsn);
-    expect(config.ssl).toEqual({
-      rejectUnauthorized: true,
-      ca: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n',
-    });
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.ca).toBe('-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n');
+    expect(typeof ssl.checkServerIdentity).toBe('function');
   });
 
   it('should read CA cert file for sslmode=verify-full with sslrootcert', async () => {
@@ -72,10 +77,9 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
     try {
       const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent('~/.dbhub-test-ssl/ca.pem')}`;
       const config = await parser.parse(dsn);
-      expect(config.ssl).toEqual({
-        rejectUnauthorized: true,
-        ca: 'test-ca-content',
-      });
+      const ssl = config.ssl as Record<string, unknown>;
+      expect(ssl.rejectUnauthorized).toBe(true);
+      expect(ssl.ca).toBe('test-ca-content');
     } finally {
       fs.rmSync(homeCertDir, { recursive: true, force: true });
     }

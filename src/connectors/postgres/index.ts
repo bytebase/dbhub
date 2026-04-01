@@ -26,8 +26,8 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
  * Supported SSL modes:
  * - sslmode=disable: No SSL
  * - sslmode=require: SSL connection without certificate verification
- * - sslmode=verify-ca: SSL with CA certificate verification (rejectUnauthorized: true)
- * - sslmode=verify-full: SSL with CA and hostname verification (rejectUnauthorized: true)
+ * - sslmode=verify-ca: SSL with CA certificate verification, no hostname check
+ * - sslmode=verify-full: SSL with CA certificate and hostname verification
  * - Any other value: SSL with default Node.js TLS settings
  *
  * Optional parameter for verify-ca/verify-full:
@@ -37,6 +37,7 @@ class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     const queryTimeoutSeconds = config?.queryTimeoutSeconds;
+    // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
       const expectedFormat = this.getSampleDSN();
@@ -46,12 +47,14 @@ class PostgresDSNParser implements DSNParser {
     }
 
     try {
+      // Use the SafeURL helper instead of the built-in URL
+      // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
       const poolConfig: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
-        database: url.pathname ? url.pathname.substring(1) : '',  // Remove leading '/' if exists
+        database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
         user: url.username,
         password: url.password,
       };
@@ -59,7 +62,7 @@ class PostgresDSNParser implements DSNParser {
       let sslmode: string | undefined;
       let sslrootcert: string | undefined;
 
-      // Handle query parameters (like sslmode, etc.)
+      // Handle query parameters (like sslmode, sslrootcert, etc.)
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
           sslmode = value;
@@ -75,6 +78,12 @@ class PostgresDSNParser implements DSNParser {
         poolConfig.ssl = { rejectUnauthorized: false };
       } else if (sslmode === "verify-ca" || sslmode === "verify-full") {
         const sslConfig: pg.ConnectionOptions["ssl"] & object = { rejectUnauthorized: true };
+        // verify-ca checks the certificate chain but does not verify the server hostname,
+        // matching libpq behavior. verify-full (the default with rejectUnauthorized: true)
+        // verifies both the certificate chain and the hostname.
+        if (sslmode === "verify-ca") {
+          sslConfig.checkServerIdentity = () => undefined;
+        }
         if (sslrootcert) {
           const certPath = sslrootcert.startsWith("~/")
             ? sslrootcert.replace("~", homedir())
@@ -92,11 +101,15 @@ class PostgresDSNParser implements DSNParser {
         poolConfig.ssl = true;
       }
 
+      // Apply connection timeout if specified
       if (connectionTimeoutSeconds !== undefined) {
+        // pg library expects timeout in milliseconds
         poolConfig.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
       }
 
+      // Apply query timeout if specified (client-side timeout)
       if (queryTimeoutSeconds !== undefined) {
+        // pg library expects query_timeout in milliseconds
         poolConfig.query_timeout = queryTimeoutSeconds * 1000;
       }
 
