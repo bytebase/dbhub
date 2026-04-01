@@ -51,7 +51,7 @@ class PostgresDSNParser implements DSNParser {
       const poolConfig: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
-        database: url.pathname ? url.pathname.substring(1) : '',
+        database: url.pathname ? url.pathname.substring(1) : '',  // Remove leading '/' if exists
         user: url.username,
         password: url.password,
       };
@@ -220,8 +220,8 @@ export class PostgresConnector implements Connector {
 
       const result = await client.query(
         `
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = $1
         ORDER BY table_name
       `,
@@ -247,8 +247,8 @@ export class PostgresConnector implements Connector {
       const result = await client.query(
         `
         SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = $1 
+          SELECT FROM information_schema.tables
+          WHERE table_schema = $1
           AND table_name = $2
         )
       `,
@@ -274,18 +274,18 @@ export class PostgresConnector implements Connector {
       // Query to get all indexes for the table
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           i.relname as index_name,
           array_agg(a.attname) as column_names,
           ix.indisunique as is_unique,
           ix.indisprimary as is_primary
-        FROM 
+        FROM
           pg_class t,
           pg_class i,
           pg_index ix,
           pg_attribute a,
           pg_namespace ns
-        WHERE 
+        WHERE
           t.oid = ix.indrelid
           AND i.oid = ix.indexrelid
           AND a.attrelid = t.oid
@@ -294,11 +294,11 @@ export class PostgresConnector implements Connector {
           AND t.relname = $1
           AND ns.oid = t.relnamespace
           AND ns.nspname = $2
-        GROUP BY 
-          i.relname, 
+        GROUP BY
+          i.relname,
           ix.indisunique,
           ix.indisprimary
-        ORDER BY 
+        ORDER BY
           i.relname
       `,
         [tableName, schemaToUse]
@@ -469,7 +469,7 @@ export class PostgresConnector implements Connector {
       // Get stored procedure details from PostgreSQL
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           routine_name as procedure_name,
           routine_type,
           CASE WHEN routine_type = 'PROCEDURE' THEN 'procedure' ELSE 'function' END as procedure_type,
@@ -478,8 +478,8 @@ export class PostgresConnector implements Connector {
           routine_definition as definition,
           (
             SELECT string_agg(
-              parameter_name || ' ' || 
-              parameter_mode || ' ' || 
+              parameter_name || ' ' ||
+              parameter_mode || ' ' ||
               data_type,
               ', '
             )
