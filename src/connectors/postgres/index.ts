@@ -66,6 +66,7 @@ class PostgresDSNParser implements DSNParser {
         } else if (key === "sslrootcert") {
           sslrootcert = value;
         }
+		// Add other parameters as needed
       });
 
       if (sslmode === "disable") {
