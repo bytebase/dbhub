@@ -34,6 +34,13 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
  * Optional parameter for verify-ca/verify-full:
  * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
  */
+class FailedToReadCertificate extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FailedToReadCertificate";
+  }
+}
+
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
@@ -89,7 +96,13 @@ class PostgresDSNParser implements DSNParser {
           const certPath = sslrootcert.startsWith("~/")
             ? path.join(os.homedir(), sslrootcert.slice(2))
             : sslrootcert;
-          sslConfig.ca = await fs.promises.readFile(certPath, "utf-8");
+          try {
+            sslConfig.ca = await fs.promises.readFile(certPath, "utf-8");
+          } catch (err) {
+            throw new FailedToReadCertificate(
+              `Failed to read SSL root certificate at '${certPath}': ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
         poolConfig.ssl = sslConfig;
       } else if (sslmode !== undefined) {
@@ -110,6 +123,9 @@ class PostgresDSNParser implements DSNParser {
 
       return poolConfig;
     } catch (error) {
+      if (error instanceof FailedToReadCertificate) {
+        throw error;
+      }
       const originalError = error instanceof Error ? error : new Error(String(error));
       throw new Error(
         `Failed to parse PostgreSQL DSN: ${originalError.message}`,

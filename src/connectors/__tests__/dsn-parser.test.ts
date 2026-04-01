@@ -83,7 +83,7 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
 
   it('should throw when sslrootcert points to nonexistent file', async () => {
     const dsn = 'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=/nonexistent/ca.pem';
-    await expect(parser.parse(dsn)).rejects.toThrow("Failed to parse PostgreSQL DSN");
+    await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
   });
 
   it('should ignore sslrootcert when sslmode=require', async () => {
