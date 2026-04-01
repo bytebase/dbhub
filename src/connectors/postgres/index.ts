@@ -20,6 +20,19 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 
+/**
+ * PostgreSQL DSN Parser
+ * Handles DSN strings like: postgres://user:password@localhost:5432/dbname?sslmode=disable
+ * Supported SSL modes:
+ * - sslmode=disable: No SSL
+ * - sslmode=require: SSL connection without certificate verification
+ * - sslmode=verify-ca: SSL with CA certificate verification (rejectUnauthorized: true)
+ * - sslmode=verify-full: SSL with CA and hostname verification (rejectUnauthorized: true)
+ * - Any other value: SSL with default Node.js TLS settings
+ *
+ * Optional parameter for verify-ca/verify-full:
+ * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
+ */
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
