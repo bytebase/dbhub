@@ -20,6 +20,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
 
 /**
  * PostgreSQL DSN Parser
@@ -34,13 +35,6 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
  * Optional parameter for verify-ca/verify-full:
  * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
  */
-class FailedToReadCertificate extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "FailedToReadCertificate";
-  }
-}
-
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
