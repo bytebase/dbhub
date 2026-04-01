@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -67,27 +67,23 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
   });
 
   it('should expand ~ in sslrootcert path', async () => {
-    const homeDir = os.homedir();
-    const homeCertDir = path.join(homeDir, '.dbhub-test-ssl');
-    const homeCertPath = path.join(homeCertDir, 'ca.pem');
-
-    fs.mkdirSync(homeCertDir, { recursive: true });
-    fs.writeFileSync(homeCertPath, 'test-ca-content');
+    const mockHomedir = vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+    fs.writeFileSync(path.join(tempDir, 'ca.pem'), 'test-ca-content');
 
     try {
-      const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent('~/.dbhub-test-ssl/ca.pem')}`;
+      const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent('~/ca.pem')}`;
       const config = await parser.parse(dsn);
       const ssl = config.ssl as Record<string, unknown>;
       expect(ssl.rejectUnauthorized).toBe(true);
       expect(ssl.ca).toBe('test-ca-content');
     } finally {
-      fs.rmSync(homeCertDir, { recursive: true, force: true });
+      mockHomedir.mockRestore();
     }
   });
 
   it('should throw when sslrootcert points to nonexistent file', async () => {
     const dsn = 'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=/nonexistent/ca.pem';
-    await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
+    await expect(parser.parse(dsn)).rejects.toThrow("Failed to parse PostgreSQL DSN");
   });
 
   it('should ignore sslrootcert when sslmode=require', async () => {

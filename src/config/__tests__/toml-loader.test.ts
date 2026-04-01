@@ -609,7 +609,7 @@ database = "testdb"
 user = "user"
 password = "pass"
 sslmode = "require"
-sslrootcert = "${certPath}"
+sslrootcert = '${certPath}'
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -628,7 +628,7 @@ host = "localhost"
 database = "testdb"
 user = "user"
 password = "pass"
-sslrootcert = "${certPath}"
+sslrootcert = '${certPath}'
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -648,7 +648,7 @@ database = "testdb"
 user = "user"
 password = "pass"
 sslmode = "verify-ca"
-sslrootcert = "${certPath}"
+sslrootcert = '${certPath}'
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 

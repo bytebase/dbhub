@@ -624,8 +624,11 @@ export function buildDSNFromSource(source: SourceConfig): string {
     queryParams.push(`sslmode=${source.sslmode}`);
   }
 
-  // Add sslrootcert when provided (path already validated and expanded during config validation)
-  if (source.sslrootcert) {
+  if (
+    source.sslrootcert &&
+    source.type === "postgres" &&
+    (source.sslmode === "verify-ca" || source.sslmode === "verify-full")
+  ) {
     const expandedCertPath = expandHomeDir(source.sslrootcert);
     queryParams.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
   }

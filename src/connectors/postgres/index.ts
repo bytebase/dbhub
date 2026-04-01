@@ -1,5 +1,6 @@
 import fs from "fs";
-import { homedir } from "os";
+import os from "os";
+import path from "path";
 import pg from "pg";
 const { Pool } = pg;
 import {
@@ -86,15 +87,9 @@ class PostgresDSNParser implements DSNParser {
         }
         if (sslrootcert) {
           const certPath = sslrootcert.startsWith("~/")
-            ? sslrootcert.replace("~", homedir())
+            ? path.join(os.homedir(), sslrootcert.slice(2))
             : sslrootcert;
-          try {
-            sslConfig.ca = fs.readFileSync(certPath, "utf-8");
-          } catch (err) {
-            throw new Error(
-              `Failed to read SSL root certificate at '${certPath}': ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
+          sslConfig.ca = await fs.promises.readFile(certPath, "utf-8");
         }
         poolConfig.ssl = sslConfig;
       } else if (sslmode !== undefined) {
@@ -115,11 +110,10 @@ class PostgresDSNParser implements DSNParser {
 
       return poolConfig;
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("Failed to read SSL root certificate")) {
-        throw error;
-      }
+      const originalError = error instanceof Error ? error : new Error(String(error));
       throw new Error(
-        `Failed to parse PostgreSQL DSN: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to parse PostgreSQL DSN: ${originalError.message}`,
+        { cause: originalError }
       );
     }
   }
