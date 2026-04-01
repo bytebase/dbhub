@@ -1,3 +1,5 @@
+import fs from "fs";
+import { homedir } from "os";
 import pg from "pg";
 const { Pool } = pg;
 import {
@@ -18,19 +20,10 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 
-/**
- * PostgreSQL DSN Parser
- * Handles DSN strings like: postgres://user:password@localhost:5432/dbname?sslmode=disable
- * Supported SSL modes:
- * - sslmode=disable: No SSL
- * - sslmode=require: SSL connection without certificate verification
- * - Any other value: SSL with certificate verification
- */
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     const queryTimeoutSeconds = config?.queryTimeoutSeconds;
-    // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
       const expectedFormat = this.getSampleDSN();
@@ -40,46 +33,63 @@ class PostgresDSNParser implements DSNParser {
     }
 
     try {
-      // Use the SafeURL helper instead of the built-in URL
-      // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
       const poolConfig: pg.PoolConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 5432,
-        database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
+        database: url.pathname ? url.pathname.substring(1) : '',
         user: url.username,
         password: url.password,
       };
 
-      // Handle query parameters (like sslmode, etc.)
+      let sslmode: string | undefined;
+      let sslrootcert: string | undefined;
+
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
-          if (value === "disable") {
-            poolConfig.ssl = false;
-          } else if (value === "require") {
-            poolConfig.ssl = { rejectUnauthorized: false };
-          } else {
-            poolConfig.ssl = true;
-          }
+          sslmode = value;
+        } else if (key === "sslrootcert") {
+          sslrootcert = value;
         }
-        // Add other parameters as needed
       });
 
-      // Apply connection timeout if specified
+      if (sslmode === "disable") {
+        poolConfig.ssl = false;
+      } else if (sslmode === "require") {
+        poolConfig.ssl = { rejectUnauthorized: false };
+      } else if (sslmode === "verify-ca" || sslmode === "verify-full") {
+        const sslConfig: pg.ConnectionOptions["ssl"] & object = { rejectUnauthorized: true };
+        if (sslrootcert) {
+          const certPath = sslrootcert.startsWith("~/")
+            ? sslrootcert.replace("~", homedir())
+            : sslrootcert;
+          try {
+            sslConfig.ca = fs.readFileSync(certPath, "utf-8");
+          } catch (err) {
+            throw new Error(
+              `Failed to read SSL root certificate at '${certPath}': ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+        poolConfig.ssl = sslConfig;
+      } else if (sslmode !== undefined) {
+        poolConfig.ssl = true;
+      }
+
       if (connectionTimeoutSeconds !== undefined) {
-        // pg library expects timeout in milliseconds
         poolConfig.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
       }
 
-      // Apply query timeout if specified (client-side timeout)
       if (queryTimeoutSeconds !== undefined) {
-        // pg library expects query_timeout in milliseconds
         poolConfig.query_timeout = queryTimeoutSeconds * 1000;
       }
 
       return poolConfig;
     } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Failed to read SSL root certificate")) {
+        throw error;
+      }
       throw new Error(
         `Failed to parse PostgreSQL DSN: ${error instanceof Error ? error.message : String(error)}`
       );
