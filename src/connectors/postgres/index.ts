@@ -59,6 +59,7 @@ class PostgresDSNParser implements DSNParser {
       let sslmode: string | undefined;
       let sslrootcert: string | undefined;
 
+	  // Handle query parameters (like sslmode, etc.)
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
           sslmode = value;
