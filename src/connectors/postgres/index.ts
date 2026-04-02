@@ -382,7 +382,7 @@ export class PostgresConnector implements Connector {
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE c.relname = $1
         AND n.nspname = $2
-        AND c.relkind IN ('r','p','m','f')
+        AND c.relkind IN ('r','p','m','f','v')
       `,
         [tableName, schemaToUse]
       );
