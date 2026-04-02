@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { isDriverNotInstalled } from '../module-loader.js';
 
-describe('generateRdsAuthToken missing package', () => {
-  it('should throw actionable error when @aws-sdk/rds-signer is not installed', async () => {
-    // Simulate ERR_MODULE_NOT_FOUND for @aws-sdk/rds-signer
+describe('isDriverNotInstalled with scoped packages', () => {
+  it('should match ERR_MODULE_NOT_FOUND for @aws-sdk/rds-signer', () => {
     const err = new Error(
       "Cannot find package '@aws-sdk/rds-signer' imported from /fake/path"
     );
