@@ -167,6 +167,12 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
       ON CONFLICT DO NOTHING
     `, {});
 
+    // Create a view with a comment (for view comment test)
+    await connector.executeSQL(`
+      CREATE OR REPLACE VIEW active_users AS SELECT id, name, email FROM users WHERE age >= 25
+    `, {});
+    await connector.executeSQL(`COMMENT ON VIEW active_users IS 'Users aged 25 or older'`, {});
+
     // Create test stored procedures using SQL language to avoid dollar quoting
     await connector.executeSQL(`
       CREATE OR REPLACE FUNCTION get_user_count()
@@ -243,6 +249,11 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.rows[0].json_data).toBeDefined();
       expect(result.rows[0].uuid_val).toBeDefined();
       expect(result.rows[0].array_val).toBeDefined();
+    });
+
+    it('should return comment for views via getTableComment', async () => {
+      const comment = await postgresTest.connector.getTableComment!('active_users');
+      expect(comment).toBe('Users aged 25 or older');
     });
 
     it('should handle PostgreSQL returning clause', async () => {
