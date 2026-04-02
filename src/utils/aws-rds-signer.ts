@@ -11,7 +11,14 @@ export interface RdsAuthTokenParams {
  * (AWS CLI profile, env vars, instance role, etc.).
  */
 export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<string> {
-  const { Signer } = await import("@aws-sdk/rds-signer");
+  let Signer: typeof import("@aws-sdk/rds-signer")["Signer"];
+  try {
+    ({ Signer } = await import("@aws-sdk/rds-signer"));
+  } catch {
+    throw new Error(
+      'AWS IAM authentication requires the "@aws-sdk/rds-signer" package. Install it with: npm install @aws-sdk/rds-signer'
+    );
+  }
 
   const signer = new Signer({
     hostname: params.hostname,
