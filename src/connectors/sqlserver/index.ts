@@ -11,7 +11,6 @@ import {
   ExecuteOptions,
   ConnectorConfig,
 } from "../interface.js";
-import { DefaultAzureCredential } from "@azure/identity";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -95,6 +94,7 @@ export class SQLServerDSNParser implements DSNParser {
       switch (options.authentication) {
         case "azure-active-directory-access-token": {
           try {
+            const { DefaultAzureCredential } = await import("@azure/identity");
             const credential = new DefaultAzureCredential();
             const token = await credential.getToken("https://database.windows.net/");
             config.authentication = {

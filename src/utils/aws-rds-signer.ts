@@ -1,5 +1,3 @@
-import { Signer } from "@aws-sdk/rds-signer";
-
 export interface RdsAuthTokenParams {
   hostname: string;
   port: number;
@@ -13,6 +11,8 @@ export interface RdsAuthTokenParams {
  * (AWS CLI profile, env vars, instance role, etc.).
  */
 export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<string> {
+  const { Signer } = await import("@aws-sdk/rds-signer");
+
   const signer = new Signer({
     hostname: params.hostname,
     port: params.port,
