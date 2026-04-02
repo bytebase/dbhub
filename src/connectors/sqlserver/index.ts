@@ -94,18 +94,18 @@ export class SQLServerDSNParser implements DSNParser {
       // Handle authentication types
       switch (options.authentication) {
         case "azure-active-directory-access-token": {
+          let DefaultAzureCredential: typeof import("@azure/identity")["DefaultAzureCredential"];
           try {
-            let DefaultAzureCredential: typeof import("@azure/identity")["DefaultAzureCredential"];
-            try {
-              ({ DefaultAzureCredential } = await import("@azure/identity"));
-            } catch (importError) {
-              if (isDriverNotInstalled(importError, "@azure/identity")) {
-                throw new Error(
-                  'Azure AD authentication requires the "@azure/identity" package. Install it with: pnpm add @azure/identity'
-                );
-              }
-              throw importError;
+            ({ DefaultAzureCredential } = await import("@azure/identity"));
+          } catch (importError) {
+            if (isDriverNotInstalled(importError, "@azure/identity")) {
+              throw new Error(
+                'Azure AD authentication requires the "@azure/identity" package. Install it with: pnpm add @azure/identity'
+              );
             }
+            throw importError;
+          }
+          try {
             const credential = new DefaultAzureCredential();
             const token = await credential.getToken("https://database.windows.net/");
             config.authentication = {
