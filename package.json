@@ -40,8 +40,6 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/rds-signer": "^3.1001.0",
-    "@azure/identity": "^4.8.0",
     "@iarna/toml": "^2.2.5",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "dotenv": "^16.4.7",
@@ -51,6 +49,8 @@
     "zod": "^3.24.2"
   },
   "optionalDependencies": {
+    "@aws-sdk/rds-signer": "^3.1001.0",
+    "@azure/identity": "^4.8.0",
     "better-sqlite3": "^11.9.0",
     "mariadb": "^3.4.0",
     "mssql": "^11.0.1",

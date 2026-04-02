@@ -11,7 +11,7 @@ import {
   ExecuteOptions,
   ConnectorConfig,
 } from "../interface.js";
-import { DefaultAzureCredential } from "@azure/identity";
+import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -94,6 +94,17 @@ export class SQLServerDSNParser implements DSNParser {
       // Handle authentication types
       switch (options.authentication) {
         case "azure-active-directory-access-token": {
+          let DefaultAzureCredential: typeof import("@azure/identity")["DefaultAzureCredential"];
+          try {
+            ({ DefaultAzureCredential } = await import("@azure/identity"));
+          } catch (importError) {
+            if (isDriverNotInstalled(importError, "@azure/identity")) {
+              throw new Error(
+                'Azure AD authentication requires the "@azure/identity" package. Install it with: pnpm add @azure/identity'
+              );
+            }
+            throw importError;
+          }
           try {
             const credential = new DefaultAzureCredential();
             const token = await credential.getToken("https://database.windows.net/");
