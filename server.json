@@ -11,7 +11,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@bytebase/dbhub",
+      "identifier": "dbhub",
       "version": "0.21.1",
       "transport": {
         "type": "stdio"
