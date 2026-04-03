@@ -4,7 +4,7 @@
  */
 
 import type { TomlConfig, ToolConfig, ExecuteSqlToolConfig, SearchObjectsToolConfig, ParameterConfig } from "../types/config.js";
-import { BUILTIN_TOOLS } from "./builtin-tools.js";
+import { BUILTIN_TOOLS, BUILTIN_AND_META_TOOLS } from "./builtin-tools.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { validateParameters } from "../utils/parameter-mapper.js";
 
@@ -23,7 +23,7 @@ export class ToolRegistry {
    * Check if a tool name is a built-in tool
    */
   private isBuiltinTool(toolName: string): boolean {
-    return BUILTIN_TOOLS.includes(toolName);
+    return (BUILTIN_AND_META_TOOLS as readonly string[]).includes(toolName);
   }
 
   /**
@@ -116,14 +116,14 @@ export class ToolRegistry {
     }
 
     // 3. Validate tool name doesn't conflict with built-in tools
-    for (const builtinName of BUILTIN_TOOLS) {
+    for (const builtinName of BUILTIN_AND_META_TOOLS) {
       if (
         toolConfig.name === builtinName ||
         toolConfig.name.startsWith(`${builtinName}_`)
       ) {
         throw new Error(
           `Tool name '${toolConfig.name}' conflicts with built-in tool naming pattern. ` +
-            `Custom tools cannot use names starting with: ${BUILTIN_TOOLS.join(", ")}`
+            `Custom tools cannot use names starting with: ${BUILTIN_AND_META_TOOLS.join(", ")}`
         );
       }
     }
@@ -184,7 +184,6 @@ export class ToolRegistry {
     for (const source of config.sources) {
       if (!registry.has(source.id)) {
         const defaultTools: ToolConfig[] = BUILTIN_TOOLS.map((name) => {
-          // Create properly typed tool configs based on the tool name
           if (name === 'execute_sql') {
             return { name: 'execute_sql', source: source.id } satisfies ExecuteSqlToolConfig;
           } else {
@@ -245,6 +244,15 @@ export class ToolRegistry {
    */
   getCustomTools(): ToolConfig[] {
     return this.getAllTools().filter((tool) => !this.isBuiltinTool(tool.name));
+  }
+
+  /**
+   * Get custom tools (non-builtin) for a specific source
+   */
+  getCustomToolsForSource(sourceId: string): ToolConfig[] {
+    return this.getEnabledToolConfigs(sourceId).filter(
+      (tool) => !(BUILTIN_AND_META_TOOLS as readonly string[]).includes(tool.name)
+    );
   }
 
   /**
