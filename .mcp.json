@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bytebase/dbhub@2.26.8",
+        "--transport",
+        "stdio"
+      ]
+    }
+  }
+}
