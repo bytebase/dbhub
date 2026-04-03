@@ -57,10 +57,10 @@ jobs:
         with:
           node-version: "22"
 
-      # Upgrade npm to latest for OIDC trusted publishing support (requires npm 11.5+)
+      # Upgrade npm for OIDC trusted publishing support (requires npm 11.5+)
       - name: Upgrade npm
         run: |
-          npm install -g npm@latest
+          npm install -g npm@11
           echo "npm version: $(npm --version)"
 
       # Install pnpm for faster and more reliable package management
