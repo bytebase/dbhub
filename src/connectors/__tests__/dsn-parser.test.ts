@@ -1,7 +1,103 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { PostgresConnector } from '../postgres/index.js';
 import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
 import { SQLServerConnector } from '../sqlserver/index.js';
+
+describe('DSN Parser - PostgreSQL SSL Modes', () => {
+  const connector = new PostgresConnector();
+  const parser = connector.dsnParser;
+  let tempDir: string;
+  let certPath: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-ssl-test-'));
+    certPath = path.join(tempDir, 'ca-bundle.pem');
+    fs.writeFileSync(certPath, '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should set ssl = false for sslmode=disable', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=disable');
+    expect(config.ssl).toBe(false);
+  });
+
+  it('should set rejectUnauthorized = false for sslmode=require', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=require');
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  });
+
+  it('should set rejectUnauthorized = true and skip hostname check for sslmode=verify-ca', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-ca');
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(typeof ssl.checkServerIdentity).toBe('function');
+    expect((ssl.checkServerIdentity as Function)()).toBeUndefined();
+  });
+
+  it('should set rejectUnauthorized = true and verify hostname for sslmode=verify-full', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-full');
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.checkServerIdentity).toBeUndefined();
+  });
+
+  it('should read CA cert file for sslmode=verify-ca with sslrootcert', async () => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent(certPath)}`;
+    const config = await parser.parse(dsn);
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.ca).toBe('-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n');
+    expect(typeof ssl.checkServerIdentity).toBe('function');
+  });
+
+  it('should read CA cert file for sslmode=verify-full with sslrootcert', async () => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-full&sslrootcert=${encodeURIComponent(certPath)}`;
+    const config = await parser.parse(dsn);
+    expect(config.ssl).toEqual({
+      rejectUnauthorized: true,
+      ca: '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n',
+    });
+  });
+
+  it('should expand ~ in sslrootcert path', async () => {
+    const mockHomedir = vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+    fs.writeFileSync(path.join(tempDir, 'ca.pem'), 'test-ca-content');
+
+    try {
+      const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent('~/ca.pem')}`;
+      const config = await parser.parse(dsn);
+      const ssl = config.ssl as Record<string, unknown>;
+      expect(ssl.rejectUnauthorized).toBe(true);
+      expect(ssl.ca).toBe('test-ca-content');
+    } finally {
+      mockHomedir.mockRestore();
+    }
+  });
+
+  it('should throw when sslrootcert points to nonexistent file', async () => {
+    const dsn = 'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=/nonexistent/ca.pem';
+    await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
+  });
+
+  it('should ignore sslrootcert when sslmode=require', async () => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=require&sslrootcert=${encodeURIComponent(certPath)}`;
+    const config = await parser.parse(dsn);
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  });
+
+  it('should ignore sslrootcert when sslmode=disable', async () => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=disable&sslrootcert=${encodeURIComponent(certPath)}`;
+    const config = await parser.parse(dsn);
+    expect(config.ssl).toBe(false);
+  });
+});
 
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {

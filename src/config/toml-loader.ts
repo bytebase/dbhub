@@ -324,7 +324,6 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate sslmode if provided
   if (source.sslmode !== undefined) {
-    // SQLite doesn't support SSL (local file-based database)
     if (source.type === "sqlite") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslmode but SQLite does not support SSL. ` +
@@ -332,11 +331,35 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    const validSslModes = ["disable", "require"];
+    const validSslModes = ["disable", "require", "verify-ca", "verify-full"];
     if (!validSslModes.includes(source.sslmode)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid sslmode '${source.sslmode}'. ` +
           `Valid values: ${validSslModes.join(", ")}`
+      );
+    }
+
+    if ((source.sslmode === "verify-ca" || source.sslmode === "verify-full") && source.type !== "postgres") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is only supported for PostgreSQL. ` +
+          `Valid values for ${source.type}: disable, require`
+      );
+    }
+  }
+
+  // Validate sslrootcert if provided
+  if (source.sslrootcert !== undefined) {
+    if (source.sslmode !== "verify-ca" && source.sslmode !== "verify-full") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has sslrootcert but sslmode is '${source.sslmode ?? "not set"}'. ` +
+          `sslrootcert requires sslmode 'verify-ca' or 'verify-full'`
+      );
+    }
+
+    const expandedPath = expandHomeDir(source.sslrootcert);
+    if (!fs.existsSync(expandedPath)) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' sslrootcert file not found: '${expandedPath}'`
       );
     }
   }
@@ -435,6 +458,11 @@ function processSourceConfigs(
     // Expand ~ in SSH key path
     if (processed.ssh_key) {
       processed.ssh_key = expandHomeDir(processed.ssh_key);
+    }
+
+    // Expand ~ in sslrootcert path
+    if (processed.sslrootcert) {
+      processed.sslrootcert = expandHomeDir(processed.sslrootcert);
     }
 
     // Expand ~ in SQLite database path (if relative)
@@ -594,6 +622,15 @@ export function buildDSNFromSource(source: SourceConfig): string {
   // Add sslmode for network databases (not sqlite)
   if (source.sslmode && source.type !== "sqlite") {
     queryParams.push(`sslmode=${source.sslmode}`);
+  }
+
+  if (
+    source.sslrootcert &&
+    source.type === "postgres" &&
+    (source.sslmode === "verify-ca" || source.sslmode === "verify-full")
+  ) {
+    const expandedCertPath = expandHomeDir(source.sslrootcert);
+    queryParams.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
   }
 
   // Append query string if any params exist

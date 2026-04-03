@@ -1,3 +1,6 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
 import pg from "pg";
 const { Pool } = pg;
 import {
@@ -17,6 +20,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
 
 /**
  * PostgreSQL DSN Parser
@@ -24,7 +28,12 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
  * Supported SSL modes:
  * - sslmode=disable: No SSL
  * - sslmode=require: SSL connection without certificate verification
- * - Any other value: SSL with certificate verification
+ * - sslmode=verify-ca: SSL with CA certificate verification, no hostname check
+ * - sslmode=verify-full: SSL with CA certificate and hostname verification
+ * - Any other value: SSL with default Node.js TLS settings
+ *
+ * Optional parameter for verify-ca/verify-full:
+ * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
  */
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
@@ -52,19 +61,47 @@ class PostgresDSNParser implements DSNParser {
         password: url.password,
       };
 
-      // Handle query parameters (like sslmode, etc.)
+      let sslmode: string | undefined;
+      let sslrootcert: string | undefined;
+
+      // Handle query parameters (like sslmode, sslrootcert, etc.)
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
-          if (value === "disable") {
-            poolConfig.ssl = false;
-          } else if (value === "require") {
-            poolConfig.ssl = { rejectUnauthorized: false };
-          } else {
-            poolConfig.ssl = true;
-          }
+          sslmode = value;
+        } else if (key === "sslrootcert") {
+          sslrootcert = value;
         }
         // Add other parameters as needed
       });
+
+      if (sslmode === "disable") {
+        poolConfig.ssl = false;
+      } else if (sslmode === "require") {
+        poolConfig.ssl = { rejectUnauthorized: false };
+      } else if (sslmode === "verify-ca" || sslmode === "verify-full") {
+        const sslConfig: pg.ConnectionOptions["ssl"] & object = { rejectUnauthorized: true };
+        // verify-ca checks the certificate chain but does not verify the server hostname,
+        // matching libpq behavior. verify-full (the default with rejectUnauthorized: true)
+        // verifies both the certificate chain and the hostname.
+        if (sslmode === "verify-ca") {
+          sslConfig.checkServerIdentity = () => undefined;
+        }
+        if (sslrootcert) {
+          const certPath = sslrootcert.startsWith("~/")
+            ? path.join(os.homedir(), sslrootcert.slice(2))
+            : sslrootcert;
+          try {
+            sslConfig.ca = await fs.promises.readFile(certPath, "utf-8");
+          } catch (err) {
+            throw new FailedToReadCertificate(
+              `Failed to read SSL root certificate at '${certPath}': ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+        poolConfig.ssl = sslConfig;
+      } else if (sslmode !== undefined) {
+        poolConfig.ssl = true;
+      }
 
       // Apply connection timeout if specified
       if (connectionTimeoutSeconds !== undefined) {
@@ -80,8 +117,13 @@ class PostgresDSNParser implements DSNParser {
 
       return poolConfig;
     } catch (error) {
+      if (error instanceof FailedToReadCertificate) {
+        throw error;
+      }
+      const originalError = error instanceof Error ? error : new Error(String(error));
       throw new Error(
-        `Failed to parse PostgreSQL DSN: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to parse PostgreSQL DSN: ${originalError.message}`,
+        { cause: originalError }
       );
     }
   }
@@ -197,8 +239,8 @@ export class PostgresConnector implements Connector {
 
       const result = await client.query(
         `
-        SELECT table_name 
-        FROM information_schema.tables 
+        SELECT table_name
+        FROM information_schema.tables
         WHERE table_schema = $1
         ORDER BY table_name
       `,
@@ -224,8 +266,8 @@ export class PostgresConnector implements Connector {
       const result = await client.query(
         `
         SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_schema = $1 
+          SELECT FROM information_schema.tables
+          WHERE table_schema = $1
           AND table_name = $2
         )
       `,
@@ -251,18 +293,18 @@ export class PostgresConnector implements Connector {
       // Query to get all indexes for the table
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           i.relname as index_name,
           array_agg(a.attname) as column_names,
           ix.indisunique as is_unique,
           ix.indisprimary as is_primary
-        FROM 
+        FROM
           pg_class t,
           pg_class i,
           pg_index ix,
           pg_attribute a,
           pg_namespace ns
-        WHERE 
+        WHERE
           t.oid = ix.indrelid
           AND i.oid = ix.indexrelid
           AND a.attrelid = t.oid
@@ -271,11 +313,11 @@ export class PostgresConnector implements Connector {
           AND t.relname = $1
           AND ns.oid = t.relnamespace
           AND ns.nspname = $2
-        GROUP BY 
-          i.relname, 
+        GROUP BY
+          i.relname,
           ix.indisunique,
           ix.indisprimary
-        ORDER BY 
+        ORDER BY
           i.relname
       `,
         [tableName, schemaToUse]
@@ -446,7 +488,7 @@ export class PostgresConnector implements Connector {
       // Get stored procedure details from PostgreSQL
       const result = await client.query(
         `
-        SELECT 
+        SELECT
           routine_name as procedure_name,
           routine_type,
           CASE WHEN routine_type = 'PROCEDURE' THEN 'procedure' ELSE 'function' END as procedure_type,
@@ -455,8 +497,8 @@ export class PostgresConnector implements Connector {
           routine_definition as definition,
           (
             SELECT string_agg(
-              parameter_name || ' ' || 
-              parameter_mode || ' ' || 
+              parameter_name || ' ' ||
+              parameter_mode || ' ' ||
               data_type,
               ', '
             )
