@@ -61,9 +61,9 @@ jobs:
       # Bootstrap without npm since Node 22.22.2 ships with broken npm (missing promise-retry)
       - name: Upgrade npm
         run: |
-          npm_tarball=$(curl -fsSL https://registry.npmjs.org/npm/latest-11 | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).dist.tarball")
+          npm_tarball=$(curl -fsSL https://registry.npmjs.org/npm/latest | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).dist.tarball")
           curl -fsSL "$npm_tarball" | tar xz -C /tmp
-          node /tmp/package/bin/npm-cli.js install -g npm@11
+          node /tmp/package/bin/npm-cli.js install -g npm@latest
           rm -rf /tmp/package
           echo "npm version: $(npm --version)"
 
