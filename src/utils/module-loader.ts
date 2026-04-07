@@ -30,6 +30,19 @@ export function isDriverNotInstalled(err: unknown, driver: string): boolean {
   );
 }
 
+/**
+ * Check if an error is any kind of missing module error (ESM or CJS).
+ * This catches both direct driver failures and transitive dependency failures,
+ * e.g. when "mssql" is installed but its transitive dep "@azure/core-client" is not.
+ */
+export function isModuleNotFound(err: unknown): boolean {
+  if (!(err instanceof Error) || !("code" in err)) {
+    return false;
+  }
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND";
+}
+
 export interface ConnectorModule {
   load: () => Promise<unknown>;
   name: string;
@@ -51,6 +64,14 @@ export async function loadConnectors(
         if (isDriverNotInstalled(err, driver)) {
           console.error(
             `Skipping ${name} connector: driver package "${driver}" not installed.`
+          );
+        } else if (isModuleNotFound(err)) {
+          // Transitive dependency missing (e.g. mssql installed but @azure/core-client is not)
+          const msg = err instanceof Error ? err.message : String(err);
+          const match = msg.match(MISSING_MODULE_RE);
+          const missing = match ? match[1] : "unknown";
+          console.error(
+            `Skipping ${name} connector: required dependency "${missing}" not installed.`
           );
         } else {
           throw err;
