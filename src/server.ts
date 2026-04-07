@@ -169,10 +169,30 @@ See documentation for more details on configuring database connections.
       // Enable JSON parsing
       app.use(express.json());
 
-      // Handle CORS and security headers
+      // DNS rebinding protection: reject cross-origin requests where the
+      // Origin hostname doesn't match the Host hostname.  Browser-based
+      // attacks (the DNS rebinding threat model) always send an Origin
+      // header on cross-origin fetches.  Non-browser MCP clients don't
+      // send Origin at all and are unaffected.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
 
+        if (origin) {
+          const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
+          try {
+            const originHost = new URL(origin).hostname.toLowerCase();
+            if (originHost !== host) {
+              return res.status(403).json({
+                error: 'Forbidden',
+                message: 'Origin does not match Host header (DNS rebinding protection)',
+              });
+            }
+          } catch {
+            return res.status(400).json({ error: 'Bad Request', message: 'Malformed Origin header' });
+          }
+        }
+
+        // CORS headers — only reflect validated origins
         res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
         res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
