@@ -1,13 +1,20 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, Navigate, useSearchParams } from 'react-router-dom';
-import { fetchSource } from '../../api/sources';
-import { executeTool, type QueryResult } from '../../api/tools';
-import { ApiError } from '../../api/errors';
-import type { Tool } from '../../types/datasource';
-import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab, type SqlEditorHandle } from '../tool';
-import LockIcon from '../icons/LockIcon';
-import CopyIcon from '../icons/CopyIcon';
-import CheckIcon from '../icons/CheckIcon';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams, Navigate, useSearchParams } from "react-router-dom";
+import { fetchSource } from "../../api/sources";
+import { executeTool, type QueryResult } from "../../api/tools";
+import { ApiError } from "../../api/errors";
+import type { Tool } from "../../types/datasource";
+import {
+  SqlEditor,
+  ParameterForm,
+  RunButton,
+  ResultsTabs,
+  type ResultTab,
+  type SqlEditorHandle,
+} from "../tool";
+import LockIcon from "../icons/LockIcon";
+import CopyIcon from "../icons/CopyIcon";
+import CheckIcon from "../icons/CheckIcon";
 
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
@@ -22,7 +29,7 @@ export default function ToolDetailView() {
   // Query state
   const [sql, setSql] = useState(() => {
     // Only for execute_sql tools - read from URL on mount
-    return searchParams.get('sql') || '';
+    return searchParams.get("sql") || "";
   });
   const [params, setParams] = useState<Record<string, any>>({});
   const [resultTabs, setResultTabs] = useState<ResultTab[]>([]);
@@ -52,41 +59,44 @@ export default function ToolDetailView() {
   }, [sourceId, toolName]);
 
   // Determine tool type
-  const getToolType = useCallback((): 'execute_sql' | 'search_objects' | 'custom' => {
-    if (!tool) return 'custom';
-    if (tool.name.startsWith('execute_sql')) return 'execute_sql';
-    if (tool.name.startsWith('search_objects')) return 'search_objects';
-    return 'custom';
+  const getToolType = useCallback((): "execute_sql" | "search_objects" | "custom" => {
+    if (!tool) return "custom";
+    if (tool.name.startsWith("execute_sql")) return "execute_sql";
+    if (tool.name.startsWith("search_objects")) return "search_objects";
+    return "custom";
   }, [tool]);
 
   const toolType = getToolType();
 
   // Coerce URL parameter values to correct types based on parameter schema
-  const coerceParamValue = useCallback((value: string, paramName: string): any => {
-    if (!tool) return value;
+  const coerceParamValue = useCallback(
+    (value: string, paramName: string): any => {
+      if (!tool) return value;
 
-    const paramDef = tool.parameters.find(p => p.name === paramName);
-    if (!paramDef) return undefined; // Invalid param - will be filtered out
+      const paramDef = tool.parameters.find((p) => p.name === paramName);
+      if (!paramDef) return undefined; // Invalid param - will be filtered out
 
-    // Type coercion based on parameter schema
-    if (paramDef.type === 'number' || paramDef.type === 'integer' || paramDef.type === 'float') {
-      const num = Number(value);
-      return isNaN(num) ? undefined : num; // Exclude invalid numbers entirely
-    }
-    if (paramDef.type === 'boolean') {
-      return value === 'true';
-    }
-    return value; // string type
-  }, [tool]);
+      // Type coercion based on parameter schema
+      if (paramDef.type === "number" || paramDef.type === "integer" || paramDef.type === "float") {
+        const num = Number(value);
+        return isNaN(num) ? undefined : num; // Exclude invalid numbers entirely
+      }
+      if (paramDef.type === "boolean") {
+        return value === "true";
+      }
+      return value; // string type
+    },
+    [tool]
+  );
 
   // Coerce URL params to correct types after tool is loaded
   useEffect(() => {
-    if (!tool || toolType !== 'custom') return;
+    if (!tool || toolType !== "custom") return;
 
     // Only coerce params from URL on initial mount
     const urlParams: Record<string, any> = {};
     searchParams.forEach((value, key) => {
-      if (key !== 'sql') {
+      if (key !== "sql") {
         const coerced = coerceParamValue(String(value), key);
         if (coerced !== undefined) {
           urlParams[key] = coerced;
@@ -102,20 +112,23 @@ export default function ToolDetailView() {
 
   // Update URL when sql changes (debounced for execute_sql tools)
   useEffect(() => {
-    if (toolType !== 'execute_sql') return;
+    if (toolType !== "execute_sql") return;
 
     const timer = setTimeout(() => {
-      setSearchParams((currentParams) => {
-        const newParams = new URLSearchParams(currentParams);
+      setSearchParams(
+        (currentParams) => {
+          const newParams = new URLSearchParams(currentParams);
 
-        if (sql.trim()) {
-          newParams.set('sql', sql);
-        } else {
-          newParams.delete('sql');
-        }
+          if (sql.trim()) {
+            newParams.set("sql", sql);
+          } else {
+            newParams.delete("sql");
+          }
 
-        return newParams;
-      }, { replace: true });
+          return newParams;
+        },
+        { replace: true }
+      );
     }, 300);
 
     return () => clearTimeout(timer);
@@ -123,28 +136,31 @@ export default function ToolDetailView() {
 
   // Update URL when params change (debounced for custom tools)
   useEffect(() => {
-    if (toolType !== 'custom') return;
+    if (toolType !== "custom") return;
 
     const timer = setTimeout(() => {
-      setSearchParams((currentParams) => {
-        const newParams = new URLSearchParams(currentParams);
+      setSearchParams(
+        (currentParams) => {
+          const newParams = new URLSearchParams(currentParams);
 
-        // Clear all non-reserved params first
-        Array.from(newParams.keys()).forEach(key => {
-          if (key !== 'sql') {
-            newParams.delete(key);
-          }
-        });
+          // Clear all non-reserved params first
+          Array.from(newParams.keys()).forEach((key) => {
+            if (key !== "sql") {
+              newParams.delete(key);
+            }
+          });
 
-        // Add current param values
-        Object.entries(params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== '') {
-            newParams.set(key, String(value));
-          }
-        });
+          // Add current param values
+          Object.entries(params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== "") {
+              newParams.set(key, String(value));
+            }
+          });
 
-        return newParams;
-      }, { replace: true });
+          return newParams;
+        },
+        { replace: true }
+      );
     }, 300);
 
     return () => clearTimeout(timer);
@@ -152,7 +168,7 @@ export default function ToolDetailView() {
 
   // Transform statement placeholders to named format
   const transformedStatement = useCallback((): string => {
-    if (!tool?.statement) return '';
+    if (!tool?.statement) return "";
     let transformedSql = tool.statement;
     let questionMarkIndex = 0;
 
@@ -169,7 +185,7 @@ export default function ToolDetailView() {
         param = tool.parameters[questionMarkIndex];
         questionMarkIndex++;
       }
-      return param ? `:${param.name}` : ':?';
+      return param ? `:${param.name}` : ":?";
     });
 
     return transformedSql;
@@ -180,25 +196,29 @@ export default function ToolDetailView() {
     let sqlText = transformedStatement();
 
     Object.entries(params).forEach(([name, value]) => {
-      if (value !== undefined && value !== '') {
+      if (value !== undefined && value !== "") {
         const displayValue =
-          typeof value === 'string'
-            ? `'${value.replace(/'/g, "''")}'`
-            : String(value);
-        sqlText = sqlText.replace(new RegExp(`:${name}\\b`, 'g'), displayValue);
+          typeof value === "string" ? `'${value.replace(/'/g, "''")}'` : String(value);
+        sqlText = sqlText.replace(new RegExp(`:${name}\\b`, "g"), displayValue);
       }
     });
 
     return sqlText;
   }, [transformedStatement, params]);
 
+  // Determine if tool has a bound source_id param (multi-source mode)
+  const hasBoundSourceId = tool?.parameters.some((p) => p.name === "source_id") ?? false;
+
+  // Parameters the user can actually fill in (excludes bound source_id)
+  const editableParameters = tool?.parameters.filter((p) => p.name !== "source_id") ?? [];
+
   // Check if all required params are filled
   const allRequiredParamsFilled = useCallback((): boolean => {
     if (!tool) return false;
-    return tool.parameters
+    return editableParameters
       .filter((p) => p.required)
-      .every((p) => params[p.name] !== undefined && params[p.name] !== '');
-  }, [tool, params]);
+      .every((p) => params[p.name] !== undefined && params[p.name] !== "");
+  }, [tool, editableParameters, params]);
 
   // Run query
   const handleRun = useCallback(async () => {
@@ -212,10 +232,17 @@ export default function ToolDetailView() {
       let queryResult: QueryResult;
       let sqlToExecute: string;
 
-      if (toolType === 'execute_sql') {
+      if (toolType === "execute_sql") {
         // Get selected SQL from editor (returns selection if any, otherwise full content)
         sqlToExecute = sqlEditorRef.current?.getSelectedSql() ?? sql;
-        queryResult = await executeTool(toolName, { sql: sqlToExecute });
+        const executeArgs: Record<string, any> = { sql: sqlToExecute };
+        if (hasBoundSourceId && sourceId) executeArgs.source_id = sourceId;
+        queryResult = await executeTool(toolName, executeArgs);
+      } else if (toolType === "search_objects") {
+        const searchArgs: Record<string, any> = { ...params };
+        if (hasBoundSourceId && sourceId) searchArgs.source_id = sourceId;
+        sqlToExecute = getSqlPreview();
+        queryResult = await executeTool(toolName, searchArgs);
       } else {
         sqlToExecute = getSqlPreview();
         queryResult = await executeTool(toolName, params);
@@ -232,51 +259,53 @@ export default function ToolDetailView() {
         executedSql: sqlToExecute,
         executionTimeMs: duration,
       };
-      setResultTabs(prev => [newTab, ...prev]);
+      setResultTabs((prev) => [newTab, ...prev]);
       setActiveTabId(newTab.id);
     } catch (err) {
       const errorTab: ResultTab = {
         id: crypto.randomUUID(),
         timestamp: new Date(),
         result: null,
-        error: err instanceof Error ? err.message : 'Query failed',
-        executedSql: toolType === 'execute_sql' ? sql : getSqlPreview(),
+        error: err instanceof Error ? err.message : "Query failed",
+        executedSql: toolType === "execute_sql" ? sql : getSqlPreview(),
         executionTimeMs: 0,
       };
-      setResultTabs(prev => [errorTab, ...prev]);
+      setResultTabs((prev) => [errorTab, ...prev]);
       setActiveTabId(errorTab.id);
     } finally {
       setIsRunning(false);
     }
-  }, [tool, toolName, toolType, sql, params, getSqlPreview]);
+  }, [tool, toolName, toolType, sql, params, getSqlPreview, hasBoundSourceId, sourceId]);
 
   // Compute disabled state for run button
-  const isRunDisabled =
-    toolType === 'execute_sql' ? !sql.trim() : !allRequiredParamsFilled();
+  const isRunDisabled = toolType === "execute_sql" ? !sql.trim() : !allRequiredParamsFilled();
 
   // Copy SQL to clipboard
   const handleCopy = useCallback(async () => {
-    const sqlToCopy = toolType === 'execute_sql' ? sql : getSqlPreview();
+    const sqlToCopy = toolType === "execute_sql" ? sql : getSqlPreview();
     await navigator.clipboard.writeText(sqlToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [toolType, sql, getSqlPreview]);
 
-  const handleTabClose = useCallback((idToClose: string) => {
-    setResultTabs(prev => {
-      const index = prev.findIndex(tab => tab.id === idToClose);
-      const newTabs = prev.filter(tab => tab.id !== idToClose);
+  const handleTabClose = useCallback(
+    (idToClose: string) => {
+      setResultTabs((prev) => {
+        const index = prev.findIndex((tab) => tab.id === idToClose);
+        const newTabs = prev.filter((tab) => tab.id !== idToClose);
 
-      if (idToClose === activeTabId && newTabs.length > 0) {
-        const nextIndex = Math.min(index, newTabs.length - 1);
-        setActiveTabId(newTabs[nextIndex].id);
-      } else if (newTabs.length === 0) {
-        setActiveTabId(null);
-      }
+        if (idToClose === activeTabId && newTabs.length > 0) {
+          const nextIndex = Math.min(index, newTabs.length - 1);
+          setActiveTabId(newTabs[nextIndex].id);
+        } else if (newTabs.length === 0) {
+          setActiveTabId(null);
+        }
 
-      return newTabs;
-    });
-  }, [activeTabId]);
+        return newTabs;
+      });
+    },
+    [activeTabId]
+  );
 
   if (!sourceId || !toolName) {
     return <Navigate to="/" replace />;
@@ -310,7 +339,7 @@ export default function ToolDetailView() {
   }
 
   // search_objects placeholder
-  if (toolType === 'search_objects') {
+  if (toolType === "search_objects") {
     return (
       <div className="container mx-auto px-8 py-12 max-w-4xl">
         <div className="space-y-4">
@@ -324,10 +353,24 @@ export default function ToolDetailView() {
             )}
           </div>
           <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
+          {hasBoundSourceId && sourceId && (
+            <div className="border border-border rounded-lg bg-card p-4">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Parameters
+              </div>
+              <div className="text-sm bg-muted/30 rounded p-2.5 opacity-60 flex items-baseline gap-2 flex-wrap">
+                <span className="font-mono font-medium">source_id</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                  string
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                  bound: {sourceId}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="border border-border rounded-lg bg-card p-8 text-center">
-            <p className="text-muted-foreground">
-              Interactive UI for this tool is coming soon.
-            </p>
+            <p className="text-muted-foreground">Interactive UI for this tool is coming soon.</p>
           </div>
         </div>
       </div>
@@ -351,16 +394,30 @@ export default function ToolDetailView() {
           <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
         </div>
 
-        {/* Parameter Form (custom tools only, show before SQL) */}
-        {toolType === 'custom' && tool.parameters.length > 0 && (
+        {/* Bound source_id display (execute_sql in multi-source mode) */}
+        {toolType === "execute_sql" && hasBoundSourceId && sourceId && (
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Parameters</label>
             <div className="border border-border rounded-lg bg-card p-4">
-              <ParameterForm
-                parameters={tool.parameters}
-                values={params}
-                onChange={setParams}
-              />
+              <div className="text-sm bg-muted/30 rounded p-2.5 opacity-60 flex items-baseline gap-2 flex-wrap">
+                <span className="font-mono font-medium">source_id</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                  string
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                  bound: {sourceId}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Parameter Form (custom tools only, show before SQL) */}
+        {toolType === "custom" && editableParameters.length > 0 && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Parameters</label>
+            <div className="border border-border rounded-lg bg-card p-4">
+              <ParameterForm parameters={editableParameters} values={params} onChange={setParams} />
             </div>
           </div>
         )}
@@ -368,9 +425,7 @@ export default function ToolDetailView() {
         {/* SQL Editor */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-foreground">
-              SQL Statement
-            </label>
+            <label className="text-sm font-medium text-foreground">SQL Statement</label>
             <button
               onClick={handleCopy}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors"
@@ -391,25 +446,19 @@ export default function ToolDetailView() {
           </div>
           <SqlEditor
             ref={sqlEditorRef}
-            value={toolType === 'execute_sql' ? sql : getSqlPreview()}
-            onChange={toolType === 'execute_sql' ? setSql : undefined}
+            value={toolType === "execute_sql" ? sql : getSqlPreview()}
+            onChange={toolType === "execute_sql" ? setSql : undefined}
             onRunShortcut={handleRun}
             disabled={isRunDisabled || isRunning}
-            readOnly={toolType !== 'execute_sql'}
+            readOnly={toolType !== "execute_sql"}
             placeholder={
-              toolType === 'execute_sql'
-                ? 'SELECT * FROM table_name LIMIT 10;'
-                : undefined
+              toolType === "execute_sql" ? "SELECT * FROM table_name LIMIT 10;" : undefined
             }
           />
         </div>
 
         {/* Run Button */}
-        <RunButton
-          onClick={handleRun}
-          disabled={isRunDisabled}
-          loading={isRunning}
-        />
+        <RunButton onClick={handleRun} disabled={isRunDisabled} loading={isRunning} />
 
         {/* Results */}
         <ResultsTabs

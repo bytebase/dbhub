@@ -39,7 +39,6 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
             </Link>
             <div className="flex-1 overflow-auto">
               {currentSource.tools
-                .filter((tool) => tool.name !== 'search_objects')
                 .map((tool) => (
                   <Link
                     key={tool.name}
