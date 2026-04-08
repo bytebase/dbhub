@@ -74,6 +74,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         rows: result.rows,
         count: result.rowCount,
         source_id: effectiveSourceId,
+        ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
       };
 
       return createToolSuccessResponse(responseData);
