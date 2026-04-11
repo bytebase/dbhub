@@ -5,6 +5,7 @@ import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
+import { SafeURL } from "../utils/safe-url.js";
 import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
 
 /**
@@ -495,7 +496,6 @@ function processSourceConfigs(
     if (processed.dsn) {
       const connectionInfo = parseConnectionInfoFromDSN(processed.dsn);
       if (connectionInfo) {
-        // Only set fields that aren't already explicitly configured
         if (!processed.type && connectionInfo.type) {
           processed.type = connectionInfo.type;
         }
@@ -511,6 +511,20 @@ function processSourceConfigs(
         if (!processed.user && connectionInfo.user) {
           processed.user = connectionInfo.user;
         }
+      }
+
+      try {
+        const url = new SafeURL(processed.dsn);
+        const dsnSslmode = url.getSearchParam("sslmode");
+        if (!processed.sslmode && dsnSslmode) {
+          processed.sslmode = dsnSslmode as SourceConfig["sslmode"];
+        }
+        const dsnSslrootcert = url.getSearchParam("sslrootcert");
+        if (!processed.sslrootcert && dsnSslrootcert) {
+          processed.sslrootcert = dsnSslrootcert;
+        }
+      } catch {
+        // DSN parsing for query params is best-effort; connector will handle errors
       }
     }
 
