@@ -357,9 +357,24 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
 
     const expandedPath = expandHomeDir(source.sslrootcert);
-    if (!fs.existsSync(expandedPath)) {
+    let stats: fs.Stats;
+    try {
+      stats = fs.statSync(expandedPath);
+    } catch {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' sslrootcert file not found: '${expandedPath}'`
+        `Configuration file ${configPath}: source '${source.id}' sslrootcert file not found or not accessible: '${expandedPath}'`
+      );
+    }
+    if (!stats.isFile()) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' sslrootcert path is not a regular file: '${expandedPath}'`
+      );
+    }
+    try {
+      fs.accessSync(expandedPath, fs.constants.R_OK);
+    } catch {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' sslrootcert file is not readable: '${expandedPath}'`
       );
     }
   }

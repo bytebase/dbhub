@@ -673,7 +673,7 @@ sslrootcert = "/nonexistent/ca.pem"
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-        expect(() => loadTomlConfig()).toThrow("sslrootcert file not found: '/nonexistent/ca.pem'");
+        expect(() => loadTomlConfig()).toThrow("sslrootcert file not found or not accessible: '/nonexistent/ca.pem'");
       });
     });
 
