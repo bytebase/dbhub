@@ -325,6 +325,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate sslmode if provided
   if (source.sslmode !== undefined) {
+    // SQLite doesn't support SSL (local file-based database)
     if (source.type === "sqlite") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslmode but SQLite does not support SSL. ` +
@@ -340,7 +341,10 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    if ((source.sslmode === "verify-ca" || source.sslmode === "verify-full") && source.type !== "postgres") {
+    if (
+      (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
+      source.type !== "postgres"
+    ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is only supported for PostgreSQL. ` +
           `Valid values for ${source.type}: disable, require`
