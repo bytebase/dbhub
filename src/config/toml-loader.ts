@@ -496,6 +496,7 @@ function processSourceConfigs(
     if (processed.dsn) {
       const connectionInfo = parseConnectionInfoFromDSN(processed.dsn);
       if (connectionInfo) {
+        // Only set fields that aren't already explicitly configured
         if (!processed.type && connectionInfo.type) {
           processed.type = connectionInfo.type;
         }
