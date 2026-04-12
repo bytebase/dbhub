@@ -509,6 +509,172 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
         expect(result).toBeTruthy();
         expect(result?.sources[0].sslmode).toBeUndefined();
       });
+
+      it('should accept sslmode = "verify-ca" for PostgreSQL', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-ca"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('verify-ca');
+      });
+
+      it('should accept sslmode = "verify-full" for PostgreSQL', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-full"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('verify-full');
+      });
+
+      it('should reject sslmode = "verify-ca" for MySQL', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "mysql"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-ca"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslmode 'verify-ca' which is only supported for PostgreSQL");
+      });
+
+      it('should reject sslmode = "verify-full" for MariaDB', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "mariadb"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-full"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslmode 'verify-full' which is only supported for PostgreSQL");
+      });
+
+      it('should reject sslmode = "verify-ca" for SQL Server', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-ca"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslmode 'verify-ca' which is only supported for PostgreSQL");
+      });
+
+      it('should reject sslrootcert when sslmode is "require"', () => {
+        const certPath = path.join(tempDir, 'ca.pem');
+        fs.writeFileSync(certPath, 'cert-content');
+
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "require"
+sslrootcert = '${certPath}'
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslrootcert requires sslmode 'verify-ca' or 'verify-full'");
+      });
+
+      it('should reject sslrootcert when sslmode is not set', () => {
+        const certPath = path.join(tempDir, 'ca.pem');
+        fs.writeFileSync(certPath, 'cert-content');
+
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslrootcert = '${certPath}'
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslrootcert requires sslmode 'verify-ca' or 'verify-full'");
+      });
+
+      it('should accept sslrootcert with sslmode = "verify-ca" when file exists', () => {
+        const certPath = path.join(tempDir, 'ca.pem');
+        fs.writeFileSync(certPath, 'cert-content');
+
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-ca"
+sslrootcert = '${certPath}'
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('verify-ca');
+        expect(result?.sources[0].sslrootcert).toBe(certPath);
+      });
+
+      it('should reject sslrootcert when file does not exist', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+sslmode = "verify-ca"
+sslrootcert = "/nonexistent/ca.pem"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sslrootcert file not found or not accessible: '/nonexistent/ca.pem'");
+      });
     });
 
     describe('SQL Server authentication validation', () => {
@@ -976,6 +1142,41 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('postgres://user:pass@localhost:5432/testdb?sslmode=require');
+    });
+
+    it('should build PostgreSQL DSN with verify-ca and sslrootcert', () => {
+      const source: SourceConfig = {
+        id: 'pg_verify',
+        type: 'postgres',
+        host: 'rds.amazonaws.com',
+        port: 5432,
+        database: 'testdb',
+        user: 'user',
+        password: 'pass',
+        sslmode: 'verify-ca',
+        sslrootcert: '/path/to/ca-bundle.pem'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@rds.amazonaws.com:5432/testdb?sslmode=verify-ca&sslrootcert=%2Fpath%2Fto%2Fca-bundle.pem');
+    });
+
+    it('should build PostgreSQL DSN with verify-full without sslrootcert', () => {
+      const source: SourceConfig = {
+        id: 'pg_verify_full',
+        type: 'postgres',
+        host: 'localhost',
+        port: 5432,
+        database: 'testdb',
+        user: 'user',
+        password: 'pass',
+        sslmode: 'verify-full'
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@localhost:5432/testdb?sslmode=verify-full');
     });
 
     it('should build MySQL DSN with sslmode', () => {

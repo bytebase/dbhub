@@ -522,8 +522,10 @@ export class ConnectorManager {
     });
 
     const queryParams = new Map(parsed.searchParams);
-    // IAM DB authentication requires SSL/TLS.
-    queryParams.set("sslmode", "require");
+    const currentSslMode = queryParams.get("sslmode");
+    if (currentSslMode !== "verify-ca" && currentSslMode !== "verify-full") {
+      queryParams.set("sslmode", "require");
+    }
 
     const protocol = parsed.protocol.endsWith(":")
       ? parsed.protocol.slice(0, -1)

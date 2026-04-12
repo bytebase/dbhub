@@ -56,6 +56,18 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # aws_region = "eu-west-1"
 # sslmode = "require"
 
+# PostgreSQL with certificate verification (e.g., AWS RDS)
+# [[sources]]
+# id = "rds_pg_verified"
+# type = "postgres"
+# host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+# port = 5432
+# database = "myapp"
+# user = "app_user"
+# password = "secure_password"
+# sslmode = "verify-ca"
+# sslrootcert = "~/.ssl/rds-combined-ca-bundle.pem"
+
 # Production PostgreSQL (behind SSH bastion, lazy connection)
 # [[sources]]
 # id = "prod_pg"
@@ -323,8 +335,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_keepalive_count_max (max missed keepalive responses, default: 3)
 #
 # SSL Mode (for network databases, not SQLite):
-#   sslmode = "disable"   # No SSL
-#   sslmode = "require"   # SSL without certificate verification
+#   sslmode = "disable"      # No SSL
+#   sslmode = "require"      # SSL without certificate verification
+#   sslmode = "verify-ca"    # SSL with CA certificate verification (PostgreSQL only)
+#   sslmode = "verify-full"  # SSL with CA + hostname verification (PostgreSQL only)
+#   sslrootcert = "~/.ssl/ca.pem"  # CA certificate path (requires verify-ca or verify-full)
 #
 # SQL Server Authentication:
 #   authentication = "ntlm"                              # Windows/NTLM auth (requires domain)
