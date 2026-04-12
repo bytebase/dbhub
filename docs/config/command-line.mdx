@@ -113,28 +113,32 @@ Command-line flags are passed when starting DBHub. These have the highest priori
 
   | Parameter | Databases | Description | Example |
   |-----------|-----------|-------------|---------|
-  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server | SSL mode: `disable`, `require` | `?sslmode=require` |
+  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
+  | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`) | `?sslrootcert=~/.ssl/ca.pem` |
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
   | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
 
   **SSL/TLS Options:**
 
-  | Database   | `sslmode=disable` | `sslmode=require` | Default |
-  | ---------- | :---------------: | :---------------: | :-----: |
-  | PostgreSQL |        ✅         |        ✅         | Certificate verification |
-  | MySQL      |        ✅         |        ✅         | Certificate verification |
-  | MariaDB    |        ✅         |        ✅         | Certificate verification |
-  | SQL Server |        ✅         |        ✅         | Certificate verification |
-  | SQLite     |        ❌         |        ❌         | N/A (file-based) |
+  | Database   | `disable` | `require` | `verify-ca` | `verify-full` | Default |
+  | ---------- | :-------: | :-------: | :---------: | :----------: | :-----: |
+  | PostgreSQL |     ✅    |     ✅    |      ✅     |      ✅      | Certificate verification |
+  | MySQL      |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
+  | MariaDB    |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
+  | SQL Server |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
+  | SQLite     |     ❌    |     ❌    |      ❌     |      ❌      | N/A (file-based) |
 
   - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
+  - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
+  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
 
   ```bash
   # Examples
   postgres://user:password@localhost:5432/dbname?sslmode=disable
   postgres://user:password@localhost:5432/dbname?sslmode=require
+  postgres://user:password@rds-host:5432/dbname?sslmode=verify-ca&sslrootcert=~/.ssl/rds-ca.pem
   sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
   ```
 </ParamField>

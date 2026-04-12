@@ -283,18 +283,60 @@ Sources define database connections. Each source represents a database that DBHu
   **Options:**
   - `disable` - No SSL/TLS encryption. Data is transmitted in plaintext.
   - `require` - SSL/TLS encryption enabled, but server certificate is not verified.
+  - `verify-ca` - SSL with CA certificate verification (no hostname check). **PostgreSQL only.**
+  - `verify-full` - SSL with CA certificate and hostname verification. **PostgreSQL only.**
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite). The `verify-ca` and `verify-full` modes are only supported for PostgreSQL.
 
   ```toml
+  # Basic SSL (all network databases)
   [[sources]]
   id = "production"
   dsn = "postgres://user:pass@localhost:5432/mydb"
   sslmode = "require"
+
+  # Certificate verification (PostgreSQL only)
+  [[sources]]
+  id = "rds_postgres"
+  type = "postgres"
+  host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+  port = 5432
+  database = "myapp"
+  user = "app_user"
+  password = "secure_password"
+  sslmode = "verify-ca"
+  sslrootcert = "~/.ssl/rds-combined-ca-bundle.pem"
   ```
 
   <Tip>
-  Can also be set via DSN query parameter: `?sslmode=require`
+  Can also be set via DSN query parameter: `?sslmode=require` or `?sslmode=verify-ca&sslrootcert=/path/to/ca.pem`
+  </Tip>
+</ParamField>
+
+### sslrootcert
+
+<ParamField path="sslrootcert" type="string">
+  Path to the CA certificate file for SSL certificate verification. Required when using `sslmode=verify-ca` or `sslmode=verify-full`.
+
+  Supports `~/` path expansion.
+
+  **PostgreSQL only.**
+
+  ```toml
+  [[sources]]
+  id = "rds_postgres"
+  type = "postgres"
+  host = "mydb.abc123.eu-west-1.rds.amazonaws.com"
+  port = 5432
+  database = "myapp"
+  user = "app_user"
+  password = "secure_password"
+  sslmode = "verify-full"
+  sslrootcert = "~/.ssl/rds-combined-ca-bundle.pem"
+  ```
+
+  <Tip>
+  Can also be set via DSN query parameter: `?sslmode=verify-full&sslrootcert=/path/to/ca.pem`
   </Tip>
 </ParamField>
 
@@ -667,7 +709,8 @@ default = 10
 | `lazy` | boolean | ❌ | Defer connection until first query (default: `false`) |
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
 | `query_timeout` | number | ❌ | Query timeout (seconds) |
-| `sslmode` | string | ❌ | SSL mode: `disable`, `require` |
+| `sslmode` | string | ❌ | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` |
+| `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |
