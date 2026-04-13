@@ -574,6 +574,46 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.rows[0]).toHaveProperty('age_rank');
     });
 
+    it('should capture PRINT output in messages', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        "PRINT 'hello from sql server'; SELECT 1 as value;",
+        {}
+      );
+
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].value).toBe(1);
+      expect(result.messages).toBeDefined();
+      expect(result.messages!.length).toBeGreaterThan(0);
+      expect(result.messages).toContain('hello from sql server');
+    });
+
+    it('should capture SET STATISTICS TIME output in messages', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SET STATISTICS TIME ON; SELECT COUNT(*) as cnt FROM users; SET STATISTICS TIME OFF;',
+        {}
+      );
+
+      expect(result.rows).toHaveLength(1);
+      expect(result.messages).toBeDefined();
+      expect(result.messages!.length).toBeGreaterThan(0);
+      // STATISTICS TIME emits messages containing "CPU time" and "elapsed time"
+      const hasTimingMessage = result.messages!.some(
+        msg => msg.includes('CPU time') || msg.includes('elapsed time')
+      );
+      expect(hasTimingMessage).toBe(true);
+    });
+
+    it('should not include messages field when no informational messages are emitted', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 as value',
+        {}
+      );
+
+      expect(result.rows).toHaveLength(1);
+      // messages should be undefined (not present) when no info messages were emitted
+      expect(result.messages).toBeUndefined();
+    });
+
     it('should ignore maxRows when not specified', async () => {
       // Test without maxRows - should return all rows
       const result = await sqlServerTest.connector.executeSQL(
