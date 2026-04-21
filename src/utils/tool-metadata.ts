@@ -106,12 +106,15 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     ? `Execute SQL (${dbType})`
     : `Execute SQL on ${sourceId} (${dbType})`;
 
-  // Determine description with more context
+  // Determine description with more context.
+  // Prepend the user-provided `description` from the source config (if set)
+  // so AI clients reading the MCP tool list see the source's purpose first.
+  const userDescPrefix = sourceConfig.description ? `${sourceConfig.description}. ` : "";
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
   const description = isSingleSource
-    ? `Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
-    : `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
+    ? `${userDescPrefix}Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
+    : `${userDescPrefix}Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -149,9 +152,12 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
   const title = isSingleSource
     ? `Search Database Objects (${dbType})`
     : `Search Database Objects on ${sourceId} (${dbType})`;
+  // Prepend the user-provided `description` from the source config (if set)
+  // so AI clients reading the MCP tool list see the source's purpose first.
+  const userDescPrefix = sourceConfig.description ? `${sourceConfig.description}. ` : "";
   const description = isSingleSource
-    ? `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
+    ? `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
+    : `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,
