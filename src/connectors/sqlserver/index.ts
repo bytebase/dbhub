@@ -581,8 +581,13 @@ export class SQLServerConnector implements Connector {
         processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
       }
 
-      // Create request and add parameters if provided
+      // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
       const request = this.connection.request();
+      const messages: string[] = [];
+      request.on('info', (info: { message: string }) => {
+        messages.push(info.message);
+      });
+
       if (parameters && parameters.length > 0) {
         // SQL Server uses @p1, @p2, etc. for parameters
         parameters.forEach((param, index) => {
@@ -625,6 +630,7 @@ export class SQLServerConnector implements Connector {
       return {
         rows: result.recordset || [],
         rowCount: result.rowsAffected[0] || 0,
+        ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
