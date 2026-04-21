@@ -40,6 +40,27 @@ export interface ToolMetadata {
 }
 
 /**
+ * Build a prefix string for prepending a source's user-provided `description`
+ * onto a generated tool description. Returns "" when no description is set
+ * (undefined, empty, or whitespace-only). Normalizes surrounding whitespace
+ * with `trim()` and avoids double sentence-ending punctuation when the
+ * description already ends with one of "." / "!" / "?".
+ *
+ * Examples:
+ *   undefined            -> ""
+ *   "  "                 -> ""
+ *   "Prod DB"            -> "Prod DB. "
+ *   "Prod DB."           -> "Prod DB. "      (no double period)
+ *   "  Prod DB!  "       -> "Prod DB! "      (trimmed, no added period)
+ *   "Query me?"          -> "Query me? "
+ */
+export function buildSourceDescriptionPrefix(description: string | undefined): string {
+  const trimmed = description?.trim() ?? "";
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? `${trimmed} ` : `${trimmed}. `;
+}
+
+/**
  * Convert a Zod schema object to simplified parameter list
  * @param schema - Zod schema object (e.g., { sql: z.string().describe("...") })
  * @returns Array of tool parameters
@@ -109,7 +130,7 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   // Determine description with more context.
   // Prepend the user-provided `description` from the source config (if set)
   // so AI clients reading the MCP tool list see the source's purpose first.
-  const userDescPrefix = sourceConfig.description ? `${sourceConfig.description}. ` : "";
+  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
   const description = isSingleSource
@@ -154,7 +175,7 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
     : `Search Database Objects on ${sourceId} (${dbType})`;
   // Prepend the user-provided `description` from the source config (if set)
   // so AI clients reading the MCP tool list see the source's purpose first.
-  const userDescPrefix = sourceConfig.description ? `${sourceConfig.description}. ` : "";
+  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const description = isSingleSource
     ? `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
     : `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
