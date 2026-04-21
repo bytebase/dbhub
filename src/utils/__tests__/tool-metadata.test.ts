@@ -32,6 +32,12 @@ describe("buildSourceDescriptionPrefix", () => {
     expect(buildSourceDescriptionPrefix("Query me?")).toBe("Query me? ");
   });
 
+  it("appends only a space when description ends with ':'", () => {
+    // A trailing colon naturally introduces what follows (the tool template),
+    // so adding '.' here would produce the artifact "Details below:. Execute..."
+    expect(buildSourceDescriptionPrefix("Details below:")).toBe("Details below: ");
+  });
+
   it("trims surrounding whitespace before assessing punctuation", () => {
     expect(buildSourceDescriptionPrefix("  Prod DB  ")).toBe("Prod DB. ");
     expect(buildSourceDescriptionPrefix("  Prod DB.  ")).toBe("Prod DB. ");
@@ -45,9 +51,9 @@ describe("buildSourceDescriptionPrefix", () => {
   });
 
   it("does not treat non-sentence-ending punctuation as terminators", () => {
-    // These are mid-sentence / structural punctuation; the helper should
-    // still append ". " to produce a complete sentence boundary.
-    expect(buildSourceDescriptionPrefix("Details below:")).toBe("Details below:. ");
+    // ')' and ';' are mid-sentence / structural punctuation; the helper
+    // should still append ". " to produce a complete sentence boundary.
+    // (':' is handled separately — see the colon-specific test above.)
     expect(buildSourceDescriptionPrefix("(read-only)")).toBe("(read-only). ");
     expect(buildSourceDescriptionPrefix("Clause 1; clause 2")).toBe("Clause 1; clause 2. ");
   });

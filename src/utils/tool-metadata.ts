@@ -43,8 +43,11 @@ export interface ToolMetadata {
  * Build a prefix string for prepending a source's user-provided `description`
  * onto a generated tool description. Returns "" when no description is set
  * (undefined, empty, or whitespace-only). Normalizes surrounding whitespace
- * with `trim()` and avoids double sentence-ending punctuation when the
- * description already ends with one of "." / "!" / "?".
+ * with `trim()` and skips adding a period when the description already ends
+ * with one of "." / "!" / "?" / ":" — the colon is included because a
+ * trailing colon naturally introduces what follows (the generic tool
+ * template) and appending "." after it would produce artifacts like
+ * "Details below:. Execute SQL...".
  *
  * Examples:
  *   undefined            -> ""
@@ -53,11 +56,14 @@ export interface ToolMetadata {
  *   "Prod DB."           -> "Prod DB. "      (no double period)
  *   "  Prod DB!  "       -> "Prod DB! "      (trimmed, no added period)
  *   "Query me?"          -> "Query me? "
+ *   "Details below:"     -> "Details below: " (colon introduces what follows)
+ *   "Clause 1; clause 2" -> "Clause 1; clause 2. " (semicolon is mid-sentence)
+ *   "(read-only)"        -> "(read-only). "  (closing paren is mid-sentence)
  */
 export function buildSourceDescriptionPrefix(description: string | undefined): string {
   const trimmed = description?.trim() ?? "";
   if (!trimmed) return "";
-  return /[.!?]$/.test(trimmed) ? `${trimmed} ` : `${trimmed}. `;
+  return /[.!?:]$/.test(trimmed) ? `${trimmed} ` : `${trimmed}. `;
 }
 
 /**
