@@ -40,6 +40,33 @@ export interface ToolMetadata {
 }
 
 /**
+ * Build a prefix string for prepending a source's user-provided `description`
+ * onto a generated tool description. Returns "" when no description is set
+ * (undefined, empty, or whitespace-only). Normalizes surrounding whitespace
+ * with `trim()` and skips adding a period when the description already ends
+ * with one of "." / "!" / "?" / ":" — the colon is included because a
+ * trailing colon naturally introduces what follows (the generic tool
+ * template) and appending "." after it would produce artifacts like
+ * "Details below:. Execute SQL...".
+ *
+ * Examples:
+ *   undefined            -> ""
+ *   "  "                 -> ""
+ *   "Prod DB"            -> "Prod DB. "
+ *   "Prod DB."           -> "Prod DB. "      (no double period)
+ *   "  Prod DB!  "       -> "Prod DB! "      (trimmed, no added period)
+ *   "Query me?"          -> "Query me? "
+ *   "Details below:"     -> "Details below: " (colon introduces what follows)
+ *   "Clause 1; clause 2" -> "Clause 1; clause 2. " (semicolon is mid-sentence)
+ *   "(read-only)"        -> "(read-only). "  (closing paren is mid-sentence)
+ */
+export function buildSourceDescriptionPrefix(description: string | undefined): string {
+  const trimmed = description?.trim() ?? "";
+  if (!trimmed) return "";
+  return /[.!?:]$/.test(trimmed) ? `${trimmed} ` : `${trimmed}. `;
+}
+
+/**
  * Convert a Zod schema object to simplified parameter list
  * @param schema - Zod schema object (e.g., { sql: z.string().describe("...") })
  * @returns Array of tool parameters
@@ -106,12 +133,15 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     ? `Execute SQL (${dbType})`
     : `Execute SQL on ${sourceId} (${dbType})`;
 
-  // Determine description with more context
+  // Determine description with more context.
+  // Prepend the user-provided `description` from the source config (if set)
+  // so AI clients reading the MCP tool list see the source's purpose first.
+  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
   const description = isSingleSource
-    ? `Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
-    : `Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
+    ? `${userDescPrefix}Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
+    : `${userDescPrefix}Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -149,9 +179,12 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
   const title = isSingleSource
     ? `Search Database Objects (${dbType})`
     : `Search Database Objects on ${sourceId} (${dbType})`;
+  // Prepend the user-provided `description` from the source config (if set)
+  // so AI clients reading the MCP tool list see the source's purpose first.
+  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const description = isSingleSource
-    ? `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
+    ? `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
+    : `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,
