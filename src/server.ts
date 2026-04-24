@@ -269,11 +269,13 @@ See documentation for more details on configuring database connections.
 
         console.error(`HTTP server listening on ${displayHost}:${boundPort}`);
 
-        // In development mode, suggest using the Vite dev server for hot reloading
+        // In development mode, suggest using the Vite dev server for hot reloading.
+        // Vite serves from localhost; use the same hostname for the backend hint so
+        // cross-origin calls from Vite satisfy the DNS-rebinding middleware check.
         if (process.env.NODE_ENV === 'development') {
           console.error('Development mode detected!');
           console.error('   Workbench dev server (with HMR): http://localhost:5173');
-          console.error(`   Backend API: http://${userHost}:${boundPort}`);
+          console.error(`   Backend API: http://localhost:${boundPort}`);
           console.error('');
         } else {
           console.error(`Workbench at http://${userHost}:${boundPort}/`);

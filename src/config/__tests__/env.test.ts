@@ -472,5 +472,27 @@ describe('Environment Configuration Tests', () => {
       exitSpy.mockRestore();
       errorSpy.mockRestore();
     });
+
+    it('exits when --host is followed by another flag', () => {
+      process.argv = ['node', 'script.js', '--host', '--port=8080'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('passes through an explicit --host=true without erroring (node listen will reject it)', () => {
+      process.argv = ['node', 'script.js', '--host=true'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: 'true', source: 'command line argument' });
+    });
   });
 });
