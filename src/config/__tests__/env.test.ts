@@ -397,6 +397,7 @@ describe('Environment Configuration Tests', () => {
 
     beforeEach(() => {
       delete process.env.HOST;
+      delete process.env.DBHUB_HOST;
       process.argv = ['node', 'script.js'];
     });
 
@@ -410,12 +411,20 @@ describe('Environment Configuration Tests', () => {
       expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
     });
 
-    it('reads HOST from the environment variable', () => {
-      process.env.HOST = '127.0.0.1';
+    it('reads DBHUB_HOST from the environment variable', () => {
+      process.env.DBHUB_HOST = '127.0.0.1';
 
       const result = resolveHost();
 
       expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
+    });
+
+    it('ignores the generic HOST env var to avoid shell/CI collisions', () => {
+      process.env.HOST = 'my-laptop.local';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
     });
 
     it('reads --host from command line arguments (equals form)', () => {
@@ -434,8 +443,8 @@ describe('Environment Configuration Tests', () => {
       expect(result).toEqual({ host: '192.168.1.10', source: 'command line argument' });
     });
 
-    it('prefers --host over HOST environment variable', () => {
-      process.env.HOST = '0.0.0.0';
+    it('prefers --host over DBHUB_HOST environment variable', () => {
+      process.env.DBHUB_HOST = '0.0.0.0';
       process.argv = ['node', 'script.js', '--host=127.0.0.1'];
 
       const result = resolveHost();
@@ -443,8 +452,8 @@ describe('Environment Configuration Tests', () => {
       expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
     });
 
-    it('treats empty HOST env var as unset and falls back to default', () => {
-      process.env.HOST = '';
+    it('treats empty DBHUB_HOST env var as unset and falls back to default', () => {
+      process.env.DBHUB_HOST = '';
 
       const result = resolveHost();
 
@@ -452,7 +461,7 @@ describe('Environment Configuration Tests', () => {
     });
 
     it('accepts IPv6 addresses verbatim', () => {
-      process.env.HOST = '::1';
+      process.env.DBHUB_HOST = '::1';
 
       const result = resolveHost();
 

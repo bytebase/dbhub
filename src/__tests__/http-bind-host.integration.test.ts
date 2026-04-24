@@ -22,7 +22,7 @@ describe('HTTP bind host integration', () => {
       env: {
         ...process.env,
         DSN: `sqlite://${testDbPath}`,
-        HOST: testHost,
+        DBHUB_HOST: testHost,
         PORT: testPort.toString(),
         NODE_ENV: 'test',
       },

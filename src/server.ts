@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
+import http from "http";
 import path from "path";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -251,8 +252,19 @@ See documentation for more details on configuring database connections.
         });
       }
 
-      // Start the HTTP server
-      const httpServer = app.listen(port!, host!, () => {
+      // Start the HTTP server. Create explicitly so the `error` listener is
+      // attached before listen() — otherwise synchronous bind failures
+      // (EADDRINUSE, EACCES on privileged ports) can fire before the listener
+      // is registered. Matches the pattern used in utils/ssh-tunnel.ts.
+      const httpServer = http.createServer(app);
+
+      httpServer.on('error', (err) => {
+        const displayHost = host!.includes(':') ? `[${host!}]` : host!;
+        console.error(`Failed to bind HTTP server to ${displayHost}:${port}: ${err.message}`);
+        process.exit(1);
+      });
+
+      httpServer.listen(port!, host!, () => {
         const address = httpServer.address();
         const boundHost = typeof address === 'object' && address ? address.address : host!;
         const boundPort = typeof address === 'object' && address ? address.port : port!;
@@ -274,12 +286,6 @@ See documentation for more details on configuring database connections.
           console.error(`Workbench at http://${userHost}:${boundPort}/`);
         }
         console.error(`MCP server endpoint at http://${userHost}:${boundPort}/mcp`);
-      });
-
-      httpServer.on('error', (err) => {
-        const displayHost = host!.includes(':') ? `[${host!}]` : host!;
-        console.error(`Failed to bind HTTP server to ${displayHost}:${port}: ${err.message}`);
-        process.exit(1);
       });
     } else {
       // STDIO transport: Pure MCP-over-stdio, no HTTP server

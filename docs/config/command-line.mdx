@@ -52,7 +52,7 @@ Command-line flags are passed when starting DBHub. These have the highest priori
 
 ### --host
 
-<ParamField path="--host" type="string" env="HOST" default="0.0.0.0">
+<ParamField path="--host" type="string" env="DBHUB_HOST" default="0.0.0.0">
   HTTP bind address. Only used when `--transport=http`. Ignored for stdio transport.
 
   ```bash
@@ -295,7 +295,7 @@ npx @bytebase/dbhub@latest --dsn "..." \
 |------------|---------------------|------|-------------|
 | `--transport` | `TRANSPORT` | string | Transport mode: stdio or http (default: `stdio`) |
 | `--port` | `PORT` | number | HTTP server port (http transport only, default: `8080`) |
-| `--host` | `HOST` | string | HTTP bind address (http transport only, default: `0.0.0.0`) |
+| `--host` | `DBHUB_HOST` | string | HTTP bind address (http transport only, default: `0.0.0.0`) |
 | `--demo` | - | boolean | Use sample employee database |
 | `--id` | `ID` | string | Instance identifier for tool names |
 | `--config` | - | string | Path to TOML config file (default: `./dbhub.toml`) |
