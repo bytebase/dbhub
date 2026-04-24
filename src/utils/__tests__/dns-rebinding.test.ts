@@ -61,4 +61,57 @@ describe('validateOrigin', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
   });
+
+  it('rejects an explicitly empty Origin header as malformed (400)', () => {
+    // `Origin:` (empty value) is not the same as "Origin absent"; a browser
+    // would not produce it, and letting it through bypasses the guard.
+    expect(validateOrigin('', 'localhost:8080')).toEqual({
+      ok: false,
+      status: 400,
+      message: 'Malformed Origin header',
+    });
+  });
+
+  it('rejects a whitespace-only Origin header as malformed (400)', () => {
+    expect(validateOrigin('   ', 'localhost:8080')).toEqual({
+      ok: false,
+      status: 400,
+      message: 'Malformed Origin header',
+    });
+  });
+
+  it('rejects a Host header containing a path separator as malformed (400)', () => {
+    // `new URL("http://evil.com/localhost:8080").hostname` silently yields
+    // "evil.com"; if an attacker also sets Origin: http://evil.com the
+    // naked string-equality match would pass.
+    expect(
+      validateOrigin('http://evil.com', 'evil.com/localhost:8080')
+    ).toEqual({
+      ok: false,
+      status: 400,
+      message: 'Malformed Host header',
+    });
+  });
+
+  it('rejects a Host header containing a userinfo character as malformed (400)', () => {
+    // `new URL("http://evil.com@localhost:8080").hostname` yields
+    // "localhost"; a crafted Origin: http://localhost would then match.
+    expect(
+      validateOrigin('http://localhost:8080', 'evil.com@localhost:8080')
+    ).toEqual({
+      ok: false,
+      status: 400,
+      message: 'Malformed Host header',
+    });
+  });
+
+  it('rejects a Host header containing whitespace as malformed (400)', () => {
+    expect(
+      validateOrigin('http://localhost:8080', 'localhost 8080')
+    ).toEqual({
+      ok: false,
+      status: 400,
+      message: 'Malformed Host header',
+    });
+  });
 });
