@@ -531,5 +531,40 @@ describe('Environment Configuration Tests', () => {
       exitSpy.mockRestore();
       errorSpy.mockRestore();
     });
+
+    it('exits when --host= is present even if a non-flag token follows (empty value, no concatenation)', () => {
+      // `--host= 127.0.0.1` is not the same as `--host=127.0.0.1`: the token
+      // is literally the empty string. parseCommandLineArgs has already been
+      // observed to bind the positional that follows to --host, silently
+      // accepting what the user almost certainly did not intend.
+      process.argv = ['node', 'script.js', '--host=', '127.0.0.1'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when a later bare --host appears after an earlier valid --host', () => {
+      // With an early break in the argv scan, only the first --host is
+      // inspected — a later duplicate bare --host sneaks through even though
+      // it has no value and the user's intent is ambiguous.
+      process.argv = ['node', 'script.js', '--host', '127.0.0.1', '--host'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 });

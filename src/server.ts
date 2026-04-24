@@ -172,11 +172,14 @@ See documentation for more details on configuring database connections.
       // Enable JSON parsing
       app.use(express.json());
 
-      // DNS rebinding protection: reject cross-origin requests where the
-      // Origin hostname doesn't match the Host hostname.  Browser-based
-      // attacks (the DNS rebinding threat model) always send an Origin
-      // header on cross-origin fetches.  Non-browser MCP clients don't
-      // send Origin at all and are unaffected.
+      // Cross-origin fetch guard: when a browser sends Origin, require
+      // it to match the Host header.  This blocks the common case of an
+      // attacker's site on a different origin issuing an authenticated
+      // fetch to a locally bound DBHub; it is NOT a complete defense
+      // against DNS rebinding, since a rebinding attacker controls both
+      // the DNS record and the Origin string and can trivially make them
+      // agree.  A Host-header allowlist is tracked as follow-up hardening.
+      // Non-browser MCP clients typically omit Origin and are unaffected.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
         const result = validateOrigin(origin, req.headers.host);

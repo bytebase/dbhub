@@ -6,12 +6,24 @@ export type OriginValidation =
   | { ok: false; status: 400 | 403; message: string };
 
 /**
- * Check that a request's Origin hostname matches its Host header hostname.
+ * Check that a request's Origin hostname equals its Host header hostname.
  *
- * Browsers always send Origin on cross-origin fetches (the DNS-rebinding
- * threat model), while non-browser MCP clients typically omit it. A missing
- * Origin is therefore allowed through — the check is a defense against
- * browser-originated cross-origin requests only.
+ * Scope and limitations:
+ *
+ * - This is a cross-origin-fetch guard, not a full DNS-rebinding defense.
+ *   A true rebinding attacker controls both the DNS record the browser
+ *   resolves *and* the Origin the script sends, so they can trivially
+ *   arrange for `Origin` and `Host` to agree while still pointing at a
+ *   local service. A proper defense requires validating `Host` against
+ *   an allowlist and/or requiring authentication — tracked as future
+ *   hardening for the HTTP transport.
+ * - What this *does* block is the simpler case of a browser on a
+ *   different origin (e.g., an attacker's public site) making an
+ *   authenticated cross-origin fetch: browsers always attach the real
+ *   Origin on such requests, and it will not match the local Host.
+ * - Browsers always send `Origin` on cross-origin fetches; non-browser
+ *   MCP clients typically omit it, so a missing `Origin` is allowed
+ *   through.
  *
  * WHATWG URL parsing is used for both headers so IPv6 bracket notation
  * (e.g., `[::1]:8080`) is handled correctly — a naive `split(':')[0]` on
@@ -45,7 +57,7 @@ export function validateOrigin(
     return {
       ok: false,
       status: 403,
-      message: 'Origin does not match Host header (DNS rebinding protection)',
+      message: 'Origin does not match Host header',
     };
   }
 

@@ -34,7 +34,7 @@ describe('validateOrigin', () => {
     expect(result).toEqual({
       ok: false,
       status: 403,
-      message: 'Origin does not match Host header (DNS rebinding protection)',
+      message: 'Origin does not match Host header',
     });
   });
 
