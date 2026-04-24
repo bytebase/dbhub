@@ -15,6 +15,7 @@ import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
 import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
+import { validateOrigin } from "./utils/dns-rebinding.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -177,20 +178,12 @@ See documentation for more details on configuring database connections.
       // send Origin at all and are unaffected.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
-
-        if (origin) {
-          const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
-          try {
-            const originHost = new URL(origin).hostname.toLowerCase();
-            if (originHost !== host) {
-              return res.status(403).json({
-                error: 'Forbidden',
-                message: 'Origin does not match Host header (DNS rebinding protection)',
-              });
-            }
-          } catch {
-            return res.status(400).json({ error: 'Bad Request', message: 'Malformed Origin header' });
-          }
+        const result = validateOrigin(origin, req.headers.host);
+        if (!result.ok) {
+          return res.status(result.status).json({
+            error: result.status === 400 ? 'Bad Request' : 'Forbidden',
+            message: result.message,
+          });
         }
 
         // CORS headers — only reflect validated origins

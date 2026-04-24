@@ -342,13 +342,27 @@ export function resolvePort(): { port: number; source: string } {
  * front DBHub with a reverse proxy or firewall.
  */
 export function resolveHost(): { host: string; source: string } {
-  // Detect bare --host (no value) directly in argv. parseCommandLineArgs()
-  // collapses bare flags and --host=true into the same string "true", so we
-  // inspect argv here to report a friendly error only for the genuinely bare
-  // case. An explicit --host=true passes through and fails later at listen().
+  // Detect a missing --host value directly in argv. parseCommandLineArgs()
+  // collapses bare flags and explicit empty values into the same sentinel
+  // string "true", which is indistinguishable from an explicit --host=true.
+  // We inspect argv here so we can reject only the genuinely value-less cases:
+  //   --host            (followed by nothing or another --flag)
+  //   --host=           (empty after equals, alone or followed by another --flag)
+  // An explicit --host=true passes through and fails later at listen().
   const rawArgs = process.argv.slice(2);
   for (let i = 0; i < rawArgs.length; i++) {
-    if (rawArgs[i] === "--host") {
+    const token = rawArgs[i];
+
+    if (token === "--host") {
+      const next = rawArgs[i + 1];
+      if (!next || next.startsWith("--")) {
+        console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+        process.exit(1);
+      }
+      break;
+    }
+
+    if (token === "--host=") {
       const next = rawArgs[i + 1];
       if (!next || next.startsWith("--")) {
         console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");

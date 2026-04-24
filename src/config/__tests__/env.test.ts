@@ -494,5 +494,33 @@ describe('Environment Configuration Tests', () => {
 
       expect(result).toEqual({ host: 'true', source: 'command line argument' });
     });
+
+    it('exits when --host= is provided with an empty value', () => {
+      process.argv = ['node', 'script.js', '--host='];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when --host= is followed by another flag', () => {
+      process.argv = ['node', 'script.js', '--host=', '--port=8080'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 });
