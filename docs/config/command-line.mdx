@@ -50,6 +50,27 @@ Command-line flags are passed when starting DBHub. These have the highest priori
   ```
 </ParamField>
 
+### --host
+
+<ParamField path="--host" type="string" env="DBHUB_HOST" default="0.0.0.0">
+  HTTP bind address. Only used when `--transport=http`. Ignored for stdio transport.
+
+  ```bash
+  # Restrict to loopback (recommended for production)
+  npx @bytebase/dbhub@latest --transport http --host 127.0.0.1 --port 8080 --dsn "..."
+
+  # Bind to a specific interface
+  npx @bytebase/dbhub@latest --transport http --host 10.0.0.5 --port 8080 --dsn "..."
+
+  # IPv6 loopback
+  npx @bytebase/dbhub@latest --transport http --host ::1 --port 8080 --dsn "..."
+  ```
+
+  <Warning>
+  The default `0.0.0.0` exposes DBHub on every network interface. For production, set `--host 127.0.0.1` and place DBHub behind a reverse proxy (nginx/Caddy) or restrict with a firewall — DBHub does not authenticate HTTP clients.
+  </Warning>
+</ParamField>
+
 ### --dsn
 
 <ParamField path="--dsn" type="string" env="DSN">
@@ -274,6 +295,7 @@ npx @bytebase/dbhub@latest --dsn "..." \
 |------------|---------------------|------|-------------|
 | `--transport` | `TRANSPORT` | string | Transport mode: stdio or http (default: `stdio`) |
 | `--port` | `PORT` | number | HTTP server port (http transport only, default: `8080`) |
+| `--host` | `DBHUB_HOST` | string | HTTP bind address (http transport only, default: `0.0.0.0`) |
 | `--demo` | - | boolean | Use sample employee database |
 | `--id` | `ID` | string | Instance identifier for tool names |
 | `--config` | - | string | Path to TOML config file (default: `./dbhub.toml`) |

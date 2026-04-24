@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { buildDSNFromEnvParams, resolveDSN, resolveId } from '../env.js';
+import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
 vi.mock('../toml-loader.js', () => ({
@@ -389,6 +389,229 @@ describe('Environment Configuration Tests', () => {
         id: '123',
         source: 'environment variable'
       });
+    });
+  });
+
+  describe('resolveHost', () => {
+    const originalArgv = process.argv;
+
+    beforeEach(() => {
+      delete process.env.HOST;
+      delete process.env.DBHUB_HOST;
+      process.argv = ['node', 'script.js'];
+    });
+
+    afterEach(() => {
+      process.argv = originalArgv;
+    });
+
+    it('defaults to 0.0.0.0 when nothing is set', () => {
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('reads DBHUB_HOST from the environment variable', () => {
+      process.env.DBHUB_HOST = '127.0.0.1';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
+    });
+
+    it('ignores the generic HOST env var to avoid shell/CI collisions', () => {
+      process.env.HOST = 'my-laptop.local';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('reads --host from command line arguments (equals form)', () => {
+      process.argv = ['node', 'script.js', '--host=10.0.0.5'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '10.0.0.5', source: 'command line argument' });
+    });
+
+    it('reads --host from command line arguments (space form)', () => {
+      process.argv = ['node', 'script.js', '--host', '192.168.1.10'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '192.168.1.10', source: 'command line argument' });
+    });
+
+    it('prefers --host over DBHUB_HOST environment variable', () => {
+      process.env.DBHUB_HOST = '0.0.0.0';
+      process.argv = ['node', 'script.js', '--host=127.0.0.1'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
+    });
+
+    it('treats empty DBHUB_HOST env var as unset and falls back to default', () => {
+      process.env.DBHUB_HOST = '';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('treats whitespace-only DBHUB_HOST env var as unset and falls back to default', () => {
+      // Without trimming, Node's listen() would be handed "   " verbatim and
+      // fail with an obscure bind error. Consistent with the `--host` flag
+      // validation, treat blank-after-trim as "not set" rather than silently
+      // misconfigured.
+      process.env.DBHUB_HOST = '   ';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('trims surrounding whitespace from DBHUB_HOST env var', () => {
+      process.env.DBHUB_HOST = '  127.0.0.1  ';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
+    });
+
+    it('accepts IPv6 addresses verbatim', () => {
+      process.env.DBHUB_HOST = '::1';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '::1', source: 'environment variable' });
+    });
+
+    it('exits when --host is provided without a value', () => {
+      process.argv = ['node', 'script.js', '--host'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when --host is followed by another flag', () => {
+      process.argv = ['node', 'script.js', '--host', '--port=8080'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('passes through an explicit --host=true without erroring (node listen will reject it)', () => {
+      process.argv = ['node', 'script.js', '--host=true'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: 'true', source: 'command line argument' });
+    });
+
+    it('exits when --host= is provided with an empty value', () => {
+      process.argv = ['node', 'script.js', '--host='];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when --host= is followed by another flag', () => {
+      process.argv = ['node', 'script.js', '--host=', '--port=8080'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when --host= is present even if a non-flag token follows (empty value, no concatenation)', () => {
+      // `--host= 127.0.0.1` is not the same as `--host=127.0.0.1`: the token
+      // is literally the empty string. parseCommandLineArgs has already been
+      // observed to bind the positional that follows to --host, silently
+      // accepting what the user almost certainly did not intend.
+      process.argv = ['node', 'script.js', '--host=', '127.0.0.1'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when a later bare --host appears after an earlier valid --host', () => {
+      // With an early break in the argv scan, only the first --host is
+      // inspected — a later duplicate bare --host sneaks through even though
+      // it has no value and the user's intent is ambiguous.
+      process.argv = ['node', 'script.js', '--host', '127.0.0.1', '--host'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('exits when --host value is whitespace-only (quoted)', () => {
+      // Shells can pass a quoted whitespace value through to argv, e.g.
+      //   --host="   "
+      // The env var path already rejects this; the CLI path should match
+      // so the user gets the same friendly error instead of an opaque
+      // listen() failure.
+      process.argv = ['node', 'script.js', '--host=   '];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('trims surrounding whitespace from --host CLI value', () => {
+      process.argv = ['node', 'script.js', '--host=  127.0.0.1  '];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
     });
   });
 });

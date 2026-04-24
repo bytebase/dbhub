@@ -2,19 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import express from "express";
+import http from "http";
 import path from "path";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, resolveSourceConfigs, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, resolveHost, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
 import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
+import { validateOrigin } from "./utils/dns-rebinding.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -129,8 +131,9 @@ See documentation for more details on configuring database connections.
     // Resolve transport type (for MCP server)
     const transportData = resolveTransport();
 
-    // Resolve port for HTTP server (only needed for http transport)
+    // Resolve port and host for HTTP server (only needed for http transport)
     const port = transportData.type === "http" ? resolvePort().port : null;
+    const host = transportData.type === "http" ? resolveHost().host : null;
 
     // Print ASCII art banner with version and slogan
     // Collect active modes
@@ -169,27 +172,22 @@ See documentation for more details on configuring database connections.
       // Enable JSON parsing
       app.use(express.json());
 
-      // DNS rebinding protection: reject cross-origin requests where the
-      // Origin hostname doesn't match the Host hostname.  Browser-based
-      // attacks (the DNS rebinding threat model) always send an Origin
-      // header on cross-origin fetches.  Non-browser MCP clients don't
-      // send Origin at all and are unaffected.
+      // Cross-origin fetch guard: when a browser sends Origin, require
+      // it to match the Host header.  This blocks the common case of an
+      // attacker's site on a different origin issuing an authenticated
+      // fetch to a locally bound DBHub; it is NOT a complete defense
+      // against DNS rebinding, since a rebinding attacker controls both
+      // the DNS record and the Origin string and can trivially make them
+      // agree.  A Host-header allowlist is tracked as follow-up hardening.
+      // Non-browser MCP clients typically omit Origin and are unaffected.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
-
-        if (origin) {
-          const host = (req.headers.host ?? '').split(':')[0].toLowerCase();
-          try {
-            const originHost = new URL(origin).hostname.toLowerCase();
-            if (originHost !== host) {
-              return res.status(403).json({
-                error: 'Forbidden',
-                message: 'Origin does not match Host header (DNS rebinding protection)',
-              });
-            }
-          } catch {
-            return res.status(400).json({ error: 'Bad Request', message: 'Malformed Origin header' });
-          }
+        const result = validateOrigin(origin, req.headers.host);
+        if (!result.ok) {
+          return res.status(result.status).json({
+            error: result.status === 400 ? 'Bad Request' : 'Forbidden',
+            message: result.message,
+          });
         }
 
         // CORS headers — only reflect validated origins
@@ -257,18 +255,40 @@ See documentation for more details on configuring database connections.
         });
       }
 
-      // Start the HTTP server
-      app.listen(port, '0.0.0.0', () => {
-        // In development mode, suggest using the Vite dev server for hot reloading
+      // Start the HTTP server. Create explicitly so the `error` listener is
+      // attached before listen() — otherwise synchronous bind failures
+      // (EADDRINUSE, EACCES on privileged ports) can fire before the listener
+      // is registered. Matches the pattern used in utils/ssh-tunnel.ts.
+      const httpServer = http.createServer(app);
+
+      httpServer.on('error', (err) => {
+        const displayHost = host!.includes(':') ? `[${host!}]` : host!;
+        console.error(`Failed to bind HTTP server to ${displayHost}:${port}: ${err.message}`);
+        process.exit(1);
+      });
+
+      httpServer.listen(port!, host!, () => {
+        const address = httpServer.address();
+        const boundHost = typeof address === 'object' && address ? address.address : host!;
+        const boundPort = typeof address === 'object' && address ? address.port : port!;
+        const displayHost = boundHost.includes(':') ? `[${boundHost}]` : boundHost;
+        // Wildcard binds (0.0.0.0 / ::) are not routable; use localhost for user URLs.
+        const userHost = (boundHost === '0.0.0.0' || boundHost === '::') ? 'localhost' : displayHost;
+
+        console.error(`HTTP server listening on ${displayHost}:${boundPort}`);
+
+        // In development mode, suggest using the Vite dev server for hot reloading.
+        // Vite serves from localhost; use the same hostname for the backend hint so
+        // cross-origin calls from Vite satisfy the DNS-rebinding middleware check.
         if (process.env.NODE_ENV === 'development') {
           console.error('Development mode detected!');
           console.error('   Workbench dev server (with HMR): http://localhost:5173');
-          console.error('   Backend API: http://localhost:8080');
+          console.error(`   Backend API: http://localhost:${boundPort}`);
           console.error('');
         } else {
-          console.error(`Workbench at http://localhost:${port}/`);
+          console.error(`Workbench at http://${userHost}:${boundPort}/`);
         }
-        console.error(`MCP server endpoint at http://localhost:${port}/mcp`);
+        console.error(`MCP server endpoint at http://${userHost}:${boundPort}/mcp`);
       });
     } else {
       // STDIO transport: Pure MCP-over-stdio, no HTTP server
