@@ -380,12 +380,15 @@ export function resolveHost(): { host: string; source: string } {
     return { host: args.host, source: "command line argument" };
   }
 
-  // 2. Environment variable (empty string is treated as unset)
+  // 2. Environment variable (trimmed; empty or whitespace-only is unset)
   //    Using DBHUB_HOST rather than generic HOST to avoid collisions — HOST is
   //    set by default in csh/tcsh, some CI systems, and Docker base images
   //    (often to the machine hostname), which would silently redirect binds.
-  if (process.env.DBHUB_HOST) {
-    return { host: process.env.DBHUB_HOST, source: "environment variable" };
+  //    Trimming matches the --host flag's validation so `DBHUB_HOST="   "`
+  //    doesn't get handed to listen() and fail with an obscure bind error.
+  const envHost = process.env.DBHUB_HOST?.trim();
+  if (envHost) {
+    return { host: envHost, source: "environment variable" };
   }
 
   // 3. Default: bind all interfaces

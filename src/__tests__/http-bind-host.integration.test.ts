@@ -61,11 +61,16 @@ describe('HTTP bind host integration', () => {
       serverProcess.kill('SIGTERM');
       await new Promise<void>((resolve) => {
         if (!serverProcess) return resolve();
-        serverProcess.on('exit', () => resolve());
-        setTimeout(() => {
+        // Without clearing this on normal exit, the pending timer keeps
+        // the Vitest process alive until the 5s tail elapses.
+        const killTimeout = setTimeout(() => {
           if (serverProcess && !serverProcess.killed) serverProcess.kill('SIGKILL');
           resolve();
         }, 5000);
+        serverProcess.on('exit', () => {
+          clearTimeout(killTimeout);
+          resolve();
+        });
       });
     }
     if (testDbPath && fs.existsSync(testDbPath)) {

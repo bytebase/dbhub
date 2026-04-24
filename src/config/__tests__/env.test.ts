@@ -460,6 +460,26 @@ describe('Environment Configuration Tests', () => {
       expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
     });
 
+    it('treats whitespace-only DBHUB_HOST env var as unset and falls back to default', () => {
+      // Without trimming, Node's listen() would be handed "   " verbatim and
+      // fail with an obscure bind error. Consistent with the `--host` flag
+      // validation, treat blank-after-trim as "not set" rather than silently
+      // misconfigured.
+      process.env.DBHUB_HOST = '   ';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('trims surrounding whitespace from DBHUB_HOST env var', () => {
+      process.env.DBHUB_HOST = '  127.0.0.1  ';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
+    });
+
     it('accepts IPv6 addresses verbatim', () => {
       process.env.DBHUB_HOST = '::1';
 
