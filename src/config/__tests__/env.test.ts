@@ -586,5 +586,32 @@ describe('Environment Configuration Tests', () => {
       exitSpy.mockRestore();
       errorSpy.mockRestore();
     });
+
+    it('exits when --host value is whitespace-only (quoted)', () => {
+      // Shells can pass a quoted whitespace value through to argv, e.g.
+      //   --host="   "
+      // The env var path already rejects this; the CLI path should match
+      // so the user gets the same friendly error instead of an opaque
+      // listen() failure.
+      process.argv = ['node', 'script.js', '--host=   '];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it('trims surrounding whitespace from --host CLI value', () => {
+      process.argv = ['node', 'script.js', '--host=  127.0.0.1  '];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
+    });
   });
 });

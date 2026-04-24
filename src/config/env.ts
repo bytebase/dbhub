@@ -375,9 +375,17 @@ export function resolveHost(): { host: string; source: string } {
 
   const args = parseCommandLineArgs();
 
-  // 1. Command line argument has highest priority
-  if (args.host) {
-    return { host: args.host, source: "command line argument" };
+  // 1. Command line argument has highest priority.
+  //    Trim surrounding whitespace; a whitespace-only value (e.g. from
+  //    `--host="   "`) is rejected with the same friendly error as the
+  //    bare/empty forms, matching the env var path below.
+  if (args.host !== undefined) {
+    const cliHost = args.host.trim();
+    if (!cliHost) {
+      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+      process.exit(1);
+    }
+    return { host: cliHost, source: "command line argument" };
   }
 
   // 2. Environment variable (trimmed; empty or whitespace-only is unset)
