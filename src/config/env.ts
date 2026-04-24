@@ -334,6 +334,36 @@ export function resolvePort(): { port: number; source: string } {
 }
 
 /**
+ * Resolve HTTP bind host from command line args or environment variables.
+ * Returns the host with "0.0.0.0" as the default (listen on all interfaces).
+ *
+ * Note: Only applicable when using --transport=http. Default "0.0.0.0" keeps
+ * backward compatibility; production deployments should set "127.0.0.1" and
+ * front DBHub with a reverse proxy or firewall.
+ */
+export function resolveHost(): { host: string; source: string } {
+  const args = parseCommandLineArgs();
+
+  // 1. Command line argument has highest priority.
+  //    parseCommandLineArgs turns bare --host (no value) into "true"; reject it.
+  if (args.host) {
+    if (args.host === "true") {
+      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+      process.exit(1);
+    }
+    return { host: args.host, source: "command line argument" };
+  }
+
+  // 2. Environment variable (empty string is treated as unset)
+  if (process.env.HOST) {
+    return { host: process.env.HOST, source: "environment variable" };
+  }
+
+  // 3. Default: bind all interfaces
+  return { host: "0.0.0.0", source: "default" };
+}
+
+/**
  * Redact sensitive information from a DSN string
  * Replaces the password with asterisks
  * @param dsn - The DSN string to redact

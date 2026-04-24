@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, resolveSourceConfigs, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, resolveHost, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
@@ -129,8 +129,9 @@ See documentation for more details on configuring database connections.
     // Resolve transport type (for MCP server)
     const transportData = resolveTransport();
 
-    // Resolve port for HTTP server (only needed for http transport)
+    // Resolve port and host for HTTP server (only needed for http transport)
     const port = transportData.type === "http" ? resolvePort().port : null;
+    const host = transportData.type === "http" ? resolveHost().host : null;
 
     // Print ASCII art banner with version and slogan
     // Collect active modes
@@ -258,17 +259,32 @@ See documentation for more details on configuring database connections.
       }
 
       // Start the HTTP server
-      app.listen(port, '0.0.0.0', () => {
+      const httpServer = app.listen(port!, host!, () => {
+        const address = httpServer.address();
+        const boundHost = typeof address === 'object' && address ? address.address : host!;
+        const boundPort = typeof address === 'object' && address ? address.port : port!;
+        const displayHost = boundHost.includes(':') ? `[${boundHost}]` : boundHost;
+        // Wildcard binds (0.0.0.0 / ::) are not routable; use localhost for user URLs.
+        const userHost = (boundHost === '0.0.0.0' || boundHost === '::') ? 'localhost' : displayHost;
+
+        console.error(`HTTP server listening on ${displayHost}:${boundPort}`);
+
         // In development mode, suggest using the Vite dev server for hot reloading
         if (process.env.NODE_ENV === 'development') {
           console.error('Development mode detected!');
           console.error('   Workbench dev server (with HMR): http://localhost:5173');
-          console.error('   Backend API: http://localhost:8080');
+          console.error(`   Backend API: http://${userHost}:${boundPort}`);
           console.error('');
         } else {
-          console.error(`Workbench at http://localhost:${port}/`);
+          console.error(`Workbench at http://${userHost}:${boundPort}/`);
         }
-        console.error(`MCP server endpoint at http://localhost:${port}/mcp`);
+        console.error(`MCP server endpoint at http://${userHost}:${boundPort}/mcp`);
+      });
+
+      httpServer.on('error', (err) => {
+        const displayHost = host!.includes(':') ? `[${host!}]` : host!;
+        console.error(`Failed to bind HTTP server to ${displayHost}:${port}: ${err.message}`);
+        process.exit(1);
       });
     } else {
       // STDIO transport: Pure MCP-over-stdio, no HTTP server

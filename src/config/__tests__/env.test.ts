@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { buildDSNFromEnvParams, resolveDSN, resolveId } from '../env.js';
+import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
 vi.mock('../toml-loader.js', () => ({
@@ -389,6 +389,88 @@ describe('Environment Configuration Tests', () => {
         id: '123',
         source: 'environment variable'
       });
+    });
+  });
+
+  describe('resolveHost', () => {
+    const originalArgv = process.argv;
+
+    beforeEach(() => {
+      delete process.env.HOST;
+      process.argv = ['node', 'script.js'];
+    });
+
+    afterEach(() => {
+      process.argv = originalArgv;
+    });
+
+    it('defaults to 0.0.0.0 when nothing is set', () => {
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('reads HOST from the environment variable', () => {
+      process.env.HOST = '127.0.0.1';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
+    });
+
+    it('reads --host from command line arguments (equals form)', () => {
+      process.argv = ['node', 'script.js', '--host=10.0.0.5'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '10.0.0.5', source: 'command line argument' });
+    });
+
+    it('reads --host from command line arguments (space form)', () => {
+      process.argv = ['node', 'script.js', '--host', '192.168.1.10'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '192.168.1.10', source: 'command line argument' });
+    });
+
+    it('prefers --host over HOST environment variable', () => {
+      process.env.HOST = '0.0.0.0';
+      process.argv = ['node', 'script.js', '--host=127.0.0.1'];
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
+    });
+
+    it('treats empty HOST env var as unset and falls back to default', () => {
+      process.env.HOST = '';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
+    });
+
+    it('accepts IPv6 addresses verbatim', () => {
+      process.env.HOST = '::1';
+
+      const result = resolveHost();
+
+      expect(result).toEqual({ host: '::1', source: 'environment variable' });
+    });
+
+    it('exits when --host is provided without a value', () => {
+      process.argv = ['node', 'script.js', '--host'];
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() => resolveHost()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
+
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
     });
   });
 });
