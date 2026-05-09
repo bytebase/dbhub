@@ -192,11 +192,12 @@ See documentation for more details on configuring database connections.
           }
         }
 
-        // CORS headers — only reflect validated origins
-        res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
+        // CORS headers: use a static wildcard origin and do not enable
+        // cross-origin credentials. The co-hosted workbench uses same-origin
+        // requests, so credentialed CORS is not required.
+        res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id');
-        res.header('Access-Control-Allow-Credentials', 'true');
 
         if (req.method === 'OPTIONS') {
           return res.sendStatus(200);
