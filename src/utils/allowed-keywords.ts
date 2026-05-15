@@ -15,6 +15,21 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
 };
 
 /**
+ * Dangerous functions that can perform privileged operations (file I/O,
+ * connection management, configuration changes) despite appearing in
+ * read-only SELECT statements. These are gated by database role privileges
+ * at the server level, but should also be blocked by the readonly keyword
+ * check as a defence-in-depth measure.
+ */
+const dangerousFunctions: Record<ConnectorType, RegExp | null> = {
+  postgres: /\b(?:pg_read_file|pg_read_binary_file|pg_ls_dir|pg_ls_logdir|pg_ls_waldir|pg_ls_tmpdir|pg_ls_archive_statusdir|pg_stat_file|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|set_config|dblink|dblink_exec|dblink_connect|lo_export|lo_import|pg_file_write|pg_file_rename|pg_file_unlink)\s*\(/i,
+  mysql: /\b(?:load_file|into\s+(?:outfile|dumpfile))\b/i,
+  mariadb: /\b(?:load_file|into\s+(?:outfile|dumpfile))\b/i,
+  sqlite: null,
+  sqlserver: /\b(?:xp_cmdshell|xp_fileexist|xp_dirtree|xp_subdirs|xp_fixeddrives|openrowset|opendatasource|bulk\s+insert)\s*\(/i,
+};
+
+/**
  * Keywords that indicate data-modifying operations.
  * Used to detect DML/DDL hidden inside CTEs or other constructs.
  */
@@ -115,6 +130,13 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
         return false;
       }
     }
+  }
+
+  // Block dangerous functions that can perform filesystem I/O or
+  // configuration changes despite being inside a valid SELECT statement.
+  const dangerousPattern = dangerousFunctions[connectorType as ConnectorType];
+  if (dangerousPattern && dangerousPattern.test(cleanedSQL)) {
+    return false;
   }
 
   return true;

