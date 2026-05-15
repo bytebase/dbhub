@@ -384,12 +384,24 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("SELECT * FROM openrowset('SQLOLEDB','server';'user';'pass','SELECT 1')", "sqlserver")).toBe(false);
     });
 
+    it("should reject dblink_send_query", () => {
+      expect(isReadOnlySQL("SELECT dblink_send_query('conn', 'DROP TABLE users')", "postgres")).toBe(false);
+    });
+
+    it("should reject openquery in SQL Server", () => {
+      expect(isReadOnlySQL("SELECT * FROM openquery(linked_srv, 'SELECT secret FROM keys')", "sqlserver")).toBe(false);
+    });
+
     // Cross-dialect: dangerous PG functions should NOT be blocked for other dialects
     it("should not block pg_read_file in MySQL (not a MySQL function)", () => {
       expect(isReadOnlySQL("SELECT pg_read_file FROM some_table", "mysql")).toBe(true);
     });
 
-    it("should not block load_file in PostgreSQL (not a PG function)", () => {
+    it("should not block load_file as a column name in MySQL", () => {
+      expect(isReadOnlySQL("SELECT load_file FROM some_table", "mysql")).toBe(true);
+    });
+
+    it("should not block load_file as a column name in PostgreSQL", () => {
       expect(isReadOnlySQL("SELECT load_file FROM some_table", "postgres")).toBe(true);
     });
   });

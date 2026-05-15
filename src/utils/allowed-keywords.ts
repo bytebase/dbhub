@@ -22,11 +22,11 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
  * check as a defence-in-depth measure.
  */
 const dangerousFunctions: Record<ConnectorType, RegExp | null> = {
-  postgres: /\b(?:pg_read_file|pg_read_binary_file|pg_ls_dir|pg_ls_logdir|pg_ls_waldir|pg_ls_tmpdir|pg_ls_archive_statusdir|pg_stat_file|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|set_config|dblink|dblink_exec|dblink_connect|lo_export|lo_import|pg_file_write|pg_file_rename|pg_file_unlink)\s*\(/i,
-  mysql: /\b(?:load_file|into\s+(?:outfile|dumpfile))\b/i,
-  mariadb: /\b(?:load_file|into\s+(?:outfile|dumpfile))\b/i,
+  postgres: /\b(?:pg_read_file|pg_read_binary_file|pg_ls_dir|pg_ls_logdir|pg_ls_waldir|pg_ls_tmpdir|pg_ls_archive_statusdir|pg_ls_replslotdir|pg_ls_logicalmapdir|pg_ls_logicalsnapdir|pg_stat_file|pg_terminate_backend|pg_cancel_backend|pg_reload_conf|pg_rotate_logfile|set_config|dblink|dblink_exec|dblink_connect|dblink_send_query|lo_export|lo_import|pg_file_write|pg_file_rename|pg_file_unlink)\s*\(/i,
+  mysql: /\b(?:load_file\s*\(|into\s+(?:outfile|dumpfile))/i,
+  mariadb: /\b(?:load_file\s*\(|into\s+(?:outfile|dumpfile))/i,
   sqlite: null,
-  sqlserver: /\b(?:xp_cmdshell|xp_fileexist|xp_dirtree|xp_subdirs|xp_fixeddrives|openrowset|opendatasource|bulk\s+insert)\s*\(/i,
+  sqlserver: /\b(?:xp_cmdshell|xp_fileexist|xp_dirtree|xp_subdirs|xp_fixeddrives|openrowset|opendatasource|openquery|bulk\s+insert)\s*\(/i,
 };
 
 /**
