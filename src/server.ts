@@ -158,8 +158,35 @@ See documentation for more details on configuring database connections.
     );
     console.error(generateStartupTable(sourceDisplayInfos));
 
-    // Clean up config watcher when the process is exiting (covers both transports)
-    process.on("exit", () => { stopConfigWatcher?.(); });
+    let isShuttingDown = false;
+    const installShutdownHandlers = (closeTransport: () => Promise<void>) => {
+      const shutdown = async (signal: string) => {
+        if (isShuttingDown) return;
+        isShuttingDown = true;
+        console.error(`Received ${signal}, shutting down...`);
+
+        const forceExit = setTimeout(() => {
+          console.error("Graceful shutdown timed out after 25s, forcing exit");
+          process.exit(1);
+        }, 25_000);
+        forceExit.unref();
+
+        try {
+          await closeTransport();
+          await connectorManager.disconnect();
+          stopConfigWatcher?.();
+        } catch (err) {
+          console.error("Error during shutdown:", err);
+        } finally {
+          clearTimeout(forceExit);
+          process.exit(0);
+        }
+      };
+
+      process.on("SIGINT", () => shutdown("SIGINT"));
+      process.on("SIGTERM", () => shutdown("SIGTERM"));
+      return shutdown;
+    };
 
     // Set up transport-specific server
     if (transportData.type === "http") {
@@ -258,7 +285,7 @@ See documentation for more details on configuring database connections.
       }
 
       // Start the HTTP server
-      app.listen(port, '0.0.0.0', () => {
+      const httpServer = app.listen(port, '0.0.0.0', () => {
         // In development mode, suggest using the Vite dev server for hot reloading
         if (process.env.NODE_ENV === 'development') {
           console.error('Development mode detected!');
@@ -270,6 +297,13 @@ See documentation for more details on configuring database connections.
         }
         console.error(`MCP server endpoint at http://localhost:${port}/mcp`);
       });
+
+      installShutdownHandlers(
+        () =>
+          new Promise<void>((resolve, reject) =>
+            httpServer.close((err) => (err ? reject(err) : resolve()))
+          )
+      );
     } else {
       // STDIO transport: Pure MCP-over-stdio, no HTTP server
       const server = createServer();
@@ -277,24 +311,12 @@ See documentation for more details on configuring database connections.
       await server.connect(transport);
       console.error("MCP server running on stdio");
 
-      let isShuttingDown = false;
-      const shutdown = async () => {
-        if (isShuttingDown) return;
-        isShuttingDown = true;
-        console.error("Shutting down...");
-        await transport.close();
-        await connectorManager.disconnect();
-        process.exit(0);
-      };
-
-      // Listen for SIGINT/SIGTERM to gracefully shut down
-      process.on("SIGINT", shutdown);
-      process.on("SIGTERM", shutdown);
+      const shutdown = installShutdownHandlers(() => transport.close());
 
       // Exit when stdin closes (parent process terminated).
       // On Windows, SIGINT/SIGTERM are not reliably sent when the parent
       // process exits — detecting stdin EOF is the portable way to handle this.
-      process.stdin.on("end", shutdown);
+      process.stdin.on("end", () => shutdown("stdin EOF"));
     }
   } catch (err) {
     console.error("Fatal error:", err);
