@@ -171,16 +171,22 @@ See documentation for more details on configuring database connections.
         }, 25_000);
         forceExit.unref();
 
-        try {
-          await closeTransport();
-          await connectorManager.disconnect();
-          stopConfigWatcher?.();
-        } catch (err) {
-          console.error("Error during shutdown:", err);
-        } finally {
-          clearTimeout(forceExit);
-          process.exit(0);
-        }
+        let hadError = false;
+        const step = async (label: string, fn: () => unknown | Promise<unknown>) => {
+          try {
+            await fn();
+          } catch (err) {
+            hadError = true;
+            console.error(`Error during shutdown (${label}):`, err);
+          }
+        };
+
+        await step("close transport", closeTransport);
+        await step("disconnect connectors", () => connectorManager.disconnect());
+        await step("stop config watcher", () => stopConfigWatcher?.());
+
+        clearTimeout(forceExit);
+        process.exit(hadError ? 1 : 0);
       };
 
       process.on("SIGINT", () => shutdown("SIGINT"));
