@@ -14,6 +14,7 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // SQL Server has no native EXPLAIN statement; the connector translates a
   // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
   sqlserver: ["select", "with", "explain"],
+  mongodb: ["find", "aggregate", "count", "distinct", "listcollections", "listdatabases", "explain"],
 };
 
 /**
@@ -70,6 +71,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPatternSqlServer,
+  mongodb: /(?!x)x/, // never-match — MongoDB uses isReadOnlyMongoCommand instead
 };
 
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
@@ -95,6 +97,24 @@ const explainAnalyzePattern =
   /^explain\s+(?:\([^)]*\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)[^)]*\)|\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)(?:\s+verbose\b)?)/i;
 
 /**
+ * Check if a MongoDB JSON command is read-only.
+ * MongoDB commands are JSON objects; the first key is the command name.
+ */
+function isReadOnlyMongoCommand(json: string): boolean {
+  try {
+    const cmd = JSON.parse(json);
+    if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+      return false;
+    }
+    const firstKey = Object.keys(cmd)[0]?.toLowerCase();
+    if (!firstKey) return false;
+    return allowedKeywords.mongodb.includes(firstKey);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Check if a SQL query is read-only.
  * 1. Strips comments and string literals before analyzing.
  * 2. Verifies the first keyword is in the allow-list.
@@ -102,6 +122,10 @@ const explainAnalyzePattern =
  * 4. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
+  // MongoDB uses JSON commands, not SQL — handle separately
+  if (connectorType === "mongodb") {
+    return isReadOnlyMongoCommand(sql.trim());
+  }
   return checkReadOnly(
     stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase(),
     connectorType,

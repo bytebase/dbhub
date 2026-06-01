@@ -385,7 +385,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "mongodb"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
@@ -908,8 +908,28 @@ export function buildDSNFromSource(source: SourceConfig): string {
     }
   }
 
-  // Add sslmode for network databases (not sqlite)
-  if (source.sslmode && source.type !== "sqlite") {
+  // Add MongoDB-specific parameters
+  if (source.type === "mongodb") {
+    // Map generic sslmode to MongoDB tls flag.
+    // - disable => tls=false
+    // - require / verify-ca / verify-full => tls=true
+    if (source.sslmode) {
+      if (source.sslmode === "disable") {
+        queryParams.push("tls=false");
+      } else {
+        queryParams.push("tls=true");
+      }
+    }
+
+    // Map sslrootcert to MongoDB tlsCAFile
+    if (source.sslrootcert) {
+      const expandedCertPath = expandHomeDir(source.sslrootcert);
+      queryParams.push(`tlsCAFile=${encodeURIComponent(expandedCertPath)}`);
+    }
+  }
+
+  // Add sslmode for network databases (not sqlite or mongodb — they use their own DSN params)
+  if (source.sslmode && source.type !== "mongodb") {
     queryParams.push(`sslmode=${source.sslmode}`);
   }
 

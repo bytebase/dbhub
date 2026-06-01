@@ -209,6 +209,47 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "sqlite:///:memory:"
 
 # ============================================================================
+# MONGODB (Local, Atlas, or self-hosted)
+# ============================================================================
+
+# Local MongoDB - DSN format
+# [[sources]]
+# id = "local_mongo"
+# description = "Local MongoDB instance"
+# dsn = "mongodb://localhost:27017/myapp"
+
+# Local MongoDB with authentication - DSN format
+# [[sources]]
+# id = "local_mongo_auth"
+# dsn = "mongodb://user:password@localhost:27017/myapp"
+
+# Local MongoDB - Individual parameters
+# [[sources]]
+# id = "local_mongo"
+# type = "mongodb"
+# host = "localhost"
+# port = 27017
+# database = "myapp"
+# user = "user"
+# password = "password"
+
+# MongoDB Atlas - SRV connection string (recommended for Atlas)
+# [[sources]]
+# id = "atlas_mongo"
+# description = "MongoDB Atlas cluster"
+# dsn = "mongodb+srv://user:password@cluster0.example.mongodb.net/myapp"
+# lazy = true  # Defer connection until first query (recommended for remote clusters)
+
+# MongoDB behind SSH bastion
+# [[sources]]
+# id = "prod_mongo"
+# dsn = "mongodb://app_user:secure_password@10.0.1.100:27017/myapp_prod"
+# lazy = true
+# ssh_host = "bastion.company.com"
+# ssh_user = "deploy"
+# ssh_key = "~/.ssh/id_ed25519"
+
+# ============================================================================
 # TOOL CONFIGURATION (Optional)
 # ============================================================================
 #
@@ -329,9 +370,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MariaDB:     mariadb://user:pass@host:3306/database
 #   SQL Server:  sqlserver://user:pass@host:1433/database
 #   SQLite:      sqlite:///path/to/file.db  or  sqlite:///:memory:
+#   MongoDB:     mongodb://user:pass@host:27017/database
+#   MongoDB Atlas (SRV): mongodb+srv://user:pass@cluster.example.mongodb.net/database
 #
 # Default Ports:
-#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433
+#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433 | MongoDB: 27017
 #
 # SSH Tunnel Options:
 #   ssh_host, ssh_port (default: 22), ssh_user
