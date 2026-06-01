@@ -57,6 +57,10 @@ class MariadbDSNParser implements DSNParser {
         ...(queryTimeoutSeconds !== undefined && {
           queryTimeout: queryTimeoutSeconds * 1000
         }),
+        // Controls how the driver interprets DATETIME values ("Z", "local", or "±HH:MM").
+        ...(config?.timezone !== undefined && {
+          timezone: config.timezone
+        }),
       };
 
       // Handle query parameters

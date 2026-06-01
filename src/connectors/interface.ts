@@ -73,6 +73,12 @@ export interface ConnectorConfig {
    * Sets the session search_path and uses the first schema as default for discovery methods.
    */
   searchPath?: string;
+  /**
+   * MySQL/MariaDB timezone setting.
+   * Controls how the driver interprets DATETIME values: "Z" (UTC), "local", or "±HH:MM" (e.g., "+09:00").
+   * Passed through to the mysql2 `timezone` connection option.
+   */
+  timezone?: string;
 }
 
 /**

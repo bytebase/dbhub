@@ -29,6 +29,8 @@ import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 class MySQLDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.ConnectionOptions> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
+    // Capture this before the local `config` (mysql.ConnectionOptions) shadows the param below
+    const timezone = config?.timezone;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -71,6 +73,13 @@ class MySQLDSNParser implements DSNParser {
       if (connectionTimeoutSeconds !== undefined) {
         // mysql2 library expects connectTimeout in milliseconds
         config.connectTimeout = connectionTimeoutSeconds * 1000;
+      }
+
+      // Apply timezone if specified: controls how mysql2 interprets DATETIME values
+      // ("Z", "local", or "±HH:MM"). Without it, mysql2 assumes "local", which can
+      // produce an incorrect instant when the server timezone differs from the data's.
+      if (timezone !== undefined) {
+        config.timezone = timezone;
       }
 
       // Auto-detect AWS IAM authentication tokens and configure cleartext plugin

@@ -105,6 +105,12 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # id = "local_mysql"
 # dsn = "mysql://root:mysql@localhost:3306/myapp"
 
+# MySQL with explicit timezone for DATETIME interpretation (MySQL/MariaDB only)
+# [[sources]]
+# id = "local_mysql_tz"
+# dsn = "mysql://root:mysql@localhost:3306/myapp"
+# timezone = "+09:00"       # How the driver interprets DATETIME values: "Z", "local", or "±HH:MM"
+
 # MySQL on AWS RDS with IAM authentication (no password in config)
 # [[sources]]
 # id = "rds_mysql_iam"
@@ -313,6 +319,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   dsn = "..."                # Connection string (or use individual params below)
 #   lazy = true                # Defer connection until first query (default: false)
 #   search_path = "schema1,public"  # PostgreSQL only: comma-separated schemas
+#   timezone = "+09:00"         # MySQL/MariaDB only: "Z", "local", or "±HH:MM"
 #   aws_iam_auth = true         # Optional: enable AWS RDS IAM auth (postgres/mysql/mariadb)
 #   aws_region = "eu-west-1"    # Required when aws_iam_auth = true
 #

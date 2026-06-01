@@ -241,6 +241,10 @@ export class ConnectorManager {
     if (source.search_path) {
       config.searchPath = source.search_path;
     }
+    // Pass timezone for MySQL/MariaDB
+    if (source.timezone) {
+      config.timezone = source.timezone;
+    }
 
     // Connect to the database with config and optional init script
     await connector.connect(actualDSN, source.init_script, config);

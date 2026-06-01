@@ -396,9 +396,53 @@ describe('MySQL Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return all users (at least the original 3 plus any added in previous tests)
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('timezone configuration', () => {
+    it('should interpret DATETIME using the configured timezone offset', async () => {
+      const connector = new MySQLConnector();
+      try {
+        // With timezone "+09:00", the driver reads the naive DATETIME as KST and
+        // produces the correct UTC instant: 02:31:23 KST == 17:31:23 UTC.
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          timezone: '+09:00',
+        });
+
+        const result = await connector.executeSQL(
+          "SELECT CAST('2025-09-29 02:31:23' AS DATETIME) AS dt",
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        const iso = new Date(result.rows[0].dt as string | Date).toISOString();
+        expect(iso).toBe('2025-09-29T17:31:23.000Z');
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should treat DATETIME as UTC when timezone is "Z"', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          timezone: 'Z',
+        });
+
+        const result = await connector.executeSQL(
+          "SELECT CAST('2025-09-29 02:31:23' AS DATETIME) AS dt",
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        const iso = new Date(result.rows[0].dt as string | Date).toISOString();
+        expect(iso).toBe('2025-09-29T02:31:23.000Z');
+      } finally {
+        await connector.disconnect();
+      }
     });
   });
 });
