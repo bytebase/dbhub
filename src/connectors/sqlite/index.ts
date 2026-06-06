@@ -217,6 +217,29 @@ export class SQLiteConnector implements Connector {
     }
   }
 
+  async getViews(schema?: string): Promise<string[]> {
+    if (!this.db) {
+      throw new Error("Not connected to SQLite database");
+    }
+
+    // In SQLite, schema parameter is ignored since SQLite doesn't have schemas like PostgreSQL
+    try {
+      const rows = this.db
+        .prepare(
+          `
+        SELECT name FROM sqlite_master
+        WHERE type='view' AND name NOT LIKE 'sqlite_%'
+        ORDER BY name
+      `
+        )
+        .all() as SQLiteTableNameRow[];
+
+      return rows.map((row) => row.name);
+    } catch (error) {
+      throw error;
+    }
+  }
+
   async tableExists(tableName: string, schema?: string): Promise<boolean> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");

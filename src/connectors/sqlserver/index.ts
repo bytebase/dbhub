@@ -234,6 +234,7 @@ export class SQLServerConnector implements Connector {
           SELECT TABLE_NAME
           FROM INFORMATION_SCHEMA.TABLES
           WHERE TABLE_SCHEMA = @schema
+          AND TABLE_TYPE = 'BASE TABLE'
           ORDER BY TABLE_NAME
       `;
 
@@ -242,6 +243,32 @@ export class SQLServerConnector implements Connector {
       return result.recordset.map((row: { TABLE_NAME: any }) => row.TABLE_NAME);
     } catch (error) {
       throw new Error(`Failed to get tables: ${(error as Error).message}`);
+    }
+  }
+
+  async getViews(schema?: string): Promise<string[]> {
+    if (!this.connection) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    try {
+      const schemaToUse = schema || "dbo";
+
+      const request = this.connection.request().input("schema", sql.VarChar, schemaToUse);
+
+      const query = `
+          SELECT TABLE_NAME
+          FROM INFORMATION_SCHEMA.TABLES
+          WHERE TABLE_SCHEMA = @schema
+          AND TABLE_TYPE = 'VIEW'
+          ORDER BY TABLE_NAME
+      `;
+
+      const result = await request.query(query);
+
+      return result.recordset.map((row: { TABLE_NAME: any }) => row.TABLE_NAME);
+    } catch (error) {
+      throw new Error(`Failed to get views: ${(error as Error).message}`);
     }
   }
 
