@@ -1035,6 +1035,77 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
         expect(result?.sources[0].search_path).toBeUndefined();
       });
     });
+
+    describe('timezone validation', () => {
+      it('should accept timezone for MySQL source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+timezone = "+09:00"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].timezone).toBe('+09:00');
+      });
+
+      it('should accept "Z" timezone for MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mariadb://user:pass@localhost:3306/testdb"
+timezone = "Z"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].timezone).toBe('Z');
+      });
+
+      it('should throw error when timezone is used with non-MySQL/MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+timezone = "+09:00"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for MySQL and MariaDB');
+      });
+
+      it('should throw error for invalid timezone format', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+timezone = "Asia/Seoul"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid timezone');
+      });
+
+      it('should work without timezone (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].timezone).toBeUndefined();
+      });
+    });
+
   });
 
   describe('buildDSNFromSource', () => {

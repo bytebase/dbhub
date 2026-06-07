@@ -450,6 +450,25 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   }
 
+  // Validate timezone (MySQL/MariaDB only)
+  if (source.timezone !== undefined) {
+    if (source.type !== "mysql" && source.type !== "mariadb") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'timezone' but it is only supported for MySQL and MariaDB sources.`
+      );
+    }
+    // Accepted by mysql2/mariadb drivers: "local", "Z", or "±HH:MM" (e.g., "+09:00")
+    if (
+      typeof source.timezone !== "string" ||
+      !/^(?:local|Z|[+-]\d\d:\d\d)$/.test(source.timezone)
+    ) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid timezone '${source.timezone}'. ` +
+          `Must be "local", "Z" (UTC), or an offset like "+09:00".`
+      );
+    }
+  }
+
   // Reject readonly and max_rows at source level (they should be set on tools instead)
   if ((source as any).readonly !== undefined) {
     throw new Error(
