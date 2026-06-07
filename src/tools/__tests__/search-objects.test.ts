@@ -623,17 +623,10 @@ describe('search_database_objects tool', () => {
       vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
       vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
 
-      vi.mocked(mockConnector.getTableSchema).mockImplementation(async (object) => {
-        if (object === 'users')
-          return [
-            { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
-          ];
-        if (object === 'active_users')
-          return [
-            { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
-          ];
-        return [];
-      });
+      // Both the table and the view expose a user_id column.
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
+        { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+      ]);
 
       const handler = createSearchDatabaseObjectsToolHandler();
       const result = await handler(

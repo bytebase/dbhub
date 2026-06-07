@@ -389,16 +389,14 @@ async function searchColumns(
         tablesToSearch = [tableFilter];
       } else {
         // Otherwise search all tables AND views in the schema. Views are queryable
-        // objects with columns, so column discovery should cover them too. getViews()
-        // may be unsupported for some connectors/schemas, so degrade gracefully.
-        const tables = await connector.getTables(schemaName);
-        let views: string[] = [];
-        try {
-          views = (await connector.getViews(schemaName)) ?? [];
-        } catch {
-          // Connector/schema doesn't expose views; continue with tables only
-        }
-        tablesToSearch = [...tables, ...views];
+        // objects with columns, so column discovery should cover them too. The two
+        // lookups are independent, so run them concurrently; getViews() may be
+        // unsupported for some connectors/schemas, so degrade to no views.
+        const [tables, views] = await Promise.all([
+          connector.getTables(schemaName),
+          Promise.resolve(connector.getViews(schemaName)).catch(() => [] as string[]),
+        ]);
+        tablesToSearch = [...tables, ...(views ?? [])];
       }
 
       for (const tableName of tablesToSearch) {
