@@ -315,9 +315,12 @@ async function searchViews(
           }
         } else {
           // full detail
+          // Note: indexes are intentionally not queried for views. Non-materialized
+          // views generally don't expose meaningful indexes, and on some engines
+          // getTableIndexes() throws for a view, which would otherwise discard the
+          // columns/comment already fetched and degrade the whole result to an error.
           try {
             const columns = await connector.getTableSchema(viewName, schemaName);
-            const indexes = await connector.getTableIndexes(viewName, schemaName);
             const comment = await getTableComment(connector, viewName, schemaName);
 
             results.push({
@@ -332,12 +335,7 @@ async function searchViews(
                 default: col.column_default,
                 ...(col.description ? { description: col.description } : {}),
               })),
-              indexes: indexes.map((idx: any) => ({
-                name: idx.index_name,
-                columns: idx.column_names,
-                unique: idx.is_unique,
-                primary: idx.is_primary,
-              })),
+              indexes: [],
             });
           } catch (error) {
             results.push({
@@ -379,19 +377,26 @@ async function searchColumns(
     schemasToSearch = await connector.getSchemas();
   }
 
-  // Search columns in tables across schemas
+  // Search columns in tables and views across schemas
   for (const schemaName of schemasToSearch) {
     if (results.length >= limit) break;
 
     try {
-      // Get tables to search
+      // Get tables (and views) to search
       let tablesToSearch: string[];
       if (tableFilter) {
-        // If table filter is specified, only search that table
+        // If table filter is specified, only search that table/view
         tablesToSearch = [tableFilter];
       } else {
-        // Otherwise search all tables in the schema
-        tablesToSearch = await connector.getTables(schemaName);
+        // Otherwise search all tables AND views in the schema. Views are queryable
+        // objects with columns, so column discovery should cover them too. The two
+        // lookups are independent, so run them concurrently; getViews() may be
+        // unsupported for some connectors/schemas, so degrade to no views.
+        const [tables, views] = await Promise.all([
+          connector.getTables(schemaName),
+          Promise.resolve(connector.getViews(schemaName)).catch(() => [] as string[]),
+        ]);
+        tablesToSearch = [...tables, ...(views ?? [])];
       }
 
       for (const tableName of tablesToSearch) {
