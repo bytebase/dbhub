@@ -458,10 +458,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
     // Accepted by mysql2/mariadb drivers: "local", "Z", or "±HH:MM" (e.g., "+09:00")
-    if (
-      typeof source.timezone !== "string" ||
-      !/^(?:local|Z|[+-]\d\d:\d\d)$/.test(source.timezone)
-    ) {
+    if (!/^(?:local|Z|[+-]\d\d:\d\d)$/.test(source.timezone)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid timezone '${source.timezone}'. ` +
           `Must be "local", "Z" (UTC), or an offset like "+09:00".`

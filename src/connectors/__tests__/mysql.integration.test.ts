@@ -407,7 +407,8 @@ describe('MySQL Connector Integration Tests', () => {
       const connector = new MySQLConnector();
       try {
         // With timezone "+09:00", the driver reads the naive DATETIME as KST and
-        // produces the correct UTC instant: 02:31:23 KST == 17:31:23 UTC.
+        // produces the correct UTC instant. KST is UTC+9, so 02:31:23 on Sep 29
+        // is 17:31:23 UTC on the previous day (Sep 28).
         await connector.connect(mysqlTest.connectionString, undefined, {
           timezone: '+09:00',
         });
@@ -419,7 +420,7 @@ describe('MySQL Connector Integration Tests', () => {
 
         expect(result.rows).toHaveLength(1);
         const iso = new Date(result.rows[0].dt as string | Date).toISOString();
-        expect(iso).toBe('2025-09-29T17:31:23.000Z');
+        expect(iso).toBe('2025-09-28T17:31:23.000Z');
       } finally {
         await connector.disconnect();
       }
