@@ -334,6 +334,57 @@ export function resolvePort(): { port: number; source: string } {
 }
 
 /**
+ * Resolve a string-valued flag (e.g. `--host`) that must carry a real value,
+ * rejecting every value-less form with a single friendly error and exit(1).
+ *
+ * This works around a limitation of parseCommandLineArgs(): it collapses a bare
+ * `--flag`, an empty `--flag=`, and an explicit `--flag=true` all into the
+ * sentinel string "true", and can even bind a following positional to `--flag=`.
+ * To distinguish a genuine value-less flag from `--flag=true`, we inspect argv
+ * directly. Reuse this for any future flag that needs the same treatment rather
+ * than re-implementing the scan.
+ *
+ * Returns the trimmed value, or undefined if the flag is absent.
+ */
+function requireFlagValue(
+  flag: string,
+  args: Record<string, string>,
+  example: string
+): string | undefined {
+  const fail = (): never => {
+    console.error(`ERROR: --${flag} requires a value (e.g., --${flag}=${example}).`);
+    process.exit(1);
+  };
+
+  // Scan the entire argv (no early break) so a later bare/duplicate `--flag`
+  // does not slip past an earlier valid occurrence.
+  const rawArgs = process.argv.slice(2);
+  for (let i = 0; i < rawArgs.length; i++) {
+    const token = rawArgs[i];
+
+    if (token === `--${flag}`) {
+      // Bare flag, followed by nothing or another --flag → no value.
+      const next = rawArgs[i + 1];
+      if (!next || next.startsWith("--")) fail();
+    } else if (token === `--${flag}=`) {
+      // Empty after equals is always an error, even if a positional follows:
+      // the space makes intent ambiguous and the positional would otherwise be
+      // silently bound as the value.
+      fail();
+    }
+  }
+
+  // parseCommandLineArgs() holds the resolved value (an explicit `--flag=true`
+  // passes through and fails later at the consumer, e.g. listen()). Trim so a
+  // whitespace-only value (e.g. from `--flag="   "`) gets the same friendly
+  // error rather than an opaque downstream failure.
+  if (args[flag] === undefined) return undefined;
+  const value = args[flag].trim();
+  if (!value) fail();
+  return value;
+}
+
+/**
  * Resolve HTTP bind host from command line args or environment variables.
  * Returns the host with "0.0.0.0" as the default (listen on all interfaces).
  *
@@ -342,49 +393,11 @@ export function resolvePort(): { port: number; source: string } {
  * front DBHub with a reverse proxy or firewall.
  */
 export function resolveHost(): { host: string; source: string } {
-  // Detect a missing --host value directly in argv. parseCommandLineArgs()
-  // collapses bare flags and explicit empty values into the same sentinel
-  // string "true", which is indistinguishable from an explicit --host=true.
-  // We inspect argv so we can reject genuinely value-less forms:
-  //   --host            (followed by nothing or another --flag)
-  //   --host=           (empty after equals — always an error, even if a
-  //                      positional follows, since the space makes the
-  //                      user's intent ambiguous and a later positional
-  //                      would otherwise be silently bound to --host)
-  // We scan the entire argv (no early break) so a later bare/duplicate
-  // --host does not slip past an earlier valid occurrence.
-  // An explicit --host=true passes through and fails later at listen().
-  const rawArgs = process.argv.slice(2);
-  for (let i = 0; i < rawArgs.length; i++) {
-    const token = rawArgs[i];
-
-    if (token === "--host") {
-      const next = rawArgs[i + 1];
-      if (!next || next.startsWith("--")) {
-        console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
-        process.exit(1);
-      }
-      continue;
-    }
-
-    if (token === "--host=") {
-      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
-      process.exit(1);
-    }
-  }
-
   const args = parseCommandLineArgs();
 
   // 1. Command line argument has highest priority.
-  //    Trim surrounding whitespace; a whitespace-only value (e.g. from
-  //    `--host="   "`) is rejected with the same friendly error as the
-  //    bare/empty forms, matching the env var path below.
-  if (args.host !== undefined) {
-    const cliHost = args.host.trim();
-    if (!cliHost) {
-      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
-      process.exit(1);
-    }
+  const cliHost = requireFlagValue("host", args, "127.0.0.1");
+  if (cliHost !== undefined) {
     return { host: cliHost, source: "command line argument" };
   }
 
