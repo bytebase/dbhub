@@ -71,7 +71,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
-          version: latest
+          version: 10.17.1
 
       # Install project dependencies
       - name: Install dependencies

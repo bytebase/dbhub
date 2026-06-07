@@ -20,7 +20,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 10.17.1
           run_install: false
 
       - name: Setup Node.js
@@ -65,7 +65,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 8
+          version: 10.17.1
           run_install: false
 
       - name: Setup Node.js
