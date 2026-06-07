@@ -457,7 +457,10 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
         `Configuration file ${configPath}: source '${source.id}' has 'timezone' but it is only supported for MySQL and MariaDB sources.`
       );
     }
-    // Accepted by mysql2/mariadb drivers: "local", "Z", or "±HH:MM" (e.g., "+09:00")
+    // Accepted by mysql2/mariadb drivers: "local", "Z", or "±HH:MM" (e.g., "+09:00").
+    // The typeof guard is required: TOML can yield non-strings (e.g. arrays), and
+    // RegExp.test() would coerce a single-element array like ["local"] to a passing
+    // string before it reaches the driver as a non-string value.
     if (
       typeof source.timezone !== "string" ||
       !/^(?:local|Z|[+-]\d\d:\d\d)$/.test(source.timezone)
