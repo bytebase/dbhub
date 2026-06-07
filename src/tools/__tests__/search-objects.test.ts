@@ -17,6 +17,7 @@ const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
   clone: vi.fn(),
   getSchemas: vi.fn(),
   getTables: vi.fn(),
+  getViews: vi.fn(),
   tableExists: vi.fn(),
   getTableSchema: vi.fn(),
   getTableIndexes: vi.fn(),
@@ -426,6 +427,155 @@ describe('search_database_objects tool', () => {
     });
   });
 
+  describe('search views', () => {
+    beforeEach(() => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+      vi.mocked(mockConnector.getViews).mockResolvedValue([
+        'active_users',
+        'user_summary',
+        'recent_orders',
+      ]);
+    });
+
+    it('should search views with pattern', async () => {
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'view',
+          pattern: 'user%',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.count).toBe(1);
+      expect(parsed.data.results).toEqual([{ name: 'user_summary', schema: 'public' }]);
+    });
+
+    it('should list all views when pattern is omitted', async () => {
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'view',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(3);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual([
+        'active_users',
+        'user_summary',
+        'recent_orders',
+      ]);
+    });
+
+    it('should filter views by schema parameter', async () => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public', 'private']);
+      vi.mocked(mockConnector.getViews).mockImplementation(async (schema) => {
+        if (schema === 'public') return ['active_users'];
+        if (schema === 'private') return ['secret_view'];
+        return [];
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'view',
+          pattern: '%',
+          schema: 'public',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(1);
+      expect(mockConnector.getViews).toHaveBeenCalledWith('public');
+      expect(mockConnector.getViews).not.toHaveBeenCalledWith('private');
+    });
+
+    it('should return summary with column count and comment', async () => {
+      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
+      const columns: TableColumn[] = [
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+        { column_name: 'name', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
+      ];
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue(columns);
+      mockConnector.getTableComment = vi.fn().mockResolvedValue('Users with recent activity');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'view',
+          pattern: 'active_users',
+          detail_level: 'summary',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toEqual({
+        name: 'active_users',
+        schema: 'public',
+        column_count: 2,
+        comment: 'Users with recent activity',
+      });
+    });
+
+    it('should return full details with columns and an empty indexes array', async () => {
+      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
+      const columns: TableColumn[] = [
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+      ];
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue(columns);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'view',
+          pattern: 'active_users',
+          detail_level: 'full',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results[0]).toMatchObject({
+        name: 'active_users',
+        schema: 'public',
+        column_count: 1,
+        indexes: [],
+        columns: [
+          { name: 'id', type: 'INTEGER', nullable: false, default: null },
+        ],
+      });
+    });
+
+    it('should not query indexes for views in full detail', async () => {
+      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
+        { column_name: 'id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+      ]);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      await handler(
+        {
+          object_type: 'view',
+          pattern: 'active_users',
+          detail_level: 'full',
+        },
+        null
+      );
+
+      // getTableIndexes throws for views on some engines; it must not be called.
+      expect(mockConnector.getTableIndexes).not.toHaveBeenCalled();
+    });
+  });
+
   describe('search columns', () => {
     beforeEach(() => {
       vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
@@ -467,6 +617,62 @@ describe('search_database_objects tool', () => {
         { name: 'id', table: 'orders', schema: 'public' },
         { name: 'user_id', table: 'orders', schema: 'public' },
       ]);
+    });
+
+    it('should also search columns of views', async () => {
+      vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
+      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
+
+      vi.mocked(mockConnector.getTableSchema).mockImplementation(async (object) => {
+        if (object === 'users')
+          return [
+            { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+          ];
+        if (object === 'active_users')
+          return [
+            { column_name: 'user_id', data_type: 'INTEGER', is_nullable: 'NO', column_default: null, description: null },
+          ];
+        return [];
+      });
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'column',
+          pattern: 'user_id',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.results).toEqual([
+        { name: 'user_id', table: 'users', schema: 'public' },
+        { name: 'user_id', table: 'active_users', schema: 'public' },
+      ]);
+    });
+
+    it('should still return table columns when getViews is unsupported', async () => {
+      vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
+      vi.mocked(mockConnector.getViews).mockRejectedValue(new Error('views not supported'));
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
+        { column_name: 'email', data_type: 'TEXT', is_nullable: 'YES', column_default: null, description: null },
+      ]);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        {
+          object_type: 'column',
+          pattern: 'email',
+          detail_level: 'names',
+        },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.count).toBe(1);
+      expect(parsed.data.results).toEqual([{ name: 'email', table: 'users', schema: 'public' }]);
     });
 
     it('should return column details in summary level', async () => {
