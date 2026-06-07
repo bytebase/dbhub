@@ -5,6 +5,7 @@ import {
   ConnectorRegistry,
   DSNParser,
   SQLResult,
+  DatabaseMessage,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -610,10 +611,19 @@ export class SQLServerConnector implements Connector {
 
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
       const request = this.connection.request();
-      const messages: string[] = [];
-      request.on('info', (info: { message: string }) => {
-        messages.push(info.message);
-      });
+      const messages: DatabaseMessage[] = [];
+      request.on(
+        'info',
+        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+          messages.push({
+            text: info.message,
+            // SQL Server reports severity as a numeric class; info messages are < 10.
+            severity: info.class !== undefined ? String(info.class) : undefined,
+            code: info.number,
+            line: info.lineNumber,
+          });
+        }
+      );
 
       if (parameters && parameters.length > 0) {
         // SQL Server uses @p1, @p2, etc. for parameters
