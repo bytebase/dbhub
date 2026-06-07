@@ -334,6 +334,76 @@ export function resolvePort(): { port: number; source: string } {
 }
 
 /**
+ * Resolve HTTP bind host from command line args or environment variables.
+ * Returns the host with "0.0.0.0" as the default (listen on all interfaces).
+ *
+ * Note: Only applicable when using --transport=http. Default "0.0.0.0" keeps
+ * backward compatibility; production deployments should set "127.0.0.1" and
+ * front DBHub with a reverse proxy or firewall.
+ */
+export function resolveHost(): { host: string; source: string } {
+  // Detect a missing --host value directly in argv. parseCommandLineArgs()
+  // collapses bare flags and explicit empty values into the same sentinel
+  // string "true", which is indistinguishable from an explicit --host=true.
+  // We inspect argv so we can reject genuinely value-less forms:
+  //   --host            (followed by nothing or another --flag)
+  //   --host=           (empty after equals — always an error, even if a
+  //                      positional follows, since the space makes the
+  //                      user's intent ambiguous and a later positional
+  //                      would otherwise be silently bound to --host)
+  // We scan the entire argv (no early break) so a later bare/duplicate
+  // --host does not slip past an earlier valid occurrence.
+  // An explicit --host=true passes through and fails later at listen().
+  const rawArgs = process.argv.slice(2);
+  for (let i = 0; i < rawArgs.length; i++) {
+    const token = rawArgs[i];
+
+    if (token === "--host") {
+      const next = rawArgs[i + 1];
+      if (!next || next.startsWith("--")) {
+        console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+        process.exit(1);
+      }
+      continue;
+    }
+
+    if (token === "--host=") {
+      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+      process.exit(1);
+    }
+  }
+
+  const args = parseCommandLineArgs();
+
+  // 1. Command line argument has highest priority.
+  //    Trim surrounding whitespace; a whitespace-only value (e.g. from
+  //    `--host="   "`) is rejected with the same friendly error as the
+  //    bare/empty forms, matching the env var path below.
+  if (args.host !== undefined) {
+    const cliHost = args.host.trim();
+    if (!cliHost) {
+      console.error("ERROR: --host requires a value (e.g., --host=127.0.0.1).");
+      process.exit(1);
+    }
+    return { host: cliHost, source: "command line argument" };
+  }
+
+  // 2. Environment variable (trimmed; empty or whitespace-only is unset)
+  //    Using DBHUB_HOST rather than generic HOST to avoid collisions — HOST is
+  //    set by default in csh/tcsh, some CI systems, and Docker base images
+  //    (often to the machine hostname), which would silently redirect binds.
+  //    Trimming matches the --host flag's validation so `DBHUB_HOST="   "`
+  //    doesn't get handed to listen() and fail with an obscure bind error.
+  const envHost = process.env.DBHUB_HOST?.trim();
+  if (envHost) {
+    return { host: envHost, source: "environment variable" };
+  }
+
+  // 3. Default: bind all interfaces
+  return { host: "0.0.0.0", source: "default" };
+}
+
+/**
  * Redact sensitive information from a DSN string
  * Replaces the password with asterisks
  * @param dsn - The DSN string to redact

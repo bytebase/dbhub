@@ -86,6 +86,14 @@ npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:p
 npx @bytebase/dbhub@latest --transport http --port 8080 --demo
 ```
 
+**Restrict to loopback (recommended for production):**
+
+```bash
+npx @bytebase/dbhub@latest --transport http --host 127.0.0.1 --port 8080 --demo
+```
+
+> The HTTP transport defaults to `--host 0.0.0.0`, exposing DBHub on every network interface. For production, bind to `127.0.0.1` and front DBHub with a reverse proxy (nginx/Caddy) or firewall — DBHub does not authenticate HTTP clients.
+
 See [Command-Line Options](https://dbhub.ai/config/command-line) for all available parameters.
 
 ### Multi-Database Setup
