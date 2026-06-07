@@ -74,7 +74,7 @@ docker run --rm --init \
    --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 ```
 
-**NPM:**
+**NPM:** (requires Node.js >= 22.5.0)
 
 ```bash
 npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
@@ -103,6 +103,8 @@ Connect to multiple databases simultaneously using TOML configuration files. Per
 See [Multi-Database Configuration](https://dbhub.ai/config/toml) for complete setup instructions.
 
 ## Development
+
+Requires Node.js >= 22.5.0 (DBHub uses the built-in `node:sqlite` module).
 
 ```bash
 # Install dependencies
