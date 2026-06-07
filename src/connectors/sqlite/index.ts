@@ -7,12 +7,8 @@
  * To use this connector: Set DSN=sqlite:///path/to/database.db in your .env file
  */
 
-// Install the experimental-warning hook before `node:sqlite` is ever loaded.
-// Node emits the warning at module-load time, and `node:sqlite` is loaded
-// lazily via dynamic import() inside connect() (a static import would be
-// hoisted above this side-effect import after bundling, defeating the hook).
-import "./suppress-experimental-warning.js";
 import type { DatabaseSync as SqliteDatabase, StatementSync } from "node:sqlite";
+import { suppressSqliteExperimentalWarning } from "./suppress-experimental-warning.js";
 import {
   Connector,
   ConnectorType,
@@ -178,8 +174,11 @@ export class SQLiteConnector implements Connector {
     this.dbPath = parsedConfig.dbPath;
 
     try {
-      // Load node:sqlite lazily so the experimental-warning hook (installed via
-      // the side-effect import above) is in place before the module is loaded.
+      // Install the experimental-warning hook before node:sqlite is loaded, then
+      // import it lazily. Doing both here keeps the global process.emitWarning
+      // patch scoped to processes that actually use SQLite (node:sqlite emits the
+      // warning at module-load time, so the hook must precede the import).
+      suppressSqliteExperimentalWarning();
       const { DatabaseSync } = await import("node:sqlite");
 
       // SDK-level readonly enforcement: Pass readOnly option to node:sqlite
