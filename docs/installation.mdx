@@ -51,10 +51,11 @@ Available driver packages:
 - `mysql2` — MySQL
 - `mariadb` — MariaDB
 - `mssql` — SQL Server
-- `better-sqlite3` — SQLite
+
+SQLite uses the built-in `node:sqlite` module (Node.js 22.5+), so it requires no driver package or native compilation and is always available.
 
 <Note>
-When a driver is not installed or a required dependency is missing (e.g., a transitive dependency like `@azure/core-client` for the SQL Server driver), DBHub will skip that connector at startup and log a message. All other connectors will work normally. Note that `--demo` mode requires the `better-sqlite3` driver.
+When a driver is not installed or a required dependency is missing (e.g., a transitive dependency like `@azure/core-client` for the SQL Server driver), DBHub will skip that connector at startup and log a message. All other connectors will work normally. SQLite (including `--demo` mode) needs no extra driver — it relies on the built-in `node:sqlite` module.
 </Note>
 
 ## Docker

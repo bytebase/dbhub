@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SQLiteConnector } from '../sqlite/index.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import type { Connector } from '../interface.js';
-import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
