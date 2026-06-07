@@ -1091,6 +1091,20 @@ timezone = "Asia/Seoul"
         expect(() => loadTomlConfig()).toThrow('invalid timezone');
       });
 
+      it('should throw error for non-string timezone (TOML array)', () => {
+        // ["local"] coerces to the string "local" via RegExp.test(), so the
+        // typeof guard is required to reject it before it reaches the driver.
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+timezone = ["local"]
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid timezone');
+      });
+
       it('should work without timezone (optional field)', () => {
         const tomlContent = `
 [[sources]]
