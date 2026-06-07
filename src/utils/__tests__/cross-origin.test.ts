@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateOrigin } from '../dns-rebinding.js';
+import { validateOrigin } from '../cross-origin.js';
 
 describe('validateOrigin', () => {
   it('allows requests with no Origin header (non-browser clients)', () => {
