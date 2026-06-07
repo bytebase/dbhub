@@ -584,7 +584,7 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.rows[0].value).toBe(1);
       expect(result.messages).toBeDefined();
       expect(result.messages!.length).toBeGreaterThan(0);
-      expect(result.messages).toContain('hello from sql server');
+      expect(result.messages!.some(msg => msg.text === 'hello from sql server')).toBe(true);
     });
 
     it('should capture SET STATISTICS TIME output in messages', async () => {
@@ -598,7 +598,7 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.messages!.length).toBeGreaterThan(0);
       // STATISTICS TIME emits messages containing "CPU time" and "elapsed time"
       const hasTimingMessage = result.messages!.some(
-        msg => msg.includes('CPU time') || msg.includes('elapsed time')
+        msg => msg.text.includes('CPU time') || msg.text.includes('elapsed time')
       );
       expect(hasTimingMessage).toBe(true);
     });

@@ -7,11 +7,28 @@ export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlse
  * Database Connector Interface
  * This defines the contract that all database connectors must implement.
  */
+/**
+ * An informational (non-error) message emitted by the database during query
+ * execution, e.g. SQL Server STATISTICS TIME/IO and PRINT output, or
+ * PostgreSQL NOTICE/WARNING. Modeled to be cross-database: only `text` is
+ * guaranteed, the rest are populated when the driver exposes them.
+ */
+export interface DatabaseMessage {
+  /** Human-readable message text */
+  text: string;
+  /** Severity indicator where available; interpret per database (PostgreSQL: level name like NOTICE/WARNING; SQL Server: numeric severity class as a string) */
+  severity?: string;
+  /** Database-specific message code (PostgreSQL: SQLSTATE; SQL Server: message number) */
+  code?: string | number;
+  /** 1-based line number within the SQL batch that produced the message, when reported */
+  line?: number;
+}
+
 export interface SQLResult {
   rows: any[];
   rowCount: number;
   /** Informational messages from the database (e.g. SQL Server STATISTICS TIME/IO, PRINT output) */
-  messages?: string[];
+  messages?: DatabaseMessage[];
 }
 
 export interface TableColumn {
