@@ -1,10 +1,14 @@
 /**
  * SQLite Connector Implementation
  *
- * Implements SQLite database connectivity for DBHub using better-sqlite3
+ * Implements SQLite database connectivity for DBHub using the built-in
+ * `node:sqlite` module. This requires Node.js >= 22.5.0 and needs no native
+ * compilation (no node-gyp / better-sqlite3 prebuilds).
  * To use this connector: Set DSN=sqlite:///path/to/database.db in your .env file
  */
 
+import type { DatabaseSync as SqliteDatabase, StatementSync } from "node:sqlite";
+import { suppressSqliteExperimentalWarning } from "./suppress-experimental-warning.js";
 import {
   Connector,
   ConnectorType,
@@ -17,7 +21,6 @@ import {
   ExecuteOptions,
   ConnectorConfig,
 } from "../interface.js";
-import Database from "better-sqlite3";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -108,7 +111,7 @@ export class SQLiteConnector implements Connector {
   name = "SQLite";
   dsnParser = new SQLiteDSNParser();
 
-  private db: Database.Database | null = null;
+  private db: SqliteDatabase | null = null;
   private dbPath: string = ":memory:"; // Default to in-memory database
 
   // Source ID is set by ConnectorManager after cloning
@@ -123,6 +126,45 @@ export class SQLiteConnector implements Connector {
   }
 
   /**
+   * Prepare a user-facing query statement with BigInt reads enabled, so 64-bit
+   * integer values in the result rows keep full precision.
+   *
+   * better-sqlite3 exposed this connection-wide via `defaultSafeIntegers(true)`;
+   * `node:sqlite` only offers it per-statement via `setReadBigInts`. This is for
+   * `executeSQL` only — schema introspection reads small integer flags and uses
+   * `queryAll`/`queryOne` (plain numbers) so comparisons like `=== 1` work.
+   */
+  private prepare(sql: string): StatementSync {
+    if (!this.db) {
+      throw new Error("Not connected to SQLite database");
+    }
+    const statement = this.db.prepare(sql);
+    statement.setReadBigInts(true);
+    return statement;
+  }
+
+  /**
+   * Run an introspection query and return all rows. Integers come back as plain
+   * numbers (no `setReadBigInts`), which is what the schema-reading callers need
+   * for boolean flag comparisons. node:sqlite types `.all()` as a generic record
+   * array, so the result is cast to the caller's expected row shape.
+   */
+  private queryAll<T>(sql: string, ...params: any[]): T[] {
+    if (!this.db) {
+      throw new Error("Not connected to SQLite database");
+    }
+    return this.db.prepare(sql).all(...params) as unknown as T[];
+  }
+
+  /** Run an introspection query and return a single row (or undefined). */
+  private queryOne<T>(sql: string, ...params: any[]): T | undefined {
+    if (!this.db) {
+      throw new Error("Not connected to SQLite database");
+    }
+    return this.db.prepare(sql).get(...params) as unknown as T | undefined;
+  }
+
+  /**
    * Connect to SQLite database
    * Note: SQLite does not support connection timeouts as it's a local file-based database.
    * The config parameter is accepted for interface compliance but ignored.
@@ -132,17 +174,26 @@ export class SQLiteConnector implements Connector {
     this.dbPath = parsedConfig.dbPath;
 
     try {
-      // SDK-level readonly enforcement: Pass readonly option to better-sqlite3
+      // Install the experimental-warning hook before node:sqlite is loaded, then
+      // import it lazily. Doing both here keeps the global process.emitWarning
+      // patch scoped to processes that actually use SQLite (node:sqlite emits the
+      // warning at module-load time, so the hook must precede the import).
+      suppressSqliteExperimentalWarning();
+      const { DatabaseSync } = await import("node:sqlite");
+
+      // SDK-level readonly enforcement: Pass readOnly option to node:sqlite
       // Note: In-memory databases (:memory:) cannot be opened in readonly mode
-      const dbOptions: any = {};
+      const dbOptions: ConstructorParameters<typeof DatabaseSync>[1] = {
+        // node:sqlite enables foreign key constraints by default, whereas
+        // better-sqlite3 (and SQLite's own default) leaves them off. Preserve
+        // the historical behavior; callers can opt in via `PRAGMA foreign_keys = ON`.
+        enableForeignKeyConstraints: false,
+      };
       if (config?.readonly && this.dbPath !== ':memory:') {
-        dbOptions.readonly = true;
+        dbOptions.readOnly = true;
       }
 
-      this.db = new Database(this.dbPath, dbOptions);
-
-      // Return all integers as BigInt to preserve precision for large values
-      this.db.defaultSafeIntegers(true);
+      this.db = new DatabaseSync(this.dbPath, dbOptions);
 
       // If an initialization script is provided, run it
       if (initScript) {
@@ -157,8 +208,12 @@ export class SQLiteConnector implements Connector {
   async disconnect(): Promise<void> {
     if (this.db) {
       try {
-        // Check if the database is still open before attempting to close
-        if (!this.db.inTransaction) {
+        // Check if the database is still open before attempting to close.
+        // `isTransaction` exists at runtime (Node >= 22.5) but isn't yet in the
+        // installed @types/node, so we read it through a narrow cast.
+        const inTransaction = (this.db as SqliteDatabase & { isTransaction: boolean })
+          .isTransaction;
+        if (!inTransaction) {
           this.db.close();
         } else {
           // If in transaction, try to rollback first
@@ -201,15 +256,11 @@ export class SQLiteConnector implements Connector {
     // You could use 'schema.table' syntax if you have attached databases, but we're
     // accessing the 'main' database by default
     try {
-      const rows = this.db
-        .prepare(
-          `
-        SELECT name FROM sqlite_master 
+      const rows = this.queryAll<SQLiteTableNameRow>(`
+        SELECT name FROM sqlite_master
         WHERE type='table' AND name NOT LIKE 'sqlite_%'
         ORDER BY name
-      `
-        )
-        .all() as SQLiteTableNameRow[];
+      `);
 
       return rows.map((row) => row.name);
     } catch (error) {
@@ -224,15 +275,11 @@ export class SQLiteConnector implements Connector {
 
     // In SQLite, schema parameter is ignored since SQLite doesn't have schemas like PostgreSQL
     try {
-      const rows = this.db
-        .prepare(
-          `
+      const rows = this.queryAll<SQLiteTableNameRow>(`
         SELECT name FROM sqlite_master
         WHERE type='view' AND name NOT LIKE 'sqlite_%'
         ORDER BY name
-      `
-        )
-        .all() as SQLiteTableNameRow[];
+      `);
 
       return rows.map((row) => row.name);
     } catch (error) {
@@ -248,14 +295,13 @@ export class SQLiteConnector implements Connector {
     // In SQLite, schema parameter is ignored since there's only one schema per database file
     // All tables exist in a single namespace within the SQLite database
     try {
-      const row = this.db
-        .prepare(
-          `
-        SELECT name FROM sqlite_master 
+      const row = this.queryOne<SQLiteTableNameRow>(
+        `
+        SELECT name FROM sqlite_master
         WHERE type='table' AND name = ?
-      `
-        )
-        .get(tableName) as SQLiteTableNameRow | undefined;
+      `,
+        tableName
+      );
 
       return !!row;
     } catch (error) {
@@ -271,26 +317,25 @@ export class SQLiteConnector implements Connector {
     // In SQLite, schema parameter is ignored (no schema concept)
     try {
       // Get all indexes for the specified table
-      const indexInfoRows = this.db
-        .prepare(
-          `
-        SELECT 
+      const indexInfoRows = this.queryAll<{ index_name: string; is_unique: number }>(
+        `
+        SELECT
           name as index_name,
           0 as is_unique
-        FROM sqlite_master 
-        WHERE type = 'index' 
+        FROM sqlite_master
+        WHERE type = 'index'
         AND tbl_name = ?
-      `
-        )
-        .all(tableName) as { index_name: string; is_unique: number }[];
+      `,
+        tableName
+      );
 
       // Get unique info from PRAGMA index_list which provides the unique flag
       // Note: PRAGMA commands require proper identifier quoting for special characters
       const quotedTableName = quoteIdentifier(tableName, "sqlite");
-      const indexListRows = this.db
-        .prepare(`PRAGMA index_list(${quotedTableName})`)
-        .all() as { name: string; unique: number }[];
-      
+      const indexListRows = this.queryAll<{ name: string; unique: number }>(
+        `PRAGMA index_list(${quotedTableName})`
+      );
+
       // Create a map of index names to unique status
       const indexUniqueMap = new Map<string, boolean>();
       for (const indexListRow of indexListRows) {
@@ -298,9 +343,7 @@ export class SQLiteConnector implements Connector {
       }
 
       // Get the primary key info
-      const tableInfo = this.db
-        .prepare(`PRAGMA table_info(${quotedTableName})`)
-        .all() as SQLiteTableInfo[];
+      const tableInfo = this.queryAll<SQLiteTableInfo>(`PRAGMA table_info(${quotedTableName})`);
 
       // Find primary key columns
       const pkColumns = tableInfo.filter((col) => col.pk > 0).map((col) => col.name);
@@ -311,11 +354,9 @@ export class SQLiteConnector implements Connector {
       for (const indexInfo of indexInfoRows) {
         // Get the columns for this index
         const quotedIndexName = quoteIdentifier(indexInfo.index_name, "sqlite");
-        const indexDetailRows = this.db
-          .prepare(`PRAGMA index_info(${quotedIndexName})`)
-          .all() as {
-          name: string;
-        }[];
+        const indexDetailRows = this.queryAll<{ name: string }>(
+          `PRAGMA index_info(${quotedIndexName})`
+        );
         const columnNames = indexDetailRows.map((row) => row.name);
 
         results.push({
@@ -353,7 +394,7 @@ export class SQLiteConnector implements Connector {
     // 3. The PRAGMA commands operate on the current database connection
     try {
       const quotedTableName = quoteIdentifier(tableName, "sqlite");
-      const rows = this.db.prepare(`PRAGMA table_info(${quotedTableName})`).all() as SQLiteTableInfo[];
+      const rows = this.queryAll<SQLiteTableInfo>(`PRAGMA table_info(${quotedTableName})`);
 
       // Convert SQLite schema format to our standard TableColumn format
       // SQLite does not support column comments, so description is always null
@@ -439,7 +480,7 @@ export class SQLiteConnector implements Connector {
           // Pass parameters if provided
           if (parameters && parameters.length > 0) {
             try {
-              const rows = this.db.prepare(processedStatement).all(...parameters);
+              const rows = this.prepare(processedStatement).all(...parameters);
               return { rows, rowCount: rows.length };
             } catch (error) {
               console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
@@ -448,7 +489,7 @@ export class SQLiteConnector implements Connector {
               throw error;
             }
           } else {
-            const rows = this.db.prepare(processedStatement).all();
+            const rows = this.prepare(processedStatement).all();
             return { rows, rowCount: rows.length };
           }
         } else {
@@ -456,7 +497,7 @@ export class SQLiteConnector implements Connector {
           let result;
           if (parameters && parameters.length > 0) {
             try {
-              result = this.db.prepare(processedStatement).run(...parameters);
+              result = this.prepare(processedStatement).run(...parameters);
             } catch (error) {
               console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
               console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
@@ -464,9 +505,11 @@ export class SQLiteConnector implements Connector {
               throw error;
             }
           } else {
-            result = this.db.prepare(processedStatement).run();
+            result = this.prepare(processedStatement).run();
           }
-          return { rows: [], rowCount: result.changes };
+          // node:sqlite returns `changes` as BigInt when BigInt reads are
+          // enabled; normalize to a number to match the SQLResult contract.
+          return { rows: [], rowCount: Number(result.changes) };
         }
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -500,8 +543,8 @@ export class SQLiteConnector implements Connector {
         // Execute write statements individually to track changes
         let totalChanges = 0;
         for (const statement of writeStatements) {
-          const result = this.db.prepare(statement).run();
-          totalChanges += result.changes;
+          const result = this.prepare(statement).run();
+          totalChanges += Number(result.changes);
         }
 
         // Execute read statements individually to collect results
@@ -509,7 +552,7 @@ export class SQLiteConnector implements Connector {
         for (let statement of readStatements) {
           // Apply maxRows limit to SELECT queries if specified
           statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
-          const result = this.db.prepare(statement).all();
+          const result = this.prepare(statement).all();
           allRows.push(...result);
         }
 
