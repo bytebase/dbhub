@@ -10,6 +10,8 @@ export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlse
 export interface SQLResult {
   rows: any[];
   rowCount: number;
+  /** Informational messages from the database (e.g. SQL Server STATISTICS TIME/IO, PRINT output) */
+  messages?: string[];
 }
 
 export interface TableColumn {
