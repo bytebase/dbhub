@@ -187,12 +187,13 @@ export class MySQLConnector implements Connector {
 
       const queryParams = schema ? [schema] : [];
 
-      // Get all tables from the specified schema or current database
+      // Get all tables from the specified schema or current database (excludes views)
       const [rows] = (await this.pool.query(
         `
-        SELECT TABLE_NAME 
-        FROM INFORMATION_SCHEMA.TABLES 
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
         ${schemaClause}
+        AND TABLE_TYPE = 'BASE TABLE'
         ORDER BY TABLE_NAME
       `,
         queryParams
@@ -201,6 +202,33 @@ export class MySQLConnector implements Connector {
       return rows.map((row) => row.TABLE_NAME);
     } catch (error) {
       console.error("Error getting tables:", error);
+      throw error;
+    }
+  }
+
+  async getViews(schema?: string): Promise<string[]> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    try {
+      const schemaClause = schema ? "WHERE TABLE_SCHEMA = ?" : "WHERE TABLE_SCHEMA = DATABASE()";
+      const queryParams = schema ? [schema] : [];
+
+      const [rows] = (await this.pool.query(
+        `
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        ${schemaClause}
+        AND TABLE_TYPE = 'VIEW'
+        ORDER BY TABLE_NAME
+      `,
+        queryParams
+      )) as [any[], any];
+
+      return rows.map((row) => row.TABLE_NAME);
+    } catch (error) {
+      console.error("Error getting views:", error);
       throw error;
     }
   }

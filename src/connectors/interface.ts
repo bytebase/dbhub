@@ -138,9 +138,20 @@ export interface Connector {
    *   - SQL Server: 'dbo' schema
    *   - MySQL: Current active database from connection (DATABASE())
    *   - SQLite: Main database (schema concept doesn't exist in SQLite)
-   * @returns Promise with array of table names
+   * @returns Promise with array of table names (excludes views)
    */
   getTables(schema?: string): Promise<string[]>;
+
+  /**
+   * Get all views in the database or in a specific schema
+   * @param schema Optional schema name. If not provided, implementation should use the default schema:
+   *   - PostgreSQL: 'public' schema
+   *   - SQL Server: 'dbo' schema
+   *   - MySQL: Current active database from connection (DATABASE())
+   *   - SQLite: Main database (schema concept doesn't exist in SQLite)
+   * @returns Promise with array of view names
+   */
+  getViews(schema?: string): Promise<string[]>;
 
   /**
    * Get schema information for a specific table

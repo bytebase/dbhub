@@ -11,7 +11,7 @@ import {
 /**
  * Object types that can be searched
  */
-export type DatabaseObjectType = "schema" | "table" | "column" | "procedure" | "function" | "index";
+export type DatabaseObjectType = "schema" | "table" | "view" | "column" | "procedure" | "function" | "index";
 
 /**
  * Detail level for search results
@@ -24,7 +24,7 @@ export type DetailLevel = "names" | "summary" | "full";
 // Schema for search_objects tool (unified search and list)
 export const searchDatabaseObjectsSchema = {
   object_type: z
-    .enum(["schema", "table", "column", "procedure", "function", "index"])
+    .enum(["schema", "table", "view", "column", "procedure", "function", "index"])
     .describe("Object type to search"),
   pattern: z
     .string()
@@ -242,6 +242,106 @@ async function searchTables(
           } catch (error) {
             results.push({
               name: tableName,
+              schema: schemaName,
+              error: `Unable to fetch full details: ${(error as Error).message}`,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      // Skip schemas we can't access
+      continue;
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Search for views
+ */
+async function searchViews(
+  connector: Connector,
+  pattern: string,
+  schemaFilter: string | undefined,
+  detailLevel: DetailLevel,
+  limit: number
+): Promise<any[]> {
+  const regex = likePatternToRegex(pattern);
+  const results: any[] = [];
+
+  // Get schemas to search
+  let schemasToSearch: string[];
+  if (schemaFilter) {
+    schemasToSearch = [schemaFilter];
+  } else {
+    schemasToSearch = await connector.getSchemas();
+  }
+
+  // Search views in each schema
+  for (const schemaName of schemasToSearch) {
+    if (results.length >= limit) break;
+
+    try {
+      const views = await connector.getViews(schemaName);
+      const matched = views.filter((view: string) => regex.test(view));
+
+      for (const viewName of matched) {
+        if (results.length >= limit) break;
+
+        if (detailLevel === "names") {
+          results.push({
+            name: viewName,
+            schema: schemaName,
+          });
+        } else if (detailLevel === "summary") {
+          // Get column count for summary
+          try {
+            const columns = await connector.getTableSchema(viewName, schemaName);
+            const comment = await getTableComment(connector, viewName, schemaName);
+
+            results.push({
+              name: viewName,
+              schema: schemaName,
+              column_count: columns.length,
+              ...(comment ? { comment } : {}),
+            });
+          } catch (error) {
+            results.push({
+              name: viewName,
+              schema: schemaName,
+              column_count: null,
+            });
+          }
+        } else {
+          // full detail
+          try {
+            const columns = await connector.getTableSchema(viewName, schemaName);
+            const indexes = await connector.getTableIndexes(viewName, schemaName);
+            const comment = await getTableComment(connector, viewName, schemaName);
+
+            results.push({
+              name: viewName,
+              schema: schemaName,
+              column_count: columns.length,
+              ...(comment ? { comment } : {}),
+              columns: columns.map((col: any) => ({
+                name: col.column_name,
+                type: col.data_type,
+                nullable: col.is_nullable === "YES",
+                default: col.column_default,
+                ...(col.description ? { description: col.description } : {}),
+              })),
+              indexes: indexes.map((idx: any) => ({
+                name: idx.index_name,
+                columns: idx.column_names,
+                unique: idx.is_unique,
+                primary: idx.is_primary,
+              })),
+            });
+          } catch (error) {
+            results.push({
+              name: viewName,
               schema: schemaName,
               error: `Unable to fetch full details: ${(error as Error).message}`,
             });
@@ -554,6 +654,9 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
           break;
         case "table":
           results = await searchTables(connector, pattern, schema, detail_level, limit);
+          break;
+        case "view":
+          results = await searchViews(connector, pattern, schema, detail_level, limit);
           break;
         case "column":
           results = await searchColumns(connector, pattern, schema, table, detail_level, limit);
