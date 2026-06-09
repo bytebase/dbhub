@@ -264,6 +264,81 @@ describe('SQL Server Connector Integration Tests', () => {
   });
 
   describe('SQL Server-specific Features', () => {
+    it('should return an execution plan for EXPLAIN <query> (SHOWPLAN_XML)', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN SELECT * FROM users WHERE age > 30',
+        {}
+      );
+
+      expect(result.rows).toHaveLength(1);
+      const planXml = result.rows[0].plan as string;
+      expect(typeof planXml).toBe('string');
+      // SHOWPLAN_XML output is a ShowPlanXML document referencing the query.
+      expect(planXml).toContain('ShowPlanXML');
+      expect(planXml).toContain('users');
+    });
+
+    it('should not execute the statement under EXPLAIN', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
+        {}
+      );
+      expect(Number(before.rows[0].count)).toBe(0);
+
+      // SHOWPLAN_XML compiles without executing, so this INSERT must not run.
+      await sqlServerTest.connector.executeSQL(
+        "EXPLAIN INSERT INTO users (name, email, age) VALUES ('NoExec', 'explain-noexec@example.com', 99)",
+        {}
+      );
+
+      const after = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(0);
+    });
+
+    it('should translate EXPLAIN even when preceded by a comment', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        '/* inspect plan */ EXPLAIN SELECT * FROM users',
+        {}
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].plan as string).toContain('ShowPlanXML');
+    });
+
+    it('should reject SET SHOWPLAN smuggled into an EXPLAIN query', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) as count FROM users',
+        {}
+      );
+
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          'EXPLAIN SET SHOWPLAN_XML OFF DELETE FROM users',
+          {}
+        )
+      ).rejects.toThrow(/SET SHOWPLAN/i);
+
+      const after = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) as count FROM users',
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(Number(before.rows[0].count));
+    });
+
+    it('should reject an empty EXPLAIN', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN   ', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
+    it('should reject a comment-only EXPLAIN', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN /* just a comment */', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
     it('should handle SQL Server IDENTITY columns', async () => {
       await sqlServerTest.connector.executeSQL(`
         CREATE TABLE identity_test (

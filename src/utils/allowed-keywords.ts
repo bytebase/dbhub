@@ -11,7 +11,9 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   mysql: ["select", "with", "explain", "show", "describe", "desc"],
   mariadb: ["select", "with", "explain", "show", "describe", "desc"],
   sqlite: ["select", "with", "explain", "pragma"],
-  sqlserver: ["select", "with", "explain", "showplan"],
+  // SQL Server has no native EXPLAIN statement; the connector translates a
+  // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
+  sqlserver: ["select", "with", "explain"],
 };
 
 /**

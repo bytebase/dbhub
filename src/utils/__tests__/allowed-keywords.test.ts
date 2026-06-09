@@ -220,6 +220,20 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("SQL Server keywords", () => {
+    it("should allow EXPLAIN (translated to SHOWPLAN_XML by the connector)", () => {
+      expect(isReadOnlySQL("EXPLAIN SELECT * FROM users", "sqlserver")).toBe(true);
+    });
+
+    it("should reject SHOWPLAN (not a real T-SQL statement)", () => {
+      expect(isReadOnlySQL("SHOWPLAN SELECT * FROM users", "sqlserver")).toBe(false);
+    });
+
+    it("should reject bare SET SHOWPLAN_XML (session-scoped, handled via EXPLAIN)", () => {
+      expect(isReadOnlySQL("SET SHOWPLAN_XML ON", "sqlserver")).toBe(false);
+    });
+  });
+
   describe("edge cases", () => {
     it("should treat empty SQL after comment stripping as not read-only", () => {
       expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(false);

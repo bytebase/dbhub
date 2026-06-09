@@ -16,6 +16,7 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
 
 /**
  * SQL Server DSN parser
@@ -171,6 +172,14 @@ export class SQLServerConnector implements Connector {
   private config?: sql.config;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
+
+  /**
+   * Leading whitespace and SQL comments to skip before looking for a keyword.
+   * The read-only validator strips comments before checking the first keyword,
+   * so the connector must skip them too; otherwise an EXPLAIN preceded by a
+   * comment passes validation but reaches the server untranslated.
+   */
+  private static readonly LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
   getId(): string {
     return this.sourceId;
@@ -602,6 +611,17 @@ export class SQLServerConnector implements Connector {
       throw new Error("Not connected to SQL Server database");
     }
 
+    // SQL Server has no native EXPLAIN statement. Translate a leading `EXPLAIN`
+    // into a SHOWPLAN_XML request so callers get a Postgres/MySQL-like
+    // experience. SHOWPLAN_XML compiles the statement without executing it, so
+    // this is read-only safe (further enforced in explainQuery).
+    const afterNoise = sqlQuery.slice(
+      sqlQuery.match(SQLServerConnector.LEADING_NOISE)![0].length
+    );
+    if (/^explain\b/i.test(afterNoise)) {
+      return this.explainQuery(afterNoise.slice("explain".length).trim());
+    }
+
     try {
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sqlQuery;
@@ -671,6 +691,65 @@ export class SQLServerConnector implements Connector {
       };
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Return the estimated execution plan for a query using SHOWPLAN_XML.
+   *
+   * SHOWPLAN_XML compiles the statement and returns its plan without executing
+   * it, but it has two constraints: `SET SHOWPLAN_XML ON` must be the only
+   * statement in its batch, and the setting is session scoped. The shared pool
+   * hands out a fresh connection per request() and an open transaction
+   * suppresses SHOWPLAN, so neither can carry the setting to a follow-up query.
+   *
+   * We therefore run the SET / query pair on a short-lived, single-connection
+   * pool built from the same config. The dedicated session keeps SHOWPLAN state
+   * off the shared pool, so a concurrent query can never land on a connection
+   * with SHOWPLAN enabled (which would return a plan instead of its results).
+   */
+  private async explainQuery(innerQuery: string): Promise<SQLResult> {
+    // Validate against comment/string-stripped SQL so comment-only input counts
+    // as empty and a SET SHOWPLAN can't hide behind comments.
+    const cleaned = stripCommentsAndStrings(innerQuery, "sqlserver").trim();
+    if (!cleaned) {
+      throw new Error("EXPLAIN requires a statement to analyze");
+    }
+
+    // Defense in depth: the SET SHOWPLAN session toggle is what makes EXPLAIN
+    // non-executing, so the explained statement must not disable it. SQL Server
+    // already rejects `SET SHOWPLAN_* OFF` alongside other statements in a
+    // batch, but enforcing it here keeps the read-only guarantee self-contained.
+    if (/\bset\s+showplan/i.test(cleaned)) {
+      throw new Error("EXPLAIN does not support SET SHOWPLAN statements");
+    }
+
+    if (!this.config) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    const explainPool = new sql.ConnectionPool({
+      ...this.config,
+      pool: { ...this.config.pool, max: 1, min: 1 },
+    });
+
+    try {
+      await explainPool.connect();
+      // max:1 + sequential awaits guarantee both batches hit the same session.
+      await explainPool.request().batch("SET SHOWPLAN_XML ON");
+      const planResult = await explainPool.request().batch(innerQuery);
+
+      // The plan is returned as the single column of the first row.
+      const planRow = planResult.recordset?.[0];
+      const planXml = planRow ? Object.values(planRow)[0] : null;
+      return {
+        rows: planXml != null ? [{ plan: planXml }] : [],
+        rowCount: planXml != null ? 1 : 0,
+      };
+    } catch (error) {
+      throw new Error(`Failed to explain query: ${(error as Error).message}`);
+    } finally {
+      await explainPool.close();
     }
   }
 }
