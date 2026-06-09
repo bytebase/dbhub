@@ -298,6 +298,41 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(Number(after.rows[0].count)).toBe(0);
     });
 
+    it('should translate EXPLAIN even when preceded by a comment', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        '/* inspect plan */ EXPLAIN SELECT * FROM users',
+        {}
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].plan as string).toContain('ShowPlanXML');
+    });
+
+    it('should reject SET SHOWPLAN smuggled into an EXPLAIN query', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) as count FROM users',
+        {}
+      );
+
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          'EXPLAIN SET SHOWPLAN_XML OFF DELETE FROM users',
+          {}
+        )
+      ).rejects.toThrow(/SET SHOWPLAN/i);
+
+      const after = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) as count FROM users',
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(Number(before.rows[0].count));
+    });
+
+    it('should reject an empty EXPLAIN', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN   ', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
     it('should handle SQL Server IDENTITY columns', async () => {
       await sqlServerTest.connector.executeSQL(`
         CREATE TABLE identity_test (

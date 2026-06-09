@@ -15,6 +15,7 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
 
 /**
  * SQL Server DSN parser
@@ -171,8 +172,13 @@ export class SQLServerConnector implements Connector {
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
 
-  /** Leading `EXPLAIN ` keyword, translated to a SHOWPLAN_XML request. */
-  private static readonly EXPLAIN_PREFIX = /^\s*explain\s+/i;
+  /**
+   * Leading whitespace and SQL comments to skip before looking for a keyword.
+   * The read-only validator strips comments before checking the first keyword,
+   * so the connector must skip them too; otherwise an EXPLAIN preceded by a
+   * comment passes validation but reaches the server untranslated.
+   */
+  private static readonly LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
   getId(): string {
     return this.sourceId;
@@ -580,10 +586,12 @@ export class SQLServerConnector implements Connector {
     // SQL Server has no native EXPLAIN statement. Translate a leading `EXPLAIN`
     // into a SHOWPLAN_XML request so callers get a Postgres/MySQL-like
     // experience. SHOWPLAN_XML compiles the statement without executing it, so
-    // this is always read-only safe.
-    const explainMatch = sqlQuery.match(SQLServerConnector.EXPLAIN_PREFIX);
-    if (explainMatch) {
-      return this.explainQuery(sqlQuery.slice(explainMatch[0].length));
+    // this is read-only safe (further enforced in explainQuery).
+    const afterNoise = sqlQuery.slice(
+      sqlQuery.match(SQLServerConnector.LEADING_NOISE)![0].length
+    );
+    if (/^explain\b/i.test(afterNoise)) {
+      return this.explainQuery(afterNoise.slice("explain".length).trim());
     }
 
     try {
@@ -658,6 +666,18 @@ export class SQLServerConnector implements Connector {
    * with SHOWPLAN enabled (which would return a plan instead of its results).
    */
   private async explainQuery(innerQuery: string): Promise<SQLResult> {
+    if (!innerQuery) {
+      throw new Error("EXPLAIN requires a statement to analyze");
+    }
+
+    // Defense in depth: the SET SHOWPLAN session toggle is what makes EXPLAIN
+    // non-executing, so the explained statement must not disable it. SQL Server
+    // already rejects `SET SHOWPLAN_* OFF` alongside other statements in a
+    // batch, but enforcing it here keeps the read-only guarantee self-contained.
+    if (/\bset\s+showplan/i.test(stripCommentsAndStrings(innerQuery, "sqlserver"))) {
+      throw new Error("EXPLAIN does not support SET SHOWPLAN statements");
+    }
+
     if (!this.config) {
       throw new Error("Not connected to SQL Server database");
     }
