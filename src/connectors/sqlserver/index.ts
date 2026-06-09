@@ -171,6 +171,9 @@ export class SQLServerConnector implements Connector {
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
 
+  /** Leading `EXPLAIN ` keyword, translated to a SHOWPLAN_XML request. */
+  private static readonly EXPLAIN_PREFIX = /^\s*explain\s+/i;
+
   getId(): string {
     return this.sourceId;
   }
@@ -574,6 +577,15 @@ export class SQLServerConnector implements Connector {
       throw new Error("Not connected to SQL Server database");
     }
 
+    // SQL Server has no native EXPLAIN statement. Translate a leading `EXPLAIN`
+    // into a SHOWPLAN_XML request so callers get a Postgres/MySQL-like
+    // experience. SHOWPLAN_XML compiles the statement without executing it, so
+    // this is always read-only safe.
+    const explainMatch = sqlQuery.match(SQLServerConnector.EXPLAIN_PREFIX);
+    if (explainMatch) {
+      return this.explainQuery(sqlQuery.slice(explainMatch[0].length));
+    }
+
     try {
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sqlQuery;
@@ -628,6 +640,50 @@ export class SQLServerConnector implements Connector {
       };
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Return the estimated execution plan for a query using SHOWPLAN_XML.
+   *
+   * SHOWPLAN_XML compiles the statement and returns its plan without executing
+   * it, but it has two constraints: `SET SHOWPLAN_XML ON` must be the only
+   * statement in its batch, and the setting is session scoped. The shared pool
+   * hands out a fresh connection per request() and an open transaction
+   * suppresses SHOWPLAN, so neither can carry the setting to a follow-up query.
+   *
+   * We therefore run the SET / query pair on a short-lived, single-connection
+   * pool built from the same config. The dedicated session keeps SHOWPLAN state
+   * off the shared pool, so a concurrent query can never land on a connection
+   * with SHOWPLAN enabled (which would return a plan instead of its results).
+   */
+  private async explainQuery(innerQuery: string): Promise<SQLResult> {
+    if (!this.config) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    const explainPool = new sql.ConnectionPool({
+      ...this.config,
+      pool: { ...this.config.pool, max: 1, min: 1 },
+    });
+
+    try {
+      await explainPool.connect();
+      // max:1 + sequential awaits guarantee both batches hit the same session.
+      await explainPool.request().batch("SET SHOWPLAN_XML ON");
+      const planResult = await explainPool.request().batch(innerQuery);
+
+      // The plan is returned as the single column of the first row.
+      const planRow = planResult.recordset?.[0];
+      const planXml = planRow ? Object.values(planRow)[0] : null;
+      return {
+        rows: planXml != null ? [{ plan: planXml }] : [],
+        rowCount: planXml != null ? 1 : 0,
+      };
+    } catch (error) {
+      throw new Error(`Failed to explain query: ${(error as Error).message}`);
+    } finally {
+      await explainPool.close();
     }
   }
 }
