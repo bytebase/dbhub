@@ -67,6 +67,26 @@ function likePatternToRegex(pattern: string): RegExp {
 }
 
 /**
+ * Resolve the set of schemas a search should scope to when the caller did not
+ * pass an explicit `schema` filter.
+ *
+ * Prefers the connector's default schema (e.g. the database named in a
+ * MySQL/MariaDB DSN) so searches don't leak across every database on the
+ * server. When the connector reports no default (null) — or doesn't implement
+ * getDefaultSchema at all — it falls back to the full getSchemas() list, which
+ * for PostgreSQL/SQL Server/SQLite is already scoped to the connected database.
+ */
+async function resolveDefaultSchemas(connector: Connector): Promise<string[]> {
+  if (connector.getDefaultSchema) {
+    const defaultSchema = await connector.getDefaultSchema();
+    if (defaultSchema) {
+      return [defaultSchema];
+    }
+  }
+  return connector.getSchemas();
+}
+
+/**
  * Get row count estimate for a table.
  * Prefers the connector's native statistics-based method (e.g. pg_class.reltuples)
  * when available, falling back to COUNT(*) for connectors that don't implement it.
@@ -123,7 +143,7 @@ async function searchSchemas(
   detailLevel: DetailLevel,
   limit: number
 ): Promise<any[]> {
-  const schemas = await connector.getSchemas();
+  const schemas = await resolveDefaultSchemas(connector);
   const regex = likePatternToRegex(pattern);
   const matched = schemas.filter((schema: string) => regex.test(schema)).slice(0, limit);
 
@@ -170,7 +190,7 @@ async function searchTables(
   if (schemaFilter) {
     schemasToSearch = [schemaFilter];
   } else {
-    schemasToSearch = await connector.getSchemas();
+    schemasToSearch = await resolveDefaultSchemas(connector);
   }
 
   // Search tables in each schema
@@ -374,7 +394,7 @@ async function searchColumns(
   if (schemaFilter) {
     schemasToSearch = [schemaFilter];
   } else {
-    schemasToSearch = await connector.getSchemas();
+    schemasToSearch = await resolveDefaultSchemas(connector);
   }
 
   // Search columns in tables and views across schemas
@@ -463,7 +483,7 @@ async function searchProcedures(
   if (schemaFilter) {
     schemasToSearch = [schemaFilter];
   } else {
-    schemasToSearch = await connector.getSchemas();
+    schemasToSearch = await resolveDefaultSchemas(connector);
   }
 
   // Search procedures/functions in each schema
@@ -532,7 +552,7 @@ async function searchIndexes(
   if (schemaFilter) {
     schemasToSearch = [schemaFilter];
   } else {
-    schemasToSearch = await connector.getSchemas();
+    schemasToSearch = await resolveDefaultSchemas(connector);
   }
 
   // Search indexes in tables across schemas
