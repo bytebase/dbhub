@@ -112,6 +112,16 @@ Command-line flags are passed when starting DBHub. These have the highest priori
       # Azure AD authentication (password optional/empty)
       sqlserver://username@localhost:1433/mydb?authentication=azure-active-directory-access-token
       ```
+
+      <Note>
+        Integrated security (a trusted connection using the logged-in
+        Windows user, with no username/password in the DSN) is **not
+        supported**. DBHub uses the pure-JS `tedious` driver, which has no
+        SSPI/Kerberos support. Note that `authentication=ntlm` still
+        requires an explicit username and password in the DSN, so it is not
+        a trusted connection. Use SQL authentication or, for Azure SQL,
+        Azure AD instead.
+      </Note>
     </Tab>
 
     <Tab title="SQLite">
