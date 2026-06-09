@@ -666,7 +666,10 @@ export class SQLServerConnector implements Connector {
    * with SHOWPLAN enabled (which would return a plan instead of its results).
    */
   private async explainQuery(innerQuery: string): Promise<SQLResult> {
-    if (!innerQuery) {
+    // Validate against comment/string-stripped SQL so comment-only input counts
+    // as empty and a SET SHOWPLAN can't hide behind comments.
+    const cleaned = stripCommentsAndStrings(innerQuery, "sqlserver").trim();
+    if (!cleaned) {
       throw new Error("EXPLAIN requires a statement to analyze");
     }
 
@@ -674,7 +677,7 @@ export class SQLServerConnector implements Connector {
     // non-executing, so the explained statement must not disable it. SQL Server
     // already rejects `SET SHOWPLAN_* OFF` alongside other statements in a
     // batch, but enforcing it here keeps the read-only guarantee self-contained.
-    if (/\bset\s+showplan/i.test(stripCommentsAndStrings(innerQuery, "sqlserver"))) {
+    if (/\bset\s+showplan/i.test(cleaned)) {
       throw new Error("EXPLAIN does not support SET SHOWPLAN statements");
     }
 

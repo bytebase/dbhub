@@ -333,6 +333,12 @@ describe('SQL Server Connector Integration Tests', () => {
       ).rejects.toThrow(/requires a statement/i);
     });
 
+    it('should reject a comment-only EXPLAIN', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN /* just a comment */', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
     it('should handle SQL Server IDENTITY columns', async () => {
       await sqlServerTest.connector.executeSQL(`
         CREATE TABLE identity_test (
