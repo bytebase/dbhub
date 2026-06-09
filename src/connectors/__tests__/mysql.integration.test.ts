@@ -19,7 +19,7 @@ class MySQLTestContainer implements TestContainer {
 class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
   constructor() {
     const config: DatabaseTestConfig = {
-      expectedSchemas: ['testdb', 'information_schema'],
+      expectedSchemas: ['testdb'],
       expectedTables: ['users', 'orders', 'products'],
       supportsStoredProcedures: false, // Disabled due to container privilege restrictions
       supportsComments: true,
@@ -176,6 +176,19 @@ describe('MySQL Connector Integration Tests', () => {
   mysqlTest.createSSLTests();
 
   describe('MySQL-specific Features', () => {
+    it('should exclude server-level system databases from getSchemas()', async () => {
+      const schemas = await mysqlTest.connector.getSchemas();
+      expect(schemas).toContain('testdb');
+      expect(schemas).not.toContain('information_schema');
+      expect(schemas).not.toContain('performance_schema');
+      expect(schemas).not.toContain('mysql');
+      expect(schemas).not.toContain('sys');
+    });
+
+    it('should report the DSN-configured database as the default schema', async () => {
+      expect(await mysqlTest.connector.getDefaultSchema!()).toBe('testdb');
+    });
+
     it('should execute multiple statements with native support', async () => {
       // First insert the test data
       await mysqlTest.connector.executeSQL(`

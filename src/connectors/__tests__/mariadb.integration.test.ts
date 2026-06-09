@@ -19,7 +19,7 @@ class MariaDBTestContainer implements TestContainer {
 class MariaDBIntegrationTest extends IntegrationTestBase<MariaDBTestContainer> {
   constructor() {
     const config: DatabaseTestConfig = {
-      expectedSchemas: ['testdb', 'information_schema'],
+      expectedSchemas: ['testdb'],
       expectedTables: ['users', 'orders', 'products'],
       supportsStoredProcedures: false, // Disabled due to container privilege restrictions
       supportsComments: true,
@@ -182,6 +182,19 @@ describe('MariaDB Connector Integration Tests', () => {
   mariadbTest.createSSLTests();
 
   describe('MariaDB-specific Features', () => {
+    it('should exclude server-level system databases from getSchemas()', async () => {
+      const schemas = await mariadbTest.connector.getSchemas();
+      expect(schemas).toContain('testdb');
+      expect(schemas).not.toContain('information_schema');
+      expect(schemas).not.toContain('performance_schema');
+      expect(schemas).not.toContain('mysql');
+      expect(schemas).not.toContain('sys');
+    });
+
+    it('should report the DSN-configured database as the default schema', async () => {
+      expect(await mariadbTest.connector.getDefaultSchema!()).toBe('testdb');
+    });
+
     it('should execute multiple statements with native support', async () => {
       // First insert the test data
       await mariadbTest.connector.executeSQL(`

@@ -152,10 +152,13 @@ export class MariaDBConnector implements Connector {
     }
 
     try {
-      // In MariaDB, schemas are equivalent to databases
+      // In MariaDB, schemas are equivalent to databases. Exclude server-level
+      // system databases so the list matches the user-facing schemas only
+      // (parity with the PostgreSQL connector, which hides pg_catalog et al.).
       const rows = await this.pool.query(`
-        SELECT SCHEMA_NAME 
+        SELECT SCHEMA_NAME
         FROM INFORMATION_SCHEMA.SCHEMATA
+        WHERE SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
         ORDER BY SCHEMA_NAME
       `) as any[];
 
@@ -540,6 +543,19 @@ export class MariaDBConnector implements Connector {
   private async getCurrentSchema(): Promise<string> {
     const rows = await this.pool!.query("SELECT DATABASE() AS DB") as any[];
     return rows[0].DB;
+  }
+
+  /**
+   * Default search scope = the database named in the DSN. DATABASE() returns
+   * null when the connection was opened without a database, in which case
+   * callers fall back to the full server-wide schema list.
+   */
+  async getDefaultSchema(): Promise<string | null> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+    const rows = await this.pool.query("SELECT DATABASE() AS DB") as any[];
+    return rows[0]?.DB ?? null;
   }
 
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {

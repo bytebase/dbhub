@@ -1106,4 +1106,88 @@ describe('search_database_objects tool', () => {
       expect(asteriskParsed.data.results.map((r: any) => r.name)).toEqual(['user*data']);
     });
   });
+
+  describe('default schema scoping', () => {
+    // Simulates a MySQL/MariaDB connector whose getSchemas() lists every
+    // database on the server, but getDefaultSchema() reports the DSN-configured
+    // database. Searches without an explicit schema must stay within the default.
+    beforeEach(() => {
+      mockConnector = createMockConnector('mysql');
+      (mockConnector as any).getDefaultSchema = vi.fn();
+      mockGetCurrentConnector.mockReturnValue(mockConnector);
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue([
+        'configured_db',
+        'other_db',
+        'third_db',
+      ]);
+      vi.mocked(mockConnector.getTables).mockImplementation(async (schema?: string) => {
+        if (schema === 'configured_db') return ['orders'];
+        if (schema === 'other_db') return ['secrets'];
+        return ['misc'];
+      });
+    });
+
+    it('scopes table search to the default schema and never fans out to other databases', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'table', pattern: '%', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.schema)).toEqual(['configured_db']);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual(['orders']);
+      // Only the configured database should have been inspected.
+      expect(mockConnector.getTables).toHaveBeenCalledTimes(1);
+      expect(mockConnector.getTables).toHaveBeenCalledWith('configured_db');
+    });
+
+    it('scopes schema listing to the default schema', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'schema', pattern: '%', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual(['configured_db']);
+    });
+
+    it('falls back to the full schema list when no default is configured (null)', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue(null);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'table', pattern: '%', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.schema)).toEqual([
+        'configured_db',
+        'other_db',
+        'third_db',
+      ]);
+    });
+
+    it('honors an explicit schema filter targeting a non-default database', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'table', pattern: '%', schema: 'other_db', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.schema)).toEqual(['other_db']);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual(['secrets']);
+      // getDefaultSchema must not override an explicit caller-provided schema.
+      expect((mockConnector as any).getDefaultSchema).not.toHaveBeenCalled();
+    });
+  });
 });

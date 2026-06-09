@@ -132,6 +132,19 @@ export interface Connector {
   getSchemas(): Promise<string[]>;
 
   /**
+   * Get the schema that searches should default to when no schema is specified.
+   *
+   * Returns a single schema name when the connection is scoped to one (e.g. the
+   * database named in a MySQL/MariaDB DSN), or null when there is no configured
+   * scope and callers should fall back to getSchemas() (the full list).
+   *
+   * Connectors whose getSchemas() is already scoped to the connected database
+   * (PostgreSQL, SQL Server, SQLite) may omit this or return null.
+   * @returns Promise with the default schema name, or null for the full list
+   */
+  getDefaultSchema?(): Promise<string | null>;
+
+  /**
    * Get all tables in the database or in a specific schema
    * @param schema Optional schema name. If not provided, implementation should use the default schema:
    *   - PostgreSQL: 'public' schema
