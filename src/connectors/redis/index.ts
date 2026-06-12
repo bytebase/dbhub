@@ -19,6 +19,11 @@ const DEFAULT_REDIS_PORT = 6379;
 const DEFAULT_REDIS_DATABASE = 0;
 const KEY_SCAN_COUNT = 100;
 const KEY_SCAN_LIMIT = 1000;
+const REDIS_CLIENT_COMPAT_OPTIONS = {
+  RESP: 2,
+  disableClientInfo: true,
+  maintNotifications: "disabled",
+} as const;
 
 type RedisMode = "single" | "cluster" | "sentinel";
 
@@ -379,6 +384,7 @@ export class RedisConnector implements Connector {
     switch (config.mode) {
       case "cluster": {
         const defaults: Record<string, any> = {};
+        Object.assign(defaults, REDIS_CLIENT_COMPAT_OPTIONS);
         if (config.username) {
           defaults.username = config.username;
         }
@@ -391,6 +397,7 @@ export class RedisConnector implements Connector {
         }
 
         const clusterOptions: Record<string, any> = {
+          RESP: REDIS_CLIENT_COMPAT_OPTIONS.RESP,
           rootNodes: config.nodes.map((node) => ({ url: node.url })),
         };
         if (Object.keys(defaults).length > 0) {
@@ -400,6 +407,7 @@ export class RedisConnector implements Connector {
       }
       case "sentinel": {
         const nodeClientOptions: Record<string, any> = {};
+        Object.assign(nodeClientOptions, REDIS_CLIENT_COMPAT_OPTIONS);
         if (config.username) {
           nodeClientOptions.username = config.username;
         }
@@ -412,6 +420,7 @@ export class RedisConnector implements Connector {
         }
 
         const sentinelClientOptions: Record<string, any> = {};
+        Object.assign(sentinelClientOptions, REDIS_CLIENT_COMPAT_OPTIONS);
         if (config.sentinelUsername) {
           sentinelClientOptions.username = config.sentinelUsername;
         }
@@ -427,6 +436,7 @@ export class RedisConnector implements Connector {
         }
 
         const sentinelOptions: Record<string, any> = {
+          RESP: REDIS_CLIENT_COMPAT_OPTIONS.RESP,
           name: config.sentinelMaster,
           sentinelRootNodes: config.sentinels.map((sentinel) => ({
             host: sentinel.host,
@@ -444,6 +454,7 @@ export class RedisConnector implements Connector {
       case "single":
       default:
         return createClient({
+          ...REDIS_CLIENT_COMPAT_OPTIONS,
           url: config.url,
           socket: {
             connectTimeout: config.connectionTimeoutMs,

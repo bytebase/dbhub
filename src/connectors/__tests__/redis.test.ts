@@ -94,6 +94,9 @@ describe("RedisConnector", () => {
     await connector.connect("redis://localhost:6380/3");
 
     expect(redisMock.createClient).toHaveBeenCalledWith({
+      RESP: 2,
+      disableClientInfo: true,
+      maintNotifications: "disabled",
       url: "redis://localhost:6380",
       socket: { connectTimeout: undefined },
     });
