@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { ConnectorManager } from "../connectors/manager.js";
 import { getDatabaseTypeFromDSN } from "../utils/dsn-obfuscate.js";
 import { getToolsForSource } from "../utils/tool-metadata.js";
+import { SafeURL } from "../utils/safe-url.js";
 import type { SourceConfig } from "../types/config.js";
 import type { components } from "./openapi.js";
 
@@ -29,6 +30,7 @@ function transformSourceConfig(source: SourceConfig): DataSource {
   const dataSource: DataSource = {
     id: source.id,
     type: source.type,
+    tools: getToolsForSource(source.id),
   };
 
   // Add description if present
@@ -49,6 +51,20 @@ function transformSourceConfig(source: SourceConfig): DataSource {
   if (source.user) {
     dataSource.user = source.user;
   }
+  if (source.type === "redis") {
+    if (source.mode) {
+      dataSource.mode = source.mode;
+    }
+    if (source.nodes) {
+      dataSource.nodes = source.nodes.map(stripRedisEndpointCredentials);
+    }
+    if (source.sentinels) {
+      dataSource.sentinels = source.sentinels.map(stripRedisEndpointCredentials);
+    }
+    if (source.sentinel_master) {
+      dataSource.sentinel_master = source.sentinel_master;
+    }
+  }
 
   // Add SSH tunnel configuration (excluding credentials)
   if (source.ssh_host) {
@@ -67,10 +83,23 @@ function transformSourceConfig(source: SourceConfig): DataSource {
     dataSource.ssh_tunnel = sshTunnel;
   }
 
-  // Add tools for this source
-  dataSource.tools = getToolsForSource(source.id);
-
   return dataSource;
+}
+
+function stripRedisEndpointCredentials(endpoint: string): string {
+  try {
+    if (!endpoint.includes("://")) {
+      const atIndex = endpoint.indexOf("@");
+      return atIndex >= 0 ? endpoint.substring(atIndex + 1) : endpoint;
+    }
+    const url = new SafeURL(endpoint);
+    const protocol = url.protocol.replace(":", "");
+    const port = url.port ? `:${url.port}` : "";
+    return `${protocol}://${url.hostname}${port}`;
+  } catch {
+    const atIndex = endpoint.indexOf("@");
+    return atIndex >= 0 ? endpoint.substring(atIndex + 1) : endpoint;
+  }
 }
 
 /**

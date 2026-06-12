@@ -3,7 +3,7 @@ import { createExecuteSqlToolHandler } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsSchema } from "./search-objects.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { getExecuteSqlMetadata, getSearchObjectsMetadata } from "../utils/tool-metadata.js";
-import { isReadOnlySQL } from "../utils/allowed-keywords.js";
+import { isAllowedInReadonlyMode } from "../utils/tool-handler-helpers.js";
 import { createCustomToolHandler, buildZodSchemaFromParameters } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
@@ -97,7 +97,7 @@ function registerCustomTool(
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
 
-  const isReadOnly = isReadOnlySQL(toolConfig.statement!, dbType);
+  const isReadOnly = isAllowedInReadonlyMode(toolConfig.statement!, dbType);
   const zodSchema = buildZodSchemaFromParameters(toolConfig.parameters);
 
   server.registerTool(

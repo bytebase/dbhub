@@ -1,5 +1,6 @@
 import { ConnectorType } from "../connectors/interface.js";
 import { stripCommentsAndStrings } from "./sql-parser.js";
+import { REDIS_READONLY_COMMANDS } from "./redis-command-parser.js";
 
 /**
  * List of allowed keywords for SQL queries
@@ -14,6 +15,7 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // SQL Server has no native EXPLAIN statement; the connector translates a
   // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
   sqlserver: ["select", "with", "explain"],
+  redis: [...REDIS_READONLY_COMMANDS],
 };
 
 /**
@@ -57,6 +59,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPattern,
+  redis: mutatingPattern,
 };
 
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;

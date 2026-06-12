@@ -4,6 +4,7 @@ import MySQLLogo from '../assets/logos/mysql.svg';
 import MariaDBLogo from '../assets/logos/mariadb.svg';
 import SQLServerLogo from '../assets/logos/sqlserver.svg';
 import SQLiteLogo from '../assets/logos/sqlite.svg';
+import RedisLogo from '../assets/logos/redis.svg';
 
 export const DB_LOGOS: Record<DatabaseType, string> = {
   postgres: PostgresLogo,
@@ -11,4 +12,5 @@ export const DB_LOGOS: Record<DatabaseType, string> = {
   mariadb: MariaDBLogo,
   sqlserver: SQLServerLogo,
   sqlite: SQLiteLogo,
+  redis: RedisLogo,
 };

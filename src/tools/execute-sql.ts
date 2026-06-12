@@ -1,19 +1,20 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
+import { allowedKeywords } from "../utils/allowed-keywords.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
+  isAllowedInReadonlyMode,
   trackToolRequest,
 } from "../utils/tool-handler-helpers.js";
 import { splitSQLStatements } from "../utils/sql-parser.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
-  sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
+  sql: z.string().describe("SQL to execute, or Redis commands for Redis sources (multiple statements separated by ; or newlines)"),
 };
 
 /**
@@ -23,8 +24,11 @@ export const executeSqlSchema = {
  * @returns True if all statements are read-only
  */
 function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
+  if (connectorType === "redis") {
+    return isAllowedInReadonlyMode(sql, connectorType);
+  }
   const statements = splitSQLStatements(sql, connectorType);
-  return statements.every(statement => isReadOnlySQL(statement, connectorType));
+  return statements.every(statement => isAllowedInReadonlyMode(statement, connectorType));
 }
 
 /**
@@ -56,7 +60,8 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       // Check if SQL is allowed based on readonly mode (per-tool)
       const isReadonly = toolConfig?.readonly === true;
       if (isReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
-        errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
+        const operationType = connector.id === "redis" ? "Redis commands" : "SQL operations";
+        errorMessage = `Read-only mode is enabled. Only the following ${operationType} are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
       }

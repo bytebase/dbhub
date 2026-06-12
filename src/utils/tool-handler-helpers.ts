@@ -5,6 +5,7 @@
 
 import { ConnectorType } from "../connectors/interface.js";
 import { isReadOnlySQL, allowedKeywords } from "./allowed-keywords.js";
+import { areRedisCommandsReadOnly } from "./redis-command-parser.js";
 import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "./client-identifier.js";
 
@@ -27,10 +28,15 @@ export function getEffectiveSourceId(sourceId?: string): string {
 }
 
 /**
- * Re-export isReadOnlySQL for readonly mode validation
- * Checks if SQL statement is read-only (SELECT, WITH, etc.)
+ * Checks if a statement is allowed in readonly mode.
+ * SQL connectors use SQL keyword validation; Redis uses command allow-list validation.
  */
-export { isReadOnlySQL as isAllowedInReadonlyMode };
+export function isAllowedInReadonlyMode(statement: string, connectorType: ConnectorType): boolean {
+  if (connectorType === "redis") {
+    return areRedisCommandsReadOnly(statement);
+  }
+  return isReadOnlySQL(statement, connectorType);
+}
 
 /**
  * Create a readonly violation error message
@@ -44,7 +50,8 @@ export function createReadonlyViolationMessage(
   sourceId: string,
   connectorType: ConnectorType
 ): string {
-  return `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
+  const operationType = connectorType === "redis" ? "Redis commands" : "SQL operations";
+  return `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only ${operationType} are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
 }
 
 /**

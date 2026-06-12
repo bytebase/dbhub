@@ -227,26 +227,51 @@ function validateToolsConfig(
  * Validate a single source configuration
  */
 function validateSourceConfig(source: SourceConfig, configPath: string): void {
-  const hasConnectionParams =
-    source.type && (source.type === "sqlite" ? source.database : source.host);
+  const hasConnectionParams = hasSufficientConnectionParams(source);
 
   if (!source.dsn && !hasConnectionParams) {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' must have either:\n` +
         `  - 'dsn' field (e.g., dsn = "postgres://user:pass@host:5432/dbname")\n` +
         `  - OR connection parameters (type, host, database, user, password)\n` +
-        `  - For SQLite: type = "sqlite" and database path`
+        `  - For SQLite: type = "sqlite" and database path\n` +
+        `  - For Redis: type = "redis" and host, or mode = "cluster"/"sentinel" with nodes`
     );
   }
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "redis"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
           `Valid types: ${validTypes.join(", ")}`
       );
+    }
+  }
+
+  if (source.mode !== undefined) {
+    if (source.type !== "redis") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'mode' but it is only supported for Redis sources.`
+      );
+    }
+    const validRedisModes = ["single", "cluster", "sentinel"];
+    if (!validRedisModes.includes(source.mode)) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid Redis mode '${source.mode}'. ` +
+          `Valid values: ${validRedisModes.join(", ")}`
+      );
+    }
+  }
+
+  if (source.type !== "redis") {
+    for (const redisField of ["nodes", "sentinels", "sentinel_master", "sentinel_user", "sentinel_password"] as const) {
+      if (source[redisField] !== undefined) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' has '${redisField}' but it is only supported for Redis sources.`
+        );
+      }
     }
   }
 
@@ -285,6 +310,55 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has aws_iam_auth enabled ` +
           `but aws_region is not specified.`
+      );
+    }
+  }
+
+  if (source.type === "redis" && source.database !== undefined) {
+    const redisDatabase = Number(source.database);
+    if (!Number.isInteger(redisDatabase) || redisDatabase < 0) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid Redis database '${source.database}'. ` +
+        `Must be a non-negative integer.`
+      );
+    }
+  }
+
+  if (source.type === "redis") {
+    const redisMode = source.mode ?? "single";
+    validateRedisEndpointArray(source.nodes, "nodes", source, configPath);
+    validateRedisEndpointArray(source.sentinels, "sentinels", source, configPath);
+
+    if (redisMode === "cluster") {
+      if (!source.nodes || source.nodes.length === 0) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' uses Redis cluster mode but 'nodes' is not configured.`
+        );
+      }
+      if (source.database !== undefined && Number(source.database) !== 0) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' uses Redis cluster mode, which only supports database 0.`
+        );
+      }
+    }
+
+    if (redisMode === "sentinel") {
+      if (!source.sentinels || source.sentinels.length === 0) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' uses Redis sentinel mode but 'sentinels' is not configured.`
+        );
+      }
+      if (!source.sentinel_master || source.sentinel_master.trim().length === 0) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' uses Redis sentinel mode but 'sentinel_master' is not configured.`
+        );
+      }
+    }
+
+    if (source.ssh_host && redisMode !== "single") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' uses Redis ${redisMode} mode with SSH tunneling. ` +
+          `SSH tunneling is only supported for Redis single-node sources.`
       );
     }
   }
@@ -487,6 +561,50 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
   }
 }
 
+function hasSufficientConnectionParams(source: SourceConfig): boolean {
+  if (!source.type) {
+    return false;
+  }
+  if (source.type === "sqlite") {
+    return Boolean(source.database);
+  }
+  if (source.type !== "redis") {
+    return Boolean(source.host);
+  }
+
+  const redisMode = source.mode ?? "single";
+  if (redisMode === "cluster") {
+    return Boolean(source.nodes && source.nodes.length > 0);
+  }
+  if (redisMode === "sentinel") {
+    return Boolean(source.sentinels && source.sentinels.length > 0);
+  }
+  return Boolean(source.host);
+}
+
+function validateRedisEndpointArray(
+  endpoints: string[] | undefined,
+  fieldName: string,
+  source: SourceConfig,
+  configPath: string
+): void {
+  if (endpoints === undefined) {
+    return;
+  }
+  if (!Array.isArray(endpoints)) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has invalid '${fieldName}'. Must be an array of strings.`
+    );
+  }
+  for (const endpoint of endpoints) {
+    if (typeof endpoint !== "string" || endpoint.trim().length === 0) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid '${fieldName}'. Must contain non-empty strings.`
+      );
+    }
+  }
+}
+
 /**
  * Process source configurations (expand paths, populate fields from DSN)
  */
@@ -622,6 +740,10 @@ export function buildDSNFromSource(source: SourceConfig): string {
     return `sqlite:///${source.database}`;
   }
 
+  if (source.type === "redis") {
+    return buildRedisDSNFromSource(source);
+  }
+
   // For other databases, require host, user, database
   // Password is optional for Azure AD access token authentication and AWS IAM auth
   const isAwsIamPasswordless =
@@ -675,8 +797,8 @@ export function buildDSNFromSource(source: SourceConfig): string {
     }
   }
 
-  // Add sslmode for network databases (not sqlite)
-  if (source.sslmode && source.type !== "sqlite") {
+  // Add sslmode for network databases (SQLite returns earlier)
+  if (source.sslmode) {
     queryParams.push(`sslmode=${source.sslmode}`);
   }
 
@@ -695,4 +817,55 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   return dsn;
+}
+
+function buildRedisDSNFromSource(source: SourceConfig): string {
+  const mode = source.mode ?? "single";
+  if (mode === "cluster") {
+    const endpoint = source.nodes?.[0];
+    if (!endpoint) {
+      throw new Error(`Source '${source.id}': 'nodes' field is required for Redis cluster mode`);
+    }
+    return buildRedisDSNFromEndpoint(source, endpoint, false);
+  }
+
+  if (mode === "sentinel") {
+    const endpoint = source.sentinels?.[0];
+    if (!endpoint) {
+      throw new Error(`Source '${source.id}': 'sentinels' field is required for Redis sentinel mode`);
+    }
+    return buildRedisDSNFromEndpoint(source, endpoint, true);
+  }
+
+  if (!source.host) {
+    throw new Error(`Source '${source.id}': 'host' field is required for Redis`);
+  }
+  const endpoint = `${source.host}:${source.port || getDefaultPortForType("redis")}`;
+  return buildRedisDSNFromEndpoint(source, endpoint, true);
+}
+
+function buildRedisDSNFromEndpoint(
+  source: SourceConfig,
+  endpoint: string,
+  includeDatabase: boolean
+): string {
+  const endpointWithProtocol = endpoint.includes("://")
+    ? endpoint
+    : `${source.sslmode === "require" ? "rediss" : "redis"}://${endpoint}`;
+  const url = new SafeURL(endpointWithProtocol);
+  const protocol = url.protocol.replace(":", "") === "rediss" || source.sslmode === "require" ? "rediss" : "redis";
+  const port = url.port || String(getDefaultPortForType("redis"));
+  const username = source.user ?? url.username;
+  const password = source.password ?? url.password;
+  const encodedUser = username ? encodeURIComponent(username) : "";
+  const encodedPassword = password ? encodeURIComponent(password) : "";
+  const auth =
+    encodedUser || encodedPassword ? `${encodedUser}${encodedPassword ? `:${encodedPassword}` : ""}@` : "";
+  const database = includeDatabase && source.database ? `/${encodeURIComponent(source.database)}` : "";
+
+  if (!url.hostname) {
+    throw new Error(`Source '${source.id}': Redis endpoint host is required`);
+  }
+
+  return `${protocol}://${auth}${url.hostname}:${port}${database}`;
 }

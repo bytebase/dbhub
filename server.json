@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.bytebase/dbhub",
   "title": "DBHub",
-  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB",
+  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB, Redis",
   "repository": {
     "url": "https://github.com/bytebase/dbhub",
     "source": "github"
@@ -26,7 +26,7 @@
         },
         {
           "name": "DB_TYPE",
-          "description": "Database type: postgres, mysql, mariadb, sqlserver, sqlite",
+          "description": "Database type: postgres, mysql, mariadb, sqlserver, sqlite, redis",
           "isRequired": false,
           "format": "string",
           "isSecret": false
@@ -61,7 +61,7 @@
         },
         {
           "name": "DB_NAME",
-          "description": "Database name or SQLite file path",
+          "description": "Database name, SQLite file path, or Redis database number",
           "isRequired": false,
           "format": "string",
           "isSecret": false

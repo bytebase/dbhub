@@ -38,7 +38,7 @@ The npm method requires **Node.js >= 22.5.0** (DBHub uses Node's built-in `node:
 
 ### Minimal Installation
 
-By default, DBHub attempts to install drivers for all supported databases (PostgreSQL, MySQL, MariaDB, SQL Server, SQLite). If you only need specific databases, you can skip the unnecessary drivers to reduce installation size.
+By default, DBHub attempts to install drivers for all supported databases (PostgreSQL, MySQL, MariaDB, SQL Server, SQLite, Redis). If you only need specific databases, you can skip the unnecessary drivers to reduce installation size.
 
 This applies to `npm install` (global or local). When using `npx`, npm will attempt to install all optional dependencies, but some drivers may be skipped if their installation fails, a required transitive dependency is missing, or the platform is not supported.
 
@@ -55,6 +55,7 @@ Available driver packages:
 - `mysql2` — MySQL
 - `mariadb` — MariaDB
 - `mssql` — SQL Server
+- `redis` — Redis
 
 SQLite uses the built-in `node:sqlite` module (Node.js 22.5+), so it requires no driver package or native compilation and is always available.
 
@@ -766,4 +767,3 @@ DBHub can be integrated with [LibreChat](https://www.librechat.ai/) using either
 
 **References:**
 - [LibreChat MCP Documentation](https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_servers)
-

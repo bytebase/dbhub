@@ -219,7 +219,7 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="connection_timeout" type="number">
   Connection timeout in seconds. The maximum time to wait when establishing a database connection.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Redis (not applicable to SQLite).
 
   ```toml
   [[sources]]
@@ -238,7 +238,7 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="query_timeout" type="number">
   Query timeout in seconds. The maximum time to wait for a query to complete before timing out.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Redis (not applicable to SQLite).
 
   ```toml
   [[sources]]
@@ -311,6 +311,41 @@ Sources define database connections. Each source represents a database that DBHu
   <Tip>
   Can also be set via DSN query parameter: `?sslmode=require` or `?sslmode=verify-ca&sslrootcert=/path/to/ca.pem`
   </Tip>
+</ParamField>
+
+### Redis Topology
+
+<ParamField path="mode" type="string">
+  Redis deployment mode. Defaults to `single`.
+
+  Supported values: `single`, `cluster`, `sentinel`.
+
+  ```toml
+  # Redis Cluster
+  [[sources]]
+  id = "redis_cluster"
+  type = "redis"
+  mode = "cluster"
+  nodes = ["redis-node-1.example.com:7000", "redis-node-2.example.com:7001"]
+  user = "default"
+  password = "secret"
+  sslmode = "require"
+
+  # Redis Sentinel
+  [[sources]]
+  id = "redis_sentinel"
+  type = "redis"
+  mode = "sentinel"
+  sentinel_master = "mymaster"
+  sentinels = ["sentinel-1.example.com:26379", "sentinel-2.example.com:26379"]
+  database = "0"
+  user = "default"
+  password = "secret"
+  sentinel_user = "sentinel_user"
+  sentinel_password = "sentinel_secret"
+  ```
+
+  Cluster mode only supports Redis database `0`.
 </ParamField>
 
 ### sslrootcert
@@ -732,6 +767,12 @@ default = 10
 | `query_timeout` | number | ❌ | Query timeout (seconds) |
 | `sslmode` | string | ❌ | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` |
 | `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
+| `mode` | string | ❌ | Redis only: `single`, `cluster`, or `sentinel` |
+| `nodes` | array | ❌ | Redis Cluster root nodes |
+| `sentinels` | array | ❌ | Redis Sentinel root nodes |
+| `sentinel_master` | string | ❌ | Redis Sentinel master name |
+| `sentinel_user` | string | ❌ | Redis Sentinel ACL username |
+| `sentinel_password` | string | ❌ | Redis Sentinel password |
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |

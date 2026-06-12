@@ -67,6 +67,12 @@ describe('DSN Obfuscation Utilities', () => {
       const result = obfuscateDSNPassword(dsn);
       expect(result).toBe('postgres://user:****@localhost:5432?sslmode=require');
     });
+
+    it('should obfuscate Redis password', () => {
+      const dsn = 'redis://default:secretpass@localhost:6379/0';
+      const result = obfuscateDSNPassword(dsn);
+      expect(result).toBe('redis://default:********@localhost:6379/0');
+    });
   });
 
   describe('obfuscateSSHConfig', () => {
@@ -94,6 +100,8 @@ describe('DSN Obfuscation Utilities', () => {
       ['mariadb://user:pass@localhost:3306/db', 'mariadb'],
       ['sqlserver://user:pass@localhost:1433/db', 'sqlserver'],
       ['sqlite:///path/to/db.db', 'sqlite'],
+      ['redis://default:pass@localhost:6379/0', 'redis'],
+      ['rediss://default:pass@localhost:6379/0', 'redis'],
     ])('should return correct type for %s', (dsn, expected) => {
       expect(getDatabaseTypeFromDSN(dsn)).toBe(expected);
     });
@@ -114,6 +122,7 @@ describe('DSN Obfuscation Utilities', () => {
       ['mysql://root:password@mysql.local:3307/appdb', { type: 'mysql', host: 'mysql.local', port: 3307, database: 'appdb', user: 'root' }],
       ['mariadb://admin:pass123@maria.server:3306/production', { type: 'mariadb', host: 'maria.server', port: 3306, database: 'production', user: 'admin' }],
       ['sqlserver://sa:StrongPass@sqlserver.local:1433/master', { type: 'sqlserver', host: 'sqlserver.local', port: 1433, database: 'master', user: 'sa' }],
+      ['redis://default:secret@redis.local:6379/2', { type: 'redis', host: 'redis.local', port: 6379, database: '2', user: 'default' }],
     ])('should parse %s correctly', (dsn, expected) => {
       expect(parseConnectionInfoFromDSN(dsn)).toEqual(expected);
     });

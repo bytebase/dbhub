@@ -33,6 +33,23 @@ const BOX = {
  * Parse host and database from source config
  */
 function parseHostAndDatabase(source: SourceConfig): { host: string; database: string } {
+  if (source.type === "redis") {
+    const mode = source.mode ?? "single";
+    if (mode === "cluster" && source.nodes && source.nodes.length > 0) {
+      return {
+        host: formatEndpointList(source.nodes),
+        database: "cluster/db0",
+      };
+    }
+    if (mode === "sentinel" && source.sentinels && source.sentinels.length > 0) {
+      const database = source.database ? `${source.sentinel_master}/${source.database}` : source.sentinel_master || "";
+      return {
+        host: formatEndpointList(source.sentinels),
+        database,
+      };
+    }
+  }
+
   // If DSN is provided, use the proper DSN parser
   if (source.dsn) {
     const parsed = parseConnectionInfoFromDSN(source.dsn);
@@ -61,6 +78,11 @@ function parseHostAndDatabase(source: SourceConfig): { host: string; database: s
   const database = source.database || "";
 
   return { host, database };
+}
+
+function formatEndpointList(endpoints: string[]): string {
+  const visible = endpoints.slice(0, 2).join(",");
+  return endpoints.length > 2 ? `${visible},...` : visible;
 }
 
 /**

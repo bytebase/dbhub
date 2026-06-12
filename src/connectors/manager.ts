@@ -229,7 +229,7 @@ export class ConnectorManager {
     if (source.connection_timeout !== undefined) {
       config.connectionTimeoutSeconds = source.connection_timeout;
     }
-    // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
+    // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server, Redis (not SQLite)
     if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
       config.queryTimeoutSeconds = source.query_timeout;
     }
@@ -244,6 +244,39 @@ export class ConnectorManager {
     // Pass timezone for MySQL/MariaDB
     if (source.timezone) {
       config.timezone = source.timezone;
+    }
+    // Pass Redis topology settings
+    if (connector.id === "redis") {
+      if (source.mode) {
+        config.redisMode = source.mode;
+      }
+      if (source.nodes) {
+        config.redisNodes = source.nodes;
+      }
+      if (source.sentinels) {
+        config.redisSentinels = source.sentinels;
+      }
+      if (source.sentinel_master) {
+        config.redisSentinelMaster = source.sentinel_master;
+      }
+      if (source.sentinel_user) {
+        config.redisSentinelUsername = source.sentinel_user;
+      }
+      if (source.sentinel_password) {
+        config.redisSentinelPassword = source.sentinel_password;
+      }
+      if (source.user) {
+        config.redisUsername = source.user;
+      }
+      if (source.password) {
+        config.redisPassword = source.password;
+      }
+      if (source.database !== undefined) {
+        config.redisDatabase = Number(source.database);
+      }
+      if (source.sslmode === "require") {
+        config.redisUseTLS = true;
+      }
     }
 
     // Connect to the database with config and optional init script

@@ -101,6 +101,34 @@ describe('Environment Configuration Tests', () => {
       });
     });
 
+    it('should build Redis DSN with only DB_TYPE and DB_HOST', () => {
+      process.env.DB_TYPE = 'redis';
+      process.env.DB_HOST = 'redis.example.com';
+
+      const result = buildDSNFromEnvParams();
+
+      expect(result).toEqual({
+        dsn: 'redis://redis.example.com:6379',
+        source: 'individual environment variables'
+      });
+    });
+
+    it('should build Redis DSN with ACL credentials and database number', () => {
+      process.env.DB_TYPE = 'redis';
+      process.env.DB_HOST = 'redis.example.com';
+      process.env.DB_PORT = '6380';
+      process.env.DB_USER = 'default';
+      process.env.DB_PASSWORD = 'p@ss';
+      process.env.DB_NAME = '2';
+
+      const result = buildDSNFromEnvParams();
+
+      expect(result).toEqual({
+        dsn: 'redis://default:p%40ss@redis.example.com:6380/2',
+        source: 'individual environment variables'
+      });
+    });
+
     it('should handle postgresql type and normalize to postgres protocol', () => {
       process.env.DB_TYPE = 'postgresql';
       process.env.DB_HOST = 'localhost';
@@ -205,7 +233,7 @@ describe('Environment Configuration Tests', () => {
       process.env.DB_NAME = 'db';
 
       expect(() => buildDSNFromEnvParams()).toThrow(
-        'Unsupported DB_TYPE: oracle. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite'
+        'Unsupported DB_TYPE: oracle. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite, redis'
       );
     });
 

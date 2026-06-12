@@ -168,6 +168,11 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
     if (!dbName) {
       return null;
     }
+  } else if (dbType?.toLowerCase() === 'redis') {
+    // Redis can run without username, password, or an explicit database number.
+    if (!dbHost) {
+      return null;
+    }
   } else {
     // For other databases, require all essential parameters
     if (!dbType || !dbHost || !dbUser || !dbPassword || !dbName) {
@@ -176,7 +181,7 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
   }
 
   // Validate supported database types
-  const supportedTypes = ['postgres', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'sqlite'];
+  const supportedTypes = ['postgres', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'sqlite', 'redis'];
   if (!supportedTypes.includes(dbType.toLowerCase())) {
     throw new Error(`Unsupported DB_TYPE: ${dbType}. Supported types: ${supportedTypes.join(', ')}`);
   }
@@ -202,9 +207,23 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
           dsn: `sqlite:///${dbName}`,
           source: 'individual environment variables'
         };
+      case 'redis':
+        port = '6379';
+        break;
       default:
         throw new Error(`Unknown database type for port determination: ${dbType}`);
     }
+  }
+
+  if (dbType.toLowerCase() === 'redis') {
+    const encodedUser = dbUser ? encodeURIComponent(dbUser) : '';
+    const encodedPassword = dbPassword ? encodeURIComponent(dbPassword) : '';
+    const auth = encodedUser || encodedPassword ? `${encodedUser}${encodedPassword ? `:${encodedPassword}` : ''}@` : '';
+    const database = dbName ? `/${encodeURIComponent(dbName)}` : '';
+    return {
+      dsn: `redis://${auth}${dbHost}:${port}${database}`,
+      source: 'individual environment variables'
+    };
   }
 
   // At this point, dbUser, dbPassword, and dbName are guaranteed to be non-null due to earlier checks.
@@ -651,7 +670,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     const protocol = dsnUrl.protocol.replace(':', '');
 
     // Map protocol to database type
-    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "redis";
     if (protocol === 'postgresql' || protocol === 'postgres') {
       dbType = 'postgres';
     } else if (protocol === 'mysql') {
@@ -662,6 +681,8 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       dbType = 'sqlserver';
     } else if (protocol === 'sqlite') {
       dbType = 'sqlite';
+    } else if (protocol === 'redis' || protocol === 'rediss') {
+      dbType = 'redis';
     } else {
       throw new Error(`Unsupported database type in DSN: ${protocol}`);
     }

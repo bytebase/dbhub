@@ -64,7 +64,7 @@ export interface components {
              * @example postgres
              * @enum {string}
              */
-            type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite";
+            type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "redis";
             /**
              * @description Database host (not present for SQLite)
              * @example localhost
@@ -76,7 +76,7 @@ export interface components {
              */
             port?: number;
             /**
-             * @description Database name or file path (for SQLite)
+             * @description Database name, file path (for SQLite), or logical database number (for Redis)
              * @example production
              */
             database?: string;
@@ -85,6 +85,21 @@ export interface components {
              * @example dbuser
              */
             user?: string;
+            /**
+             * @description Redis deployment mode
+             * @example cluster
+             * @enum {string}
+             */
+            mode?: "single" | "cluster" | "sentinel";
+            /** @description Redis Cluster root nodes (credentials excluded) */
+            nodes?: string[];
+            /** @description Redis Sentinel root nodes (credentials excluded) */
+            sentinels?: string[];
+            /**
+             * @description Redis Sentinel master name
+             * @example mymaster
+             */
+            sentinel_master?: string;
             ssh_tunnel?: components["schemas"]["SSHTunnel"];
             /** @description Available MCP tools for this data source */
             tools: components["schemas"]["Tool"][];

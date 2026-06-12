@@ -102,7 +102,7 @@ components:
           example: Production read replica for analytics queries
         type:
           type: string
-          enum: [postgres, mysql, mariadb, sqlserver, sqlite]
+          enum: [postgres, mysql, mariadb, sqlserver, sqlite, redis]
           description: Database type
           example: postgres
         host:
@@ -115,12 +115,31 @@ components:
           example: 5432
         database:
           type: string
-          description: Database name or file path (for SQLite)
+          description: Database name, file path (for SQLite), or logical database number (for Redis)
           example: production
         user:
           type: string
           description: Database username (not present for SQLite)
           example: dbuser
+        mode:
+          type: string
+          enum: [single, cluster, sentinel]
+          description: Redis deployment mode
+          example: cluster
+        nodes:
+          type: array
+          description: Redis Cluster root nodes (credentials excluded)
+          items:
+            type: string
+        sentinels:
+          type: array
+          description: Redis Sentinel root nodes (credentials excluded)
+          items:
+            type: string
+        sentinel_master:
+          type: string
+          description: Redis Sentinel master name
+          example: mymaster
         ssh_tunnel:
           $ref: '#/components/schemas/SSHTunnel'
         tools:

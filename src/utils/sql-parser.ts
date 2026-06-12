@@ -168,6 +168,7 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
   mariadb: scanTokenMySQL,
   sqlite: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
+  redis: scanTokenAnsi,
 };
 
 function getScanner(dialect?: ConnectorType): TokenScanner {

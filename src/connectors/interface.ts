@@ -1,7 +1,7 @@
 /**
  * Type definition for supported database connector types
  */
-export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlserver";
+export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlserver" | "redis";
 
 /**
  * Database Connector Interface
@@ -75,9 +75,9 @@ export interface ExecuteOptions {
  * Different databases may use different subset of these options
  */
 export interface ConnectorConfig {
-  /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server, Redis) */
   connectionTimeoutSeconds?: number;
-  /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server, Redis) */
   queryTimeoutSeconds?: number;
   /**
    * Read-only mode for SDK-level enforcement (PostgreSQL, SQLite)
@@ -98,6 +98,26 @@ export interface ConnectorConfig {
    * Passed through to the mysql2 `timezone` connection option.
    */
   timezone?: string;
+  /** Redis deployment mode. Defaults to single-node Redis. */
+  redisMode?: "single" | "cluster" | "sentinel";
+  /** Redis Cluster root node endpoints, e.g. ["redis://host1:7000", "host2:7001"]. */
+  redisNodes?: string[];
+  /** Redis Sentinel root node endpoints, e.g. ["host1:26379", "host2:26379"]. */
+  redisSentinels?: string[];
+  /** Redis Sentinel master name. */
+  redisSentinelMaster?: string;
+  /** Optional ACL username for Sentinel nodes. */
+  redisSentinelUsername?: string;
+  /** Optional password for Sentinel nodes. */
+  redisSentinelPassword?: string;
+  /** Optional ACL username for Redis data nodes. */
+  redisUsername?: string;
+  /** Optional password for Redis data nodes. */
+  redisPassword?: string;
+  /** Redis logical database number. Cluster mode only supports 0. */
+  redisDatabase?: number;
+  /** Enable TLS for Redis data-node connections when endpoints do not use rediss://. */
+  redisUseTLS?: boolean;
 }
 
 /**
@@ -114,6 +134,7 @@ export interface DSNParser {
    * - MariaDB: "mariadb://user:password@localhost:3306/dbname"
    * - MySQL: "mysql://user:password@localhost:3306/dbname"
    * - SQLite: "sqlite:///path/to/database.db" or "sqlite:///:memory:"
+   * - Redis: "redis://localhost:6379/0" or "rediss://user:password@localhost:6379/0"
    */
   parse(dsn: string, config?: ConnectorConfig): Promise<any>;
 
@@ -176,6 +197,7 @@ export interface Connector {
    *   - SQL Server: 'dbo' schema
    *   - MySQL: Current active database from connection (DATABASE())
    *   - SQLite: Main database (schema concept doesn't exist in SQLite)
+   *   - Redis: Logical database number from the connection
    * @returns Promise with array of table names (excludes views)
    */
   getTables(schema?: string): Promise<string[]>;
@@ -187,6 +209,7 @@ export interface Connector {
    *   - SQL Server: 'dbo' schema
    *   - MySQL: Current active database from connection (DATABASE())
    *   - SQLite: Main database (schema concept doesn't exist in SQLite)
+   *   - Redis: Logical database number from the connection
    * @returns Promise with array of view names
    */
   getViews(schema?: string): Promise<string[]>;

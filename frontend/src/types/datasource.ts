@@ -1,4 +1,4 @@
-export type DatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'sqlserver' | 'sqlite';
+export type DatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'sqlserver' | 'sqlite' | 'redis';
 
 export interface SSHTunnel {
   enabled: boolean;
@@ -30,6 +30,10 @@ export interface DataSource {
   port?: number;
   database?: string;
   user?: string;
+  mode?: 'single' | 'cluster' | 'sentinel';
+  nodes?: string[];
+  sentinels?: string[];
+  sentinel_master?: string;
   is_default: boolean;
   ssh_tunnel?: SSHTunnel;
   tools: Tool[];

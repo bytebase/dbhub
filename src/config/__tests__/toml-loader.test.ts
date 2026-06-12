@@ -116,6 +116,151 @@ dsn = "sqlite:///path/to/database.db"
       expect(result?.sources[0].user).toBeUndefined();
     });
 
+    it('should parse DSN and populate connection fields for redis', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_dsn"
+dsn = "rediss://default:secret@redis.local:6380/2"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'redis_dsn',
+        type: 'redis',
+        host: 'redis.local',
+        port: 6380,
+        database: '2',
+        user: 'default',
+      });
+    });
+
+    it('should reject invalid Redis database number', () => {
+      const tomlContent = `
+[[sources]]
+id = "bad_redis"
+type = "redis"
+host = "localhost"
+database = "not-a-number"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid Redis database');
+    });
+
+    it('should load Redis cluster configuration', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_cluster"
+type = "redis"
+mode = "cluster"
+nodes = ["localhost:7000", "redis://localhost:7001"]
+user = "default"
+password = "secret"
+database = "0"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'redis_cluster',
+        type: 'redis',
+        mode: 'cluster',
+        nodes: ['localhost:7000', 'redis://localhost:7001'],
+        user: 'default',
+        password: 'secret',
+        database: '0',
+      });
+    });
+
+    it('should reject Redis cluster with non-zero database', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_cluster"
+type = "redis"
+mode = "cluster"
+nodes = ["localhost:7000"]
+database = "1"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('only supports database 0');
+    });
+
+    it('should load Redis sentinel configuration', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_sentinel"
+type = "redis"
+mode = "sentinel"
+sentinel_master = "mymaster"
+sentinels = ["localhost:26379", "localhost:26380"]
+database = "2"
+user = "default"
+password = "secret"
+sentinel_user = "sentinel"
+sentinel_password = "sentinel_secret"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0]).toMatchObject({
+        id: 'redis_sentinel',
+        type: 'redis',
+        mode: 'sentinel',
+        sentinel_master: 'mymaster',
+        sentinels: ['localhost:26379', 'localhost:26380'],
+        database: '2',
+        user: 'default',
+        sentinel_user: 'sentinel',
+      });
+    });
+
+    it('should reject Redis sentinel without master name', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_sentinel"
+type = "redis"
+mode = "sentinel"
+sentinels = ["localhost:26379"]
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('sentinel_master');
+    });
+
+    it('should reject invalid Redis mode', () => {
+      const tomlContent = `
+[[sources]]
+id = "redis_invalid"
+type = "redis"
+mode = "replica"
+host = "localhost"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow("invalid Redis mode 'replica'");
+    });
+
+    it('should reject Redis topology fields on non-Redis sources', () => {
+      const tomlContent = `
+[[sources]]
+id = "pg"
+type = "postgres"
+host = "localhost"
+database = "db"
+user = "user"
+password = "pass"
+mode = "cluster"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow("only supported for Redis sources");
+    });
+
     it('should not override explicit connection params with DSN values', () => {
       const tomlContent = `
 [[sources]]
@@ -1364,6 +1509,67 @@ dsn = "mysql://user:pass@localhost:3306/testdb"
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('sqlite:////path/to/database.db');
+    });
+
+    it('should build Redis DSN from connection parameters', () => {
+      const source: SourceConfig = {
+        id: 'redis_test',
+        type: 'redis',
+        host: 'redis.example.com',
+        port: 6380,
+        database: '2',
+        user: 'default',
+        password: 'p@ss',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('redis://default:p%40ss@redis.example.com:6380/2');
+    });
+
+    it('should build rediss DSN when Redis sslmode is require', () => {
+      const source: SourceConfig = {
+        id: 'redis_tls',
+        type: 'redis',
+        host: 'redis.example.com',
+        sslmode: 'require',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('rediss://redis.example.com:6379');
+    });
+
+    it('should build representative Redis cluster DSN from the first root node', () => {
+      const source: SourceConfig = {
+        id: 'redis_cluster',
+        type: 'redis',
+        mode: 'cluster',
+        nodes: ['redis-a.example.com:7000', 'redis-b.example.com:7001'],
+        user: 'default',
+        password: 'secret',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('redis://default:secret@redis-a.example.com:7000');
+    });
+
+    it('should build representative Redis sentinel DSN from the first sentinel', () => {
+      const source: SourceConfig = {
+        id: 'redis_sentinel',
+        type: 'redis',
+        mode: 'sentinel',
+        sentinels: ['sentinel-a.example.com:26379', 'sentinel-b.example.com:26379'],
+        sentinel_master: 'mymaster',
+        database: '2',
+        user: 'default',
+        password: 'secret',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('redis://default:secret@sentinel-a.example.com:26379/2');
     });
 
     it('should encode special characters in credentials', () => {

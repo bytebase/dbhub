@@ -151,6 +151,18 @@ describe('execute-sql tool', () => {
       expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
+    it('should reject Redis multi-line command batches with a mutating command', async () => {
+      const redisConnector = createMockConnector('redis', 'redis_source');
+      mockGetCurrentConnector.mockReturnValue(redisConnector);
+
+      const handler = createExecuteSqlToolHandler('redis_source');
+      const result = await handler({ sql: 'GET alpha\nSET alpha beta' }, null);
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+      expect(redisConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
   });
 
   describe('readonly per-source isolation', () => {

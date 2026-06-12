@@ -209,6 +209,51 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "sqlite:///:memory:"
 
 # ============================================================================
+# REDIS
+# ============================================================================
+
+# Local Redis
+# [[sources]]
+# id = "local_redis"
+# dsn = "redis://localhost:6379/0"
+
+# Redis with ACL username/password and TLS
+# [[sources]]
+# id = "secure_redis"
+# dsn = "rediss://default:secret@redis.example.com:6379/0"
+
+# Alternative: individual connection parameters
+# [[sources]]
+# id = "local_redis"
+# type = "redis"
+# host = "localhost"
+# port = 6379
+# database = "0"
+
+# Redis Cluster
+# [[sources]]
+# id = "redis_cluster"
+# type = "redis"
+# mode = "cluster"
+# nodes = ["redis-node-1.example.com:7000", "redis-node-2.example.com:7001", "redis-node-3.example.com:7002"]
+# user = "default"
+# password = "secret"
+# sslmode = "require"  # Optional: use TLS for node connections
+
+# Redis Sentinel
+# [[sources]]
+# id = "redis_sentinel"
+# type = "redis"
+# mode = "sentinel"
+# sentinel_master = "mymaster"
+# sentinels = ["sentinel-1.example.com:26379", "sentinel-2.example.com:26379"]
+# database = "0"
+# user = "default"                 # Redis data-node ACL username
+# password = "secret"              # Redis data-node password
+# sentinel_user = "sentinel_user"   # Optional Sentinel ACL username
+# sentinel_password = "secret"      # Optional Sentinel password
+
+# ============================================================================
 # TOOL CONFIGURATION (Optional)
 # ============================================================================
 #
@@ -329,9 +374,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MariaDB:     mariadb://user:pass@host:3306/database
 #   SQL Server:  sqlserver://user:pass@host:1433/database
 #   SQLite:      sqlite:///path/to/file.db  or  sqlite:///:memory:
+#   Redis:       redis://[:pass@]host:6379/0  or  rediss://user:pass@host:6379/0
+#   Redis cluster/sentinel are configured with mode + nodes/sentinels fields.
 #
 # Default Ports:
-#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433
+#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433 | Redis: 6379
 #
 # SSH Tunnel Options:
 #   ssh_host, ssh_port (default: 22), ssh_user
@@ -354,7 +401,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   domain = "MYDOMAIN"                                  # Required for NTLM
 #
 # Tool Options:
-#   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN (works for execute_sql and custom tools)
+#   readonly = true    # Restrict to read-only SQL operations or Redis commands (works for execute_sql and custom tools)
 #   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
 #
 # Parameter Placeholders by Database:
@@ -362,3 +409,4 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MySQL/MariaDB:  ?, ?, ?
 #   SQL Server:     @p1, @p2, @p3
 #   SQLite:         ?, ?, ?
+#   Redis:          ?, ?, ?

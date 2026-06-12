@@ -130,8 +130,12 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
 
   // Determine title (human-readable display name)
   const title = isSingleSource
-    ? `Execute SQL (${dbType})`
-    : `Execute SQL on ${sourceId} (${dbType})`;
+    ? dbType === "redis"
+      ? "Execute Redis Commands (redis)"
+      : `Execute SQL (${dbType})`
+    : dbType === "redis"
+      ? `Execute Redis Commands on ${sourceId} (redis)`
+      : `Execute SQL on ${sourceId} (${dbType})`;
 
   // Determine description with more context.
   // Prepend the user-provided `description` from the source config (if set)
@@ -139,9 +143,10 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
+  const operation = dbType === "redis" ? "Redis commands" : "SQL queries";
   const description = isSingleSource
-    ? `${userDescPrefix}Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
-    : `${userDescPrefix}Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
+    ? `${userDescPrefix}Execute ${operation} on the ${dbType} database${readonlyNote}${maxRowsNote}`
+    : `${userDescPrefix}Execute ${operation} on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;
 
   // Build annotations object with all standard MCP hints
   const isReadonly = executeOptions.readonly === true;
@@ -169,22 +174,36 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
  * @param sourceId - The source ID to get tool metadata for
  * @returns Tool name, description, and annotations
  */
-export function getSearchObjectsMetadata(sourceId: string): { name: string; description: string; title: string } {
+export function getSearchObjectsMetadata(sourceId: string): {
+  name: string;
+  description: string;
+  title: string;
+} {
   const sourceIds = ConnectorManager.getAvailableSourceIds();
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
   const isSingleSource = sourceIds.length === 1;
 
-  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
+  const toolName = isSingleSource
+    ? "search_objects"
+    : `search_objects_${normalizeSourceId(sourceId)}`;
   const title = isSingleSource
-    ? `Search Database Objects (${dbType})`
-    : `Search Database Objects on ${sourceId} (${dbType})`;
+    ? dbType === "redis"
+      ? "Search Redis Keys (redis)"
+      : `Search Database Objects (${dbType})`
+    : dbType === "redis"
+      ? `Search Redis Keys on ${sourceId} (redis)`
+      : `Search Database Objects on ${sourceId} (${dbType})`;
   // Prepend the user-provided `description` from the source config (if set)
   // so AI clients reading the MCP tool list see the source's purpose first.
   const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
+  const searchableObjects =
+    dbType === "redis"
+      ? "Redis logical databases and keys (schemas map to Redis DB numbers, tables map to keys)"
+      : "database objects (schemas, tables, columns, procedures, functions, indexes)";
   const description = isSingleSource
-    ? `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
+    ? `${userDescPrefix}Search and list ${searchableObjects} on the ${dbType} database`
+    : `${userDescPrefix}Search and list ${searchableObjects} on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,
@@ -220,8 +239,8 @@ function buildExecuteSqlTool(sourceId: string, toolConfig?: ToolConfig): Tool {
 
   // Extract readonly and max_rows from toolConfig
   // ToolConfig is a union type, but ExecuteSqlToolConfig and CustomToolConfig both have these fields
-  const readonly = toolConfig && 'readonly' in toolConfig ? toolConfig.readonly : undefined;
-  const max_rows = toolConfig && 'max_rows' in toolConfig ? toolConfig.max_rows : undefined;
+  const readonly = toolConfig && "readonly" in toolConfig ? toolConfig.readonly : undefined;
+  const max_rows = toolConfig && "max_rows" in toolConfig ? toolConfig.max_rows : undefined;
 
   return {
     name: executeSqlMetadata.name,
