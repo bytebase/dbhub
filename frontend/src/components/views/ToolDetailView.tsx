@@ -9,6 +9,8 @@ import LockIcon from '../icons/LockIcon';
 import CopyIcon from '../icons/CopyIcon';
 import CheckIcon from '../icons/CheckIcon';
 
+type ToolType = 'execute_sql' | 'execute_redis' | 'search_objects' | 'custom';
+
 export default function ToolDetailView() {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -21,8 +23,8 @@ export default function ToolDetailView() {
 
   // Query state
   const [sql, setSql] = useState(() => {
-    // Only for execute_sql tools - read from URL on mount
-    return searchParams.get('sql') || '';
+    // Only for execute tools - read from URL on mount
+    return searchParams.get('sql') || searchParams.get('command') || '';
   });
   const [params, setParams] = useState<Record<string, any>>({});
   const [resultTabs, setResultTabs] = useState<ResultTab[]>([]);
@@ -52,14 +54,20 @@ export default function ToolDetailView() {
   }, [sourceId, toolName]);
 
   // Determine tool type
-  const getToolType = useCallback((): 'execute_sql' | 'search_objects' | 'custom' => {
+  const getToolType = useCallback((): ToolType => {
     if (!tool) return 'custom';
     if (tool.name.startsWith('execute_sql')) return 'execute_sql';
+    if (tool.name.startsWith('execute_redis')) return 'execute_redis';
     if (tool.name.startsWith('search_objects')) return 'search_objects';
     return 'custom';
   }, [tool]);
 
   const toolType = getToolType();
+  const isExecuteTool = toolType === 'execute_sql' || toolType === 'execute_redis';
+  const statementLabel = toolType === 'execute_redis' ? 'Redis Command' : 'SQL Statement';
+  const statementPlaceholder = toolType === 'execute_redis'
+    ? 'GET key_name'
+    : 'SELECT * FROM table_name LIMIT 10;';
 
   // Coerce URL parameter values to correct types based on parameter schema
   const coerceParamValue = useCallback((value: string, paramName: string): any => {
@@ -86,7 +94,7 @@ export default function ToolDetailView() {
     // Only coerce params from URL on initial mount
     const urlParams: Record<string, any> = {};
     searchParams.forEach((value, key) => {
-      if (key !== 'sql') {
+      if (key !== 'sql' && key !== 'command') {
         const coerced = coerceParamValue(String(value), key);
         if (coerced !== undefined) {
           urlParams[key] = coerced;
@@ -100,26 +108,29 @@ export default function ToolDetailView() {
     }
   }, [tool, toolType, searchParams, coerceParamValue]);
 
-  // Update URL when sql changes (debounced for execute_sql tools)
+  // Update URL when statement changes (debounced for execute tools)
   useEffect(() => {
-    if (toolType !== 'execute_sql') return;
+    if (!isExecuteTool) return;
 
     const timer = setTimeout(() => {
       setSearchParams((currentParams) => {
         const newParams = new URLSearchParams(currentParams);
+        const paramName = toolType === 'execute_redis' ? 'command' : 'sql';
+        const otherParamName = paramName === 'sql' ? 'command' : 'sql';
 
         if (sql.trim()) {
-          newParams.set('sql', sql);
+          newParams.set(paramName, sql);
         } else {
-          newParams.delete('sql');
+          newParams.delete(paramName);
         }
+        newParams.delete(otherParamName);
 
         return newParams;
       }, { replace: true });
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [sql, toolType, setSearchParams]); // Removed searchParams from dependencies
+  }, [sql, isExecuteTool, toolType, setSearchParams]); // Removed searchParams from dependencies
 
   // Update URL when params change (debounced for custom tools)
   useEffect(() => {
@@ -131,7 +142,7 @@ export default function ToolDetailView() {
 
         // Clear all non-reserved params first
         Array.from(newParams.keys()).forEach(key => {
-          if (key !== 'sql') {
+          if (key !== 'sql' && key !== 'command') {
             newParams.delete(key);
           }
         });
@@ -212,10 +223,11 @@ export default function ToolDetailView() {
       let queryResult: QueryResult;
       let sqlToExecute: string;
 
-      if (toolType === 'execute_sql') {
-        // Get selected SQL from editor (returns selection if any, otherwise full content)
+      if (isExecuteTool) {
+        // Get selected statement from editor (returns selection if any, otherwise full content)
         sqlToExecute = sqlEditorRef.current?.getSelectedSql() ?? sql;
-        queryResult = await executeTool(toolName, { sql: sqlToExecute });
+        const argumentName = toolType === 'execute_redis' ? 'command' : 'sql';
+        queryResult = await executeTool(toolName, { [argumentName]: sqlToExecute });
       } else {
         sqlToExecute = getSqlPreview();
         queryResult = await executeTool(toolName, params);
@@ -240,7 +252,7 @@ export default function ToolDetailView() {
         timestamp: new Date(),
         result: null,
         error: err instanceof Error ? err.message : 'Query failed',
-        executedSql: toolType === 'execute_sql' ? sql : getSqlPreview(),
+        executedSql: isExecuteTool ? sql : getSqlPreview(),
         executionTimeMs: 0,
       };
       setResultTabs(prev => [errorTab, ...prev]);
@@ -248,19 +260,19 @@ export default function ToolDetailView() {
     } finally {
       setIsRunning(false);
     }
-  }, [tool, toolName, toolType, sql, params, getSqlPreview]);
+  }, [tool, toolName, toolType, isExecuteTool, sql, params, getSqlPreview]);
 
   // Compute disabled state for run button
   const isRunDisabled =
-    toolType === 'execute_sql' ? !sql.trim() : !allRequiredParamsFilled();
+    isExecuteTool ? !sql.trim() : !allRequiredParamsFilled();
 
   // Copy SQL to clipboard
   const handleCopy = useCallback(async () => {
-    const sqlToCopy = toolType === 'execute_sql' ? sql : getSqlPreview();
+    const sqlToCopy = isExecuteTool ? sql : getSqlPreview();
     await navigator.clipboard.writeText(sqlToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [toolType, sql, getSqlPreview]);
+  }, [isExecuteTool, sql, getSqlPreview]);
 
   const handleTabClose = useCallback((idToClose: string) => {
     setResultTabs(prev => {
@@ -369,7 +381,7 @@ export default function ToolDetailView() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-foreground">
-              SQL Statement
+              {statementLabel}
             </label>
             <button
               onClick={handleCopy}
@@ -391,14 +403,14 @@ export default function ToolDetailView() {
           </div>
           <SqlEditor
             ref={sqlEditorRef}
-            value={toolType === 'execute_sql' ? sql : getSqlPreview()}
-            onChange={toolType === 'execute_sql' ? setSql : undefined}
+            value={isExecuteTool ? sql : getSqlPreview()}
+            onChange={isExecuteTool ? setSql : undefined}
             onRunShortcut={handleRun}
             disabled={isRunDisabled || isRunning}
-            readOnly={toolType !== 'execute_sql'}
+            readOnly={!isExecuteTool}
             placeholder={
-              toolType === 'execute_sql'
-                ? 'SELECT * FROM table_name LIMIT 10;'
+              isExecuteTool
+                ? statementPlaceholder
                 : undefined
             }
           />

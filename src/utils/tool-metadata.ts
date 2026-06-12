@@ -2,10 +2,11 @@ import { z } from "zod";
 import { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
-import { executeSqlSchema } from "../tools/execute-sql.js";
+import { executeRedisSchema, executeSqlSchema } from "../tools/execute-sql.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
+import { getExecuteToolPublicName } from "./execute-tool-name.js";
 
 /**
  * Tool parameter definition for API responses
@@ -125,8 +126,9 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     maxRows: toolConfig?.max_rows,
   };
 
-  // Determine tool name based on single vs multi-source configuration
-  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
+  // Determine public tool name based on connector type and source count.
+  // TOML still uses the internal built-in name "execute_sql" for Redis.
+  const toolName = getExecuteToolPublicName(dbType, sourceId, isSingleSource);
 
   // Determine title (human-readable display name)
   const title = isSingleSource
@@ -164,7 +166,7 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   return {
     name: toolName,
     description,
-    schema: executeSqlSchema,
+    schema: dbType === "redis" ? executeRedisSchema : executeSqlSchema,
     annotations,
   };
 }

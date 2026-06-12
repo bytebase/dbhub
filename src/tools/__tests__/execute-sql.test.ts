@@ -35,11 +35,13 @@ const parseToolResponse = (response: any) => {
 describe('execute-sql tool', () => {
   let mockConnector: Connector;
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+  const mockGetAvailableSourceIds = vi.mocked(ConnectorManager.getAvailableSourceIds);
   const mockGetToolRegistry = vi.mocked(getToolRegistry);
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
     mockGetCurrentConnector.mockReturnValue(mockConnector);
+    mockGetAvailableSourceIds.mockReturnValue(['test_source']);
 
     // Mock tool registry to return empty config (no readonly, no max_rows)
     mockGetToolRegistry.mockReturnValue({
@@ -77,6 +79,21 @@ describe('execute-sql tool', () => {
 
       expect(parsedResult.success).toBe(true);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: undefined, maxRows: undefined });
+    });
+
+    it('should accept command input for Redis sources', async () => {
+      const redisConnector = createMockConnector('redis', 'redis_source');
+      const mockResult: SQLResult = { rows: [{ value: 'beta' }], rowCount: 1 };
+      mockGetCurrentConnector.mockReturnValue(redisConnector);
+      mockGetAvailableSourceIds.mockReturnValue(['redis_source']);
+      vi.mocked(redisConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('redis_source');
+      const result = await handler({ command: 'GET alpha' }, null);
+      const parsedResult = parseToolResponse(result);
+
+      expect(parsedResult.success).toBe(true);
+      expect(redisConnector.executeSQL).toHaveBeenCalledWith('GET alpha', { readonly: undefined, maxRows: undefined });
     });
 
     it('should handle execution errors', async () => {

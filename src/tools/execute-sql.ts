@@ -11,10 +11,17 @@ import {
   trackToolRequest,
 } from "../utils/tool-handler-helpers.js";
 import { splitSQLStatements } from "../utils/sql-parser.js";
+import { getExecuteToolPublicName } from "../utils/execute-tool-name.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
-  sql: z.string().describe("SQL to execute, or Redis commands for Redis sources (multiple statements separated by ; or newlines)"),
+  sql: z.string().describe("SQL to execute (multiple statements separated by semicolons)"),
+};
+
+// Schema for Redis execute tool. Handler still accepts the legacy "sql" key
+// for compatibility with clients created before Redis got a dedicated name.
+export const executeRedisSchema = {
+  command: z.string().describe("Redis command(s) to execute (multiple commands separated by semicolons or newlines)"),
 };
 
 /**
@@ -38,12 +45,16 @@ function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): bo
  */
 export function createExecuteSqlToolHandler(sourceId?: string) {
   return async (args: any, extra: any) => {
-    const { sql } = args as { sql: string };
+    const input = args as { sql?: string; command?: string };
     const startTime = Date.now();
     const effectiveSourceId = getEffectiveSourceId(sourceId);
     let success = true;
     let errorMessage: string | undefined;
     let result: any;
+    let sql = "";
+    let actualSourceId = effectiveSourceId;
+    let connectorType: ConnectorType | undefined;
+    let isSingleSource = sourceId === undefined;
 
     try {
       // Ensure source is connected (handles lazy connections)
@@ -51,7 +62,21 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
 
       // Get connector for the specified source (or default)
       const connector = ConnectorManager.getCurrentConnector(sourceId);
-      const actualSourceId = connector.getId();
+      actualSourceId = connector.getId();
+      connectorType = connector.id;
+      isSingleSource = ConnectorManager.getAvailableSourceIds().length === 1;
+      const statement = connector.id === "redis"
+        ? input.command ?? input.sql
+        : input.sql ?? input.command;
+
+      if (typeof statement !== "string") {
+        errorMessage = connector.id === "redis"
+          ? "Missing Redis command input"
+          : "Missing SQL input";
+        success = false;
+        return createToolErrorResponse(errorMessage, "VALIDATION_ERROR");
+      }
+      sql = statement;
 
       // Get tool-specific configuration (tool is already registered, so it's enabled)
       const registry = getToolRegistry();
@@ -92,7 +117,11 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
+          toolName: getExecuteToolPublicName(
+            connectorType,
+            actualSourceId,
+            isSingleSource
+          ),
           sql,
         },
         startTime,
