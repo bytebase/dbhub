@@ -1,0 +1,130 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "sqlserver"
+  namespace: "system"
+spec:
+  displayName: "SQL Server"
+  description: "High-performance Microsoft SQL Server database access via DBHub. Requires\
+    \ the 'mssql' driver package."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema:
+    DB_HOST:
+      type: "string"
+      required: true
+      default: "localhost"
+      description: "SQL Server hostname"
+      sensitive: null
+      pattern: null
+    DB_PORT:
+      type: "string"
+      required: true
+      default: "1433"
+      description: "SQL Server port"
+      sensitive: null
+      pattern: null
+    DB_USER:
+      type: "string"
+      required: true
+      default: null
+      description: "SQL Server username"
+      sensitive: null
+      pattern: null
+    DB_PASSWORD:
+      type: "string"
+      required: true
+      default: null
+      description: "SQL Server password"
+      sensitive: true
+      pattern: null
+    DB_NAME:
+      type: "string"
+      required: true
+      default: null
+      description: "SQL Server database name"
+      sensitive: null
+      pattern: null
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "@bytebase/dbhub@latest"
+    - "--transport"
+    - "stdio"
+    env:
+      DB_TYPE: "sqlserver"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions: []
+  tools:
+    execute_sql:
+      description: "Execute MS SQL Server T-SQL queries with transaction support and\
+        \ safety controls."
+      usageIntent: null
+      discoveryHint: "Execute high-performance T-SQL queries against your Microsoft\
+        \ SQL Server instance to perform critical analytical operations, data manipulation,\
+        \ and complex schema management. Microsoft SQL Server is a comprehensive,\
+        \ enterprise-level database platform designed to handle massive workloads\
+        \ and provide robust data management for business-critical applications. This\
+        \ tool allows for the execution of advanced Transact-SQL (T-SQL) commands,\
+        \ including specialized window functions, common table expressions (CTEs),\
+        \ and complex multi-table joins. It is specifically designed to work with\
+        \ SQL Server's unique features, such as stored procedure execution and schema-qualified\
+        \ table access. The tool includes built-in safety guardrails provided by the\
+        \ DBHub layer, such as strict row limiting and query execution timeouts to\
+        \ prevent accidental resource exhaustion or long-running queries from blocking\
+        \ other database processes. It supports full transaction management, ensuring\
+        \ that complex data modifications are handled with full ACID compliance, which\
+        \ is critical for maintaining data integrity in professional enterprise environments.\
+        \ By leveraging the DBHub bridge, the agent can interact with SQL Server with\
+        \ high precision and efficiency, minimizing token overhead while ensuring\
+        \ the accuracy of data extraction. Synonyms include running T-SQL queries,\
+        \ executing MSSQL commands, database manipulation, and data fetching. Common\
+        \ use cases include generating complex business reports from multiple related\
+        \ tables, performing data cleaning and transformation tasks, and auditing\
+        \ database activity for compliance. Keywords: SQL Server, MSSQL, T-SQL, enterprise\
+        \ database, transaction support, query execution, data analysis, Transact-SQL,\
+        \ database administration, relational mapping, ACID compliance, data engineering."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore MS SQL Server schemas, tables, columns, indexes,\
+        \ and procedures."
+      usageIntent: null
+      discoveryHint: "Systematically search and explore Microsoft SQL Server structural\
+        \ components, providing a detailed and hierarchical overview of schemas, tables,\
+        \ views, and columns. This tool is an essential reconnaissance utility that\
+        \ allows the AI to discover and map the internal organizational structure\
+        \ of a SQL Server environment without prior knowledge of the database schema.\
+        \ It utilizes a progressive disclosure methodology, enabling the agent to\
+        \ navigate from a list of available schemas (such as 'dbo' or custom business\
+        \ schemas) down to the granular details of individual table structures, data\
+        \ types, primary and foreign keys, and index configurations. This structural\
+        \ awareness is an absolute requirement for writing syntactically correct T-SQL\
+        \ and for performing accurate data analysis where precise schema-qualified\
+        \ table and column names are paramount. By identifying the exact shape of\
+        \ the data and its relational constraints, the agent can formulate highly\
+        \ targeted and performant queries. The tool provides a clean, role-based view\
+        \ of the database metadata, filtering out internal system catalogs to focus\
+        \ on user-defined content that is directly relevant to the current analytical\
+        \ task. It is particularly valuable for identifying key entities in an enterprise\
+        \ data warehouse, finding relationship keys for complex joins, and auditing\
+        \ the database for consistency across different environments. Synonyms include\
+        \ schema discovery, database exploration, metadata inspection, structural\
+        \ mapping, and object searching. Common use cases include performing initial\
+        \ discovery on a legacy SQL Server instance, verifying table availability\
+        \ after a data migration, and mapping out relationships in a multi-schema\
+        \ database. Keywords: SQL Server schema, T-SQL metadata, table discovery,\
+        \ column mapping, index search, database reconnaissance, structural inspection,\
+        \ relational mapping, schema audit, database inventory."
+      properties: null
+      required: null
+  modelSemantics: null

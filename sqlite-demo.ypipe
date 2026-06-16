@@ -1,0 +1,96 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "sqlite-demo"
+  namespace: "system"
+spec:
+  displayName: "SQLite (Demo)"
+  description: "Zero-dependency, token-efficient database MCP server in demo mode.\
+    \ Includes a sample 'employee' SQLite database for rapid testing and experimentation."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema: {}
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "-p"
+    - "@bytebase/dbhub@latest"
+    - "-p"
+    - "better-sqlite3"
+    - "dbhub"
+    - "--transport"
+    - "stdio"
+    - "--demo"
+    env: null
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions:
+  - id: "sqlite-demo-sqlite-show-all-tables"
+    title: "SQLite: Show All Tables"
+    label: "List tables in the demo database"
+    action: "Show all available tables in the demo database with ${metadata.name}_search_objects"
+    actionType: null
+    target: null
+  - id: "sqlite-demo-sqlite-query-employees"
+    title: "SQLite: Query Employees"
+    label: "Show sample employee data"
+    action: "Query the first 10 rows from the 'employee' table in the  SQLite demo\
+      \ database ${metadata.name}_execute_sql"
+    actionType: null
+    target: null
+  tools:
+    execute_sql:
+      description: "Execute SQL queries with transaction support and safety controls."
+      usageIntent: null
+      discoveryHint: "Execute high-performance SQL queries against a built-in sample\
+        \ 'employee' database using the DBHub engine. This tool is specifically designed\
+        \ for testing the core capabilities of the database MCP server in a completely\
+        \ zero-risk, sandbox environment. It supports standard SQL operations, allowing\
+        \ you to experiment with data retrieval, complex grouping, and analytical\
+        \ functions on a pre-populated dataset. The sample database provides a rich\
+        \ playground for exploring SQL-based workflows, verifying query logic, and\
+        \ training AI agents in a safe, controlled environment. By running queries\
+        \ through this tool, the agent can practice data manipulation and analysis\
+        \ without the need for an external database setup. It includes safety guardrails\
+        \ like row limiting and execution timeouts to maintain system performance.\
+        \ This is an excellent way to demonstrate the power of MCP-based database\
+        \ interaction to new users or to perform quick validation of an AI's SQL-generating\
+        \ abilities. Synonyms include running SQL queries, database testing, SQL experimentation,\
+        \ sample data exploration, and sandbox querying. Common use cases include\
+        \ testing complex join logic on known data, benchmarking query performance\
+        \ for different SQL patterns, and providing interactive tutorials for SQL\
+        \ analysis. Keywords: SQL testing, SQLite, demo mode, database sandbox, query\
+        \ experimentation, sample data, DBHub, SQL simulation, developer experience,\
+        \ educational sandbox."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore database schemas, tables, columns, indexes,\
+        \ and procedures."
+      usageIntent: null
+      discoveryHint: "Systematically search and discover the structural components\
+        \ of the built-in sample database, including schemas, tables, columns, and\
+        \ indexes. This tool is the foundational starting point for database reconnaissance\
+        \ in the demo environment, enabling the AI to identify available tables like\
+        \ 'employees', 'departments', and 'salaries' without any prior information.\
+        \ By exploring the schema, the agent builds an accurate mental map of the\
+        \ database, which is absolutely essential for writing precise and syntactically\
+        \ correct SQL queries during testing and experimentation. It utilizes a progressive\
+        \ disclosure methodology, allowing the agent to drill down from high-level\
+        \ table lists to granular column definitions and data types. This structural\
+        \ awareness ensures that the AI can act as a truly expert data analyst within\
+        \ the demo sandbox. The tool provides a clean and focused view of the metadata,\
+        \ filtering out system overhead to highlight the data structures relevant\
+        \ for user-facing analysis. Synonyms include schema discovery, database exploration,\
+        \ metadata mapping, structural inspection, and object searching. Common use\
+        \ cases include performing initial discovery on the demo environment, teaching\
+        \ users how to map out relational data, and verifying the schema coverage\
+        \ of the sample dataset. Keywords: schema discovery, database exploration,\
+        \ sample metadata, table mapping, index search, structural audit, DBHub demo,\
+        \ reconnaissance, educational tool."
+      properties: null
+      required: null
+  modelSemantics: null

@@ -102,6 +102,20 @@ Connect to multiple databases simultaneously using TOML configuration files. Per
 
 See [Multi-Database Configuration](https://dbhub.ai/config/toml) for complete setup instructions.
 
+### Quick Install with ypipe
+
+Install and run **ypipe** with a single command using JBang:
+```bash
+jbang ypipe@iunera/ypipe
+```
+Or download the desktop app from [ypipe.com](https://ypipe.com). Once opened, simply import any of the pre-configured database blueprints to install and register the MCP server with one click:
+* **SQLite (Demo):** [sqlite-demo.ypipe](./sqlite-demo.ypipe)
+* **SQLite:** [sqlite.ypipe](./sqlite.ypipe)
+* **PostgreSQL:** [postgres.ypipe](./postgres.ypipe)
+* **MySQL:** [mysql.ypipe](./mysql.ypipe)
+* **MariaDB:** [mariadb.ypipe](./mariadb.ypipe)
+* **SQL Server:** [sqlserver.ypipe](./sqlserver.ypipe)
+
 ## Development
 
 Requires Node.js >= 22.5.0 (DBHub uses the built-in `node:sqlite` module).

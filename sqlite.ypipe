@@ -1,0 +1,92 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "sqlite"
+  namespace: "system"
+spec:
+  displayName: "SQLite"
+  description: "Local SQLite database access via DBHub. Requires the 'better-sqlite3'\
+    \ driver package."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema:
+    DB_NAME:
+      type: "string"
+      required: true
+      default: null
+      description: "Path to the SQLite database file (e.g., /path/to/database.sqlite)"
+      sensitive: null
+      pattern: null
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "@bytebase/dbhub@latest"
+    - "--transport"
+    - "stdio"
+    env:
+      DB_TYPE: "sqlite"
+      DB_NAME: "${DB_NAME}"
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions: []
+  tools:
+    execute_sql:
+      description: "Execute SQLite SQL queries with transaction support and safety\
+        \ controls."
+      usageIntent: null
+      discoveryHint: "Execute SQL queries against a local, file-based SQLite database\
+        \ to perform efficient data analysis, manipulation, and local storage management.\
+        \ SQLite is a lightweight, C-language library that implements a small, fast,\
+        \ self-contained, high-reliability, full-featured, SQL database engine. It\
+        \ is the most used database engine in the world, found in everything from\
+        \ mobile apps to web browsers and embedded systems. This tool allows for the\
+        \ execution of standard SQL commands, including complex joins, aggregations,\
+        \ and subqueries, directly against a local database file. It is ideal for\
+        \ local data science tasks, development workflows, and managing persistent\
+        \ state for small-scale applications. The tool includes built-in safety guardrails\
+        \ provided by the DBHub integration, such as row limiting and query execution\
+        \ timeouts to ensure that accidental long-running queries do not impact system\
+        \ performance. It supports full transaction management, allowing for atomic\
+        \ operations that maintain data consistency during multi-step updates. By\
+        \ leveraging the DBHub bridge, the agent can interact with SQLite with high\
+        \ efficiency, providing a powerful way to query local data with minimal setup.\
+        \ Synonyms include running SQLite queries, executing local SQL, file-based\
+        \ database manipulation, and local data fetching. Common use cases include\
+        \ analyzing local application logs, managing personal knowledge bases, and\
+        \ performing rapid prototyping for larger database systems. Keywords: SQLite,\
+        \ embedded database, local SQL, file-based storage, query execution, data\
+        \ analysis, SQL dialect, serverless database, data engineering, rapid prototyping."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore SQLite tables, columns, and indexes."
+      usageIntent: null
+      discoveryHint: "Systematically search and explore the structural components of\
+        \ a local SQLite database, providing a clear and comprehensive overview of\
+        \ tables, columns, and indexes. This tool is a vital reconnaissance utility\
+        \ that allows the AI to discover and map the internal structure of a SQLite\
+        \ file without any prior knowledge of its schema. It utilizes a progressive\
+        \ disclosure methodology, enabling the agent to navigate from a list of available\
+        \ tables down to the granular details of individual column definitions, data\
+        \ types, and index configurations. This structural awareness is an absolute\
+        \ requirement for writing syntactically correct SQL and for performing accurate\
+        \ data analysis where precise table and column names are paramount. By identifying\
+        \ the exact shape of the local data, the agent can formulate highly targeted\
+        \ and efficient queries. The tool provides a clean view of the database metadata,\
+        \ focusing exclusively on user-defined content that is directly relevant to\
+        \ the current task. It is particularly valuable for identifying key data structures\
+        \ in a local file, verifying the success of data import operations, and auditing\
+        \ the database for structural consistency. Synonyms include schema discovery,\
+        \ local database exploration, metadata inspection, structural mapping, and\
+        \ object searching. Common use cases include performing initial discovery\
+        \ on a newly received SQLite file, verifying the structure of a local development\
+        \ database, and mapping out relationships in an embedded data store. Keywords:\
+        \ SQLite schema, table discovery, metadata management, column mapping, index\
+        \ search, local database reconnaissance, structural inspection, file-based\
+        \ schema, database inventory."
+      properties: null
+      required: null
+  modelSemantics: null

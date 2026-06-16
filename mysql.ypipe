@@ -1,0 +1,142 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "mysql"
+  namespace: "system"
+spec:
+  displayName: "MySQL"
+  description: "High-performance MySQL database access via DBHub. Requires the 'mysql2'\
+    \ driver package."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema:
+    DB_HOST:
+      type: "string"
+      required: true
+      default: "localhost"
+      description: "MySQL server hostname"
+      sensitive: null
+      pattern: null
+    DB_PORT:
+      type: "string"
+      required: true
+      default: "3306"
+      description: "MySQL server port"
+      sensitive: null
+      pattern: null
+    DB_USER:
+      type: "string"
+      required: true
+      default: null
+      description: "MySQL username"
+      sensitive: null
+      pattern: null
+    DB_PASSWORD:
+      type: "string"
+      required: true
+      default: null
+      description: "MySQL password"
+      sensitive: true
+      pattern: null
+    DB_NAME:
+      type: "string"
+      required: true
+      default: null
+      description: "MySQL database name"
+      sensitive: null
+      pattern: null
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "@bytebase/dbhub@latest"
+    - "--transport"
+    - "stdio"
+    env:
+      DB_TYPE: "mysql"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions:
+  - id: "mysql-mysql-show-databases"
+    title: "MySQL: Show Databases"
+    label: "List all databases"
+    action: "Connect to MySQL and list all databases I have access to."
+    actionType: null
+    target: null
+  - id: "mysql-mysql-table-structure"
+    title: "MySQL: Table Structure"
+    label: "Describe a specific table"
+    action: "Connect to my MySQL database and show me the structure of the 'users'\
+      \ table."
+    actionType: null
+    target: null
+  tools:
+    execute_sql:
+      description: "Execute MySQL SQL queries with transaction support and safety\
+        \ controls."
+      usageIntent: null
+      discoveryHint: "Execute high-performance MySQL queries against your server instance\
+        \ to perform critical analytical operations, data manipulation, and schema\
+        \ management. MySQL is globally recognized as one of the most popular open-source\
+        \ relational databases, serving as the foundational storage layer for countless\
+        \ web applications and enterprise systems. This tool enables full data lifecycle\
+        \ management, allowing for the execution of complex SELECT statements, efficient\
+        \ INSERT/UPDATE/DELETE operations, and sophisticated DDL commands using MySQL's\
+        \ proven SQL dialect. It is specifically designed to leverage MySQL-specific\
+        \ optimizations and features, such as specialized join algorithms and storage\
+        \ engine-specific behaviors (like InnoDB transactions). The tool includes\
+        \ robust safety guardrails provided by the DBHub layer, including strict row\
+        \ limiting and query timeouts to prevent runaway processes from impacting\
+        \ server health or exceeding client memory limits. It supports full transaction\
+        \ management, ensuring that multi-step operations are handled with ACID (Atomicity,\
+        \ Consistency, Isolation, Durability) compliance. This is essential for maintaining\
+        \ data integrity in high-concurrency environments. By using the DBHub bridge,\
+        \ the agent can interact with MySQL with high efficiency, minimizing token\
+        \ usage while maximizing the quality of data extraction. Synonyms include\
+        \ running MySQL queries, executing relational SQL, database manipulation,\
+        \ and data fetching. Common use cases include performing real-time analytics\
+        \ on user behavioral data, updating inventory records in an e-commerce platform,\
+        \ and managing schema migrations for evolving applications. Keywords: MySQL,\
+        \ relational database, InnoDB, web storage, transaction support, query execution,\
+        \ data analysis, SQL dialect, database administration, relational mapping,\
+        \ ACID compliance, data engineering."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore MySQL databases, tables, columns, indexes,\
+        \ and procedures."
+      usageIntent: null
+      discoveryHint: "Systematically search and explore MySQL structural components,\
+        \ providing a comprehensive overview of databases, tables, columns, and indexes.\
+        \ This tool is a critical reconnaissance utility that allows the AI to discover\
+        \ and map the internal organizational structure of a MySQL environment without\
+        \ any prior knowledge of the schema. It utilizes a progressive disclosure\
+        \ methodology, enabling the agent to efficiently navigate from a list of available\
+        \ databases down to the granular details of individual table schemas, data\
+        \ types, primary keys, and index configurations. This structural awareness\
+        \ is an absolute requirement for writing syntactically correct SQL and for\
+        \ performing accurate data analysis where precise table and column names are\
+        \ paramount. By identifying the exact shape of the data, the agent can formulate\
+        \ highly targeted and performant queries. The tool provides a clean, role-based\
+        \ view of the database metadata, filtering out internal system schemas (like\
+        \ information_schema) to focus on user-defined content that is directly relevant\
+        \ to the current task. It is particularly valuable for identifying key entities\
+        \ in a large database, finding join keys for relational analysis, and auditing\
+        \ the database for consistency and naming convention compliance. Synonyms\
+        \ include schema discovery, database exploration, metadata inspection, structural\
+        \ mapping, and object searching. Common use cases include performing initial\
+        \ discovery on a legacy database, verifying the existence of specific tables\
+        \ after an ingestion process, and mapping out relationships between raw data\
+        \ and summarized views. Keywords: MySQL schema, table discovery, metadata\
+        \ management, column mapping, index search, database reconnaissance, structural\
+        \ inspection, relational mapping, schema audit, database inventory."
+      properties: null
+      required: null
+  modelSemantics: null

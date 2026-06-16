@@ -1,0 +1,147 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "postgres"
+  namespace: "system"
+spec:
+  displayName: "PostgreSQL"
+  description: "High-performance PostgreSQL database access via DBHub. Requires the\
+    \ 'pg' driver package."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema:
+    DB_HOST:
+      type: "string"
+      required: true
+      default: "localhost"
+      description: "PostgreSQL server hostname"
+      sensitive: null
+      pattern: null
+    DB_PORT:
+      type: "string"
+      required: true
+      default: "5432"
+      description: "PostgreSQL server port"
+      sensitive: null
+      pattern: null
+    DB_USER:
+      type: "string"
+      required: true
+      default: null
+      description: "PostgreSQL username"
+      sensitive: null
+      pattern: null
+    DB_PASSWORD:
+      type: "string"
+      required: true
+      default: null
+      description: "PostgreSQL password"
+      sensitive: true
+      pattern: null
+    DB_NAME:
+      type: "string"
+      required: true
+      default: null
+      description: "PostgreSQL database name"
+      sensitive: null
+      pattern: null
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "@bytebase/dbhub@latest"
+    - "--transport"
+    - "stdio"
+    env:
+      DB_TYPE: "postgres"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions:
+  - id: "postgres-postgres-table-list"
+    title: "Postgres: Table List"
+    label: "List all tables in the database"
+    action: "Connect to my Postgres database and list all available tables."
+    actionType: null
+    target: null
+  - id: "postgres-postgres-sample-data"
+    title: "Postgres: Sample Data"
+    label: "Show first 10 rows of a table"
+    action: "Select the first 10 rows from the most important table in my Postgres\
+      \ database."
+    actionType: null
+    target: null
+  tools:
+    execute_sql:
+      description: "Execute PostgreSQL SQL queries with transaction support and safety\
+        \ controls."
+      usageIntent: null
+      discoveryHint: "Execute high-performance PostgreSQL queries against your database\
+        \ cluster to perform analytical operations, data manipulation, and schema\
+        \ management. PostgreSQL is a powerful, open-source object-relational database\
+        \ system known for its reliability, feature robustness, and performance. This\
+        \ tool allows for complex analytical operations using PostgreSQL-specific\
+        \ syntax and features like JSONB support for semi-structured data, advanced\
+        \ window functions for time-series analysis, and rich data types including\
+        \ geometric and network address types. It is the primary interface for professional\
+        \ database interaction, supporting both DDL (Data Definition Language) for\
+        \ creating tables and DML (Data Manipulation Language) for inserting or updating\
+        \ records. It includes built-in safety controls like row limiting (enforced\
+        \ by DBHub) and query timeouts to prevent runaway operations and ensure system\
+        \ stability even under heavy load. The tool supports transaction management,\
+        \ allowing for atomic operations where multiple steps succeed or fail as a\
+        \ single unit, which is critical for maintaining data integrity in production\
+        \ environments. By leveraging the DBHub engine, the agent can efficiently\
+        \ retrieve results and handle large result sets with minimal token overhead.\
+        \ This is essential for a wide variety of tasks, including real-time research,\
+        \ competitive analysis, data scraping, and automated UI testing. Synonyms\
+        \ include running SQL, executing PGSQL queries, database manipulation, and\
+        \ data fetching. Common use cases involve calculating complex aggregations\
+        \ over billions of rows, filtering events by highly granular time ranges,\
+        \ and performing multi-dimensional grouping on both streaming and batch-ingested\
+        \ data. The tool correctly handles standard protocols and ensures compatibility\
+        \ with modern PostgreSQL features. Keywords: PostgreSQL, PGSQL, object-relational,\
+        \ transaction support, query execution, data analysis, JSONB, window functions,\
+        \ ACID compliance, database administration, SQL optimization, data engineering,\
+        \ relational mapping."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore PostgreSQL schemas, tables, columns, indexes,\
+        \ and procedures."
+      usageIntent: null
+      discoveryHint: "Systematically search and explore PostgreSQL structural components\
+        \ across all schemas, including the default public schema and any custom organizational\
+        \ namespaces. This tool provides a powerful mechanism for database reconnaissance\
+        \ and discovery, allowing the AI to understand the internal organizational\
+        \ structure and metadata of a database without prior knowledge of its schema.\
+        \ It utilizes a progressive disclosure approach, enabling the agent to drill\
+        \ down from high-level schema overviews to granular table definitions, column\
+        \ types, primary and foreign keys, indexes, and stored procedures. This is\
+        \ an absolute requirement for any task involving database exploration, schema\
+        \ mapping, or preparing for complex SQL generation where accurate table and\
+        \ column names are paramount. By identifying the exact names and types of\
+        \ database objects, the agent ensures that subsequent queries are syntactically\
+        \ correct and computationally efficient. The tool provides a structural overview\
+        \ of the page as perceived by database administrators, filtering out internal\
+        \ system catalogs to focus exclusively on user-defined content that is meaningful\
+        \ for interaction. It is particularly useful for identifying the main entities\
+        \ in a complex microservices architecture, locating primary keys for join\
+        \ operations, and finding key relationships in a deeply nested data model.\
+        \ Synonyms include schema discovery, database exploration, metadata inspection,\
+        \ structural mapping, and object searching. Common use cases include performing\
+        \ initial reconnaissance on a new PostgreSQL instance, verifying the availability\
+        \ of specific tables mentioned in documentation, and identifying which schemas\
+        \ contain the most relevant information for a given analytical task. Keywords:\
+        \ PostgreSQL schema, metadata discovery, table exploration, column mapping,\
+        \ index search, database reconnaissance, structural inspection, relational\
+        \ mapping, schema audit, database inventory."
+      properties: null
+      required: null
+  modelSemantics: null

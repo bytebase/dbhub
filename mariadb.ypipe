@@ -1,0 +1,132 @@
+---
+apiVersion: "mcp.ypipe.com/v1"
+kind: "McpIntegrationBlueprint"
+metadata:
+  name: "mariadb"
+  namespace: "system"
+spec:
+  displayName: "MariaDB"
+  description: "High-performance MariaDB database access via DBHub. Requires the 'mariadb'\
+    \ driver package."
+  source: "https://github.com/bytebase/dbhub"
+  configurationSchema:
+    DB_HOST:
+      type: "string"
+      required: true
+      default: "localhost"
+      description: "MariaDB server hostname"
+      sensitive: null
+      pattern: null
+    DB_PORT:
+      type: "string"
+      required: true
+      default: "3306"
+      description: "MariaDB server port"
+      sensitive: null
+      pattern: null
+    DB_USER:
+      type: "string"
+      required: true
+      default: null
+      description: "MariaDB username"
+      sensitive: null
+      pattern: null
+    DB_PASSWORD:
+      type: "string"
+      required: true
+      default: null
+      description: "MariaDB password"
+      sensitive: true
+      pattern: null
+    DB_NAME:
+      type: "string"
+      required: true
+      default: null
+      description: "MariaDB database name"
+      sensitive: null
+      pattern: null
+  mcpConfig:
+    type: "stdio"
+    command: "npx"
+    args:
+    - "-y"
+    - "@bytebase/dbhub@latest"
+    - "--transport"
+    - "stdio"
+    env:
+      DB_TYPE: "mariadb"
+      DB_HOST: "${DB_HOST}"
+      DB_PORT: "${DB_PORT}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_NAME: "${DB_NAME}"
+    url: null
+    headers: null
+  disabledTools: null
+  suggestions: []
+  tools:
+    execute_sql:
+      description: "Execute MariaDB SQL queries with transaction support and safety\
+        \ controls."
+      usageIntent: null
+      discoveryHint: "Execute high-performance MariaDB queries against your server\
+        \ instance to perform critical analytical operations, data manipulation, and\
+        \ schema management. MariaDB is a prominent community-developed fork of MySQL,\
+        \ known for its enhanced performance features and commitment to open-source\
+        \ values. This tool enables full data lifecycle management, allowing for the\
+        \ execution of complex SELECT statements, efficient data modification (INSERT/UPDATE/DELETE),\
+        \ and sophisticated DDL (Data Definition Language) commands using MariaDB's\
+        \ highly compatible but extended SQL dialect. It is specifically optimized\
+        \ to take advantage of MariaDB's unique storage engines and performance enhancements.\
+        \ The tool includes robust safety guardrails provided by the DBHub integration\
+        \ layer, such as strict row limiting and query execution timeouts to prevent\
+        \ runaway processes from consuming excessive server resources or crashing\
+        \ the client. It supports full transaction management, ensuring that multi-stage\
+        \ operations are handled with ACID (Atomicity, Consistency, Isolation, Durability)\
+        \ compliance, which is absolutely vital for maintaining data integrity in\
+        \ professional and high-concurrency environments. By leveraging the DBHub\
+        \ bridge, the agent can interact with MariaDB with exceptional efficiency,\
+        \ minimizing token usage while maximizing the depth and quality of extracted\
+        \ data. Synonyms include running MariaDB queries, executing relational SQL,\
+        \ database manipulation, and data fetching. Common use cases include performing\
+        \ real-time analytics on complex datasets, managing transactional records\
+        \ in a multi-user application, and performing rapid schema exploration for\
+        \ data engineering tasks. Keywords: MariaDB, relational database, MySQL fork,\
+        \ transaction support, query execution, data analysis, SQL dialect, database\
+        \ administration, relational mapping, ACID compliance, data engineering, performance\
+        \ optimization."
+      properties: null
+      required: null
+    search_objects:
+      description: "Search and explore MariaDB databases, tables, columns, indexes,\
+        \ and procedures."
+      usageIntent: null
+      discoveryHint: "Systematically search and explore MariaDB structural components,\
+        \ providing a comprehensive and detailed overview of databases, tables, columns,\
+        \ and indexes. This tool is a critical reconnaissance utility that allows\
+        \ the AI to discover and accurately map the internal organizational structure\
+        \ of a MariaDB environment without any prior knowledge of the underlying schema.\
+        \ It utilizes a progressive disclosure methodology, enabling the agent to\
+        \ efficiently navigate from a high-level list of available databases down\
+        \ to the granular details of individual table structures, data types, primary\
+        \ and foreign keys, and complex index configurations. This structural awareness\
+        \ is an absolute requirement for writing syntactically correct SQL and for\
+        \ performing accurate data analysis where precise table and column identifiers\
+        \ are paramount for success. By identifying the exact shape and relationships\
+        \ of the data, the agent can formulate highly targeted and computationally\
+        \ efficient queries. The tool provides a clean, role-based view of the database\
+        \ metadata, filtering out internal system schemas to focus exclusively on\
+        \ user-defined content that is directly relevant to the current task. It is\
+        \ particularly valuable for identifying key business entities, finding join\
+        \ keys for relational analysis, and auditing the database for consistency\
+        \ and compliance with naming standards. Synonyms include schema discovery,\
+        \ database exploration, metadata inspection, structural mapping, and object\
+        \ searching. Common use cases include performing initial discovery on a new\
+        \ MariaDB cluster, verifying the existence of specific tables after an ETL\
+        \ process, and mapping out complex relationships in a data warehouse. Keywords:\
+        \ MariaDB schema, table discovery, metadata management, column mapping, index\
+        \ search, database reconnaissance, structural inspection, relational mapping,\
+        \ schema audit, database inventory."
+      properties: null
+      required: null
+  modelSemantics: null
