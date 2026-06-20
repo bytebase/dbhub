@@ -3,6 +3,8 @@
  * Provides formatting for resources, tools, and prompts
  */
 
+import { getOutputFormat } from "../config/output-format.js";
+
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
@@ -77,14 +79,51 @@ export function createToolErrorResponse(error: string, code: string = "ERROR", d
 }
 
 /**
+ * Lazily loaded GCF encoder. Resolved once on first use.
+ * Uses createRequire for synchronous loading in ESM context.
+ */
+import { createRequire } from "module";
+
+let gcfEncoder: ((data: any) => string) | null | undefined;
+
+function getGcfEncoder(): ((data: any) => string) | null {
+  if (gcfEncoder !== undefined) return gcfEncoder;
+  try {
+    const require = createRequire(import.meta.url);
+    const mod = require("@blackwell-systems/gcf");
+    gcfEncoder = mod.encodeGeneric;
+  } catch {
+    gcfEncoder = null;
+  }
+  return gcfEncoder;
+}
+
+/**
  * Create a tool success response object
  */
 export function createToolSuccessResponse<T>(data: T, meta: Record<string, any> = {}) {
+  const payload = formatSuccessResponse(data, meta);
+
+  if (getOutputFormat() === "gcf") {
+    const encode = getGcfEncoder();
+    if (encode) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: encode(payload),
+            mimeType: "text/plain",
+          },
+        ],
+      };
+    }
+  }
+
   return {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(formatSuccessResponse(data, meta), bigIntReplacer, 2),
+        text: JSON.stringify(payload, bigIntReplacer, 2),
         mimeType: "application/json",
       },
     ],
