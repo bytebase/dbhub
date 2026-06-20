@@ -96,6 +96,22 @@ npx @bytebase/dbhub@latest --transport http --host 127.0.0.1 --port 8080 --demo
 
 See [Command-Line Options](https://dbhub.ai/config/command-line) for all available parameters.
 
+### Token-Optimized Output (GCF)
+
+Reduce tool response tokens by ~54% with the opt-in [GCF](https://gcformat.com) output format:
+
+```bash
+npx @bytebase/dbhub@latest --dsn "..." --output-format=gcf
+```
+
+Or via environment variable:
+
+```bash
+OUTPUT_FORMAT=gcf npx @bytebase/dbhub@latest --dsn "..."
+```
+
+GCF encodes structured data with positional fields (keys declared once, values pipe-delimited). 100% LLM comprehension on all frontier models. Requires installing the optional `@blackwell-systems/gcf` package. Falls back to JSON if not installed.
+
 ### Multi-Database Setup
 
 Connect to multiple databases simultaneously using TOML configuration files. Perfect for managing production, staging, and development databases from a single DBHub instance.
