@@ -4,9 +4,12 @@
  */
 
 import { ConnectorType } from "../connectors/interface.js";
+import { ConnectorManager } from "../connectors/manager.js";
 import { isReadOnlySQL, allowedKeywords } from "./allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "./client-identifier.js";
+import { classifyConnectionError } from "./error-classifier.js";
+import { createToolErrorResponse } from "./response-formatter.js";
 
 /**
  * Request metadata for tracking
@@ -72,6 +75,28 @@ export function trackToolRequest(
     client: getClientIdentifier(extra),
     success,
     error,
+  });
+}
+
+/**
+ * If `error` is a recognized connection/access failure for the given source,
+ * return a classified tool error response; otherwise return null so the caller
+ * falls back to its generic error handling.
+ *
+ * @param rawSourceId     config lookup key (undefined => default source)
+ * @param displaySourceId human-readable id used in the message + details
+ */
+export function tryClassifyConnectionError(
+  error: unknown,
+  rawSourceId: string | undefined,
+  displaySourceId: string
+): ReturnType<typeof createToolErrorResponse> | null {
+  const connectorType = ConnectorManager.getSourceConfig(rawSourceId)?.type;
+  if (!connectorType) return null;
+  const classified = classifyConnectionError(error, connectorType, displaySourceId);
+  if (!classified) return null;
+  return createToolErrorResponse(classified.message, classified.code, {
+    source_id: displaySourceId,
   });
 }
 

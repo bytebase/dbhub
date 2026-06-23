@@ -8,9 +8,9 @@ import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
   trackToolRequest,
+  tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
 import { splitSQLStatements } from "../utils/sql-parser.js";
-import { classifyConnectionError } from "../utils/error-classifier.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
@@ -82,16 +82,8 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
     } catch (error) {
       success = false;
       errorMessage = (error as Error).message;
-      const connectorType = ConnectorManager.getSourceConfig(sourceId)?.type;
-      if (connectorType) {
-        const classified = classifyConnectionError(error, connectorType, effectiveSourceId);
-        if (classified) {
-          errorMessage = classified.message;
-          return createToolErrorResponse(classified.message, classified.code, {
-            source_id: effectiveSourceId,
-          });
-        }
-      }
+      const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
+      if (classified) return classified;
       return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
     } finally {
       // Track the request
