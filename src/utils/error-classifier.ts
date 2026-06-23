@@ -77,7 +77,7 @@ export function classifyConnectionError(
     return { code: "SOURCE_UNREACHABLE", message: unreachableMessage(sourceId) };
   }
 
-  const authCodes = AUTH_CODES[connectorType] ?? [];
+  const authCodes = AUTH_CODES[connectorType];
   const errno = err.errno;
   if (
     (typeof code === "string" && authCodes.includes(code)) ||
