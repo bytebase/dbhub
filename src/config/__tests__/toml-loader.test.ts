@@ -551,6 +551,18 @@ dsn = "postgres://user:pass@localhost:5432/db?sslmode=require"
         expect(result?.sources[0].sslmode).toBe('require');
       });
 
+      it('should treat an empty DSN sslmode (?sslmode=) as present and conflicting', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/db?sslmode="
+sslmode = "require"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("conflicting sslmode");
+      });
+
       it('should throw error when DSN user conflicts with user field', () => {
         const tomlContent = `
 [[sources]]
@@ -1384,6 +1396,21 @@ dsn = "mysql://user:pass@localhost:3306/testdb"
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('postgres://user:pass@localhost:5432/db?sslmode=require');
+    });
+
+    it('should not append a duplicate when the DSN has an empty-valued param', () => {
+      // SafeURL drops `?sslmode=`, but the raw presence check must still see it
+      // so we never produce an ambiguous `?sslmode=&sslmode=require`.
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db?sslmode=',
+        sslmode: 'require',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@localhost:5432/db?sslmode=');
     });
 
     it('should not produce "?&" when the DSN ends with a bare "?"', () => {

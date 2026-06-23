@@ -224,6 +224,38 @@ function validateToolsConfig(
 }
 
 /**
+ * Read a query parameter's value from a DSN's raw query string, distinguishing
+ * "absent" (returns null) from "present but empty" (returns "").
+ *
+ * SafeURL drops params whose value is empty (e.g. `?sslmode=`), which would make
+ * an empty-but-present param look absent — causing conflict checks to be skipped
+ * and the merge step to append a duplicate param. Scanning the raw query string
+ * here avoids that.
+ */
+function getRawDSNQueryParam(dsn: string, key: string): string | null {
+  const queryStart = dsn.indexOf("?");
+  if (queryStart === -1) {
+    return null;
+  }
+  for (const pair of dsn.substring(queryStart + 1).split("&")) {
+    if (pair === "") {
+      continue;
+    }
+    const eq = pair.indexOf("=");
+    const rawKey = eq === -1 ? pair : pair.substring(0, eq);
+    if (rawKey === key) {
+      const rawValue = eq === -1 ? "" : pair.substring(eq + 1);
+      try {
+        return decodeURIComponent(rawValue);
+      } catch {
+        return rawValue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Reject standalone fields that contradict a DSN.
  *
  * A DSN already encodes the connection identity (type/host/port/database/user/
@@ -302,33 +334,35 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     );
   }
 
-  // Dual-home query-string fields
-  const dsnSslmode = url.getSearchParam("sslmode");
-  if (source.sslmode && dsnSslmode && dsnSslmode !== source.sslmode) {
+  // Dual-home query-string fields. Use the raw query string (not SafeURL, which
+  // drops empty-valued params) so a present-but-empty param like `?sslmode=` is
+  // still treated as present and a conflicting field is rejected.
+  const dsnSslmode = getRawDSNQueryParam(source.dsn!, "sslmode");
+  if (source.sslmode && dsnSslmode !== null && dsnSslmode !== source.sslmode) {
     conflict("sslmode", source.sslmode, dsnSslmode);
   }
 
-  const dsnSslrootcert = url.getSearchParam("sslrootcert");
+  const dsnSslrootcert = getRawDSNQueryParam(source.dsn!, "sslrootcert");
   if (
     source.sslrootcert &&
-    dsnSslrootcert &&
+    dsnSslrootcert !== null &&
     expandHomeDir(source.sslrootcert) !== expandHomeDir(dsnSslrootcert)
   ) {
     conflict("sslrootcert", expandHomeDir(source.sslrootcert), expandHomeDir(dsnSslrootcert));
   }
 
-  const dsnInstanceName = url.getSearchParam("instanceName");
-  if (source.instanceName && dsnInstanceName && dsnInstanceName !== source.instanceName) {
+  const dsnInstanceName = getRawDSNQueryParam(source.dsn!, "instanceName");
+  if (source.instanceName && dsnInstanceName !== null && dsnInstanceName !== source.instanceName) {
     conflict("instanceName", source.instanceName, dsnInstanceName);
   }
 
-  const dsnAuthentication = url.getSearchParam("authentication");
-  if (source.authentication && dsnAuthentication && dsnAuthentication !== source.authentication) {
+  const dsnAuthentication = getRawDSNQueryParam(source.dsn!, "authentication");
+  if (source.authentication && dsnAuthentication !== null && dsnAuthentication !== source.authentication) {
     conflict("authentication", source.authentication, dsnAuthentication);
   }
 
-  const dsnDomain = url.getSearchParam("domain");
-  if (source.domain && dsnDomain && dsnDomain !== source.domain) {
+  const dsnDomain = getRawDSNQueryParam(source.dsn!, "domain");
+  if (source.domain && dsnDomain !== null && dsnDomain !== source.domain) {
     conflict("domain", source.domain, dsnDomain);
   }
 }
@@ -729,30 +763,36 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
     return dsn;
   }
 
-  let url: SafeURL;
   try {
-    url = new SafeURL(dsn);
+    // Parse only to validate the DSN; if it can't be parsed, leave it untouched
+    // and let the connector surface the error.
+    new SafeURL(dsn);
   } catch {
-    // If the DSN can't be parsed, leave it untouched; the connector surfaces errors
     return dsn;
   }
+
+  // Use raw key presence (not SafeURL, which drops empty-valued params) so we
+  // never append a duplicate of a param the DSN already specifies, even as
+  // `?sslmode=`. Such empty-but-present params are rejected by validation when a
+  // conflicting field is set.
+  const hasParam = (key: string): boolean => getRawDSNQueryParam(dsn, key) !== null;
 
   const additions: string[] = [];
 
   // SQL Server query parameters
   if (source.type === "sqlserver") {
-    if (source.instanceName && !url.getSearchParam("instanceName")) {
+    if (source.instanceName && !hasParam("instanceName")) {
       additions.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
     }
-    if (source.authentication && !url.getSearchParam("authentication")) {
+    if (source.authentication && !hasParam("authentication")) {
       additions.push(`authentication=${encodeURIComponent(source.authentication)}`);
     }
-    if (source.domain && !url.getSearchParam("domain")) {
+    if (source.domain && !hasParam("domain")) {
       additions.push(`domain=${encodeURIComponent(source.domain)}`);
     }
   }
 
-  if (source.sslmode && !url.getSearchParam("sslmode")) {
+  if (source.sslmode && !hasParam("sslmode")) {
     additions.push(`sslmode=${source.sslmode}`);
   }
 
@@ -760,7 +800,7 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
     source.sslrootcert &&
     source.type === "postgres" &&
     (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
-    !url.getSearchParam("sslrootcert")
+    !hasParam("sslrootcert")
   ) {
     const expandedCertPath = expandHomeDir(source.sslrootcert);
     additions.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
