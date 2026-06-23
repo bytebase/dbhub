@@ -91,6 +91,65 @@ describe('execute-sql tool', () => {
       expect(parsedResult.error).toBe('Database error');
       expect(parsedResult.code).toBe('EXECUTION_ERROR');
     });
+
+    it('returns SOURCE_UNREACHABLE when the connector throws a network error', async () => {
+      const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
+      econn.code = 'ECONNREFUSED';
+      mockGetCurrentConnector.mockReturnValue({
+        id: 'postgres',
+        getId: () => 'prod',
+        executeSQL: vi.fn().mockRejectedValue(econn),
+      } as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ id: 'prod', type: 'postgres' } as any);
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+
+      const handler = createExecuteSqlToolHandler('prod');
+      const res: any = await handler({ sql: 'SELECT 1' }, {});
+      const payload = JSON.parse(res.content[0].text);
+
+      expect(res.isError).toBe(true);
+      expect(payload.code).toBe('SOURCE_UNREACHABLE');
+      expect(payload.details.source_id).toBe('prod');
+    });
+
+    it('falls through to EXECUTION_ERROR when the source config is null', async () => {
+      const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
+      econn.code = 'ECONNREFUSED';
+      mockGetCurrentConnector.mockReturnValue({
+        id: 'postgres',
+        getId: () => 'prod',
+        executeSQL: vi.fn().mockRejectedValue(econn),
+      } as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue(null as any);
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+
+      const handler = createExecuteSqlToolHandler('prod');
+      const res: any = await handler({ sql: 'SELECT 1' }, {});
+      const payload = JSON.parse(res.content[0].text);
+
+      expect(res.isError).toBe(true);
+      expect(payload.code).toBe('EXECUTION_ERROR');
+    });
+
+    it('uses the display source id "default" in single-source mode', async () => {
+      const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
+      econn.code = 'ECONNREFUSED';
+      mockGetCurrentConnector.mockReturnValue({
+        id: 'postgres',
+        getId: () => 'default',
+        executeSQL: vi.fn().mockRejectedValue(econn),
+      } as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ type: 'postgres' } as any);
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+
+      const handler = createExecuteSqlToolHandler();
+      const res: any = await handler({ sql: 'SELECT 1' }, {});
+      const payload = JSON.parse(res.content[0].text);
+
+      expect(res.isError).toBe(true);
+      expect(payload.code).toBe('SOURCE_UNREACHABLE');
+      expect(payload.details.source_id).toBe('default');
+    });
   });
 
   describe('read-only mode enforcement', () => {

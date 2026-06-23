@@ -6,6 +6,7 @@ import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
 import {
   getEffectiveSourceId,
   trackToolRequest,
+  tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
 
 /**
@@ -714,6 +715,8 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
     } catch (error) {
       success = false;
       errorMessage = (error as Error).message;
+      const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
+      if (classified) return classified;
       return createToolErrorResponse(
         `Error searching database objects: ${errorMessage}`,
         "SEARCH_ERROR"
