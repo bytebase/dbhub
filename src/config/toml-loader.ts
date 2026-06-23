@@ -224,6 +224,150 @@ function validateToolsConfig(
 }
 
 /**
+ * Read a query parameter's value from a DSN's raw query string, distinguishing
+ * "absent" (returns null) from "present but empty" (returns "").
+ *
+ * SafeURL drops params whose value is empty (e.g. `?sslmode=`), which would make
+ * an empty-but-present param look absent — causing conflict checks to be skipped
+ * and the merge step to append a duplicate param. Scanning the raw query string
+ * here avoids that.
+ */
+function getRawDSNQueryParam(dsn: string, key: string): string | null {
+  const queryStart = dsn.indexOf("?");
+  if (queryStart === -1) {
+    return null;
+  }
+  for (const pair of dsn.substring(queryStart + 1).split("&")) {
+    if (pair === "") {
+      continue;
+    }
+    const eq = pair.indexOf("=");
+    const rawKey = eq === -1 ? pair : pair.substring(0, eq);
+    if (rawKey === key) {
+      const rawValue = eq === -1 ? "" : pair.substring(eq + 1);
+      try {
+        return decodeURIComponent(rawValue);
+      } catch {
+        return rawValue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Reject standalone fields that contradict a DSN.
+ *
+ * A DSN already encodes the connection identity (type/host/port/database/user/
+ * password) and may carry query parameters (sslmode/sslrootcert plus the SQL
+ * Server instanceName/authentication/domain). When the user also sets one of
+ * those as a standalone field with a different value, the DSN wins at connection
+ * time (buildDSNFromSource returns the DSN), so the field would be silently
+ * ignored — we fail fast here instead.
+ *
+ * A field left unset never trips this check: processSourceConfigs() copies a
+ * subset of these (type/host/port/database/user + sslmode/sslrootcert) from the
+ * DSN into the source when the field is unset, so they end up matching.
+ */
+function validateDSNFieldConflicts(source: SourceConfig, configPath: string): void {
+  const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has conflicting ${field}: ` +
+        `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
+        `Set ${field} in only one place, or make the two values match.`
+    );
+  };
+
+  const info = parseConnectionInfoFromDSN(source.dsn!);
+
+  // Reject a type field that disagrees with the DSN protocol. Checked before the
+  // SQLite short-circuit below, and keyed off the DSN's parsed type rather than
+  // source.type, so a `type = "sqlite"` paired with a non-SQLite DSN (or the
+  // reverse) is still caught instead of silently skipped.
+  if (source.type && info?.type && source.type !== info.type) {
+    conflict("type", source.type, info.type);
+  }
+
+  // A SQLite DSN only carries a database path — no host/credentials or
+  // query-string fields to cross-check.
+  if (info?.type === "sqlite") {
+    return;
+  }
+
+  let url: SafeURL;
+  try {
+    url = new SafeURL(source.dsn!);
+  } catch {
+    // DSN parse failures are surfaced by the connector; skip the conflict check
+    return;
+  }
+
+  // Identity fields embedded in the DSN
+  if (info) {
+    // Hostnames are case-insensitive, so compare them normalized
+    if (source.host && info.host && source.host.toLowerCase() !== info.host.toLowerCase()) {
+      conflict("host", source.host, info.host);
+    }
+    if (source.port !== undefined && info.port !== undefined && source.port !== info.port) {
+      conflict("port", String(source.port), String(info.port));
+    }
+    if (source.database && info.database && source.database !== info.database) {
+      conflict("database", source.database, info.database);
+    }
+    if (source.user && info.user && source.user !== info.user) {
+      conflict("user", source.user, info.user);
+    }
+  }
+
+  // Password is never introspected into a field (omitted from API responses),
+  // so compare against the DSN directly. Never echo the values.
+  if (source.password && source.password !== url.password) {
+    if (!url.password) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has a 'password' field but the DSN has no password. ` +
+          `The field is ignored at connection time — add the password to the DSN, or use individual connection parameters instead of a DSN.`
+      );
+    }
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has a 'password' field that conflicts ` +
+        `with the password in the DSN. Set the password in only one place.`
+    );
+  }
+
+  // Dual-home query-string fields. Use the raw query string (not SafeURL, which
+  // drops empty-valued params) so a present-but-empty param like `?sslmode=` is
+  // still treated as present and a conflicting field is rejected.
+  const dsnSslmode = getRawDSNQueryParam(source.dsn!, "sslmode");
+  if (source.sslmode && dsnSslmode !== null && dsnSslmode !== source.sslmode) {
+    conflict("sslmode", source.sslmode, dsnSslmode);
+  }
+
+  const dsnSslrootcert = getRawDSNQueryParam(source.dsn!, "sslrootcert");
+  if (
+    source.sslrootcert &&
+    dsnSslrootcert !== null &&
+    expandHomeDir(source.sslrootcert) !== expandHomeDir(dsnSslrootcert)
+  ) {
+    conflict("sslrootcert", expandHomeDir(source.sslrootcert), expandHomeDir(dsnSslrootcert));
+  }
+
+  const dsnInstanceName = getRawDSNQueryParam(source.dsn!, "instanceName");
+  if (source.instanceName && dsnInstanceName !== null && dsnInstanceName !== source.instanceName) {
+    conflict("instanceName", source.instanceName, dsnInstanceName);
+  }
+
+  const dsnAuthentication = getRawDSNQueryParam(source.dsn!, "authentication");
+  if (source.authentication && dsnAuthentication !== null && dsnAuthentication !== source.authentication) {
+    conflict("authentication", source.authentication, dsnAuthentication);
+  }
+
+  const dsnDomain = getRawDSNQueryParam(source.dsn!, "domain");
+  if (source.domain && dsnDomain !== null && dsnDomain !== source.domain) {
+    conflict("domain", source.domain, dsnDomain);
+  }
+}
+
+/**
  * Validate a single source configuration
  */
 function validateSourceConfig(source: SourceConfig, configPath: string): void {
@@ -350,6 +494,15 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
           `Valid values for ${source.type}: disable, require`
       );
     }
+  }
+
+  // Reject fields that contradict the DSN. A DSN already encodes the connection
+  // identity (type/host/port/database/user/password) and may carry query params
+  // (sslmode/sslrootcert/instanceName/authentication/domain). When the same value
+  // is also set as a standalone field with a different value, the field is
+  // silently ignored at connection time, so we fail fast instead.
+  if (source.dsn) {
+    validateDSNFieldConflicts(source, configPath);
   }
 
   // Validate sslrootcert if provided
@@ -596,13 +749,93 @@ function expandHomeDir(filePath: string): string {
 }
 
 /**
+ * Merge "dual-home" fields (those that can be expressed either as a TOML field
+ * or as a DSN query parameter) into an existing DSN. Only appends a param when
+ * the DSN does not already specify it; conflicting values are rejected earlier
+ * by validateSourceConfig, so any param already present is guaranteed to match.
+ *
+ * This mirrors the query parameters built by the connection-params path of
+ * buildDSNFromSource so both paths produce equivalent DSNs.
+ */
+function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
+  // SQLite DSNs never carry these parameters
+  if (source.type === "sqlite") {
+    return dsn;
+  }
+
+  try {
+    // Parse only to validate the DSN; if it can't be parsed, leave it untouched
+    // and let the connector surface the error.
+    new SafeURL(dsn);
+  } catch {
+    return dsn;
+  }
+
+  // Use raw key presence (not SafeURL, which drops empty-valued params) so we
+  // never append a duplicate of a param the DSN already specifies, even as
+  // `?sslmode=`. Such empty-but-present params are rejected by validation when a
+  // conflicting field is set.
+  const hasParam = (key: string): boolean => getRawDSNQueryParam(dsn, key) !== null;
+
+  const additions: string[] = [];
+
+  // SQL Server query parameters
+  if (source.type === "sqlserver") {
+    if (source.instanceName && !hasParam("instanceName")) {
+      additions.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
+    }
+    if (source.authentication && !hasParam("authentication")) {
+      additions.push(`authentication=${encodeURIComponent(source.authentication)}`);
+    }
+    if (source.domain && !hasParam("domain")) {
+      additions.push(`domain=${encodeURIComponent(source.domain)}`);
+    }
+  }
+
+  if (source.sslmode && !hasParam("sslmode")) {
+    additions.push(`sslmode=${source.sslmode}`);
+  }
+
+  if (
+    source.sslrootcert &&
+    source.type === "postgres" &&
+    (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
+    !hasParam("sslrootcert")
+  ) {
+    const expandedCertPath = expandHomeDir(source.sslrootcert);
+    additions.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
+  }
+
+  if (additions.length === 0) {
+    return dsn;
+  }
+
+  // Pick the right join character: "?" when no query string exists yet, nothing
+  // when the DSN already ends with "?" or "&" (an empty/trailing query string),
+  // otherwise "&".
+  let separator: string;
+  if (!dsn.includes("?")) {
+    separator = "?";
+  } else if (dsn.endsWith("?") || dsn.endsWith("&")) {
+    separator = "";
+  } else {
+    separator = "&";
+  }
+  return `${dsn}${separator}${additions.join("&")}`;
+}
+
+/**
  * Build DSN from source connection parameters
  * Similar to buildDSNFromEnvParams in env.ts but for TOML sources
  */
 export function buildDSNFromSource(source: SourceConfig): string {
-  // If DSN is already provided, use it
+  // If DSN is already provided, use it — but merge in dual-home fields
+  // (sslmode/sslrootcert/instanceName/authentication/domain) so they actually
+  // affect the connection. Conflicts between the DSN query string and these
+  // fields are rejected at validation time, so any param already present in the
+  // DSN is guaranteed to match.
   if (source.dsn) {
-    return source.dsn;
+    return mergeSourceFieldsIntoDSN(source.dsn, source);
   }
 
   // Validate required fields

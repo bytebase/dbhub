@@ -212,6 +212,12 @@ Sources define database connections. Each source represents a database that DBHu
       ```
     </Tab>
   </Tabs>
+
+  <Note>
+  **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `instanceName`, `authentication`, `domain` — may be set alongside a `dsn` and are applied when the DSN omits them.
+
+  If such a field is set to a value that **contradicts** the DSN (e.g. `dsn = "...?sslmode=disable"` together with `sslmode = "require"`, or a `host`/`user`/`database` that differs from the DSN), DBHub rejects the configuration at startup rather than silently ignoring the field. Set each value in only one place, or make the two values match.
+  </Note>
 </ParamField>
 
 ### connection_timeout
