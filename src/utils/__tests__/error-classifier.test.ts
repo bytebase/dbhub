@@ -18,6 +18,9 @@ describe("classifyConnectionError", () => {
   it("classifies mysql/mariadb auth errors via code or errno", () => {
     expect(classifyConnectionError({ code: "ER_ACCESS_DENIED_ERROR" }, "mysql", "m")?.code).toBe("AUTH_FAILED");
     expect(classifyConnectionError({ errno: 1045 }, "mariadb", "m")?.code).toBe("AUTH_FAILED");
+    // 1698 = ER_ACCESS_DENIED_NO_PASSWORD_ERROR
+    expect(classifyConnectionError({ errno: 1698 }, "mysql", "m")?.code).toBe("AUTH_FAILED");
+    expect(classifyConnectionError({ errno: 1698 }, "mariadb", "m")?.code).toBe("AUTH_FAILED");
   });
 
   it("classifies sqlserver login errors as AUTH_FAILED", () => {

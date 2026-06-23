@@ -91,7 +91,15 @@ export function tryClassifyConnectionError(
   rawSourceId: string | undefined,
   displaySourceId: string
 ): ReturnType<typeof createToolErrorResponse> | null {
-  const connectorType = ConnectorManager.getSourceConfig(rawSourceId)?.type;
+  // Defensive: getSourceConfig throws if the manager is uninitialized. Keep
+  // this helper as total as classifyConnectionError itself — never throw from
+  // within a caller's catch block.
+  let connectorType: ConnectorType | undefined;
+  try {
+    connectorType = ConnectorManager.getSourceConfig(rawSourceId)?.type;
+  } catch {
+    return null;
+  }
   if (!connectorType) return null;
   const classified = classifyConnectionError(error, connectorType, displaySourceId);
   if (!classified) return null;

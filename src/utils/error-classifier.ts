@@ -30,8 +30,8 @@ const NETWORK_CODES = new Set([
 // Per-connector authentication failure signals. Keyed by code or errno.
 const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   postgres: ["28P01", "28000"],
-  mysql: ["ER_ACCESS_DENIED_ERROR", 1045],
-  mariadb: ["ER_ACCESS_DENIED_ERROR", 1045],
+  mysql: ["ER_ACCESS_DENIED_ERROR", 1045, 1698],
+  mariadb: ["ER_ACCESS_DENIED_ERROR", 1045, 1698],
   sqlserver: ["ELOGIN"],
   sqlite: [], // no network/auth layer
 };
