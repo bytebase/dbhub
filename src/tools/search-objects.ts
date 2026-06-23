@@ -30,7 +30,7 @@ export const searchDatabaseObjectsSchema = {
     .string()
     .optional()
     .default("%")
-    .describe("LIKE pattern (% = any chars, _ = one char). Default: %"),
+    .describe("LIKE pattern (% = any chars, _ = one char)"),
   schema: z
     .string()
     .optional()
@@ -49,7 +49,7 @@ export const searchDatabaseObjectsSchema = {
     .positive()
     .max(1000)
     .default(100)
-    .describe("Max results (default: 100, max: 1000)"),
+    .describe("Max results"),
 };
 
 /**
