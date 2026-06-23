@@ -37,7 +37,7 @@ const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
 };
 
 function unreachableMessage(sourceId: string): string {
-  return `Source '${sourceId}' is unreachable (connection refused or timed out). ` +
+  return `Source '${sourceId}' is unreachable. ` +
     `Verify the database is running and reachable (host, port, network), then retry.`;
 }
 
