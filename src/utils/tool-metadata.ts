@@ -183,8 +183,8 @@ export function getSearchObjectsMetadata(sourceId: string): { name: string; desc
   // so AI clients reading the MCP tool list see the source's purpose first.
   const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const description = isSingleSource
-    ? `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the ${dbType} database`
-    : `${userDescPrefix}Search and list database objects (schemas, tables, columns, procedures, functions, indexes) on the '${sourceId}' ${dbType} database`;
+    ? `${userDescPrefix}Search and list database objects on the ${dbType} database`
+    : `${userDescPrefix}Search and list database objects on the '${sourceId}' ${dbType} database`;
 
   return {
     name: toolName,
@@ -252,7 +252,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "pattern",
         type: "string",
         required: false,
-        description: "LIKE pattern (% = any chars, _ = one char). Default: %",
+        description: "LIKE pattern (% = any chars, _ = one char)",
       },
       {
         name: "schema",
@@ -276,7 +276,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "limit",
         type: "integer",
         required: false,
-        description: "Max results (default: 100, max: 1000)",
+        description: "Max results",
       },
     ],
     readonly: true, // search_objects is always readonly
