@@ -226,12 +226,16 @@ function validateToolsConfig(
 /**
  * Reject standalone fields that contradict a DSN.
  *
- * processSourceConfigs() copies identity fields (type/host/port/database/user)
- * and the sslmode/sslrootcert query params from the DSN into the source only
- * when the field is unset, so a value that differs here means the user
- * explicitly set both the DSN and the field to incompatible values. The DSN
- * always wins at connection time (buildDSNFromSource returns the DSN), so the
- * field would otherwise be silently ignored.
+ * A DSN already encodes the connection identity (type/host/port/database/user/
+ * password) and may carry query parameters (sslmode/sslrootcert plus the SQL
+ * Server instanceName/authentication/domain). When the user also sets one of
+ * those as a standalone field with a different value, the DSN wins at connection
+ * time (buildDSNFromSource returns the DSN), so the field would be silently
+ * ignored — we fail fast here instead.
+ *
+ * A field left unset never trips this check: processSourceConfigs() copies a
+ * subset of these (type/host/port/database/user + sslmode/sslrootcert) from the
+ * DSN into the source when the field is unset, so they end up matching.
  */
 function validateDSNFieldConflicts(source: SourceConfig, configPath: string): void {
   const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
@@ -268,7 +272,8 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
 
   // Identity fields embedded in the DSN
   if (info) {
-    if (source.host && info.host && source.host !== info.host) {
+    // Hostnames are case-insensitive, so compare them normalized
+    if (source.host && info.host && source.host.toLowerCase() !== info.host.toLowerCase()) {
       conflict("host", source.host, info.host);
     }
     if (source.port !== undefined && info.port !== undefined && source.port !== info.port) {
@@ -765,7 +770,17 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
     return dsn;
   }
 
-  const separator = dsn.includes("?") ? "&" : "?";
+  // Pick the right join character: "?" when no query string exists yet, nothing
+  // when the DSN already ends with "?" or "&" (an empty/trailing query string),
+  // otherwise "&".
+  let separator: string;
+  if (!dsn.includes("?")) {
+    separator = "?";
+  } else if (dsn.endsWith("?") || dsn.endsWith("&")) {
+    separator = "";
+  } else {
+    separator = "&";
+  }
   return `${dsn}${separator}${additions.join("&")}`;
 }
 

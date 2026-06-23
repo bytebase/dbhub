@@ -131,6 +131,20 @@ host = "explicit_host"
       expect(() => loadTomlConfig()).toThrow("conflicting host");
     });
 
+    it('should accept a host field that differs only in case from the DSN', () => {
+      const tomlContent = `
+[[sources]]
+id = "case_host"
+dsn = "postgres://user:pass@DB.EXAMPLE.COM:5432/db"
+host = "db.example.com"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].id).toBe('case_host');
+    });
+
     it('should accept identity fields that match the DSN', () => {
       const tomlContent = `
 [[sources]]
@@ -1325,6 +1339,64 @@ dsn = "mysql://user:pass@localhost:3306/testdb"
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('sqlserver://sa:pass@localhost:1433/db?instanceName=ENV1');
+    });
+
+    it('should merge authentication and domain fields into a SQL Server DSN', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'sqlserver',
+        dsn: 'sqlserver://user:pass@localhost:1433/db',
+        authentication: 'ntlm',
+        domain: 'CORP',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('sqlserver://user:pass@localhost:1433/db?authentication=ntlm&domain=CORP');
+    });
+
+    it('should merge sslrootcert field into a postgres DSN for verify-ca', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db',
+        sslmode: 'verify-ca',
+        sslrootcert: '/etc/ssl/ca bundle.pem',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe(
+        'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=' +
+          encodeURIComponent('/etc/ssl/ca bundle.pem')
+      );
+    });
+
+    it('should not merge sslrootcert when sslmode is not a verify mode', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db',
+        sslmode: 'require',
+        sslrootcert: '/etc/ssl/ca.pem',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@localhost:5432/db?sslmode=require');
+    });
+
+    it('should not produce "?&" when the DSN ends with a bare "?"', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db?',
+        sslmode: 'require',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe('postgres://user:pass@localhost:5432/db?sslmode=require');
     });
 
     it('should not add sslmode to a SQLite DSN', () => {
