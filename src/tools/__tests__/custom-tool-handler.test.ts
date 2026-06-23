@@ -1,10 +1,15 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
 import {
   buildZodSchemaFromParameters,
   buildInputSchema,
+  createCustomToolHandler,
 } from "../custom-tool-handler.js";
-import type { ParameterConfig } from "../../types/config.js";
+import { ConnectorManager } from "../../connectors/manager.js";
+import type { ToolConfig, ParameterConfig } from "../../types/config.js";
+
+// Auto-mock the connector manager so we control connection/execution behavior
+vi.mock("../../connectors/manager.js");
 
 describe("Custom Tool Handler", () => {
   describe("buildZodSchemaFromParameters", () => {
@@ -355,6 +360,44 @@ describe("Custom Tool Handler", () => {
       expect(schema.type).toBe("object");
       expect(schema.properties).toEqual({});
       expect(schema.required).toBeUndefined();
+    });
+  });
+
+  describe("createCustomToolHandler connection error classification", () => {
+    afterEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("returns SOURCE_UNREACHABLE (not a SQL error) when the connector throws a network error", async () => {
+      const econn: any = new Error("connect ECONNREFUSED 127.0.0.1:5432");
+      econn.code = "ECONNREFUSED";
+
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "postgres",
+        getId: () => "prod",
+        executeSQL: vi.fn().mockRejectedValue(econn),
+      } as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({
+        id: "prod",
+        type: "postgres",
+      } as any);
+
+      const toolConfig: ToolConfig = {
+        name: "get_user",
+        source: "prod",
+        statement: "SELECT * FROM users",
+      } as any;
+
+      const handler = createCustomToolHandler(toolConfig);
+      const res: any = await handler({}, {});
+      const payload = JSON.parse(res.content[0].text);
+
+      expect(res.isError).toBe(true);
+      expect(payload.code).toBe("SOURCE_UNREACHABLE");
+      expect(payload.details.source_id).toBe(toolConfig.source);
+      // Connection failures must NOT be augmented with SQL-context debugging info
+      expect(payload.error).not.toContain("SQL:");
     });
   });
 });

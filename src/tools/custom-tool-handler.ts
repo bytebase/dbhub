@@ -15,6 +15,7 @@ import {
   isAllowedInReadonlyMode,
   createReadonlyViolationMessage,
   trackToolRequest,
+  tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
 
 /**
@@ -212,6 +213,11 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
     } catch (error) {
       success = false;
       errorMessage = (error as Error).message;
+
+      // A connection/access failure is not a SQL problem — classify and return
+      // it cleanly, ahead of the ZodError / SQL-context augmentation below.
+      const classified = tryClassifyConnectionError(error, toolConfig.source, toolConfig.source);
+      if (classified) return classified;
 
       // Provide helpful error messages for common issues
       if (error instanceof z.ZodError) {
