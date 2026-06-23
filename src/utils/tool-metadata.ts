@@ -246,13 +246,13 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "object_type",
         type: "string",
         required: true,
-        description: "Object type to search",
+        description: "Object type to search: schema, table, view, column, procedure, function, index",
       },
       {
         name: "pattern",
         type: "string",
         required: false,
-        description: "LIKE pattern (% = any chars, _ = one char)",
+        description: "LIKE pattern (% = any chars, _ = one char). Default: %",
       },
       {
         name: "schema",
@@ -276,7 +276,7 @@ function buildSearchObjectsTool(sourceId: string): Tool {
         name: "limit",
         type: "integer",
         required: false,
-        description: "Max results",
+        description: "Max results (default: 100, max: 1000)",
       },
     ],
     readonly: true, // search_objects is always readonly
