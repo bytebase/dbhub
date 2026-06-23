@@ -1208,6 +1208,33 @@ describe('search_database_objects tool', () => {
       const parsed = parseToolResponse(result);
       expect(parsed.code).toBe('SEARCH_ERROR');
     });
+
+    it('returns AUTH_FAILED when the connector throws a login error', async () => {
+      const elogin: any = new Error('Login failed for user');
+      elogin.code = 'ELOGIN';
+      // make every method the handler might call reject with the auth error
+      const failing = {
+        id: 'sqlserver',
+        getId: () => 'mssql',
+        getDefaultSchema: vi.fn().mockRejectedValue(elogin),
+        getSchemas: vi.fn().mockRejectedValue(elogin),
+        getTables: vi.fn().mockRejectedValue(elogin),
+      };
+      mockGetCurrentConnector.mockReturnValue(failing as any);
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ id: 'mssql', type: 'sqlserver' } as any);
+
+      const handler = createSearchDatabaseObjectsToolHandler('mssql');
+      const result: any = await handler(
+        { object_type: 'table', detail_level: 'names', limit: 100 },
+        {}
+      );
+      const payload = parseToolResponse(result);
+
+      expect(result.isError).toBe(true);
+      expect(payload.code).toBe('AUTH_FAILED');
+      expect(payload.details.source_id).toBe('mssql');
+    });
   });
 
   describe('case insensitivity', () => {
