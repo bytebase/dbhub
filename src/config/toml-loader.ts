@@ -224,6 +224,98 @@ function validateToolsConfig(
 }
 
 /**
+ * Reject standalone fields that contradict a DSN.
+ *
+ * processSourceConfigs() copies identity fields (type/host/port/database/user)
+ * and the sslmode/sslrootcert query params from the DSN into the source only
+ * when the field is unset, so a value that differs here means the user
+ * explicitly set both the DSN and the field to incompatible values. The DSN
+ * always wins at connection time (buildDSNFromSource returns the DSN), so the
+ * field would otherwise be silently ignored.
+ */
+function validateDSNFieldConflicts(source: SourceConfig, configPath: string): void {
+  // SQLite DSNs only carry a path; nothing to cross-check
+  if (source.type === "sqlite") {
+    return;
+  }
+
+  let url: SafeURL;
+  try {
+    url = new SafeURL(source.dsn!);
+  } catch {
+    // DSN parse failures are surfaced by the connector; skip the conflict check
+    return;
+  }
+
+  const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has conflicting ${field}: ` +
+        `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
+        `Set ${field} in only one place, or make the two values match.`
+    );
+  };
+
+  // Identity fields embedded in the DSN
+  const info = parseConnectionInfoFromDSN(source.dsn!);
+  if (info) {
+    if (source.type && info.type && source.type !== info.type) {
+      conflict("type", source.type, info.type);
+    }
+    if (source.host && info.host && source.host !== info.host) {
+      conflict("host", source.host, info.host);
+    }
+    if (source.port !== undefined && info.port !== undefined && source.port !== info.port) {
+      conflict("port", String(source.port), String(info.port));
+    }
+    if (source.database && info.database && source.database !== info.database) {
+      conflict("database", source.database, info.database);
+    }
+    if (source.user && info.user && source.user !== info.user) {
+      conflict("user", source.user, info.user);
+    }
+  }
+
+  // Password is never introspected into a field (omitted from API responses),
+  // so compare against the DSN directly. Never echo the values.
+  if (source.password && source.password !== url.password) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has a 'password' field that conflicts ` +
+        `with the password embedded in the DSN. Set the password in only one place.`
+    );
+  }
+
+  // Dual-home query-string fields
+  const dsnSslmode = url.getSearchParam("sslmode");
+  if (source.sslmode && dsnSslmode && dsnSslmode !== source.sslmode) {
+    conflict("sslmode", source.sslmode, dsnSslmode);
+  }
+
+  const dsnSslrootcert = url.getSearchParam("sslrootcert");
+  if (
+    source.sslrootcert &&
+    dsnSslrootcert &&
+    expandHomeDir(source.sslrootcert) !== expandHomeDir(dsnSslrootcert)
+  ) {
+    conflict("sslrootcert", expandHomeDir(source.sslrootcert), expandHomeDir(dsnSslrootcert));
+  }
+
+  const dsnInstanceName = url.getSearchParam("instanceName");
+  if (source.instanceName && dsnInstanceName && dsnInstanceName !== source.instanceName) {
+    conflict("instanceName", source.instanceName, dsnInstanceName);
+  }
+
+  const dsnAuthentication = url.getSearchParam("authentication");
+  if (source.authentication && dsnAuthentication && dsnAuthentication !== source.authentication) {
+    conflict("authentication", source.authentication, dsnAuthentication);
+  }
+
+  const dsnDomain = url.getSearchParam("domain");
+  if (source.domain && dsnDomain && dsnDomain !== source.domain) {
+    conflict("domain", source.domain, dsnDomain);
+  }
+}
+
+/**
  * Validate a single source configuration
  */
 function validateSourceConfig(source: SourceConfig, configPath: string): void {
@@ -350,6 +442,15 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
           `Valid values for ${source.type}: disable, require`
       );
     }
+  }
+
+  // Reject fields that contradict the DSN. A DSN already encodes the connection
+  // identity (type/host/port/database/user/password) and may carry query params
+  // (sslmode/sslrootcert/instanceName/authentication/domain). When the same value
+  // is also set as a standalone field with a different value, the field is
+  // silently ignored at connection time, so we fail fast instead.
+  if (source.dsn) {
+    validateDSNFieldConflicts(source, configPath);
   }
 
   // Validate sslrootcert if provided
@@ -596,13 +697,77 @@ function expandHomeDir(filePath: string): string {
 }
 
 /**
+ * Merge "dual-home" fields (those that can be expressed either as a TOML field
+ * or as a DSN query parameter) into an existing DSN. Only appends a param when
+ * the DSN does not already specify it; conflicting values are rejected earlier
+ * by validateSourceConfig, so any param already present is guaranteed to match.
+ *
+ * This mirrors the query parameters built by the connection-params path of
+ * buildDSNFromSource so both paths produce equivalent DSNs.
+ */
+function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
+  // SQLite DSNs never carry these parameters
+  if (source.type === "sqlite") {
+    return dsn;
+  }
+
+  let url: SafeURL;
+  try {
+    url = new SafeURL(dsn);
+  } catch {
+    // If the DSN can't be parsed, leave it untouched; the connector surfaces errors
+    return dsn;
+  }
+
+  const additions: string[] = [];
+
+  // SQL Server query parameters
+  if (source.type === "sqlserver") {
+    if (source.instanceName && !url.getSearchParam("instanceName")) {
+      additions.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
+    }
+    if (source.authentication && !url.getSearchParam("authentication")) {
+      additions.push(`authentication=${encodeURIComponent(source.authentication)}`);
+    }
+    if (source.domain && !url.getSearchParam("domain")) {
+      additions.push(`domain=${encodeURIComponent(source.domain)}`);
+    }
+  }
+
+  if (source.sslmode && !url.getSearchParam("sslmode")) {
+    additions.push(`sslmode=${source.sslmode}`);
+  }
+
+  if (
+    source.sslrootcert &&
+    source.type === "postgres" &&
+    (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
+    !url.getSearchParam("sslrootcert")
+  ) {
+    const expandedCertPath = expandHomeDir(source.sslrootcert);
+    additions.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
+  }
+
+  if (additions.length === 0) {
+    return dsn;
+  }
+
+  const separator = dsn.includes("?") ? "&" : "?";
+  return `${dsn}${separator}${additions.join("&")}`;
+}
+
+/**
  * Build DSN from source connection parameters
  * Similar to buildDSNFromEnvParams in env.ts but for TOML sources
  */
 export function buildDSNFromSource(source: SourceConfig): string {
-  // If DSN is already provided, use it
+  // If DSN is already provided, use it — but merge in dual-home fields
+  // (sslmode/sslrootcert/instanceName/authentication/domain) so they actually
+  // affect the connection. Conflicts between the DSN query string and these
+  // fields are rejected at validation time, so any param already present in the
+  // DSN is guaranteed to match.
   if (source.dsn) {
-    return source.dsn;
+    return mergeSourceFieldsIntoDSN(source.dsn, source);
   }
 
   // Validate required fields
