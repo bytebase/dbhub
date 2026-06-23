@@ -1,6 +1,6 @@
 import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions, ConnectorConfig } from "./interface.js";
 import { SSHTunnel } from "../utils/ssh-tunnel.js";
-import type { SSHTunnelConfig } from "../types/ssh.js";
+import type { SSHTunnelConfig, SSHTunnelInfo } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
@@ -8,6 +8,7 @@ import { redactDSN } from "../config/env.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
+import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -191,10 +192,18 @@ export class ConnectorManager {
 
       // Create and establish SSH tunnel
       const tunnel = new SSHTunnel();
-      const tunnelInfo = await tunnel.establish(sshConfig, {
-        targetHost,
-        targetPort,
-      });
+      let tunnelInfo: SSHTunnelInfo;
+      try {
+        tunnelInfo = await tunnel.establish(sshConfig, {
+          targetHost,
+          targetPort,
+        });
+      } catch (error) {
+        if (error && typeof error === "object") {
+          (error as Record<string, unknown>)[TUNNEL_ERROR_MARKER] = true;
+        }
+        throw error;
+      }
 
       // Update DSN to use local tunnel endpoint
       url.hostname = "127.0.0.1";
