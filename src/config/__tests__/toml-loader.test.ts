@@ -570,8 +570,46 @@ password = "other_pass"
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-        // The error must not echo the password values
         expect(() => loadTomlConfig()).toThrow("password' field that conflicts");
+        // The error must not echo either password value
+        expect(() => loadTomlConfig()).not.toThrow(/dsn_pass|other_pass/);
+      });
+
+      it('should report a clear error when password field is set but DSN has no password', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user@localhost:5432/db"
+password = "field_pass"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("the DSN has no password");
+        expect(() => loadTomlConfig()).not.toThrow(/field_pass/);
+      });
+
+      it('should throw error when type = "sqlite" conflicts with a non-SQLite DSN', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlite"
+dsn = "postgres://user:pass@localhost:5432/db"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("conflicting type");
+      });
+
+      it('should throw error when type = "postgres" conflicts with a SQLite DSN', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "postgres"
+dsn = "sqlite:///path/to/db.sqlite"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("conflicting type");
       });
 
       it('should throw error when DSN instanceName conflicts with instanceName field', () => {

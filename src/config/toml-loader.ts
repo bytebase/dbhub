@@ -234,8 +234,27 @@ function validateToolsConfig(
  * field would otherwise be silently ignored.
  */
 function validateDSNFieldConflicts(source: SourceConfig, configPath: string): void {
-  // SQLite DSNs only carry a path; nothing to cross-check
-  if (source.type === "sqlite") {
+  const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has conflicting ${field}: ` +
+        `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
+        `Set ${field} in only one place, or make the two values match.`
+    );
+  };
+
+  const info = parseConnectionInfoFromDSN(source.dsn!);
+
+  // Reject a type field that disagrees with the DSN protocol. Checked before the
+  // SQLite short-circuit below, and keyed off the DSN's parsed type rather than
+  // source.type, so a `type = "sqlite"` paired with a non-SQLite DSN (or the
+  // reverse) is still caught instead of silently skipped.
+  if (source.type && info?.type && source.type !== info.type) {
+    conflict("type", source.type, info.type);
+  }
+
+  // A SQLite DSN only carries a database path — no host/credentials or
+  // query-string fields to cross-check.
+  if (info?.type === "sqlite") {
     return;
   }
 
@@ -247,20 +266,8 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     return;
   }
 
-  const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
-    throw new Error(
-      `Configuration file ${configPath}: source '${source.id}' has conflicting ${field}: ` +
-        `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
-        `Set ${field} in only one place, or make the two values match.`
-    );
-  };
-
   // Identity fields embedded in the DSN
-  const info = parseConnectionInfoFromDSN(source.dsn!);
   if (info) {
-    if (source.type && info.type && source.type !== info.type) {
-      conflict("type", source.type, info.type);
-    }
     if (source.host && info.host && source.host !== info.host) {
       conflict("host", source.host, info.host);
     }
@@ -278,9 +285,15 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   // Password is never introspected into a field (omitted from API responses),
   // so compare against the DSN directly. Never echo the values.
   if (source.password && source.password !== url.password) {
+    if (!url.password) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has a 'password' field but the DSN has no password. ` +
+          `The field is ignored at connection time — add the password to the DSN, or use individual connection parameters instead of a DSN.`
+      );
+    }
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has a 'password' field that conflicts ` +
-        `with the password embedded in the DSN. Set the password in only one place.`
+        `with the password in the DSN. Set the password in only one place.`
     );
   }
 
