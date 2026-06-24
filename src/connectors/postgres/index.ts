@@ -684,7 +684,13 @@ export class PostgresConnector implements Connector {
           }
           await client.query('COMMIT');
         } catch (error) {
-          await client.query('ROLLBACK');
+          // Best-effort rollback so a failed ROLLBACK can't mask the original
+          // error (read-only violations mid-batch are expected under BEGIN READ ONLY).
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            // ignore; the original error is more useful
+          }
           throw error;
         }
 

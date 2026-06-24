@@ -598,4 +598,25 @@ describe("splitSQLStatements", () => {
     });
   });
 
+  describe("MySQL/MariaDB dialect-aware -- comments", () => {
+    it("does not treat -- as a comment unless followed by whitespace/control/EOL", () => {
+      // `--1;DROP...` is not a comment in MySQL, so the ; still splits.
+      expect(splitSQLStatements("SELECT 1--1;DROP TABLE t", "mysql")).toHaveLength(2);
+      expect(splitSQLStatements("SELECT 1--1;DROP TABLE t", "mariadb")).toHaveLength(2);
+    });
+
+    it("treats '-- ' (whitespace) as a comment, swallowing the rest of the line", () => {
+      expect(splitSQLStatements("SELECT 1 -- c;DROP TABLE t", "mysql")).toHaveLength(1);
+    });
+
+    it("treats '--' followed by a control char (ASCII DEL 0x7F) as a comment", () => {
+      // MySQL's lexer uses my_isspace() || my_iscntrl(); DEL is a control char.
+      expect(splitSQLStatements("SELECT 1 --\x7Fc;DROP TABLE t", "mysql")).toHaveLength(1);
+    });
+
+    it("keeps -- as an always-comment for postgres (dialect difference)", () => {
+      expect(splitSQLStatements("SELECT 1--1;DROP TABLE t", "postgres")).toHaveLength(1);
+    });
+  });
+
 });

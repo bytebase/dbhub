@@ -31,7 +31,12 @@ function scanSingleLineComment(sql: string, i: number): SQLToken | null {
 function scanSingleLineCommentMySQL(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "-" || sql[i + 1] !== "-") { return null; }
   const next = sql[i + 2];
-  if (next !== undefined && next.charCodeAt(0) > 0x20) { return null; }
+  // Comment trigger = whitespace, control char, or EOL. MySQL's lexer uses
+  // my_isspace() || my_iscntrl(), so besides bytes <= 0x20 this also includes
+  // ASCII DEL (0x7F). Anything else means the dashes are minus operators.
+  if (next !== undefined && next.charCodeAt(0) > 0x20 && next.charCodeAt(0) !== 0x7f) {
+    return null;
+  }
   let j = i;
   while (j < sql.length && sql[j] !== "\n") { j++; }
   return { type: TokenType.Comment, end: j };
