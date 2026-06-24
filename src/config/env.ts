@@ -417,6 +417,44 @@ export function resolveHost(): { host: string; source: string } {
 }
 
 /**
+ * Resolve the list of additional hostnames the HTTP transport accepts in the
+ * `Host`/`Origin` headers (DNS-rebinding allow-list). Loopback hosts and the
+ * concrete bind host are always allowed by buildAllowedHosts(); this returns
+ * only the operator-supplied extras.
+ *
+ * Sources (highest priority first):
+ *   1. --allowed-hosts=host1,host2
+ *   2. DBHUB_ALLOWED_HOSTS=host1,host2 environment variable
+ *
+ * Use a single "*" to disable Host validation (only when DBHub is fronted by
+ * your own authentication/proxy). Entries may include a port, which is ignored
+ * (only the hostname is matched). IPv6 literals must be bracketed, e.g. [::1].
+ */
+export function resolveAllowedHosts(): { hosts: string[]; source: string } {
+  const args = parseCommandLineArgs();
+
+  const cliValue = requireFlagValue("allowed-hosts", args, "db.internal,app.example.com");
+  if (cliValue !== undefined) {
+    return { hosts: splitHostList(cliValue), source: "command line argument" };
+  }
+
+  const envValue = process.env.DBHUB_ALLOWED_HOSTS?.trim();
+  if (envValue) {
+    return { hosts: splitHostList(envValue), source: "environment variable" };
+  }
+
+  return { hosts: [], source: "default" };
+}
+
+/** Split a comma-separated host list, trimming and dropping empty entries. */
+function splitHostList(value: string): string[] {
+  return value
+    .split(",")
+    .map((h) => h.trim())
+    .filter((h) => h.length > 0);
+}
+
+/**
  * Redact sensitive information from a DSN string
  * Replaces the password with asterisks
  * @param dsn - The DSN string to redact

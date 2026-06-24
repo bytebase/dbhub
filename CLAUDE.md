@@ -121,6 +121,8 @@ DBHub supports three configuration methods (in priority order):
 - `--dsn`: Database connection string
 - `--transport`: `stdio` (default) or `http` for streamable HTTP transport (endpoint: `/mcp`)
 - `--port`: HTTP server port (default: 8080)
+- `--host`: HTTP bind host (default: `0.0.0.0`; env `DBHUB_HOST`)
+- `--allowed-hosts`: Comma-separated extra hostnames accepted in the HTTP `Host`/`Origin` headers, for DNS-rebinding protection (env `DBHUB_ALLOWED_HOSTS`). Loopback is always allowed; on a wildcard bind (`0.0.0.0`/`::`) this machine's hostname and IPs are auto-allowed so local/by-IP access needs no config. Set the flag for other names (e.g. a reverse-proxy/public DNS name); use `*` to disable the check when fronted by your own auth/proxy. See `buildAllowedHosts`/`getSelfHosts` in `src/utils/cross-origin.ts`.
 - `--config`: Path to TOML configuration file
 - `--demo`: Use bundled SQLite employee database
 - `--readonly`: Restrict to read-only SQL operations (deprecated - use TOML configuration instead)
