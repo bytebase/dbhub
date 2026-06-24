@@ -58,6 +58,11 @@ function normalizeHost(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   if (trimmed === ALLOW_ANY_HOST) return ALLOW_ANY_HOST;
+  // Mirror the Host-header validation: reject crafted authority strings such as
+  // "evil.com/foo" or "evil.com@localhost" that URL parsing would otherwise
+  // silently normalize to an unintended hostname (e.g. an operator typo
+  // broadening the allow-list).
+  if (INVALID_HOST_CHARS.test(trimmed)) return null;
   try {
     const hostname = new URL(`http://${trimmed}`).hostname.toLowerCase();
     return hostname || null;

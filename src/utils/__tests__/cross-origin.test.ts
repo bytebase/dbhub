@@ -28,6 +28,14 @@ describe('buildAllowedHosts', () => {
     expect(hosts.has('db.internal')).toBe(true);
   });
 
+  it('drops crafted configured entries instead of normalizing them to a hostname', () => {
+    // "evil.com/foo" and "evil.com@host" would URL-parse to a hostname; reject
+    // them so an operator typo cannot silently broaden the allow-list.
+    const hosts = buildAllowedHosts(['evil.com/foo', 'evil.com@trusted.example'], '127.0.0.1');
+    expect(hosts.has('evil.com')).toBe(false);
+    expect(hosts.has('trusted.example')).toBe(false);
+  });
+
   it('collapses to the wildcard sentinel when "*" is configured', () => {
     const hosts = buildAllowedHosts(['*', 'example.com'], '127.0.0.1');
     expect(hosts.has(ALLOW_ANY_HOST)).toBe(true);
@@ -86,9 +94,11 @@ describe('getSelfHosts', () => {
 
   it('produces entries that survive the allow-list and validate against themselves', () => {
     // Whatever this machine reports must round-trip: building an allow-list from
-    // it (wildcard bind) and validating that Host returns ok.
-    const allowed = buildAllowedHosts([], '0.0.0.0', getSelfHosts());
-    for (const h of getSelfHosts()) {
+    // it (wildcard bind) and validating that Host returns ok. Capture once —
+    // OS interface enumeration can change between calls.
+    const selfHosts = getSelfHosts();
+    const allowed = buildAllowedHosts([], '0.0.0.0', selfHosts);
+    for (const h of selfHosts) {
       expect(validateOrigin(undefined, h, allowed)).toEqual({ ok: true });
     }
   });
