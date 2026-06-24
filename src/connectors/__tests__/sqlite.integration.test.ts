@@ -563,4 +563,67 @@ describe('SQLite Connector Integration Tests', () => {
       ).rejects.toThrow();
     });
   });
+
+  describe('Per-tool readonly engine backstop (options.readonly)', () => {
+    // The connection itself is writable (shared by read-only and writable tools);
+    // read-only enforcement is applied per execution via PRAGMA query_only.
+    it('should block a write-effecting PRAGMA when options.readonly is set', async () => {
+      // query_only makes the engine reject the header write; the classifier would
+      // also reject the assignment form, so this is defense in depth.
+      await expect(
+        sqliteTest.connector.executeSQL('PRAGMA user_version = 1337', { readonly: true })
+      ).rejects.toThrow(/readonly|query_only/i);
+    });
+
+    it('should block INSERT when options.readonly is set', async () => {
+      await expect(
+        sqliteTest.connector.executeSQL(
+          "INSERT INTO users (name, email) VALUES ('ro', 'ro@test.com')",
+          { readonly: true }
+        )
+      ).rejects.toThrow(/readonly/i);
+    });
+
+    it('should restore writability for non-read-only calls on the same connection', async () => {
+      // A read-only call toggles query_only ON; it must be turned back OFF after.
+      await expect(
+        sqliteTest.connector.executeSQL('PRAGMA user_version = 1', { readonly: true })
+      ).rejects.toThrow();
+
+      // Subsequent writable call must succeed.
+      const insert = await sqliteTest.connector.executeSQL(
+        "INSERT INTO users (name, email) VALUES ('rw', 'rw@test.com')",
+        {}
+      );
+      expect(insert.rowCount).toBe(1);
+
+      // Cleanup
+      await sqliteTest.connector.executeSQL("DELETE FROM users WHERE email = 'rw@test.com'", {});
+    });
+
+    it('should allow read-only PRAGMA and SELECT when options.readonly is set', async () => {
+      const select = await sqliteTest.connector.executeSQL('SELECT 1 AS one', { readonly: true });
+      expect(Number(select.rows[0].one)).toBe(1);
+
+      const pragma = await sqliteTest.connector.executeSQL('PRAGMA table_info(users)', { readonly: true });
+      expect(pragma.rows.length).toBeGreaterThan(0);
+    });
+
+    it('should not let an in-batch query_only toggle disable the backstop', async () => {
+      // Even if the classifier were skipped, the engine re-asserts query_only=ON
+      // before each statement, so a mid-batch toggle cannot enable the later INSERT.
+      await expect(
+        sqliteTest.connector.executeSQL(
+          "PRAGMA query_only = OFF; INSERT INTO users (name, email) VALUES ('bypass', 'bypass@test.com')",
+          { readonly: true }
+        )
+      ).rejects.toThrow(/readonly|query_only/i);
+
+      const check = await sqliteTest.connector.executeSQL(
+        "SELECT COUNT(*) AS c FROM users WHERE email = 'bypass@test.com'",
+        {}
+      );
+      expect(Number(check.rows[0].c)).toBe(0);
+    });
+  });
 });

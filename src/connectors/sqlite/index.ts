@@ -453,6 +453,15 @@ export class SQLiteConnector implements Connector {
       throw new Error("Not connected to SQLite database");
     }
 
+    // Engine-level read-only backstop: PRAGMA query_only=ON makes SQLite reject any
+    // write (including header-writing pragmas like `PRAGMA user_version=N` and
+    // `wal_checkpoint(...)`) regardless of what the keyword classifier allowed. The
+    // body below runs synchronously (node:sqlite is sync), so no other executeSQL
+    // call can interleave between toggling the flag on and restoring it.
+    if (options.readonly) {
+      this.db.exec("PRAGMA query_only = ON");
+    }
+
     try {
       // Check if this is a multi-statement query
       const statements = splitSQLStatements(sql, "sqlite");
@@ -543,6 +552,12 @@ export class SQLiteConnector implements Connector {
         // Execute write statements individually to track changes
         let totalChanges = 0;
         for (const statement of writeStatements) {
+          // Re-assert the read-only backstop before each statement so an earlier
+          // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
+          // cannot disable it for the ones that follow.
+          if (options.readonly) {
+            this.db.exec("PRAGMA query_only = ON");
+          }
           const result = this.prepare(statement).run();
           totalChanges += Number(result.changes);
         }
@@ -550,6 +565,9 @@ export class SQLiteConnector implements Connector {
         // Execute read statements individually to collect results
         let allRows: any[] = [];
         for (let statement of readStatements) {
+          if (options.readonly) {
+            this.db.exec("PRAGMA query_only = ON");
+          }
           // Apply maxRows limit to SELECT queries if specified
           statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
           const result = this.prepare(statement).all();
@@ -559,8 +577,17 @@ export class SQLiteConnector implements Connector {
         // rowCount is total changes for writes, plus rows returned for reads
         return { rows: allRows, rowCount: totalChanges + allRows.length };
       }
-    } catch (error) {
-      throw error;
+    } finally {
+      // Restore the connection to writable so non-read-only tools on the same
+      // shared connection are unaffected. Best-effort: if this throws it must not
+      // mask the primary execution error (the expected read-only rejection).
+      if (options.readonly) {
+        try {
+          this.db.exec("PRAGMA query_only = OFF");
+        } catch {
+          // ignore; preserve the original error
+        }
+      }
     }
   }
 }

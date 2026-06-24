@@ -19,6 +19,29 @@ function scanSingleLineComment(sql: string, i: number): SQLToken | null {
   return { type: TokenType.Comment, end: j };
 }
 
+/**
+ * MySQL/MariaDB single-line comment scanner. Unlike ANSI SQL, MySQL and MariaDB
+ * only begin a `--` comment when the two dashes are followed by whitespace, a
+ * control character, or end of input. Otherwise the dashes are two minus
+ * operators and the rest of the line is ordinary SQL (e.g. `SELECT 1--1` is
+ * `SELECT 1 - (-1)`). Treating `--x` as a comment here would let a statement
+ * hidden after it (`SELECT 1--1;DROP TABLE t`) pass the read-only classifier
+ * while the engine still executes the DROP.
+ */
+function scanSingleLineCommentMySQL(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "-" || sql[i + 1] !== "-") { return null; }
+  const next = sql[i + 2];
+  // Comment trigger = whitespace, control char, or EOL. MySQL's lexer uses
+  // my_isspace() || my_iscntrl(), so besides bytes <= 0x20 this also includes
+  // ASCII DEL (0x7F). Anything else means the dashes are minus operators.
+  if (next !== undefined && next.charCodeAt(0) > 0x20 && next.charCodeAt(0) !== 0x7f) {
+    return null;
+  }
+  let j = i;
+  while (j < sql.length && sql[j] !== "\n") { j++; }
+  return { type: TokenType.Comment, end: j };
+}
+
 function scanMultiLineComment(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
   let j = i + 2;
@@ -133,7 +156,7 @@ function scanTokenPostgres(sql: string, i: number): SQLToken {
 }
 
 function scanTokenMySQL(sql: string, i: number): SQLToken {
-  return scanSingleLineComment(sql, i)
+  return scanSingleLineCommentMySQL(sql, i)
     ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)

@@ -242,10 +242,12 @@ export class ConnectorManager {
     if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
       config.queryTimeoutSeconds = source.query_timeout;
     }
-    // Pass readonly flag for SDK-level enforcement (PostgreSQL, SQLite)
-    if (source.readonly !== undefined) {
-      config.readonly = source.readonly;
-    }
+    // Note: read-only enforcement is per-tool, not per-source. It is applied at
+    // execution time via ExecuteOptions.readonly. Some connectors also add an
+    // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),
+    // because a single source connection may be shared by both read-only and
+    // writable tools. ConnectorConfig.readonly (connection-level) remains supported
+    // for direct connector use but is intentionally not wired from source config.
     // Pass search_path for PostgreSQL
     if (source.search_path) {
       config.searchPath = source.search_path;

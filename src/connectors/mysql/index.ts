@@ -612,6 +612,18 @@ export class MySQLConnector implements Connector {
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
     try {
+      // Engine-level read-only backstop: run the batch inside a READ ONLY
+      // transaction so MySQL rejects DML writes (INSERT/UPDATE/DELETE/REPLACE)
+      // that the keyword classifier missed (e.g. function-based writes). Note this
+      // does NOT stop DDL: statements like DROP/CREATE perform an implicit COMMIT
+      // that ends the read-only transaction first, so DDL escapes. Stacked-DDL
+      // payloads (e.g. `SELECT 1--1;DROP TABLE t`) are instead rejected upstream by
+      // the read-only classifier, which now splits `--`-hidden statements (see
+      // scanSingleLineCommentMySQL in sql-parser.ts).
+      if (options.readonly) {
+        await conn.query("START TRANSACTION READ ONLY");
+      }
+
       // Apply maxRows limit to SELECT queries if specified
       let processedSQL = sql;
       if (options.maxRows) {
@@ -651,8 +663,20 @@ export class MySQLConnector implements Connector {
       // Parse results using shared utility that handles both single and multi-statement queries
       const rows = parseQueryResults(firstResult);
       const rowCount = extractAffectedRows(firstResult);
+
+      if (options.readonly) {
+        await conn.query("COMMIT");
+      }
       return { rows, rowCount };
     } catch (error) {
+      if (options.readonly) {
+        // Best-effort rollback so the connection returns to the pool clean.
+        try {
+          await conn.query("ROLLBACK");
+        } catch {
+          // ignore rollback failure; the original error is more useful
+        }
+      }
       console.error("Error executing query:", error);
       throw error;
     } finally {

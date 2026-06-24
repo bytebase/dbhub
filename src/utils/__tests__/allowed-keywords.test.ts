@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { isReadOnlySQL } from "../allowed-keywords.js";
+import { splitSQLStatements } from "../sql-parser.js";
+import type { ConnectorType } from "../../connectors/interface.js";
+
+// Mirrors areAllStatementsReadOnly in src/tools/execute-sql.ts: the real
+// enforcement splits a batch into statements first, then checks each one.
+function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
+  return splitSQLStatements(sql, connectorType).every(s => isReadOnlySQL(s, connectorType));
+}
 
 describe("isReadOnlySQL", () => {
   describe("basic read-only detection", () => {
@@ -278,6 +286,76 @@ describe("isReadOnlySQL", () => {
 
     it("should reject MariaDB M-bang executable comment on MySQL dialect", () => {
       expect(isReadOnlySQL("/*M! DROP TABLE users */", "mysql")).toBe(false);
+    });
+  });
+
+  describe("SQLite PRAGMA write bypass prevention", () => {
+    it("should allow query-form introspection pragmas", () => {
+      expect(isReadOnlySQL("PRAGMA table_info(users)", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA user_version", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA journal_mode", "sqlite")).toBe(true);
+    });
+
+    it("should reject assignment-form pragma writing the database header", () => {
+      expect(isReadOnlySQL("PRAGMA user_version = 1337", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA application_id = 1", "sqlite")).toBe(false);
+    });
+
+    it("should reject assignment-form pragma changing durable state", () => {
+      expect(isReadOnlySQL("PRAGMA journal_mode = WAL", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA foreign_keys = OFF", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA secure_delete = ON", "sqlite")).toBe(false);
+    });
+
+    it("should reject assignment-form pragma disabling the read-only backstop", () => {
+      expect(isReadOnlySQL("PRAGMA query_only = OFF", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA writable_schema = ON", "sqlite")).toBe(false);
+    });
+
+    it("should reject assignment-form pragma without surrounding spaces", () => {
+      expect(isReadOnlySQL("PRAGMA user_version=1", "sqlite")).toBe(false);
+    });
+
+    it("should reject the parenthesized setter form (equivalent to '= value')", () => {
+      // SQLite accepts `PRAGMA name(value)` as an alias for `PRAGMA name = value`.
+      expect(isReadOnlySQL("PRAGMA user_version(1337)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA journal_mode(wal)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA writable_schema(1)", "sqlite")).toBe(false);
+    });
+
+    it("should reject disabling the backstop via the parenthesized form", () => {
+      expect(isReadOnlySQL("PRAGMA query_only(0)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA query_only(OFF)", "sqlite")).toBe(false);
+    });
+
+    it("should still allow introspection pragmas that take a name argument", () => {
+      expect(isReadOnlySQL("PRAGMA table_info(users)", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA index_list(users)", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA foreign_key_list(orders)", "sqlite")).toBe(true);
+    });
+  });
+
+  describe("MySQL/MariaDB -- comment bypass prevention", () => {
+    // MySQL/MariaDB only treat "--" as a comment when followed by whitespace.
+    // "SELECT 1--1;DROP TABLE t" is one statement to a naive parser but two to
+    // the engine, so after splitting the hidden DROP must be checked and rejected.
+    it("should split and reject a DROP hidden after -- without whitespace (mysql)", () => {
+      expect(splitSQLStatements("SELECT 1--1;DROP TABLE victim", "mysql")).toHaveLength(2);
+      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "mysql")).toBe(false);
+    });
+
+    it("should split and reject a DROP hidden after -- without whitespace (mariadb)", () => {
+      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "mariadb")).toBe(false);
+    });
+
+    it("should still treat '-- ' followed by whitespace as a comment (mysql)", () => {
+      expect(splitSQLStatements("SELECT 1 -- a comment;DROP TABLE t", "mysql")).toHaveLength(1);
+      expect(areAllStatementsReadOnly("SELECT 1 -- a comment", "mysql")).toBe(true);
+    });
+
+    it("should still treat the DML-in-comment as inert for postgres (-- is always a comment)", () => {
+      expect(splitSQLStatements("SELECT 1--1;DROP TABLE victim", "postgres")).toHaveLength(1);
+      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "postgres")).toBe(true);
     });
   });
 });
