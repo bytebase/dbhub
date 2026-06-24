@@ -9,7 +9,7 @@ Execute SQL queries and statements on your database with support for transaction
 - **Single statements**: Execute a single SQL query or command
 - **Multiple statements**: Separate multiple statements with semicolons (`;`)
 - **Transactions**: Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution
-- **Read-only mode**: When enabled with `--readonly` flag, only SELECT and read-only operations are allowed
+- **Read-only mode**: Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode
 - **Row limiting**: Configure `--max-rows` to limit SELECT query results
 
 ## Single Query
@@ -117,7 +117,9 @@ npx @bytebase/dbhub@latest --readonly --dsn "postgres://user:pass@localhost:5432
 ```
 </CodeGroup>
 
-In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) are permitted, including:
+In read-only mode, DBHub enforces read-only access in two layers:
+
+**1. Keyword classifier.** Each statement is checked against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) after stripping comments and strings:
 
 - `SELECT` queries
 - `SHOW` commands
@@ -125,9 +127,21 @@ In read-only mode, only [allowed SQL keywords](https://github.com/bytebase/dbhub
 - `EXPLAIN` queries
 - Other read-only operations
 
+**2. Engine-level enforcement.** The statement is then executed under the database's own read-only mechanism, so the database rejects writes even if the classifier is evaded:
+
+- **PostgreSQL** — runs inside a `BEGIN READ ONLY` transaction
+- **SQLite** — runs with `PRAGMA query_only = ON`
+- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`
+
 <Note>
-Read-only mode validates the **first keyword** of each statement after stripping comments and strings. It is a safety net to prevent accidental modifications, not a security boundary. For untrusted environments, use database-level read-only users or permissions instead.
+Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.
 </Note>
+
+<Warning>
+Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction. On MySQL/MariaDB, DDL performs an implicit commit and is stopped only by the keyword classifier.
+
+For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
+</Warning>
 
 ## Row Limiting
 
