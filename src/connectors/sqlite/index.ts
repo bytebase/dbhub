@@ -570,9 +570,14 @@ export class SQLiteConnector implements Connector {
       }
     } finally {
       // Restore the connection to writable so non-read-only tools on the same
-      // shared connection are unaffected.
+      // shared connection are unaffected. Best-effort: if this throws it must not
+      // mask the primary execution error (the expected read-only rejection).
       if (options.readonly) {
-        this.db.exec("PRAGMA query_only = OFF");
+        try {
+          this.db.exec("PRAGMA query_only = OFF");
+        } catch {
+          // ignore; preserve the original error
+        }
       }
     }
   }

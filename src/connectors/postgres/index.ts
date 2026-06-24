@@ -621,9 +621,18 @@ export class PostgresConnector implements Connector {
             await client.query('COMMIT');
             return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
           } catch (error) {
-            await client.query('ROLLBACK');
+            // Best-effort rollback so a failed ROLLBACK (e.g. dropped connection)
+            // can't mask the original query error.
+            try {
+              await client.query('ROLLBACK');
+            } catch {
+              // ignore; the original error is more useful
+            }
             console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
             console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
+            if (parameters && parameters.length > 0) {
+              console.error(`[PostgreSQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+            }
             throw error;
           }
         }
