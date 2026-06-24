@@ -596,6 +596,69 @@ describe('PostgreSQL Connector Integration Tests', () => {
     });
   });
 
+  describe('Per-tool readonly engine backstop (options.readonly)', () => {
+    // These mirror the realistic config: the connection is writable (no
+    // connection-level readonly), and read-only is enforced per execution by
+    // running inside a READ ONLY transaction. This catches function-based writes
+    // that the leading-keyword classifier passes (e.g. SELECT setval()).
+    it('should block a sequence write via SELECT setval() when options.readonly is set', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+
+        // SELECT setval(...) passes the read-only keyword classifier but writes a
+        // sequence; the READ ONLY transaction must reject it at the engine.
+        await expect(
+          connector.executeSQL(
+            "SELECT setval(pg_get_serial_sequence('users','id'), 1, true)",
+            { readonly: true }
+          )
+        ).rejects.toThrow(/read-only transaction/i);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should block INSERT when options.readonly is set', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+        await expect(
+          connector.executeSQL(
+            "INSERT INTO users (name, email) VALUES ('ro', 'ro@ro.com')",
+            { readonly: true }
+          )
+        ).rejects.toThrow(/read-only transaction/i);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should keep the connection writable for non-read-only calls', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+
+        // A read-only call (rolled back) must not leave the session read-only.
+        await expect(
+          connector.executeSQL("INSERT INTO users (name, email) VALUES ('x', 'x@x.com')", {
+            readonly: true,
+          })
+        ).rejects.toThrow();
+
+        const insert = await connector.executeSQL(
+          "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com') RETURNING id",
+          {}
+        );
+        expect(insert.rows).toHaveLength(1);
+
+        await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
+
   describe('Search Path Configuration Tests', () => {
     it('should use first schema in search_path as default for discovery', async () => {
       const connector = new PostgresConnector();

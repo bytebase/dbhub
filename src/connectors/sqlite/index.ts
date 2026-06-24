@@ -453,6 +453,15 @@ export class SQLiteConnector implements Connector {
       throw new Error("Not connected to SQLite database");
     }
 
+    // Engine-level read-only backstop: PRAGMA query_only=ON makes SQLite reject any
+    // write (including header-writing pragmas like `PRAGMA user_version=N` and
+    // `wal_checkpoint(...)`) regardless of what the keyword classifier allowed. The
+    // body below runs synchronously (node:sqlite is sync), so no other executeSQL
+    // call can interleave between toggling the flag on and restoring it.
+    if (options.readonly) {
+      this.db.exec("PRAGMA query_only = ON");
+    }
+
     try {
       // Check if this is a multi-statement query
       const statements = splitSQLStatements(sql, "sqlite");
@@ -559,8 +568,12 @@ export class SQLiteConnector implements Connector {
         // rowCount is total changes for writes, plus rows returned for reads
         return { rows: allRows, rowCount: totalChanges + allRows.length };
       }
-    } catch (error) {
-      throw error;
+    } finally {
+      // Restore the connection to writable so non-read-only tools on the same
+      // shared connection are unaffected.
+      if (options.readonly) {
+        this.db.exec("PRAGMA query_only = OFF");
+      }
     }
   }
 }

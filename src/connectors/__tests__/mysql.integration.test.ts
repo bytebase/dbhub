@@ -459,4 +459,55 @@ describe('MySQL Connector Integration Tests', () => {
       }
     });
   });
+
+  describe('Per-tool readonly engine backstop (options.readonly)', () => {
+    // The READ ONLY transaction reliably blocks DML. (DDL like DROP performs an
+    // implicit commit and escapes the transaction; stacked-DDL payloads such as
+    // `SELECT 1--1;DROP TABLE t` are instead rejected upstream by the read-only
+    // classifier — see the unit tests in allowed-keywords.test.ts.)
+    it('should block a stacked UPDATE hidden after -- via the READ ONLY transaction', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString);
+
+        // multipleStatements is on, so MySQL sees this as SELECT then UPDATE. The
+        // READ ONLY transaction must reject the UPDATE (DML) at the engine.
+        await expect(
+          connector.executeSQL("SELECT 1--1;UPDATE users SET name='hacked'", { readonly: true })
+        ).rejects.toThrow(/read only|read-only/i);
+
+        // No row should have been renamed.
+        const check = await connector.executeSQL(
+          "SELECT COUNT(*) AS c FROM users WHERE name='hacked'",
+          {}
+        );
+        expect(Number(check.rows[0].c)).toBe(0);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should block INSERT and keep the connection writable afterward', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString);
+
+        await expect(
+          connector.executeSQL("INSERT INTO users (name, email) VALUES ('ro', 'ro@ro.com')", {
+            readonly: true,
+          })
+        ).rejects.toThrow(/read only|read-only/i);
+
+        // Non-read-only call on the same pooled connection still works.
+        const insert = await connector.executeSQL(
+          "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com')",
+          {}
+        );
+        expect(insert.rowCount).toBe(1);
+        await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
 });

@@ -103,6 +103,16 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
     }
   }
 
+  // SQLite PRAGMA: the assignment form (e.g. `PRAGMA user_version = 1`,
+  // `PRAGMA journal_mode = WAL`, `PRAGMA query_only = OFF`) mutates durable or
+  // session state and must not classify as read-only. Only the query form
+  // (`PRAGMA user_version`, `PRAGMA table_info(t)`) is allowed here. Function-form
+  // write pragmas (e.g. `wal_checkpoint(...)`) are caught by the engine-level
+  // query_only backstop in SQLiteConnector.executeSQL.
+  if (firstWord === "pragma" && connectorType === "sqlite" && cleanedSQL.includes("=")) {
+    return false;
+  }
+
   // SELECT/WITH ... INTO writes data (creates tables or writes to files)
   if ((firstWord === "select" || firstWord === "with") && selectIntoPattern.test(cleanedSQL)) {
     return false;

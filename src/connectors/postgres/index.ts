@@ -609,6 +609,25 @@ export class PostgresConnector implements Connector {
         // Single statement - apply maxRows if applicable
         const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
 
+        // Engine-level read-only enforcement: when the tool is read-only, run the
+        // statement inside a READ ONLY transaction so the database itself rejects any
+        // write, even one the keyword classifier failed to catch (e.g. SELECT setval()).
+        if (options.readonly) {
+          await client.query('BEGIN READ ONLY');
+          try {
+            const result = parameters && parameters.length > 0
+              ? await client.query(processedStatement, parameters)
+              : await client.query(processedStatement);
+            await client.query('COMMIT');
+            return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+          } catch (error) {
+            await client.query('ROLLBACK');
+            console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
+            console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
+            throw error;
+          }
+        }
+
         // Use parameters if provided
         let result;
         if (parameters && parameters.length > 0) {
@@ -635,8 +654,10 @@ export class PostgresConnector implements Connector {
         let allRows: any[] = [];
         let totalRowCount = 0;
 
-        // Execute within a transaction to ensure session consistency
-        await client.query('BEGIN');
+        // Execute within a transaction to ensure session consistency.
+        // In read-only mode, open it READ ONLY so the engine rejects any write the
+        // keyword classifier missed (defense in depth, not a parser).
+        await client.query(options.readonly ? 'BEGIN READ ONLY' : 'BEGIN');
         try {
           for (let statement of statements) {
             // Apply maxRows limit to SELECT queries if specified
