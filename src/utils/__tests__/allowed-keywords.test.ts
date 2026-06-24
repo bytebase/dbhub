@@ -315,6 +315,24 @@ describe("isReadOnlySQL", () => {
     it("should reject assignment-form pragma without surrounding spaces", () => {
       expect(isReadOnlySQL("PRAGMA user_version=1", "sqlite")).toBe(false);
     });
+
+    it("should reject the parenthesized setter form (equivalent to '= value')", () => {
+      // SQLite accepts `PRAGMA name(value)` as an alias for `PRAGMA name = value`.
+      expect(isReadOnlySQL("PRAGMA user_version(1337)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA journal_mode(wal)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA writable_schema(1)", "sqlite")).toBe(false);
+    });
+
+    it("should reject disabling the backstop via the parenthesized form", () => {
+      expect(isReadOnlySQL("PRAGMA query_only(0)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL("PRAGMA query_only(OFF)", "sqlite")).toBe(false);
+    });
+
+    it("should still allow introspection pragmas that take a name argument", () => {
+      expect(isReadOnlySQL("PRAGMA table_info(users)", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA index_list(users)", "sqlite")).toBe(true);
+      expect(isReadOnlySQL("PRAGMA foreign_key_list(orders)", "sqlite")).toBe(true);
+    });
   });
 
   describe("MySQL/MariaDB -- comment bypass prevention", () => {

@@ -608,5 +608,22 @@ describe('SQLite Connector Integration Tests', () => {
       const pragma = await sqliteTest.connector.executeSQL('PRAGMA table_info(users)', { readonly: true });
       expect(pragma.rows.length).toBeGreaterThan(0);
     });
+
+    it('should not let an in-batch query_only toggle disable the backstop', async () => {
+      // Even if the classifier were skipped, the engine re-asserts query_only=ON
+      // before each statement, so a mid-batch toggle cannot enable the later INSERT.
+      await expect(
+        sqliteTest.connector.executeSQL(
+          "PRAGMA query_only = OFF; INSERT INTO users (name, email) VALUES ('bypass', 'bypass@test.com')",
+          { readonly: true }
+        )
+      ).rejects.toThrow(/readonly|query_only/i);
+
+      const check = await sqliteTest.connector.executeSQL(
+        "SELECT COUNT(*) AS c FROM users WHERE email = 'bypass@test.com'",
+        {}
+      );
+      expect(Number(check.rows[0].c)).toBe(0);
+    });
   });
 });

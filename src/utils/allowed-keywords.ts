@@ -61,6 +61,22 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
 
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
+/**
+ * SQLite read-only introspection pragmas that legitimately take a parenthesized
+ * argument (a table/index name) and return rows without mutating state. Any other
+ * pragma using the parenthesized form is a setter (e.g. `PRAGMA user_version(1)`,
+ * `PRAGMA query_only(0)`), which SQLite treats identically to the `= value` form.
+ */
+const sqliteReadOnlyArgPragmas = new Set([
+  "table_info",
+  "index_info",
+  "index_list",
+  "foreign_key_list",
+]);
+
+/** Matches `PRAGMA [schema.]name(` to extract the pragma name of the parenthesized form. */
+const sqlitePragmaParenPattern = /^pragma\s+(?:[a-z0-9_]+\.)?([a-z0-9_]+)\s*\(/;
+
 /** Matches EXPLAIN ANALYZE (or parenthesized form), excluding disabled forms (false/off/0) */
 const explainAnalyzePattern =
   /^explain\s+(?:\([^)]*\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)[^)]*\)|\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)(?:\s+verbose\b)?)/i;
@@ -103,14 +119,21 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
     }
   }
 
-  // SQLite PRAGMA: the assignment form (e.g. `PRAGMA user_version = 1`,
-  // `PRAGMA journal_mode = WAL`, `PRAGMA query_only = OFF`) mutates durable or
-  // session state and must not classify as read-only. Only the query form
-  // (`PRAGMA user_version`, `PRAGMA table_info(t)`) is allowed here. Function-form
-  // write pragmas (e.g. `wal_checkpoint(...)`) are caught by the engine-level
-  // query_only backstop in SQLiteConnector.executeSQL.
-  if (firstWord === "pragma" && connectorType === "sqlite" && cleanedSQL.includes("=")) {
-    return false;
+  // SQLite PRAGMA: a pragma that sets a value mutates durable or session state and
+  // must not classify as read-only. SQLite accepts a setter in two equivalent
+  // forms — `PRAGMA name = value` and `PRAGMA name(value)` — so checking for `=`
+  // alone is not enough. Reject the assignment form, and reject the parenthesized
+  // form unless the pragma is a known introspection pragma (e.g. `table_info(t)`)
+  // that takes an argument purely to return rows. The bare query form
+  // (`PRAGMA user_version`) returns the value and is allowed.
+  if (firstWord === "pragma" && connectorType === "sqlite") {
+    if (cleanedSQL.includes("=")) {
+      return false;
+    }
+    const parenMatch = cleanedSQL.match(sqlitePragmaParenPattern);
+    if (parenMatch && !sqliteReadOnlyArgPragmas.has(parenMatch[1])) {
+      return false;
+    }
   }
 
   // SELECT/WITH ... INTO writes data (creates tables or writes to files)

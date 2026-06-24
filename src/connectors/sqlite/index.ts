@@ -552,6 +552,12 @@ export class SQLiteConnector implements Connector {
         // Execute write statements individually to track changes
         let totalChanges = 0;
         for (const statement of writeStatements) {
+          // Re-assert the read-only backstop before each statement so an earlier
+          // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
+          // cannot disable it for the ones that follow.
+          if (options.readonly) {
+            this.db.exec("PRAGMA query_only = ON");
+          }
           const result = this.prepare(statement).run();
           totalChanges += Number(result.changes);
         }
@@ -559,6 +565,9 @@ export class SQLiteConnector implements Connector {
         // Execute read statements individually to collect results
         let allRows: any[] = [];
         for (let statement of readStatements) {
+          if (options.readonly) {
+            this.db.exec("PRAGMA query_only = ON");
+          }
           // Apply maxRows limit to SELECT queries if specified
           statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
           const result = this.prepare(statement).all();
