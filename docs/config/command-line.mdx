@@ -71,6 +71,46 @@ Command-line flags are passed when starting DBHub. These have the highest priori
   </Warning>
 </ParamField>
 
+### --allowed-hosts
+
+<ParamField path="--allowed-hosts" type="string" env="DBHUB_ALLOWED_HOSTS" default="(loopback + this machine)">
+  Comma-separated list of additional hostnames the HTTP transport accepts in the
+  `Host` (and `Origin`) headers. This is DBHub's **DNS-rebinding protection**:
+  requests whose `Host` is not on the list are rejected with `403`, so a
+  malicious web page cannot rebind a hostname to your DBHub instance and drive
+  its MCP tools from the victim's browser. Only used when `--transport=http`.
+
+  The list always includes loopback (`localhost`, `127.0.0.1`, `[::1]`). When
+  bound to a wildcard address (the default `0.0.0.0` / `::`), this machine's own
+  hostname and external IP addresses are added automatically, so reaching DBHub
+  by IP or machine name works without any extra configuration. You only need
+  this flag for **other** names that resolve to DBHub — most commonly a
+  reverse-proxy or public DNS name.
+
+  ```bash
+  # Serve behind a public/reverse-proxy hostname
+  npx @bytebase/dbhub@latest --transport http --allowed-hosts "dbhub.example.com" --dsn "..."
+
+  # Multiple hostnames
+  npx @bytebase/dbhub@latest --transport http --allowed-hosts "dbhub.example.com,db.internal" --dsn "..."
+
+  # Disable the check entirely (only when fronted by your own auth/proxy)
+  npx @bytebase/dbhub@latest --transport http --allowed-hosts "*" --dsn "..."
+  ```
+
+  <Note>
+  A port in an entry is ignored — only the hostname is matched. IPv6 literals
+  must be bracketed, e.g. `[2001:db8::1]`. The active allow-list is printed at
+  startup. If a legitimate client gets a `403` "Host ... is not allowed", add
+  its hostname here.
+  </Note>
+
+  <Warning>
+  `--allowed-hosts "*"` turns off DNS-rebinding protection. Use it only when
+  DBHub sits behind your own authentication and/or proxy.
+  </Warning>
+</ParamField>
+
 ### --dsn
 
 <ParamField path="--dsn" type="string" env="DSN">

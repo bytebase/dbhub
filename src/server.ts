@@ -9,14 +9,14 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, resolveHost, resolveSourceConfigs, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
 import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
-import { validateOrigin } from "./utils/cross-origin.js";
+import { validateOrigin, buildAllowedHosts, getSelfHosts, ALLOW_ANY_HOST } from "./utils/cross-origin.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -135,6 +135,15 @@ See documentation for more details on configuring database connections.
     const port = transportData.type === "http" ? resolvePort().port : null;
     const host = transportData.type === "http" ? resolveHost().host : null;
 
+    // DNS-rebinding allow-list for the HTTP transport: loopback is always
+    // permitted; a wildcard bind also auto-allows this machine's hostname/IPs so
+    // network clients work without extra config, and operators add any other
+    // served hostnames via --allowed-hosts / DBHUB_ALLOWED_HOSTS ("*" disables).
+    const allowedHosts =
+      transportData.type === "http"
+        ? buildAllowedHosts(resolveAllowedHosts().hosts, host ?? undefined, getSelfHosts())
+        : new Set<string>();
+
     // Print ASCII art banner with version and slogan
     // Collect active modes
     const activeModes: string[] = [];
@@ -172,17 +181,15 @@ See documentation for more details on configuring database connections.
       // Enable JSON parsing
       app.use(express.json());
 
-      // Cross-origin fetch guard: when a browser sends Origin, require
-      // it to match the Host header.  This blocks the common case of an
-      // attacker's site on a different origin issuing an authenticated
-      // fetch to a locally bound DBHub; it is NOT a complete defense
-      // against DNS rebinding, since a rebinding attacker controls both
-      // the DNS record and the Origin string and can trivially make them
-      // agree.  A Host-header allowlist is tracked as follow-up hardening.
-      // Non-browser MCP clients typically omit Origin and are unaffected.
+      // DNS-rebinding guard: validate the Host header against an explicit
+      // allow-list (loopback + the bind host + any --allowed-hosts) on every
+      // request, and validate Origin when present. A rebound attacker hostname
+      // is not on the list and is rejected even though Origin and Host agree —
+      // closing GHSA-fm8p-53ww-hf6w / GHSA-fp99-xwp4-hv8q / GHSA-qvg2-3c48-77mx.
+      // Non-browser MCP clients targeting an allowed host are unaffected.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
-        const result = validateOrigin(origin, req.headers.host);
+        const result = validateOrigin(origin, req.headers.host, allowedHosts);
         if (!result.ok) {
           return res.status(result.status).json({
             error: result.status === 400 ? 'Bad Request' : 'Forbidden',
@@ -276,6 +283,14 @@ See documentation for more details on configuring database connections.
         const userHost = (boundHost === '0.0.0.0' || boundHost === '::') ? 'localhost' : displayHost;
 
         console.error(`HTTP server listening on ${displayHost}:${boundPort}`);
+
+        // Surface the DNS-rebinding allow-list so operators know which Host
+        // values are accepted (and how to widen it for network deployments).
+        if (allowedHosts.has(ALLOW_ANY_HOST)) {
+          console.error('Allowed hosts: * (DNS-rebinding protection DISABLED — ensure DBHub is fronted by your own auth/proxy)');
+        } else {
+          console.error(`Allowed hosts: ${[...allowedHosts].join(', ')} (set --allowed-hosts to serve other hostnames)`);
+        }
 
         // In development mode, suggest using the Vite dev server for hot reloading.
         // Vite serves from localhost; use the same hostname for the backend hint so
