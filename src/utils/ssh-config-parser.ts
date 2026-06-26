@@ -4,6 +4,10 @@ import { join } from 'path';
 import SSHConfig from 'ssh-config';
 import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
 
+type SSHConfigLookupResult = Omit<SSHTunnelConfig, 'username'> & {
+  username?: string;
+};
+
 /**
  * Default path to the user's SSH config file
  */
@@ -92,9 +96,23 @@ function findDefaultSSHKey(): string | undefined {
  */
 export function parseSSHConfig(
   hostAlias: string,
+  configPath: string
+): SSHTunnelConfig | null;
+export function parseSSHConfig(
+  hostAlias: string,
+  configPath: string,
+  options: { requireUser?: true }
+): SSHTunnelConfig | null;
+export function parseSSHConfig(
+  hostAlias: string,
+  configPath: string,
+  options: { requireUser: false }
+): SSHConfigLookupResult | null;
+export function parseSSHConfig(
+  hostAlias: string,
   configPath: string,
   options: { requireUser?: boolean } = {}
-): SSHTunnelConfig | null {
+): SSHConfigLookupResult | null {
   const { requireUser = true } = options;
 
   // Resolve symlinks in the config path (important for Windows where .ssh may be a junction)
@@ -125,7 +143,7 @@ export function parseSSHConfig(
     }
 
     // Extract SSH configuration parameters
-    const sshConfig: Partial<SSHTunnelConfig> = {};
+    const sshConfig: Partial<SSHConfigLookupResult> = {};
 
     // Host (required)
     if (hostConfig.HostName) {
@@ -183,7 +201,9 @@ export function parseSSHConfig(
       return null;
     }
 
-    return sshConfig as SSHTunnelConfig;
+    return requireUser
+      ? sshConfig as SSHTunnelConfig
+      : sshConfig as SSHConfigLookupResult;
   } catch (error) {
     console.error(`Error parsing SSH config: ${error instanceof Error ? error.message : String(error)}`);
     return null;
