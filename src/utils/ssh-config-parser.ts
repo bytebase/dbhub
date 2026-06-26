@@ -113,8 +113,14 @@ export function parseSSHConfig(
     // Find configuration for the specified host
     const hostConfig = config.compute(hostAlias);
 
-    // Check if we have a valid config (not just Include directives)
-    if (!hostConfig || !hostConfig.HostName && !hostConfig.User) {
+    // Check if we have a valid config (not just Include directives). A host counts as
+    // configured if it sets any meaningful directive — not only HostName/User — since
+    // ProxyJump aliases often define just Port/IdentityFile/ProxyJump and inherit the
+    // hostname (the alias) and username (from the target).
+    if (
+      !hostConfig ||
+      (!hostConfig.HostName && !hostConfig.User && !hostConfig.Port && !hostConfig.IdentityFile && !hostConfig.ProxyJump)
+    ) {
       return null;
     }
 

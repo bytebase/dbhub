@@ -160,6 +160,21 @@ export class ConnectorManager {
       // Build SSH config: explicit TOML fields override SSH config values
       const username = source.ssh_user || resolvedSSHConfig?.username;
       const proxyJump = source.ssh_proxy_jump || resolvedSSHConfig?.proxyJump;
+
+      // Resolve the jump-host chain so alias hops (and nested ProxyJump) carry their own
+      // host/user/port/key from ~/.ssh/config, matching `ssh`. This can throw (e.g. a
+      // cyclic ProxyJump or invalid token); tag such failures as tunnel errors so they're
+      // classified consistently with tunnel.establish() failures.
+      let resolvedJumpHosts: SSHTunnelConfig["resolvedJumpHosts"];
+      try {
+        resolvedJumpHosts = proxyJump ? resolveJumpHosts(proxyJump, sshConfigPath) : undefined;
+      } catch (error) {
+        if (error && typeof error === "object") {
+          (error as Record<string, unknown>)[TUNNEL_ERROR_MARKER] = true;
+        }
+        throw error;
+      }
+
       const sshConfig: SSHTunnelConfig = {
         host: resolvedSSHConfig?.host || source.ssh_host,
         port: source.ssh_port || resolvedSSHConfig?.port || 22,
@@ -168,9 +183,7 @@ export class ConnectorManager {
         privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
         passphrase: source.ssh_passphrase,
         proxyJump,
-        // Resolve the jump-host chain so alias hops (and nested ProxyJump) carry
-        // their own host/user/port/key from ~/.ssh/config, matching `ssh`.
-        resolvedJumpHosts: proxyJump ? resolveJumpHosts(proxyJump, sshConfigPath) : undefined,
+        resolvedJumpHosts,
         keepaliveInterval: source.ssh_keepalive_interval,
         keepaliveCountMax: source.ssh_keepalive_count_max,
       };

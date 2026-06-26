@@ -585,6 +585,23 @@ Host bastion
       expect(hops[0].username).toBeUndefined();
     });
 
+    it('resolves a jump alias defining only Port/IdentityFile (HostName falls back to the alias)', () => {
+      const keyPath = join(tempDir, 'bastion_key');
+      writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+      writeFileSync(configPath, `
+Host bastion
+  Port 2200
+  IdentityFile ${keyPath}
+`);
+      const hops = resolveJumpHosts('bastion', configPath);
+      expect(hops).toHaveLength(1);
+      // No HostName → OpenSSH uses the alias itself as the hostname.
+      expect(hops[0].host).toBe('bastion');
+      expect(hops[0].port).toBe(2200);
+      expect(hops[0].privateKey).toBe(realpathSync(keyPath));
+      expect(hops[0].username).toBeUndefined();
+    });
+
     it('expands nested ProxyJump aliases in connection order (x -> a -> b)', () => {
       writeFileSync(configPath, `
 Host x
