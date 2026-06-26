@@ -172,10 +172,13 @@ DBHub supports SSH tunnels for secure database connections through bastion hosts
 - Configuration via command-line options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
 - Configuration via environment variables: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD`, `SSH_KEY`, `SSH_PASSPHRASE`
 - SSH config file support: Automatically reads from `~/.ssh/config` when using host aliases
-- Implementation in `src/utils/ssh-tunnel.ts` using the `ssh2` library
+- **Native SSH mode** (auto): When `ssh_host` matches a Host alias in `~/.ssh/config` (and no `ssh_password` / `ssh_proxy_jump`), DBHub spawns the system `ssh` client (`src/utils/native-ssh-tunnel.ts`) so ProxyJump and per-hop auth are handled by OpenSSH
+- **ssh2 fallback**: Direct IP/hostname, password auth, and explicit `ssh_proxy_jump` use `src/utils/ssh-tunnel.ts` with the `ssh2` library
+- Troubleshooting env: `DBHUB_SSH_BIN`, `DBHUB_SSH_CONFIG`, `DBHUB_SSH_FORCE_SSH2`
 - SSH config parsing in `src/utils/ssh-config-parser.ts` using the `ssh-config` library
+- Tunnel mode resolution in `src/utils/ssh-tunnel-resolver.ts`
 - Automatic tunnel establishment when SSH config is detected
-- Support for both password and key-based authentication
+- Support for both password and key-based authentication (ssh2 mode)
 - Default SSH key detection (tries `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.)
 - Tunnel lifecycle managed by `ConnectorManager`
 

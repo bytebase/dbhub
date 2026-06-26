@@ -460,6 +460,9 @@ Sources define database connections. Each source represents a database that DBHu
   ssh_key = "~/.ssh/id_rsa"  # File path or base64-encoded key
   ssh_passphrase = "my_key_passphrase"  # Optional
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
+
+  # Or use a ~/.ssh/config Host alias (native OpenSSH when no ssh_password / ssh_proxy_jump):
+  # ssh_host = "target-with-jump"
   ```
 
   `ssh_key` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format.

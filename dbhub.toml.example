@@ -68,13 +68,19 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # sslmode = "verify-ca"
 # sslrootcert = "~/.ssl/rds-combined-ca-bundle.pem"
 
+# SSH tunnel via ~/.ssh/config alias (native OpenSSH — ProxyJump handled automatically)
+# [[sources]]
+# id = "prod_pg"
+# dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
+# ssh_host = "target-with-jump"   # Host alias from ~/.ssh/config (e.g. ProxyJump mybastion)
+
 # Production PostgreSQL (behind SSH bastion, lazy connection)
 # [[sources]]
 # id = "prod_pg"
 # dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
 # lazy = true  # Defer connection until first query (avoids startup overhead for remote DBs)
 # connection_timeout = 30
-# # SSH tunnel configuration
+# # SSH tunnel configuration (direct host — uses built-in ssh2)
 # ssh_host = "bastion.company.com"
 # ssh_port = 22
 # ssh_user = "deploy"
