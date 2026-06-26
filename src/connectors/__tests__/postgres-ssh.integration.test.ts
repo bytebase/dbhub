@@ -135,11 +135,10 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
 
         // Verify that SSH tunnel was attempted with the correct config values
         expect(mockSSHTunnelEstablish).toHaveBeenCalledTimes(1);
-        const sshTunnelCall = mockSSHTunnelEstablish.mock.calls[0];
-        const [sshConfig, tunnelOptions] = sshTunnelCall;
+        const [request] = mockSSHTunnelEstablish.mock.calls[0];
 
         // Verify SSH config values were properly set from source config
-        expect(sshConfig).toMatchObject({
+        expect(request.sshConfig).toMatchObject({
           host: 'bastion.example.com',
           username: 'sshuser',
           port: 2222,
@@ -148,8 +147,8 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
 
         // Verify tunnel options are correctly set up for the database connection
         const originalDsnUrl = new URL(dsn);
-        expect(tunnelOptions.targetHost).toBe(originalDsnUrl.hostname);
-        expect(tunnelOptions.targetPort).toBe(parseInt(originalDsnUrl.port));
+        expect(request.targetHost).toBe(originalDsnUrl.hostname);
+        expect(request.targetPort).toBe(parseInt(originalDsnUrl.port));
 
       } finally {
         mockSSHTunnelEstablish.mockRestore();
@@ -179,8 +178,8 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
 
         // Verify SSH tunnel was attempted with password auth
         expect(mockSSHTunnelEstablish).toHaveBeenCalledTimes(1);
-        const [sshConfig] = mockSSHTunnelEstablish.mock.calls[0];
-        expect(sshConfig.password).toBe('sshpass');
+        const [request] = mockSSHTunnelEstablish.mock.calls[0];
+        expect(request.sshConfig?.password).toBe('sshpass');
 
       } finally {
         mockSSHTunnelEstablish.mockRestore();
