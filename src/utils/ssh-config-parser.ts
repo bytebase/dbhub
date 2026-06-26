@@ -85,12 +85,18 @@ function findDefaultSSHKey(): string | undefined {
  * Parse SSH config file and extract configuration for a specific host
  * @param hostAlias The host alias to look up in the SSH config
  * @param configPath Path to SSH config file
+ * @param options.requireUser When true (default), return null unless a `User` is
+ *   resolved. ProxyJump alias hops pass `false` because they inherit the username
+ *   from the target connection.
  * @returns SSH tunnel configuration or null if not found
  */
 export function parseSSHConfig(
   hostAlias: string,
-  configPath: string
+  configPath: string,
+  options: { requireUser?: boolean } = {}
 ): SSHTunnelConfig | null {
+  const { requireUser = true } = options;
+
   // Resolve symlinks in the config path (important for Windows where .ssh may be a junction)
   const sshConfigPath = resolveSymlink(configPath);
 
@@ -165,8 +171,9 @@ export function parseSSHConfig(
       console.error('Warning: ProxyCommand in SSH config is not supported by DBHub. Use ProxyJump instead.');
     }
 
-    // Validate that we have minimum required fields
-    if (!sshConfig.host || !sshConfig.username) {
+    // Validate that we have minimum required fields. Top-level `ssh_host` resolution
+    // requires a username; ProxyJump alias hops can inherit it from the target.
+    if (!sshConfig.host || (requireUser && !sshConfig.username)) {
       return null;
     }
 
@@ -355,7 +362,8 @@ export function resolveJumpHosts(
       throw new Error(`Cycle detected in SSH ProxyJump chain at alias "${hop.host}"`);
     }
 
-    const aliasConfig = parseSSHConfig(hop.host, configPath);
+    // Jump-host aliases may omit `User` (inherited from the target), so don't require it.
+    const aliasConfig = parseSSHConfig(hop.host, configPath, { requireUser: false });
     if (!aliasConfig) {
       resolved.push(hop); // alias not in config — treat the token literally
       continue;

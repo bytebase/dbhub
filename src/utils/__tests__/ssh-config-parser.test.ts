@@ -567,6 +567,24 @@ Host target-with-jump
       expect(hops[0].privateKey).toBe(realpathSync(keyPath));
     });
 
+    it('resolves a jump alias that has no User (username inherited from target)', () => {
+      const keyPath = join(tempDir, 'bastion_key');
+      writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+      writeFileSync(configPath, `
+Host bastion
+  HostName bastion.example.com
+  Port 2200
+  IdentityFile ${keyPath}
+`);
+      const hops = resolveJumpHosts('bastion', configPath);
+      expect(hops).toHaveLength(1);
+      expect(hops[0].host).toBe('bastion.example.com');
+      expect(hops[0].port).toBe(2200);
+      expect(hops[0].privateKey).toBe(realpathSync(keyPath));
+      // No User in the stanza → username left undefined so the tunnel inherits the target's.
+      expect(hops[0].username).toBeUndefined();
+    });
+
     it('expands nested ProxyJump aliases in connection order (x -> a -> b)', () => {
       writeFileSync(configPath, `
 Host x
