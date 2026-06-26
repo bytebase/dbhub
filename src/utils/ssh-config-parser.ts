@@ -4,6 +4,10 @@ import { join } from 'path';
 import SSHConfig from 'ssh-config';
 import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
 
+type SSHConfigLookupResult = Omit<SSHTunnelConfig, 'username'> & {
+  username?: string;
+};
+
 /**
  * Default path to the user's SSH config file
  */
@@ -85,12 +89,32 @@ function findDefaultSSHKey(): string | undefined {
  * Parse SSH config file and extract configuration for a specific host
  * @param hostAlias The host alias to look up in the SSH config
  * @param configPath Path to SSH config file
+ * @param options.requireUser When true (default), return null unless a `User` is
+ *   resolved. ProxyJump alias hops pass `false` because they inherit the username
+ *   from the target connection.
  * @returns SSH tunnel configuration or null if not found
  */
 export function parseSSHConfig(
   hostAlias: string,
   configPath: string
-): SSHTunnelConfig | null {
+): SSHTunnelConfig | null;
+export function parseSSHConfig(
+  hostAlias: string,
+  configPath: string,
+  options: { requireUser?: true }
+): SSHTunnelConfig | null;
+export function parseSSHConfig(
+  hostAlias: string,
+  configPath: string,
+  options: { requireUser: false }
+): SSHConfigLookupResult | null;
+export function parseSSHConfig(
+  hostAlias: string,
+  configPath: string,
+  options: { requireUser?: boolean } = {}
+): SSHConfigLookupResult | null {
+  const { requireUser = true } = options;
+
   // Resolve symlinks in the config path (important for Windows where .ssh may be a junction)
   const sshConfigPath = resolveSymlink(configPath);
 
@@ -107,13 +131,19 @@ export function parseSSHConfig(
     // Find configuration for the specified host
     const hostConfig = config.compute(hostAlias);
 
-    // Check if we have a valid config (not just Include directives)
-    if (!hostConfig || !hostConfig.HostName && !hostConfig.User) {
+    // Check if we have a valid config (not just Include directives). A host counts as
+    // configured if it sets any meaningful directive — not only HostName/User — since
+    // ProxyJump aliases often define just Port/IdentityFile/ProxyJump and inherit the
+    // hostname (the alias) and username (from the target).
+    if (
+      !hostConfig ||
+      (!hostConfig.HostName && !hostConfig.User && !hostConfig.Port && !hostConfig.IdentityFile && !hostConfig.ProxyJump)
+    ) {
       return null;
     }
 
     // Extract SSH configuration parameters
-    const sshConfig: Partial<SSHTunnelConfig> = {};
+    const sshConfig: Partial<SSHConfigLookupResult> = {};
 
     // Host (required)
     if (hostConfig.HostName) {
@@ -165,12 +195,15 @@ export function parseSSHConfig(
       console.error('Warning: ProxyCommand in SSH config is not supported by DBHub. Use ProxyJump instead.');
     }
 
-    // Validate that we have minimum required fields
-    if (!sshConfig.host || !sshConfig.username) {
+    // Validate that we have minimum required fields. Top-level `ssh_host` resolution
+    // requires a username; ProxyJump alias hops can inherit it from the target.
+    if (!sshConfig.host || (requireUser && !sshConfig.username)) {
       return null;
     }
 
-    return sshConfig as SSHTunnelConfig;
+    return requireUser
+      ? sshConfig as SSHTunnelConfig
+      : sshConfig as SSHConfigLookupResult;
   } catch (error) {
     console.error(`Error parsing SSH config: ${error instanceof Error ? error.message : String(error)}`);
     return null;
@@ -309,4 +342,84 @@ export function parseJumpHosts(proxyJump: string): JumpHost[] {
     .map(s => s.trim())
     .filter(s => s.length > 0)
     .map(parseJumpHost);
+}
+
+/**
+ * Resolve a ProxyJump string into a fully-resolved jump-host chain.
+ *
+ * Unlike {@link parseJumpHosts} (which treats every token as a literal
+ * `[user@]host[:port]`), this resolves any hop that is a `~/.ssh/config` Host
+ * alias through {@link parseSSHConfig}, so each hop carries its own real
+ * HostName/User/Port/IdentityFile — matching how OpenSSH connects. Aliases whose
+ * own stanza has a `ProxyJump` are expanded recursively and prepended, so a
+ * target with `ProxyJump a,b` where `a` has `ProxyJump x` resolves to
+ * `x -> a -> b`. An explicit `user@`/`:port` on the token overrides the config.
+ *
+ * Non-alias tokens (FQDNs/IPs) and aliases absent from the config fall back to
+ * literal parsing, preserving prior behavior for explicit `ssh_proxy_jump` specs.
+ *
+ * @param proxyJump Comma-separated ProxyJump string
+ * @param configPath Path to the SSH config file (for alias lookups)
+ * @param visited Aliases already on the current resolution path (cycle guard)
+ */
+export function resolveJumpHosts(
+  proxyJump: string,
+  configPath: string,
+  visited: Set<string> = new Set()
+): JumpHost[] {
+  if (!proxyJump || proxyJump.trim() === '' || proxyJump.toLowerCase() === 'none') {
+    return [];
+  }
+
+  const resolved: JumpHost[] = [];
+
+  // Iterate the raw tokens (not parseJumpHosts output) so we can tell an explicit
+  // `:port` from the normalized default of 22 — needed to let a token port override
+  // a config alias's Port.
+  for (const token of proxyJump.split(',').map((s) => s.trim()).filter((s) => s.length > 0)) {
+    const hop = parseJumpHost(token);
+
+    if (!looksLikeSSHAlias(hop.host)) {
+      resolved.push(hop); // literal host — nothing to resolve
+      continue;
+    }
+
+    if (visited.has(hop.host)) {
+      throw new Error(`Cycle detected in SSH ProxyJump chain at alias "${hop.host}"`);
+    }
+
+    // Jump-host aliases may omit `User` (inherited from the target), so don't require it.
+    const aliasConfig = parseSSHConfig(hop.host, configPath, { requireUser: false });
+    if (!aliasConfig) {
+      resolved.push(hop); // alias not in config — treat the token literally
+      continue;
+    }
+
+    // Expand this alias's own jump chain first so it connects before the alias.
+    if (aliasConfig.proxyJump) {
+      resolved.push(...resolveJumpHosts(aliasConfig.proxyJump, configPath, new Set(visited).add(hop.host)));
+    }
+
+    resolved.push({
+      host: aliasConfig.host,
+      // An explicit `:port` on the token wins; otherwise use the alias's Port (default 22).
+      port: tokenHasExplicitPort(token) ? hop.port : aliasConfig.port ?? 22,
+      // An explicit `user@` on the token wins; otherwise the alias's User.
+      username: hop.username ?? aliasConfig.username,
+      privateKey: aliasConfig.privateKey,
+      passphrase: aliasConfig.passphrase,
+    });
+  }
+
+  return resolved;
+}
+
+/**
+ * Whether a ProxyJump token carries an explicit `:port` (vs. relying on the
+ * default). Handles an optional `user@` prefix and bracketed IPv6 (`[host]:port`).
+ */
+function tokenHasExplicitPort(token: string): boolean {
+  const atIndex = token.indexOf('@');
+  const hostPart = atIndex !== -1 ? token.slice(atIndex + 1) : token;
+  return hostPart.startsWith('[') ? /\]:\d+$/.test(hostPart) : /:\d+$/.test(hostPart);
 }

@@ -33,34 +33,13 @@ export class SSHTunnel {
     this.isConnected = true;
 
     try {
-      // Parse jump hosts if ProxyJump is configured
-      const jumpHosts = config.proxyJump ? parseJumpHosts(config.proxyJump) : [];
+      // Use the fully-resolved jump-host chain when available (per-hop config/auth
+      // from ~/.ssh/config); otherwise fall back to literal ProxyJump parsing.
+      const jumpHosts = config.resolvedJumpHosts
+        ?? (config.proxyJump ? parseJumpHosts(config.proxyJump) : []);
 
-      // Read the private key once (shared by all connections)
-      // Supports both file paths and base64-encoded key content
-      let privateKeyBuffer: Buffer | undefined;
-      if (config.privateKey) {
-        try {
-          const resolvedKeyPath = resolveSymlink(config.privateKey);
-          privateKeyBuffer = readFileSync(resolvedKeyPath);
-        } catch {
-          // Not a readable file — try base64 decode
-          try {
-            const decoded = Buffer.from(config.privateKey, 'base64');
-            const text = decoded.toString('utf8');
-            if (text.includes('PRIVATE KEY')) {
-              privateKeyBuffer = decoded;
-            } else {
-              throw new Error(`SSH key is neither a valid file path nor a base64-encoded private key`);
-            }
-          } catch (decodeError) {
-            if (decodeError instanceof Error && decodeError.message.includes('neither a valid file path')) {
-              throw decodeError;
-            }
-            throw new Error(`SSH key is neither a valid file path nor a base64-encoded private key`);
-          }
-        }
-      }
+      // Read the target's private key once.
+      const privateKeyBuffer = config.privateKey ? this.loadPrivateKey(config.privateKey) : undefined;
 
       // Validate authentication
       if (!config.password && !privateKeyBuffer) {
@@ -75,6 +54,32 @@ export class SSHTunnel {
     } catch (error) {
       this.cleanup();
       throw error;
+    }
+  }
+
+  /**
+   * Load an SSH private key, supporting both a file path (with symlink resolution)
+   * and base64-encoded key content.
+   */
+  private loadPrivateKey(key: string): Buffer {
+    try {
+      const resolvedKeyPath = resolveSymlink(key);
+      return readFileSync(resolvedKeyPath);
+    } catch {
+      // Not a readable file — try base64 decode
+      try {
+        const decoded = Buffer.from(key, 'base64');
+        const text = decoded.toString('utf8');
+        if (text.includes('PRIVATE KEY')) {
+          return decoded;
+        }
+        throw new Error('SSH key is neither a valid file path nor a base64-encoded private key');
+      } catch (decodeError) {
+        if (decodeError instanceof Error && decodeError.message.includes('neither a valid file path')) {
+          throw decodeError;
+        }
+        throw new Error('SSH key is neither a valid file path nor a base64-encoded private key');
+      }
     }
   }
 
@@ -96,6 +101,14 @@ export class SSHTunnel {
         ? jumpHosts[i + 1]
         : { host: targetConfig.host, port: targetConfig.port || 22 };
 
+      // Per-hop credentials: use a hop's own resolved key when it has one, falling
+      // back to the target's key otherwise. The target password is always offered as
+      // a fallback (as before) — a hop may carry only a default-discovered key, so
+      // suppressing the password on "has a key" would break password auth.
+      const hopPrivateKey = jumpHost.privateKey ? this.loadPrivateKey(jumpHost.privateKey) : privateKey;
+      const hopPassword = targetConfig.password;
+      const hopPassphrase = jumpHost.passphrase ?? targetConfig.passphrase;
+
       let client: Client | null = null;
       let forwardStream: Duplex;
       try {
@@ -105,9 +118,9 @@ export class SSHTunnel {
             port: jumpHost.port,
             username: jumpHost.username || targetConfig.username,
           },
-          targetConfig.password,
-          privateKey,
-          targetConfig.passphrase,
+          hopPassword,
+          hopPrivateKey,
+          hopPassphrase,
           previousStream,
           `jump host ${i + 1}`,
           targetConfig.keepaliveInterval,

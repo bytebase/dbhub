@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink, parseJumpHost, parseJumpHosts } from '../ssh-config-parser.js';
+import { parseSSHConfig, looksLikeSSHAlias, resolveSymlink, parseJumpHost, parseJumpHosts, resolveJumpHosts } from '../ssh-config-parser.js';
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync, mkdirSync, realpathSync, unlinkSync } from 'fs';
 import { tmpdir, homedir } from 'os';
 import { join } from 'path';
@@ -529,5 +529,139 @@ describe('parseJumpHosts', () => {
     expect(result[0]).toEqual({ host: 'bastion.company.com', port: 22, username: undefined });
     expect(result[1]).toEqual({ host: 'internal.company.com', port: 2222, username: 'admin' });
     expect(result[2]).toEqual({ host: '10.0.0.1', port: 22, username: 'root' });
+  });
+
+  describe('resolveJumpHosts', () => {
+    let tempDir: string;
+    let configPath: string;
+
+    beforeEach(() => {
+      tempDir = mkdtempSync(join(tmpdir(), 'dbhub-resolvejump-'));
+      configPath = join(tempDir, 'config');
+    });
+
+    afterEach(() => {
+      rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    it("resolves a ProxyJump alias to the bastion's real host/user/port/key (issue #347)", () => {
+      const keyPath = join(tempDir, 'bastion_key');
+      writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+      writeFileSync(configPath, `
+Host mybastion
+  HostName bastion.example.com
+  User ubuntu
+  Port 2200
+  IdentityFile ${keyPath}
+
+Host target-with-jump
+  HostName 10.0.0.5
+  User admin
+  ProxyJump mybastion
+`);
+      const hops = resolveJumpHosts('mybastion', configPath);
+      expect(hops).toHaveLength(1);
+      expect(hops[0].host).toBe('bastion.example.com');
+      expect(hops[0].port).toBe(2200);
+      expect(hops[0].username).toBe('ubuntu');
+      expect(hops[0].privateKey).toBe(realpathSync(keyPath));
+    });
+
+    it('resolves a jump alias that has no User (username inherited from target)', () => {
+      const keyPath = join(tempDir, 'bastion_key');
+      writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+      writeFileSync(configPath, `
+Host bastion
+  HostName bastion.example.com
+  Port 2200
+  IdentityFile ${keyPath}
+`);
+      const hops = resolveJumpHosts('bastion', configPath);
+      expect(hops).toHaveLength(1);
+      expect(hops[0].host).toBe('bastion.example.com');
+      expect(hops[0].port).toBe(2200);
+      expect(hops[0].privateKey).toBe(realpathSync(keyPath));
+      // No User in the stanza → username left undefined so the tunnel inherits the target's.
+      expect(hops[0].username).toBeUndefined();
+    });
+
+    it('resolves a jump alias defining only Port/IdentityFile (HostName falls back to the alias)', () => {
+      const keyPath = join(tempDir, 'bastion_key');
+      writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\n');
+      writeFileSync(configPath, `
+Host bastion
+  Port 2200
+  IdentityFile ${keyPath}
+`);
+      const hops = resolveJumpHosts('bastion', configPath);
+      expect(hops).toHaveLength(1);
+      // No HostName → OpenSSH uses the alias itself as the hostname.
+      expect(hops[0].host).toBe('bastion');
+      expect(hops[0].port).toBe(2200);
+      expect(hops[0].privateKey).toBe(realpathSync(keyPath));
+      expect(hops[0].username).toBeUndefined();
+    });
+
+    it('expands nested ProxyJump aliases in connection order (x -> a -> b)', () => {
+      writeFileSync(configPath, `
+Host x
+  HostName x.example.com
+  User xu
+Host a
+  HostName a.example.com
+  User au
+  ProxyJump x
+Host b
+  HostName b.example.com
+  User bu
+`);
+      const hops = resolveJumpHosts('a,b', configPath);
+      expect(hops.map((h) => h.host)).toEqual(['x.example.com', 'a.example.com', 'b.example.com']);
+    });
+
+    it('throws on a ProxyJump cycle', () => {
+      writeFileSync(configPath, `
+Host a
+  HostName a.example.com
+  User au
+  ProxyJump b
+Host b
+  HostName b.example.com
+  User bu
+  ProxyJump a
+`);
+      expect(() => resolveJumpHosts('a', configPath)).toThrow(/cycle/i);
+    });
+
+    it('passes through literal (non-alias) jump hosts unchanged', () => {
+      writeFileSync(configPath, `Host unused\n  HostName u.example.com\n  User uu\n`);
+      const hops = resolveJumpHosts('bastion.example.com:2222', configPath);
+      expect(hops).toEqual([{ host: 'bastion.example.com', port: 2222, username: undefined }]);
+    });
+
+    it('lets an explicit :port on the token override the config Port (incl. :22)', () => {
+      writeFileSync(configPath, `
+Host mybastion
+  HostName bastion.example.com
+  User ubuntu
+  Port 2200
+`);
+      // No port on the token → use the alias's Port.
+      expect(resolveJumpHosts('mybastion', configPath)[0].port).toBe(2200);
+      // Explicit port on the token wins — including an explicit :22.
+      expect(resolveJumpHosts('mybastion:2022', configPath)[0].port).toBe(2022);
+      expect(resolveJumpHosts('mybastion:22', configPath)[0].port).toBe(22);
+    });
+
+    it('lets an explicit user@ on the token override the config User', () => {
+      writeFileSync(configPath, `
+Host mybastion
+  HostName bastion.example.com
+  User ubuntu
+`);
+      const hops = resolveJumpHosts('admin@mybastion', configPath);
+      expect(hops[0].host).toBe('bastion.example.com');
+      expect(hops[0].username).toBe('admin');
+    });
   });
 });
