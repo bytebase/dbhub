@@ -335,6 +335,7 @@ npx @bytebase/dbhub@latest --dsn "..." \
 <Note>
 - `--ssh-key` / `SSH_KEY` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format: it first tries to read the value as a file path, and if that fails, decodes it as base64.
 - When `--ssh-host` is a plain alias (no dots, not an IP address), DBHub automatically resolves it from `~/.ssh/config`, reading the `Hostname`, `User`, `IdentityFile`, and `ProxyJump` directives. Explicit flags always override values from the config file.
+- `ProxyJump` hops that are themselves `~/.ssh/config` aliases are resolved recursively — each hop uses its own `Hostname`/`User`/`Port`/`IdentityFile` (and its own nested `ProxyJump`), matching how `ssh` connects. Cyclic `ProxyJump` chains are rejected with an error.
 - ProxyCommand is not supported (requires shell execution). Use ProxyJump instead.
 - Path expansion for `~/` is supported in file paths.
 </Note>

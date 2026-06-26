@@ -7,7 +7,7 @@ import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfu
 import { redactDSN } from "../config/env.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
-import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
+import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
 
 // Singleton instance for global access
@@ -149,16 +149,17 @@ export class ConnectorManager {
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
     if (source.ssh_host) {
+      const sshConfigPath = getDefaultSSHConfigPath();
       // If ssh_host looks like an SSH config alias, resolve from ~/.ssh/config
       let resolvedSSHConfig: SSHTunnelConfig | null = null;
       if (looksLikeSSHAlias(source.ssh_host)) {
-        const sshConfigPath = getDefaultSSHConfigPath();
         console.error(`  Resolving SSH config for host '${source.ssh_host}' from: ${sshConfigPath}`);
         resolvedSSHConfig = parseSSHConfig(source.ssh_host, sshConfigPath);
       }
 
       // Build SSH config: explicit TOML fields override SSH config values
       const username = source.ssh_user || resolvedSSHConfig?.username;
+      const proxyJump = source.ssh_proxy_jump || resolvedSSHConfig?.proxyJump;
       const sshConfig: SSHTunnelConfig = {
         host: resolvedSSHConfig?.host || source.ssh_host,
         port: source.ssh_port || resolvedSSHConfig?.port || 22,
@@ -166,7 +167,10 @@ export class ConnectorManager {
         password: source.ssh_password,
         privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
         passphrase: source.ssh_passphrase,
-        proxyJump: source.ssh_proxy_jump || resolvedSSHConfig?.proxyJump,
+        proxyJump,
+        // Resolve the jump-host chain so alias hops (and nested ProxyJump) carry
+        // their own host/user/port/key from ~/.ssh/config, matching `ssh`.
+        resolvedJumpHosts: proxyJump ? resolveJumpHosts(proxyJump, sshConfigPath) : undefined,
         keepaliveInterval: source.ssh_keepalive_interval,
         keepaliveCountMax: source.ssh_keepalive_count_max,
       };

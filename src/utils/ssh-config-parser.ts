@@ -310,3 +310,63 @@ export function parseJumpHosts(proxyJump: string): JumpHost[] {
     .filter(s => s.length > 0)
     .map(parseJumpHost);
 }
+
+/**
+ * Resolve a ProxyJump string into a fully-resolved jump-host chain.
+ *
+ * Unlike {@link parseJumpHosts} (which treats every token as a literal
+ * `[user@]host[:port]`), this resolves any hop that is a `~/.ssh/config` Host
+ * alias through {@link parseSSHConfig}, so each hop carries its own real
+ * HostName/User/Port/IdentityFile — matching how OpenSSH connects. Aliases whose
+ * own stanza has a `ProxyJump` are expanded recursively and prepended, so a
+ * target with `ProxyJump a,b` where `a` has `ProxyJump x` resolves to
+ * `x -> a -> b`. An explicit `user@`/`:port` on the token overrides the config.
+ *
+ * Non-alias tokens (FQDNs/IPs) and aliases absent from the config fall back to
+ * literal parsing, preserving prior behavior for explicit `ssh_proxy_jump` specs.
+ *
+ * @param proxyJump Comma-separated ProxyJump string
+ * @param configPath Path to the SSH config file (for alias lookups)
+ * @param visited Aliases already on the current resolution path (cycle guard)
+ */
+export function resolveJumpHosts(
+  proxyJump: string,
+  configPath: string,
+  visited: Set<string> = new Set()
+): JumpHost[] {
+  const resolved: JumpHost[] = [];
+
+  for (const hop of parseJumpHosts(proxyJump)) {
+    if (!looksLikeSSHAlias(hop.host)) {
+      resolved.push(hop); // literal host — nothing to resolve
+      continue;
+    }
+
+    if (visited.has(hop.host)) {
+      throw new Error(`Cycle detected in SSH ProxyJump chain at alias "${hop.host}"`);
+    }
+
+    const aliasConfig = parseSSHConfig(hop.host, configPath);
+    if (!aliasConfig) {
+      resolved.push(hop); // alias not in config — treat the token literally
+      continue;
+    }
+
+    // Expand this alias's own jump chain first so it connects before the alias.
+    if (aliasConfig.proxyJump) {
+      resolved.push(...resolveJumpHosts(aliasConfig.proxyJump, configPath, new Set(visited).add(hop.host)));
+    }
+
+    resolved.push({
+      host: aliasConfig.host,
+      // An explicit `:port` on the token wins; otherwise use the alias's Port (default 22).
+      port: hop.port !== 22 ? hop.port : aliasConfig.port ?? 22,
+      // An explicit `user@` on the token wins; otherwise the alias's User.
+      username: hop.username ?? aliasConfig.username,
+      privateKey: aliasConfig.privateKey,
+      passphrase: aliasConfig.passphrase,
+    });
+  }
+
+  return resolved;
+}

@@ -34,6 +34,14 @@ export interface SSHTunnelConfig {
 
   /** Maximum number of missed keepalive responses before disconnecting (default: 3) */
   keepaliveCountMax?: number;
+
+  /**
+   * Fully-resolved jump-host chain (in connection order), produced by
+   * `resolveJumpHosts` from `proxyJump` + `~/.ssh/config`. When present, the tunnel
+   * uses these (with their per-hop credentials) instead of re-parsing `proxyJump`
+   * as literal hosts.
+   */
+  resolvedJumpHosts?: JumpHost[];
 }
 
 /**
@@ -48,6 +56,12 @@ export interface JumpHost {
 
   /** Jump host username (inherited from target if not specified) */
   username?: string;
+
+  /** Jump host private key path/content, resolved from its own `~/.ssh/config` entry */
+  privateKey?: string;
+
+  /** Passphrase for the jump host's private key */
+  passphrase?: string;
 }
 
 export interface SSHTunnelOptions {
