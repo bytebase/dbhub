@@ -736,12 +736,16 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     // Add SSH config if available
     const sshResult = resolveSSHConfig();
     if (sshResult) {
-      source.ssh_host = sshResult.config.host;
+      const args = parseCommandLineArgs();
+      const sshHostArg = args["ssh-host"] || process.env.SSH_HOST;
+      // Preserve the original alias so native SSH auto-detection can use it
+      source.ssh_host = sshHostArg || sshResult.config.host;
       source.ssh_port = sshResult.config.port;
       source.ssh_user = sshResult.config.username;
       source.ssh_password = sshResult.config.password;
       source.ssh_key = sshResult.config.privateKey;
       source.ssh_passphrase = sshResult.config.passphrase;
+      source.ssh_proxy_jump = sshResult.config.proxyJump;
       source.ssh_keepalive_interval = sshResult.config.keepaliveInterval;
       source.ssh_keepalive_count_max = sshResult.config.keepaliveCountMax;
     }

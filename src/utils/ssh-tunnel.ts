@@ -2,26 +2,52 @@ import { Client, ConnectConfig } from 'ssh2';
 import { readFileSync } from 'fs';
 import { Server, createServer } from 'net';
 import type { Duplex } from 'stream';
-import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo, JumpHost } from '../types/ssh.js';
+import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo, JumpHost, SSHTunnelBackend, SSHTunnelEstablishRequest } from '../types/ssh.js';
 import { resolveSymlink, parseJumpHosts } from './ssh-config-parser.js';
 
 /**
  * SSH Tunnel implementation for secure database connections.
  * Supports ProxyJump for multi-hop SSH connections through bastion/jump hosts.
  */
-export class SSHTunnel {
+export class SSHTunnel implements SSHTunnelBackend {
   private sshClients: Client[] = []; // All SSH clients in the chain
   private localServer: Server | null = null;
   private tunnelInfo: SSHTunnelInfo | null = null;
   private isConnected: boolean = false;
 
+  getMode(): 'ssh2' {
+    return 'ssh2';
+  }
+
   /**
-   * Establish an SSH tunnel, optionally through jump hosts (ProxyJump).
-   * @param config SSH connection configuration
-   * @param options Tunnel options including target host and port
-   * @returns Promise resolving to tunnel information including local port
+   * Establish an SSH tunnel via ssh2 (supports ProxyJump multi-hop).
    */
   async establish(
+    config: SSHTunnelConfig,
+    options: SSHTunnelOptions
+  ): Promise<SSHTunnelInfo>;
+  async establish(request: SSHTunnelEstablishRequest): Promise<SSHTunnelInfo>;
+  async establish(
+    configOrRequest: SSHTunnelConfig | SSHTunnelEstablishRequest,
+    options?: SSHTunnelOptions
+  ): Promise<SSHTunnelInfo> {
+    if (options !== undefined) {
+      return this.doEstablish(configOrRequest as SSHTunnelConfig, options);
+    }
+
+    const request = configOrRequest as SSHTunnelEstablishRequest;
+    if (!request.sshConfig) {
+      throw new Error('ssh2 tunnel requires sshConfig in establish request');
+    }
+
+    return this.doEstablish(request.sshConfig, {
+      targetHost: request.targetHost,
+      targetPort: request.targetPort,
+      localPort: request.localPort,
+    });
+  }
+
+  private async doEstablish(
     config: SSHTunnelConfig,
     options: SSHTunnelOptions
   ): Promise<SSHTunnelInfo> {

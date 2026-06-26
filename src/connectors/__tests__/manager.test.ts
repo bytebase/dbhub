@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   parseSSHConfig: vi.fn(),
   looksLikeSSHAlias: vi.fn(),
   getDefaultSSHConfigPath: vi.fn(() => join(homedir(), '.ssh', 'config')),
+  nativeEstablish: vi.fn(),
+  ssh2Establish: vi.fn(),
 }));
 
 vi.mock("../../utils/aws-rds-signer.js", () => ({
@@ -19,19 +21,51 @@ vi.mock("../../utils/ssh-config-parser.js", () => ({
   parseSSHConfig: mocks.parseSSHConfig,
   looksLikeSSHAlias: mocks.looksLikeSSHAlias,
   getDefaultSSHConfigPath: mocks.getDefaultSSHConfigPath,
+  resolveSymlink: vi.fn((p: string) => p),
+  parseJumpHosts: vi.fn(),
+  parseJumpHost: vi.fn(),
 }));
 
-describe("ConnectorManager SSH config resolution", () => {
+vi.mock("../../utils/native-ssh-tunnel.js", () => ({
+  NativeSSHTunnel: class MockNativeSSHTunnel {
+    establish(...args: unknown[]) {
+      return mocks.nativeEstablish(...args);
+    }
+    close = vi.fn();
+    getMode() {
+      return "native" as const;
+    }
+    getTunnelInfo = vi.fn();
+    getIsConnected = vi.fn();
+  },
+}));
+
+vi.mock("../../utils/ssh-tunnel.js", () => ({
+  SSHTunnel: class MockSSHTunnel {
+    establish(...args: unknown[]) {
+      return mocks.ssh2Establish(...args);
+    }
+    close = vi.fn();
+    getMode() {
+      return "ssh2" as const;
+    }
+    getTunnelInfo = vi.fn();
+    getIsConnected = vi.fn();
+  },
+}));
+
+describe("ConnectorManager SSH tunnel routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.nativeEstablish.mockRejectedValue(new Error('native tunnel failed (expected in test)'));
+    mocks.ssh2Establish.mockRejectedValue(new Error('ssh2 tunnel failed (expected in test)'));
   });
 
-  it("should resolve SSH config from ~/.ssh/config for alias hosts", async () => {
+  it("should use native SSH when alias is found in SSH config", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(true);
     mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      port: 2222,
-      username: "ubuntu",
+      host: "10.100.100.100",
+      username: "bigdatauser",
       privateKey: "/home/user/.ssh/id_rsa",
     });
 
@@ -39,25 +73,28 @@ describe("ConnectorManager SSH config resolution", () => {
     const source: SourceConfig = {
       id: "test",
       type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
+      dsn: "postgres://user:pass@10.100.100.100:5432/mydb",
+      ssh_host: "mtn03",
     };
 
-    // connectSource is private; connectWithSources calls it.
-    // It will fail when trying to establish the actual SSH tunnel,
-    // but only after the config resolution succeeds.
-    await expect(manager.connectWithSources([source])).rejects.toThrow();
+    await expect(manager.connectWithSources([source])).rejects.toThrow('native tunnel failed');
 
-    expect(mocks.looksLikeSSHAlias).toHaveBeenCalledWith("mybastion");
-    expect(mocks.parseSSHConfig).toHaveBeenCalledWith("mybastion", expect.stringContaining(".ssh/config"));
+    expect(mocks.nativeEstablish).toHaveBeenCalledTimes(1);
+    expect(mocks.ssh2Establish).not.toHaveBeenCalled();
+    expect(mocks.nativeEstablish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostAlias: "mtn03",
+        targetHost: "10.100.100.100",
+        targetPort: 5432,
+      })
+    );
   });
 
-  it("should let explicit TOML fields override SSH config values", async () => {
+  it("should use ssh2 when ssh_password is set", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(true);
     mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      port: 2222,
-      username: "ubuntu",
+      host: "10.100.100.100",
+      username: "bigdatauser",
       privateKey: "/home/user/.ssh/id_rsa",
     });
 
@@ -65,17 +102,16 @@ describe("ConnectorManager SSH config resolution", () => {
     const source: SourceConfig = {
       id: "test",
       type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
-      ssh_user: "override-user",
-      ssh_port: 3333,
-      ssh_key: "/custom/key",
+      dsn: "postgres://user:pass@10.100.100.100:5432/mydb",
+      ssh_host: "mtn03",
+      ssh_password: "secret",
+      ssh_user: "bigdatauser",
     };
 
-    await expect(manager.connectWithSources([source])).rejects.toThrow();
+    await expect(manager.connectWithSources([source])).rejects.toThrow('ssh2 tunnel failed');
 
-    // Verify parseSSHConfig was still called (alias was resolved)
-    expect(mocks.parseSSHConfig).toHaveBeenCalled();
+    expect(mocks.ssh2Establish).toHaveBeenCalledTimes(1);
+    expect(mocks.nativeEstablish).not.toHaveBeenCalled();
   });
 
   it("should throw when SSH alias not found and no ssh_user provided", async () => {
@@ -93,30 +129,12 @@ describe("ConnectorManager SSH config resolution", () => {
     await expect(manager.connectWithSources([source])).rejects.toThrow(
       "SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)"
     );
+
+    expect(mocks.ssh2Establish).not.toHaveBeenCalled();
+    expect(mocks.nativeEstablish).not.toHaveBeenCalled();
   });
 
-  it("should throw when no auth method available after SSH config resolution", async () => {
-    mocks.looksLikeSSHAlias.mockReturnValue(true);
-    mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      username: "ubuntu",
-      // No privateKey, no password
-    });
-
-    const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
-    };
-
-    await expect(manager.connectWithSources([source])).rejects.toThrow(
-      "SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)"
-    );
-  });
-
-  it("should skip SSH config resolution for direct hostnames", async () => {
+  it("should use ssh2 for direct hostnames", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(false);
 
     const manager = new ConnectorManager();
@@ -129,11 +147,12 @@ describe("ConnectorManager SSH config resolution", () => {
       ssh_key: "/home/user/.ssh/id_rsa",
     };
 
-    // Will fail at tunnel establishment, not at config resolution
-    await expect(manager.connectWithSources([source])).rejects.toThrow();
+    await expect(manager.connectWithSources([source])).rejects.toThrow('ssh2 tunnel failed');
 
     expect(mocks.looksLikeSSHAlias).toHaveBeenCalledWith("bastion.example.com");
     expect(mocks.parseSSHConfig).not.toHaveBeenCalled();
+    expect(mocks.ssh2Establish).toHaveBeenCalledTimes(1);
+    expect(mocks.nativeEstablish).not.toHaveBeenCalled();
   });
 });
 

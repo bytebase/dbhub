@@ -1,13 +1,14 @@
 import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions, ConnectorConfig } from "./interface.js";
 import { SSHTunnel } from "../utils/ssh-tunnel.js";
-import type { SSHTunnelConfig, SSHTunnelInfo } from "../types/ssh.js";
+import { NativeSSHTunnel } from "../utils/native-ssh-tunnel.js";
+import type { SSHTunnelBackend, SSHTunnelInfo } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { redactDSN } from "../config/env.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
-import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
+import { resolveTunnelPlan } from "../utils/ssh-tunnel-resolver.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
 
 // Singleton instance for global access
@@ -21,7 +22,7 @@ const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000; // refresh before 15-minute tok
 export class ConnectorManager {
   // Maps for multi-source support
   private connectors: Map<string, Connector> = new Map();
-  private sshTunnels: Map<string, SSHTunnel> = new Map();
+  private sshTunnels: Map<string, SSHTunnelBackend> = new Map();
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
   private iamRefreshTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -149,52 +150,38 @@ export class ConnectorManager {
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
     if (source.ssh_host) {
-      // If ssh_host looks like an SSH config alias, resolve from ~/.ssh/config
-      let resolvedSSHConfig: SSHTunnelConfig | null = null;
-      if (looksLikeSSHAlias(source.ssh_host)) {
-        const sshConfigPath = getDefaultSSHConfigPath();
-        console.error(`  Resolving SSH config for host '${source.ssh_host}' from: ${sshConfigPath}`);
-        resolvedSSHConfig = parseSSHConfig(source.ssh_host, sshConfigPath);
-      }
+      const plan = resolveTunnelPlan(source);
 
-      // Build SSH config: explicit TOML fields override SSH config values
-      const username = source.ssh_user || resolvedSSHConfig?.username;
-      const sshConfig: SSHTunnelConfig = {
-        host: resolvedSSHConfig?.host || source.ssh_host,
-        port: source.ssh_port || resolvedSSHConfig?.port || 22,
-        username: username || '',
-        password: source.ssh_password,
-        privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
-        passphrase: source.ssh_passphrase,
-        proxyJump: source.ssh_proxy_jump || resolvedSSHConfig?.proxyJump,
-        keepaliveInterval: source.ssh_keepalive_interval,
-        keepaliveCountMax: source.ssh_keepalive_count_max,
-      };
-
-      // Validate required SSH fields
-      if (!username) {
-        throw new Error(
-          `Source '${sourceId}': SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)`
-        );
-      }
-
-      // Validate SSH auth
-      if (!sshConfig.password && !sshConfig.privateKey) {
-        throw new Error(
-          `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)`
-        );
-      }
-
-      // Parse DSN to get target host and port
       const url = new URL(dsn);
       const targetHost = url.hostname;
       const targetPort = parseInt(url.port) || this.getDefaultPort(dsn);
 
-      // Create and establish SSH tunnel
-      const tunnel = new SSHTunnel();
+      if (plan.mode === "ssh2") {
+        const sshConfig = plan.sshConfig!;
+        if (!sshConfig.username) {
+          throw new Error(
+            `Source '${sourceId}': SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)`
+          );
+        }
+        if (!sshConfig.password && !sshConfig.privateKey) {
+          throw new Error(
+            `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)`
+          );
+        }
+      }
+
+      const tunnel: SSHTunnelBackend =
+        plan.mode === "native" ? new NativeSSHTunnel() : new SSHTunnel();
+
+      console.error(`  SSH tunnel mode: ${plan.mode} (${plan.reason})`);
+
       let tunnelInfo: SSHTunnelInfo;
       try {
-        tunnelInfo = await tunnel.establish(sshConfig, {
+        tunnelInfo = await tunnel.establish({
+          hostAlias: plan.hostAlias,
+          sshConfigPath: plan.sshConfigPath,
+          sshConfig: plan.sshConfig,
+          overrides: plan.overrides,
           targetHost,
           targetPort,
         });
@@ -205,12 +192,10 @@ export class ConnectorManager {
         throw error;
       }
 
-      // Update DSN to use local tunnel endpoint
       url.hostname = "127.0.0.1";
       url.port = tunnelInfo.localPort.toString();
       actualDSN = url.toString();
 
-      // Store tunnel for later cleanup
       this.sshTunnels.set(sourceId, tunnel);
 
       console.error(

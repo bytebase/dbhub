@@ -71,3 +71,43 @@ export interface SSHTunnelInfo {
   /** Original target port */
   targetPort: number;
 }
+
+/** Optional overrides passed to the native ssh CLI */
+export interface NativeSSHOverrides {
+  user?: string;
+  port?: number;
+  privateKey?: string;
+  keepaliveInterval?: number;
+  keepaliveCountMax?: number;
+}
+
+/** Request to establish an SSH tunnel (native or ssh2) */
+export interface SSHTunnelEstablishRequest {
+  hostAlias?: string;
+  sshConfigPath?: string;
+  sshConfig?: SSHTunnelConfig;
+  targetHost: string;
+  targetPort: number;
+  localPort?: number;
+  overrides?: NativeSSHOverrides;
+}
+
+/** Common interface for native and ssh2 tunnel backends */
+export interface SSHTunnelBackend {
+  establish(request: SSHTunnelEstablishRequest): Promise<SSHTunnelInfo>;
+  close(): Promise<void>;
+  getTunnelInfo(): SSHTunnelInfo | null;
+  getIsConnected(): boolean;
+  getMode(): 'native' | 'ssh2';
+}
+
+export type SSHTunnelBackendMode = 'native' | 'ssh2';
+
+export interface ResolvedTunnelPlan {
+  mode: SSHTunnelBackendMode;
+  hostAlias?: string;
+  sshConfigPath: string;
+  sshConfig?: SSHTunnelConfig;
+  overrides?: NativeSSHOverrides;
+  reason: string;
+}
