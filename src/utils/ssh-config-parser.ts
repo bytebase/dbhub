@@ -334,9 +334,18 @@ export function resolveJumpHosts(
   configPath: string,
   visited: Set<string> = new Set()
 ): JumpHost[] {
+  if (!proxyJump || proxyJump.trim() === '' || proxyJump.toLowerCase() === 'none') {
+    return [];
+  }
+
   const resolved: JumpHost[] = [];
 
-  for (const hop of parseJumpHosts(proxyJump)) {
+  // Iterate the raw tokens (not parseJumpHosts output) so we can tell an explicit
+  // `:port` from the normalized default of 22 — needed to let a token port override
+  // a config alias's Port.
+  for (const token of proxyJump.split(',').map((s) => s.trim()).filter((s) => s.length > 0)) {
+    const hop = parseJumpHost(token);
+
     if (!looksLikeSSHAlias(hop.host)) {
       resolved.push(hop); // literal host — nothing to resolve
       continue;
@@ -360,7 +369,7 @@ export function resolveJumpHosts(
     resolved.push({
       host: aliasConfig.host,
       // An explicit `:port` on the token wins; otherwise use the alias's Port (default 22).
-      port: hop.port !== 22 ? hop.port : aliasConfig.port ?? 22,
+      port: tokenHasExplicitPort(token) ? hop.port : aliasConfig.port ?? 22,
       // An explicit `user@` on the token wins; otherwise the alias's User.
       username: hop.username ?? aliasConfig.username,
       privateKey: aliasConfig.privateKey,
@@ -369,4 +378,14 @@ export function resolveJumpHosts(
   }
 
   return resolved;
+}
+
+/**
+ * Whether a ProxyJump token carries an explicit `:port` (vs. relying on the
+ * default). Handles an optional `user@` prefix and bracketed IPv6 (`[host]:port`).
+ */
+function tokenHasExplicitPort(token: string): boolean {
+  const atIndex = token.indexOf('@');
+  const hostPart = atIndex !== -1 ? token.slice(atIndex + 1) : token;
+  return hostPart.startsWith('[') ? /\]:\d+$/.test(hostPart) : /:\d+$/.test(hostPart);
 }

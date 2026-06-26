@@ -101,12 +101,12 @@ export class SSHTunnel {
         ? jumpHosts[i + 1]
         : { host: targetConfig.host, port: targetConfig.port || 22 };
 
-      // Per-hop credentials: a hop resolved from ~/.ssh/config carries its own key,
-      // so use it (and skip the target's password) rather than reusing the target's
-      // credentials for every hop. Hops without their own key fall back to the
-      // target's key/password (preserves prior behavior for literal jump specs).
+      // Per-hop credentials: use a hop's own resolved key when it has one, falling
+      // back to the target's key otherwise. The target password is always offered as
+      // a fallback (as before) — a hop may carry only a default-discovered key, so
+      // suppressing the password on "has a key" would break password auth.
       const hopPrivateKey = jumpHost.privateKey ? this.loadPrivateKey(jumpHost.privateKey) : privateKey;
-      const hopPassword = jumpHost.privateKey ? undefined : targetConfig.password;
+      const hopPassword = targetConfig.password;
       const hopPassphrase = jumpHost.passphrase ?? targetConfig.passphrase;
 
       let client: Client | null = null;

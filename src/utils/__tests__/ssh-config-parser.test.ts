@@ -604,6 +604,20 @@ Host b
       expect(hops).toEqual([{ host: 'bastion.example.com', port: 2222, username: undefined }]);
     });
 
+    it('lets an explicit :port on the token override the config Port (incl. :22)', () => {
+      writeFileSync(configPath, `
+Host mybastion
+  HostName bastion.example.com
+  User ubuntu
+  Port 2200
+`);
+      // No port on the token → use the alias's Port.
+      expect(resolveJumpHosts('mybastion', configPath)[0].port).toBe(2200);
+      // Explicit port on the token wins — including an explicit :22.
+      expect(resolveJumpHosts('mybastion:2022', configPath)[0].port).toBe(2022);
+      expect(resolveJumpHosts('mybastion:22', configPath)[0].port).toBe(22);
+    });
+
     it('lets an explicit user@ on the token override the config User', () => {
       writeFileSync(configPath, `
 Host mybastion
