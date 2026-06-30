@@ -764,7 +764,17 @@ export class SQLServerConnector implements Connector {
         });
       }
 
-      const result = await request.query(processedSQL);
+      let result;
+      try {
+        result = await request.query(processedSQL);
+      } catch (error) {
+        console.error(`[SQL Server executeReadOnly] ERROR: ${(error as Error).message}`);
+        console.error(`[SQL Server executeReadOnly] SQL: ${processedSQL}`);
+        if (parameters && parameters.length > 0) {
+          console.error(`[SQL Server executeReadOnly] Parameters: ${JSON.stringify(parameters)}`);
+        }
+        throw error;
+      }
       return {
         rows: result.recordset || [],
         rowCount: result.rowsAffected[0] || 0,

@@ -263,6 +263,14 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("WITH cte AS (SELECT 1) EXECUTE('DELETE FROM users')", "sqlserver")).toBe(false);
     });
 
+    it("should reject implicit sp_executesql (no EXEC prefix) inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) sp_executesql N'DELETE FROM users'", "sqlserver")).toBe(false);
+    });
+
+    it("should reject xp_cmdshell inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) xp_cmdshell 'del *.*'", "sqlserver")).toBe(false);
+    });
+
     it("should not reject EXEC/EXECUTE inside string literals", () => {
       expect(isReadOnlySQL("SELECT * FROM users WHERE name = 'EXEC is a keyword'", "sqlserver")).toBe(true);
     });

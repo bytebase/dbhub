@@ -51,13 +51,15 @@ const mutatingPatternWithReplace = new RegExp(
 );
 
 /**
- * Extended pattern for SQL Server: adds EXEC/EXECUTE which are T-SQL dynamic
- * SQL primitives that can run arbitrary (including mutating) statements.
- * sp_executesql and xp_cmdshell are always invoked via EXEC so are covered
- * transitively.
+ * Extended pattern for SQL Server: adds T-SQL dynamic SQL primitives that can
+ * run arbitrary (including mutating) statements.
+ * - EXEC/EXECUTE: direct dynamic SQL execution
+ * - sp_executesql: system proc for parameterized dynamic SQL (callable without
+ *   EXEC as the first statement in a batch)
+ * - xp_cmdshell: OS command execution
  */
 const mutatingPatternSqlServer = new RegExp(
-  `\\b(?:${[...mutatingKeywords, "execute", "exec"].join("|")})\\b`,
+  `\\b(?:${[...mutatingKeywords, "execute", "exec", "sp_executesql", "xp_cmdshell"].join("|")})\\b`,
   "i",
 );
 
