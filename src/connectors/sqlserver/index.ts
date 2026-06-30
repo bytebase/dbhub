@@ -707,11 +707,23 @@ export class SQLServerConnector implements Connector {
    * any modifications from persisting. SQL Server has no native READ ONLY
    * transaction mode, so this is the defense-in-depth backstop behind the
    * keyword classifier.
+   *
+   * Because the rollback guard is application-level (not engine-enforced),
+   * we must reject transaction-control keywords (COMMIT, ROLLBACK) in the
+   * SQL — an in-band COMMIT would end the outer transaction before the
+   * finally-block ROLLBACK runs, letting writes persist.
    */
   private async executeReadOnly(
     processedSQL: string,
     parameters?: any[],
   ): Promise<SQLResult> {
+    const cleaned = stripCommentsAndStrings(processedSQL, "sqlserver").toLowerCase();
+    if (/\b(?:commit|rollback)\b/.test(cleaned)) {
+      throw new Error(
+        "Read-only mode: transaction control statements (COMMIT, ROLLBACK) are not allowed",
+      );
+    }
+
     const transaction = new sql.Transaction(this.connection!);
     await transaction.begin();
     try {
