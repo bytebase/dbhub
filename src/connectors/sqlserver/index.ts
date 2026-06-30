@@ -629,6 +629,14 @@ export class SQLServerConnector implements Connector {
         processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
       }
 
+      // Engine-level read-only enforcement: SQL Server has no
+      // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
+      // unconditionally ROLLBACK to prevent any modifications from persisting.
+      // This is defense-in-depth behind the keyword classifier.
+      if (options.readonly) {
+        return await this.executeReadOnly(processedSQL, parameters);
+      }
+
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
       const request = this.connection.request();
       const messages: DatabaseMessage[] = [];
@@ -691,6 +699,71 @@ export class SQLServerConnector implements Connector {
       };
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Execute a query inside a transaction that always rolls back, preventing
+   * any modifications from persisting. SQL Server has no native READ ONLY
+   * transaction mode, so this is the defense-in-depth backstop behind the
+   * keyword classifier.
+   */
+  private async executeReadOnly(
+    processedSQL: string,
+    parameters?: any[],
+  ): Promise<SQLResult> {
+    const transaction = new sql.Transaction(this.connection!);
+    await transaction.begin();
+    try {
+      const request = new sql.Request(transaction);
+      const messages: DatabaseMessage[] = [];
+      request.on(
+        'info',
+        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+          messages.push({
+            text: info.message,
+            severity: info.class !== undefined ? String(info.class) : undefined,
+            code: info.number,
+            line: info.lineNumber,
+          });
+        },
+      );
+
+      if (parameters && parameters.length > 0) {
+        parameters.forEach((param, index) => {
+          const paramName = `p${index + 1}`;
+          if (typeof param === 'string') {
+            request.input(paramName, sql.VarChar, param);
+          } else if (typeof param === 'number') {
+            if (Number.isInteger(param)) {
+              request.input(paramName, sql.Int, param);
+            } else {
+              request.input(paramName, sql.Float, param);
+            }
+          } else if (typeof param === 'boolean') {
+            request.input(paramName, sql.Bit, param);
+          } else if (param === null || param === undefined) {
+            request.input(paramName, sql.VarChar, param);
+          } else if (Array.isArray(param)) {
+            request.input(paramName, sql.VarChar, JSON.stringify(param));
+          } else {
+            request.input(paramName, sql.VarChar, JSON.stringify(param));
+          }
+        });
+      }
+
+      const result = await request.query(processedSQL);
+      return {
+        rows: result.recordset || [],
+        rowCount: result.rowsAffected[0] || 0,
+        ...(messages.length > 0 ? { messages } : {}),
+      };
+    } finally {
+      try {
+        await transaction.rollback();
+      } catch {
+        // ignore; the original error is more useful
+      }
     }
   }
 

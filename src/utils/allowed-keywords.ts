@@ -50,13 +50,24 @@ const mutatingPatternWithReplace = new RegExp(
   "i",
 );
 
+/**
+ * Extended pattern for SQL Server: adds EXEC/EXECUTE which are T-SQL dynamic
+ * SQL primitives that can run arbitrary (including mutating) statements.
+ * sp_executesql and xp_cmdshell are always invoked via EXEC so are covered
+ * transitively.
+ */
+const mutatingPatternSqlServer = new RegExp(
+  `\\b(?:${[...mutatingKeywords, "execute", "exec"].join("|")})\\b`,
+  "i",
+);
+
 /** Per-dialect mutating keyword pattern */
 const mutatingPatterns: Record<ConnectorType, RegExp> = {
   postgres: mutatingPattern,
   mysql: mutatingPatternWithReplace,
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
-  sqlserver: mutatingPattern,
+  sqlserver: mutatingPatternSqlServer,
 };
 
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
