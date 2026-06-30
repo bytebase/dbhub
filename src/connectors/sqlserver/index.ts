@@ -629,6 +629,14 @@ export class SQLServerConnector implements Connector {
         processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
       }
 
+      // Engine-level read-only enforcement: SQL Server has no
+      // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
+      // unconditionally ROLLBACK to prevent any modifications from persisting.
+      // This is defense-in-depth behind the keyword classifier.
+      if (options.readonly) {
+        return await this.executeReadOnly(processedSQL, parameters);
+      }
+
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
       const request = this.connection.request();
       const messages: DatabaseMessage[] = [];
@@ -692,6 +700,105 @@ export class SQLServerConnector implements Connector {
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Execute a query inside a transaction that always rolls back, preventing
+   * any modifications from persisting. SQL Server has no native READ ONLY
+   * transaction mode, so this is the defense-in-depth backstop behind the
+   * keyword classifier.
+   *
+   * Because the rollback guard is application-level (not engine-enforced),
+   * we reject dangerous keywords in the stripped SQL before opening the
+   * transaction:
+   * - COMMIT/ROLLBACK: would end the outer transaction, letting writes persist
+   * - EXEC/EXECUTE/sp_executesql/xp_cmdshell: dynamic SQL can carry hidden
+   *   COMMIT/ROLLBACK inside string literals that stripCommentsAndStrings removes
+   */
+  private async executeReadOnly(
+    processedSQL: string,
+    parameters?: any[],
+  ): Promise<SQLResult> {
+    const cleaned = stripCommentsAndStrings(processedSQL, "sqlserver").toLowerCase();
+    if (/\b(?:commit|rollback)\b/.test(cleaned)) {
+      throw new Error(
+        "Read-only mode: transaction control statements (COMMIT, ROLLBACK) are not allowed",
+      );
+    }
+    if (/\b(?:exec|execute|sp_executesql|xp_cmdshell)\b/.test(cleaned)) {
+      throw new Error(
+        "Read-only mode: dynamic SQL execution (EXEC, EXECUTE, sp_executesql, xp_cmdshell) is not allowed",
+      );
+    }
+
+    const transaction = new sql.Transaction(this.connection!);
+    await transaction.begin();
+
+    const request = new sql.Request(transaction);
+    const messages: DatabaseMessage[] = [];
+    request.on(
+      'info',
+      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+        messages.push({
+          text: info.message,
+          severity: info.class !== undefined ? String(info.class) : undefined,
+          code: info.number,
+          line: info.lineNumber,
+        });
+      },
+    );
+
+    if (parameters && parameters.length > 0) {
+      parameters.forEach((param, index) => {
+        const paramName = `p${index + 1}`;
+        if (typeof param === 'string') {
+          request.input(paramName, sql.VarChar, param);
+        } else if (typeof param === 'number') {
+          if (Number.isInteger(param)) {
+            request.input(paramName, sql.Int, param);
+          } else {
+            request.input(paramName, sql.Float, param);
+          }
+        } else if (typeof param === 'boolean') {
+          request.input(paramName, sql.Bit, param);
+        } else if (param === null || param === undefined) {
+          request.input(paramName, sql.VarChar, param);
+        } else if (Array.isArray(param)) {
+          request.input(paramName, sql.VarChar, JSON.stringify(param));
+        } else {
+          request.input(paramName, sql.VarChar, JSON.stringify(param));
+        }
+      });
+    }
+
+    let result;
+    let queryFailed = false;
+    try {
+      result = await request.query(processedSQL);
+    } catch (error) {
+      queryFailed = true;
+      console.error(`[SQL Server executeReadOnly] ERROR: ${(error as Error).message}`);
+      console.error(`[SQL Server executeReadOnly] SQL: ${processedSQL}`);
+      if (parameters && parameters.length > 0) {
+        console.error(`[SQL Server executeReadOnly] Parameters: ${JSON.stringify(parameters)}`);
+      }
+      throw error;
+    } finally {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        if (!queryFailed) {
+          throw new Error(
+            `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`,
+          );
+        }
+      }
+    }
+    return {
+      rows: result.recordset || [],
+      rowCount: result.rowsAffected[0] || 0,
+      ...(messages.length > 0 ? { messages } : {}),
+    };
   }
 
   /**

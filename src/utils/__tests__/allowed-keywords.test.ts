@@ -242,6 +242,48 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("SQL Server dynamic SQL bypass prevention", () => {
+    it("should reject EXEC as a standalone statement", () => {
+      expect(isReadOnlySQL("EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject EXECUTE as a standalone statement", () => {
+      expect(isReadOnlySQL("EXECUTE('DELETE FROM users')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject EXEC sp_executesql", () => {
+      expect(isReadOnlySQL("EXEC sp_executesql N'DELETE FROM users'", "sqlserver")).toBe(false);
+    });
+
+    it("should reject EXEC inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject EXECUTE inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) EXECUTE('DELETE FROM users')", "sqlserver")).toBe(false);
+    });
+
+    it("should reject implicit sp_executesql (no EXEC prefix) inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) sp_executesql N'DELETE FROM users'", "sqlserver")).toBe(false);
+    });
+
+    it("should reject xp_cmdshell inside a CTE", () => {
+      expect(isReadOnlySQL("WITH cte AS (SELECT 1) xp_cmdshell 'del *.*'", "sqlserver")).toBe(false);
+    });
+
+    it("should not reject EXEC/EXECUTE inside string literals", () => {
+      expect(isReadOnlySQL("SELECT * FROM users WHERE name = 'EXEC is a keyword'", "sqlserver")).toBe(true);
+    });
+
+    it("should not reject EXEC/EXECUTE in comments", () => {
+      expect(isReadOnlySQL("/* EXEC('DROP TABLE users') */ SELECT 1", "sqlserver")).toBe(true);
+    });
+
+    it("should reject EXEC after multi-statement split", () => {
+      expect(areAllStatementsReadOnly("SELECT 1; EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
+    });
+  });
+
   describe("edge cases", () => {
     it("should treat empty SQL after comment stripping as not read-only", () => {
       expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(false);
