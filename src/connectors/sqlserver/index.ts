@@ -733,67 +733,72 @@ export class SQLServerConnector implements Connector {
 
     const transaction = new sql.Transaction(this.connection!);
     await transaction.begin();
-    try {
-      const request = new sql.Request(transaction);
-      const messages: DatabaseMessage[] = [];
-      request.on(
-        'info',
-        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-          messages.push({
-            text: info.message,
-            severity: info.class !== undefined ? String(info.class) : undefined,
-            code: info.number,
-            line: info.lineNumber,
-          });
-        },
-      );
 
-      if (parameters && parameters.length > 0) {
-        parameters.forEach((param, index) => {
-          const paramName = `p${index + 1}`;
-          if (typeof param === 'string') {
-            request.input(paramName, sql.VarChar, param);
-          } else if (typeof param === 'number') {
-            if (Number.isInteger(param)) {
-              request.input(paramName, sql.Int, param);
-            } else {
-              request.input(paramName, sql.Float, param);
-            }
-          } else if (typeof param === 'boolean') {
-            request.input(paramName, sql.Bit, param);
-          } else if (param === null || param === undefined) {
-            request.input(paramName, sql.VarChar, param);
-          } else if (Array.isArray(param)) {
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          } else {
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          }
+    const request = new sql.Request(transaction);
+    const messages: DatabaseMessage[] = [];
+    request.on(
+      'info',
+      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+        messages.push({
+          text: info.message,
+          severity: info.class !== undefined ? String(info.class) : undefined,
+          code: info.number,
+          line: info.lineNumber,
         });
-      }
+      },
+    );
 
-      let result;
-      try {
-        result = await request.query(processedSQL);
-      } catch (error) {
-        console.error(`[SQL Server executeReadOnly] ERROR: ${(error as Error).message}`);
-        console.error(`[SQL Server executeReadOnly] SQL: ${processedSQL}`);
-        if (parameters && parameters.length > 0) {
-          console.error(`[SQL Server executeReadOnly] Parameters: ${JSON.stringify(parameters)}`);
+    if (parameters && parameters.length > 0) {
+      parameters.forEach((param, index) => {
+        const paramName = `p${index + 1}`;
+        if (typeof param === 'string') {
+          request.input(paramName, sql.VarChar, param);
+        } else if (typeof param === 'number') {
+          if (Number.isInteger(param)) {
+            request.input(paramName, sql.Int, param);
+          } else {
+            request.input(paramName, sql.Float, param);
+          }
+        } else if (typeof param === 'boolean') {
+          request.input(paramName, sql.Bit, param);
+        } else if (param === null || param === undefined) {
+          request.input(paramName, sql.VarChar, param);
+        } else if (Array.isArray(param)) {
+          request.input(paramName, sql.VarChar, JSON.stringify(param));
+        } else {
+          request.input(paramName, sql.VarChar, JSON.stringify(param));
         }
-        throw error;
+      });
+    }
+
+    let result;
+    let queryFailed = false;
+    try {
+      result = await request.query(processedSQL);
+    } catch (error) {
+      queryFailed = true;
+      console.error(`[SQL Server executeReadOnly] ERROR: ${(error as Error).message}`);
+      console.error(`[SQL Server executeReadOnly] SQL: ${processedSQL}`);
+      if (parameters && parameters.length > 0) {
+        console.error(`[SQL Server executeReadOnly] Parameters: ${JSON.stringify(parameters)}`);
       }
-      return {
-        rows: result.recordset || [],
-        rowCount: result.rowsAffected[0] || 0,
-        ...(messages.length > 0 ? { messages } : {}),
-      };
+      throw error;
     } finally {
       try {
         await transaction.rollback();
-      } catch {
-        // ignore; the original error is more useful
+      } catch (rollbackError) {
+        if (!queryFailed) {
+          throw new Error(
+            `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`,
+          );
+        }
       }
     }
+    return {
+      rows: result.recordset || [],
+      rowCount: result.rowsAffected[0] || 0,
+      ...(messages.length > 0 ? { messages } : {}),
+    };
   }
 
   /**
