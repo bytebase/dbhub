@@ -709,9 +709,11 @@ export class SQLServerConnector implements Connector {
    * keyword classifier.
    *
    * Because the rollback guard is application-level (not engine-enforced),
-   * we must reject transaction-control keywords (COMMIT, ROLLBACK) in the
-   * SQL — an in-band COMMIT would end the outer transaction before the
-   * finally-block ROLLBACK runs, letting writes persist.
+   * we reject dangerous keywords in the stripped SQL before opening the
+   * transaction:
+   * - COMMIT/ROLLBACK: would end the outer transaction, letting writes persist
+   * - EXEC/EXECUTE/sp_executesql/xp_cmdshell: dynamic SQL can carry hidden
+   *   COMMIT/ROLLBACK inside string literals that stripCommentsAndStrings removes
    */
   private async executeReadOnly(
     processedSQL: string,
@@ -721,6 +723,11 @@ export class SQLServerConnector implements Connector {
     if (/\b(?:commit|rollback)\b/.test(cleaned)) {
       throw new Error(
         "Read-only mode: transaction control statements (COMMIT, ROLLBACK) are not allowed",
+      );
+    }
+    if (/\b(?:exec|execute|sp_executesql|xp_cmdshell)\b/.test(cleaned)) {
+      throw new Error(
+        "Read-only mode: dynamic SQL execution (EXEC, EXECUTE, sp_executesql, xp_cmdshell) is not allowed",
       );
     }
 
