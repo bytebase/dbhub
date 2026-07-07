@@ -73,6 +73,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # id = "prod_pg"
 # dsn = "postgres://app_user:secure_password@10.0.1.100:5432/myapp_prod?sslmode=require"
 # lazy = true  # Defer connection until first query (avoids startup overhead for remote DBs)
+# enabled = false  # Skip this source entirely at startup: no connection attempt, no tools registered,
+#                  # and any [[tools]] entries targeting this id are dropped too. Default: true
 # connection_timeout = 30
 # # SSH tunnel configuration
 # ssh_host = "bastion.company.com"
@@ -316,6 +318,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # Source Fields:
 #   id = "unique_id"           # Required: unique identifier
 #   description = "..."        # Optional: human-readable description
+#   enabled = false             # Skip this source at startup entirely (default: true)
 #   dsn = "..."                # Connection string (or use individual params below)
 #   lazy = true                # Defer connection until first query (default: false)
 #   search_path = "schema1,public"  # PostgreSQL only: comma-separated schemas

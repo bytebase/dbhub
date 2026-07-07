@@ -456,6 +456,139 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
       });
     });
 
+    describe('enabled field', () => {
+      it('should exclude a source with enabled = false from the loaded sources', () => {
+        const tomlContent = `
+[[sources]]
+id = "active_db"
+dsn = "postgres://user:pass@localhost:5432/activedb"
+
+[[sources]]
+id = "disabled_db"
+dsn = "postgres://user:pass@localhost:5432/disableddb"
+enabled = false
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources).toHaveLength(1);
+        expect(result?.sources[0].id).toBe('active_db');
+      });
+
+      it('should include a source when enabled is omitted or true', () => {
+        const tomlContent = `
+[[sources]]
+id = "default_enabled_db"
+dsn = "postgres://user:pass@localhost:5432/db1"
+
+[[sources]]
+id = "explicit_enabled_db"
+dsn = "postgres://user:pass@localhost:5432/db2"
+enabled = true
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources).toHaveLength(2);
+        expect(result?.sources.map((s) => s.id)).toEqual(['default_enabled_db', 'explicit_enabled_db']);
+      });
+
+      it('should drop tools that reference a disabled source instead of failing validation', () => {
+        const tomlContent = `
+[[sources]]
+id = "active_db"
+dsn = "postgres://user:pass@localhost:5432/activedb"
+
+[[sources]]
+id = "disabled_db"
+dsn = "postgres://user:pass@localhost:5432/disableddb"
+enabled = false
+
+[[tools]]
+name = "execute_sql"
+source = "disabled_db"
+readonly = true
+
+[[tools]]
+name = "get_active_users"
+source = "disabled_db"
+description = "Get all active users"
+statement = "SELECT * FROM users WHERE active = true"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources).toHaveLength(1);
+        expect(result?.tools).toEqual([]);
+      });
+
+      it('should keep tools for a still-enabled source when a sibling source is disabled', () => {
+        const tomlContent = `
+[[sources]]
+id = "active_db"
+dsn = "postgres://user:pass@localhost:5432/activedb"
+
+[[sources]]
+id = "disabled_db"
+dsn = "postgres://user:pass@localhost:5432/disableddb"
+enabled = false
+
+[[tools]]
+name = "execute_sql"
+source = "active_db"
+readonly = true
+max_rows = 500
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.tools).toHaveLength(1);
+        expect(result?.tools![0]).toMatchObject({
+          name: 'execute_sql',
+          source: 'active_db',
+          readonly: true,
+          max_rows: 500,
+        });
+      });
+
+      it('should still reject a tool referencing a source id that was never defined (typo), not just silently drop it', () => {
+        const tomlContent = `
+[[sources]]
+id = "active_db"
+dsn = "postgres://user:pass@localhost:5432/activedb"
+
+[[tools]]
+name = "get_active_users"
+source = "actve_db"
+description = "Get all active users"
+statement = "SELECT * FROM users WHERE active = true"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow(/references unknown source 'actve_db'/);
+      });
+
+      it('should reject a non-boolean enabled value instead of silently treating it as enabled', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+enabled = "false"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow(/invalid enabled/);
+      });
+    });
+
     describe('sslmode validation', () => {
       it('should accept sslmode = "disable"', () => {
         const tomlContent = `

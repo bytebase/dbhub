@@ -35,11 +35,22 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 
     // Process first to populate fields from DSN (like type), then validate
     const sources = processSourceConfigs(parsedToml.sources, configPath);
-    validateTomlConfig({ ...parsedToml, sources }, configPath);
+
+    // Tools referencing a disabled source are inert - drop them here so they
+    // don't fail "unknown source" validation or get registered. Only sources
+    // that actually exist and were explicitly disabled are exempted; a tool
+    // pointing at a source id that never existed (e.g. a typo) still hits the
+    // normal "unknown source" validation error below.
+    const disabledSourceIds = new Set(
+      parsedToml.sources.filter((s) => s.enabled === false).map((s) => s.id)
+    );
+    const tools = parsedToml.tools?.filter((tool) => !disabledSourceIds.has(tool.source));
+
+    validateTomlConfig({ ...parsedToml, sources, tools }, configPath);
 
     return {
       sources,
-      tools: parsedToml.tools,
+      tools,
       source: path.basename(configPath),
     };
   } catch (error) {
@@ -394,6 +405,17 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate enabled field. Only a strict boolean `false` is treated as
+  // "disabled" by processSourceConfigs' filter, so a non-boolean value (e.g.
+  // a stringified "false" from an env var, or a number) would otherwise be
+  // silently kept enabled instead of surfacing the user's mistake.
+  if (source.enabled !== undefined && typeof source.enabled !== "boolean") {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has invalid enabled. ` +
+        `Must be a boolean (true or false).`
+    );
+  }
+
   // Validate AWS IAM auth fields
   if (
     source.aws_iam_auth !== undefined &&
@@ -647,7 +669,9 @@ function processSourceConfigs(
   sources: SourceConfig[],
   configPath: string
 ): SourceConfig[] {
-  return sources.map((source) => {
+  return sources
+    .filter((source) => source.enabled !== false)
+    .map((source) => {
     const processed = { ...source };
 
     // Expand ~ in SSH key path

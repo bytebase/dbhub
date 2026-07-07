@@ -49,6 +49,7 @@ export interface ConnectionParams {
 export interface SourceConfig extends ConnectionParams, SSHConfig {
   id: string;
   description?: string; // Human-readable description of this data source
+  enabled?: boolean; // Set to false to skip this source entirely at startup (default: true)
   dsn?: string;
   connection_timeout?: number; // Connection timeout in seconds
   query_timeout?: number; // Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server)
