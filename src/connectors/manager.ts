@@ -273,7 +273,7 @@ export class ConnectorManager {
     if (source.timezone) {
       config.timezone = source.timezone;
     }
-    // Pass charset / collation for MySQL/MariaDB (mutually exclusive)
+    // Pass charset / collation for MySQL/MariaDB (either, or both together)
     if (source.charset) {
       config.charset = source.charset;
     }

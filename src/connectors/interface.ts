@@ -100,16 +100,15 @@ export interface ConnectorConfig {
   timezone?: string;
   /**
    * MySQL/MariaDB connection character set (e.g. "utf8mb4").
-   * The connection uses that character set's default collation.
-   * Mutually exclusive with `collation`.
+   * May be set on its own (the character set's default collation is used) or
+   * together with `collation`.
    */
   charset?: string;
   /**
    * MySQL/MariaDB connection collation (e.g. "utf8mb4_0900_ai_ci").
-   * Sets the exact collation used for string literals and comparisons on the
-   * connection; a collation already implies its character set. Mutually exclusive
-   * with `charset`. When neither is set, the driver falls back to its built-in
-   * default (mysql2: `utf8mb4_unicode_ci`).
+   * Sets the collation used for string literals and comparisons on the connection.
+   * May be set on its own or together with `charset`. When neither is set, the
+   * driver falls back to its built-in default (mysql2: `utf8mb4_unicode_ci`).
    */
   collation?: string;
 }

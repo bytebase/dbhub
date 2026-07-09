@@ -1421,7 +1421,7 @@ collation = ["utf8mb4_0900_ai_ci"]
         expect(() => loadTomlConfig()).toThrow('invalid collation');
       });
 
-      it('should throw error when both charset and collation are set', () => {
+      it('should accept charset and collation together', () => {
         const tomlContent = `
 [[sources]]
 id = "test_db"
@@ -1431,7 +1431,11 @@ collation = "utf8mb4_0900_ai_ci"
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-        expect(() => loadTomlConfig()).toThrow("sets both 'charset' and 'collation'");
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].charset).toBe('utf8mb4');
+        expect(result?.sources[0].collation).toBe('utf8mb4_0900_ai_ci');
       });
 
       it('should work without collation (optional field)', () => {

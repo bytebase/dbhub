@@ -661,15 +661,6 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
-  // charset and collation are mutually exclusive: a collation already implies its
-  // character set, and the drivers resolve the connection to a single collation id.
-  if (source.charset !== undefined && source.collation !== undefined) {
-    throw new Error(
-      `Configuration file ${configPath}: source '${source.id}' sets both 'charset' and 'collation'. ` +
-        `Set only one — a collation already implies its character set.`
-    );
-  }
-
   // Reject readonly and max_rows at source level (they should be set on tools instead)
   if ((source as any).readonly !== undefined) {
     throw new Error(

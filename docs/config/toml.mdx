@@ -446,9 +446,9 @@ Sources define database connections. Each source represents a database that DBHu
 ### charset
 
 <ParamField path="charset" type="string">
-  Sets the connection character set (e.g. `"utf8mb4"`). The connection uses that character set's default collation.
+  Sets the connection character set (e.g. `"utf8mb4"`). On its own, the connection uses that character set's default collation; combine with `collation` to pick a specific one.
 
-  **MySQL / MariaDB only.** Mutually exclusive with `collation`.
+  **MySQL / MariaDB only.**
 
   ```toml
   [[sources]]
@@ -465,9 +465,9 @@ Sources define database connections. Each source represents a database that DBHu
 ### collation
 
 <ParamField path="collation" type="string">
-  Sets the connection collation (e.g. `"utf8mb4_0900_ai_ci"`), which determines how string literals and comparisons are ordered/compared on the connection (`collation_connection`). A collation already implies its character set.
+  Sets the connection collation (e.g. `"utf8mb4_0900_ai_ci"`), which determines how string literals and comparisons are ordered/compared on the connection (`collation_connection`). Can be set on its own or alongside `charset`; a collation already implies its character set, so when both are given the collation is authoritative.
 
-  **MySQL / MariaDB only.** Mutually exclusive with `charset`.
+  **MySQL / MariaDB only.**
 
   ```toml
   [[sources]]
@@ -783,8 +783,8 @@ default = 10
 | `domain` | string | ❌ | Windows domain (NTLM) |
 | `search_path` | string | ❌ | PostgreSQL schema search path (comma-separated) |
 | `timezone` | string | ❌ | MySQL/MariaDB: `Z`, `local`, or offset like `+09:00` |
-| `charset` | string | ❌ | MySQL/MariaDB: connection character set (`utf8mb4`). Mutually exclusive with `collation` |
-| `collation` | string | ❌ | MySQL/MariaDB: connection collation (`utf8mb4_0900_ai_ci`). Mutually exclusive with `charset` |
+| `charset` | string | ❌ | MySQL/MariaDB: connection character set (`utf8mb4`) |
+| `collation` | string | ❌ | MySQL/MariaDB: connection collation (`utf8mb4_0900_ai_ci`) |
 | `ssh_host` | string | ❌ | SSH server hostname |
 | `ssh_port` | number | ❌ | SSH server port (default: 22) |
 | `ssh_user` | string | ❌ | SSH username |

@@ -85,14 +85,17 @@ class MySQLDSNParser implements DSNParser {
       }
 
       // Apply charset / collation if specified. mysql2 exposes a single `charset`
-      // connection option that accepts either a character set (e.g. "utf8mb4") or a
-      // collation (e.g. "utf8mb4_0900_ai_ci") name — see its typings. charset and
-      // collation are mutually exclusive upstream, so at most one is set here.
-      // Without either, mysql2 defaults to utf8mb4_unicode_ci.
-      if (collation !== undefined) {
-        config.charset = collation;
-      } else if (charset !== undefined) {
-        config.charset = charset;
+      // connection option (it has no separate `collation` option) that accepts
+      // either a character set (e.g. "utf8mb4") or a collation (e.g.
+      // "utf8mb4_0900_ai_ci") name — see its typings. Both resolve to one
+      // connection collation id: a collation implies its character set, so when a
+      // collation is configured we pass that (it sets both character_set_connection
+      // and collation_connection); otherwise we pass the charset (which uses that
+      // character set's default collation). Without either, mysql2 defaults to
+      // utf8mb4_unicode_ci.
+      const charsetOrCollation = collation ?? charset;
+      if (charsetOrCollation !== undefined) {
+        config.charset = charsetOrCollation;
       }
 
       // Auto-detect AWS IAM authentication tokens and configure cleartext plugin

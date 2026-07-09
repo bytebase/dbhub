@@ -501,6 +501,27 @@ describe('MySQL Connector Integration Tests', () => {
         await connector.disconnect();
       }
     });
+
+    it('should honor charset and collation set together', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          charset: 'utf8mb4',
+          collation: 'utf8mb4_0900_ai_ci',
+        });
+
+        const result = await connector.executeSQL(
+          'SELECT @@session.character_set_connection AS charset, @@session.collation_connection AS collation',
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].charset).toBe('utf8mb4');
+        expect(result.rows[0].collation).toBe('utf8mb4_0900_ai_ci');
+      } finally {
+        await connector.disconnect();
+      }
+    });
   });
 
   describe('Per-tool readonly engine backstop (options.readonly)', () => {
