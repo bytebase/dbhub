@@ -29,8 +29,10 @@ import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 class MySQLDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.ConnectionOptions> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
-    // Capture this before the local `config` (mysql.ConnectionOptions) shadows the param below
+    // Capture these before the local `config` (mysql.ConnectionOptions) shadows the param below
     const timezone = config?.timezone;
+    const charset = config?.charset;
+    const collation = config?.collation;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -80,6 +82,20 @@ class MySQLDSNParser implements DSNParser {
       // produce an incorrect instant when the server timezone differs from the data's.
       if (timezone !== undefined) {
         config.timezone = timezone;
+      }
+
+      // Apply charset / collation if specified. mysql2 exposes a single `charset`
+      // connection option (it has no separate `collation` option) that accepts
+      // either a character set (e.g. "utf8mb4") or a collation (e.g.
+      // "utf8mb4_0900_ai_ci") name — see its typings. Both resolve to one
+      // connection collation id: a collation implies its character set, so when a
+      // collation is configured we pass that (it sets both character_set_connection
+      // and collation_connection); otherwise we pass the charset (which uses that
+      // character set's default collation). Without either, mysql2 defaults to
+      // utf8mb4_unicode_ci.
+      const charsetOrCollation = collation ?? charset;
+      if (charsetOrCollation !== undefined) {
+        config.charset = charsetOrCollation;
       }
 
       // Auto-detect AWS IAM authentication tokens and configure cleartext plugin
