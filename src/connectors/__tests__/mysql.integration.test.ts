@@ -460,6 +460,29 @@ describe('MySQL Connector Integration Tests', () => {
     });
   });
 
+  describe('charset configuration', () => {
+    it('should set the connection collation from the configured charset', async () => {
+      const connector = new MySQLConnector();
+      try {
+        // utf8mb4_general_ci differs from mysql2's built-in default
+        // (utf8mb4_unicode_ci), so a match proves the option took effect.
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          charset: 'utf8mb4_general_ci',
+        });
+
+        const result = await connector.executeSQL(
+          'SELECT @@session.collation_connection AS collation',
+          {}
+        );
+
+        expect(result.rows).toHaveLength(1);
+        expect(result.rows[0].collation).toBe('utf8mb4_general_ci');
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
+
   describe('Per-tool readonly engine backstop (options.readonly)', () => {
     // The READ ONLY transaction reliably blocks DML. (DDL like DROP performs an
     // implicit commit and escapes the transaction; stacked-DDL payloads such as

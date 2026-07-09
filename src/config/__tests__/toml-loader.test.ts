@@ -1287,6 +1287,88 @@ dsn = "mysql://user:pass@localhost:3306/testdb"
       });
     });
 
+    describe('charset validation', () => {
+      it('should accept a charset name for a MySQL source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+charset = "utf8mb4"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].charset).toBe('utf8mb4');
+      });
+
+      it('should accept a collation name for a MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mariadb://user:pass@localhost:3306/testdb"
+charset = "utf8mb4_0900_ai_ci"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].charset).toBe('utf8mb4_0900_ai_ci');
+      });
+
+      it('should throw error when charset is used with non-MySQL/MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+charset = "utf8mb4"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for MySQL and MariaDB');
+      });
+
+      it('should throw error for empty charset', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+charset = ""
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid charset');
+      });
+
+      it('should throw error for non-string charset (TOML array)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+charset = ["utf8mb4"]
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid charset');
+      });
+
+      it('should work without charset (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].charset).toBeUndefined();
+      });
+    });
+
   });
 
   describe('buildDSNFromSource', () => {

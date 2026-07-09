@@ -625,6 +625,26 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate charset (MySQL/MariaDB only)
+  if (source.charset !== undefined) {
+    if (source.type !== "mysql" && source.type !== "mariadb") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'charset' but it is only supported for MySQL and MariaDB sources.`
+      );
+    }
+    // Accepts a character set (e.g. "utf8mb4") or a collation (e.g. "utf8mb4_0900_ai_ci").
+    // The set of valid names is large and depends on the driver and server version,
+    // so we only require a non-empty string here; the driver rejects unknown names at
+    // connect time. The typeof guard also rejects non-strings (e.g. a TOML array like
+    // ["utf8mb4"]) before they reach the driver.
+    if (typeof source.charset !== "string" || source.charset.trim() === "") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid charset '${source.charset}'. ` +
+          `Must be a non-empty string naming a character set (e.g. "utf8mb4") or collation (e.g. "utf8mb4_0900_ai_ci").`
+      );
+    }
+  }
+
   // Reject readonly and max_rows at source level (they should be set on tools instead)
   if ((source as any).readonly !== undefined) {
     throw new Error(

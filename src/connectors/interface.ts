@@ -98,6 +98,14 @@ export interface ConnectorConfig {
    * Passed through to the mysql2 `timezone` connection option.
    */
   timezone?: string;
+  /**
+   * MySQL/MariaDB connection character set or collation.
+   * Accepts a character set (e.g. "utf8mb4") or a collation (e.g. "utf8mb4_0900_ai_ci").
+   * Passed through to the driver's `charset` connection option, which sets the
+   * connection collation used for string literals and comparisons. When unset,
+   * the driver falls back to its built-in default (mysql2: `utf8mb4_unicode_ci`).
+   */
+  charset?: string;
 }
 
 /**
