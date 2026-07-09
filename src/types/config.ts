@@ -56,7 +56,8 @@ export interface SourceConfig extends ConnectionParams, SSHConfig {
   lazy?: boolean; // Defer connection until first query (default: false)
   search_path?: string; // Comma-separated list of schemas for PostgreSQL search_path (e.g., "myschema,public")
   timezone?: string; // MySQL/MariaDB: how the driver interprets DATETIME values. "Z" (UTC), "local", or "±HH:MM" (e.g., "+09:00")
-  charset?: string; // MySQL/MariaDB: connection character set or collation (e.g., "utf8mb4" or "utf8mb4_0900_ai_ci")
+  charset?: string; // MySQL/MariaDB: connection character set (e.g., "utf8mb4"). Mutually exclusive with collation.
+  collation?: string; // MySQL/MariaDB: connection collation (e.g., "utf8mb4_0900_ai_ci"). Mutually exclusive with charset.
 }
 
 /**

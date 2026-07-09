@@ -61,10 +61,14 @@ class MariadbDSNParser implements DSNParser {
         ...(config?.timezone !== undefined && {
           timezone: config.timezone
         }),
-        // Connection character set or collation ("utf8mb4" or "utf8mb4_0900_ai_ci").
-        // The mariadb driver accepts either a charset or a collation name here.
+        // Connection character set (e.g. "utf8mb4") and/or collation (e.g.
+        // "utf8mb4_0900_ai_ci"). The mariadb driver exposes both as distinct
+        // options; they are mutually exclusive here, so at most one is set.
         ...(config?.charset !== undefined && {
           charset: config.charset
+        }),
+        ...(config?.collation !== undefined && {
+          collation: config.collation
         }),
       };
 

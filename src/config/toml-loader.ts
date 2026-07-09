@@ -632,17 +632,42 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
         `Configuration file ${configPath}: source '${source.id}' has 'charset' but it is only supported for MySQL and MariaDB sources.`
       );
     }
-    // Accepts a character set (e.g. "utf8mb4") or a collation (e.g. "utf8mb4_0900_ai_ci").
-    // The set of valid names is large and depends on the driver and server version,
-    // so we only require a non-empty string here; the driver rejects unknown names at
-    // connect time. The typeof guard also rejects non-strings (e.g. a TOML array like
-    // ["utf8mb4"]) before they reach the driver.
+    // The set of valid character sets is large and server-version dependent, so we
+    // only require a non-empty string here; the driver rejects unknown names at
+    // connect time. The typeof guard also rejects non-strings (e.g. a TOML array
+    // like ["utf8mb4"]) before they reach the driver.
     if (typeof source.charset !== "string" || source.charset.trim() === "") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid charset '${source.charset}'. ` +
-          `Must be a non-empty string naming a character set (e.g. "utf8mb4") or collation (e.g. "utf8mb4_0900_ai_ci").`
+          `Must be a non-empty string naming a character set (e.g. "utf8mb4").`
       );
     }
+  }
+
+  // Validate collation (MySQL/MariaDB only)
+  if (source.collation !== undefined) {
+    if (source.type !== "mysql" && source.type !== "mariadb") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'collation' but it is only supported for MySQL and MariaDB sources.`
+      );
+    }
+    // As with charset, the set of valid collations is large and server-version
+    // dependent, so we only require a non-empty string; the driver validates the name.
+    if (typeof source.collation !== "string" || source.collation.trim() === "") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid collation '${source.collation}'. ` +
+          `Must be a non-empty string naming a collation (e.g. "utf8mb4_0900_ai_ci").`
+      );
+    }
+  }
+
+  // charset and collation are mutually exclusive: a collation already implies its
+  // character set, and the drivers resolve the connection to a single collation id.
+  if (source.charset !== undefined && source.collation !== undefined) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' sets both 'charset' and 'collation'. ` +
+        `Set only one — a collation already implies its character set.`
+    );
   }
 
   // Reject readonly and max_rows at source level (they should be set on tools instead)

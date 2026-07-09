@@ -111,11 +111,13 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "mysql://root:mysql@localhost:3306/myapp"
 # timezone = "+09:00"       # How the driver interprets DATETIME values: "Z", "local", or "±HH:MM"
 
-# MySQL with explicit connection charset/collation (MySQL/MariaDB only)
+# MySQL with an explicit connection charset or collation (MySQL/MariaDB only).
+# charset and collation are mutually exclusive — set at most one.
 # [[sources]]
 # id = "local_mysql_charset"
 # dsn = "mysql://root:mysql@localhost:3306/myapp"
-# charset = "utf8mb4_0900_ai_ci"  # Connection charset or collation (e.g. "utf8mb4" or "utf8mb4_0900_ai_ci")
+# charset = "utf8mb4"              # Connection character set (uses its default collation)
+# collation = "utf8mb4_0900_ai_ci"  # Or set an explicit collation instead
 
 # MySQL on AWS RDS with IAM authentication (no password in config)
 # [[sources]]
@@ -326,7 +328,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   lazy = true                # Defer connection until first query (default: false)
 #   search_path = "schema1,public"  # PostgreSQL only: comma-separated schemas
 #   timezone = "+09:00"         # MySQL/MariaDB only: "Z", "local", or "±HH:MM"
-#   charset = "utf8mb4_0900_ai_ci"  # MySQL/MariaDB only: charset or collation name
+#   charset = "utf8mb4"         # MySQL/MariaDB only: connection character set (excl. with collation)
+#   collation = "utf8mb4_0900_ai_ci"  # MySQL/MariaDB only: connection collation (excl. with charset)
 #   aws_iam_auth = true         # Optional: enable AWS RDS IAM auth (postgres/mysql/mariadb)
 #   aws_region = "eu-west-1"    # Required when aws_iam_auth = true
 #

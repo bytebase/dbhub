@@ -32,6 +32,7 @@ class MySQLDSNParser implements DSNParser {
     // Capture these before the local `config` (mysql.ConnectionOptions) shadows the param below
     const timezone = config?.timezone;
     const charset = config?.charset;
+    const collation = config?.collation;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -83,10 +84,14 @@ class MySQLDSNParser implements DSNParser {
         config.timezone = timezone;
       }
 
-      // Apply charset if specified: sets the connection character set / collation
-      // (e.g. "utf8mb4" or "utf8mb4_0900_ai_ci"). mysql2 accepts either a charset
-      // or a collation name here. Without it, mysql2 defaults to utf8mb4_unicode_ci.
-      if (charset !== undefined) {
+      // Apply charset / collation if specified. mysql2 exposes a single `charset`
+      // connection option that accepts either a character set (e.g. "utf8mb4") or a
+      // collation (e.g. "utf8mb4_0900_ai_ci") name — see its typings. charset and
+      // collation are mutually exclusive upstream, so at most one is set here.
+      // Without either, mysql2 defaults to utf8mb4_unicode_ci.
+      if (collation !== undefined) {
+        config.charset = collation;
+      } else if (charset !== undefined) {
         config.charset = charset;
       }
 

@@ -1303,21 +1303,6 @@ charset = "utf8mb4"
         expect(result?.sources[0].charset).toBe('utf8mb4');
       });
 
-      it('should accept a collation name for a MariaDB source', () => {
-        const tomlContent = `
-[[sources]]
-id = "test_db"
-dsn = "mariadb://user:pass@localhost:3306/testdb"
-charset = "utf8mb4_0900_ai_ci"
-`;
-        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
-
-        const result = loadTomlConfig();
-
-        expect(result).toBeTruthy();
-        expect(result?.sources[0].charset).toBe('utf8mb4_0900_ai_ci');
-      });
-
       it('should throw error when charset is used with non-MySQL/MariaDB source', () => {
         const tomlContent = `
 [[sources]]
@@ -1366,6 +1351,101 @@ dsn = "mysql://user:pass@localhost:3306/testdb"
 
         expect(result).toBeTruthy();
         expect(result?.sources[0].charset).toBeUndefined();
+      });
+    });
+
+    describe('collation validation', () => {
+      it('should accept a collation name for a MySQL source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+collation = "utf8mb4_0900_ai_ci"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].collation).toBe('utf8mb4_0900_ai_ci');
+      });
+
+      it('should accept a collation name for a MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mariadb://user:pass@localhost:3306/testdb"
+collation = "utf8mb4_unicode_ci"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].collation).toBe('utf8mb4_unicode_ci');
+      });
+
+      it('should throw error when collation is used with non-MySQL/MariaDB source', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+collation = "utf8mb4_0900_ai_ci"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for MySQL and MariaDB');
+      });
+
+      it('should throw error for empty collation', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+collation = ""
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid collation');
+      });
+
+      it('should throw error for non-string collation (TOML array)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+collation = ["utf8mb4_0900_ai_ci"]
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid collation');
+      });
+
+      it('should throw error when both charset and collation are set', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+charset = "utf8mb4"
+collation = "utf8mb4_0900_ai_ci"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("sets both 'charset' and 'collation'");
+      });
+
+      it('should work without collation (optional field)', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].collation).toBeUndefined();
       });
     });
 

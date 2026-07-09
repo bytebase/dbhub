@@ -446,18 +446,37 @@ Sources define database connections. Each source represents a database that DBHu
 ### charset
 
 <ParamField path="charset" type="string">
-  Sets the connection character set or collation. Accepts a character set (e.g. `"utf8mb4"`) or a collation (e.g. `"utf8mb4_0900_ai_ci"`).
+  Sets the connection character set (e.g. `"utf8mb4"`). The connection uses that character set's default collation.
 
-  **MySQL / MariaDB only.**
+  **MySQL / MariaDB only.** Mutually exclusive with `collation`.
 
   ```toml
   [[sources]]
   id = "production"
   dsn = "mysql://user:pass@localhost:3306/mydb"
-  charset = "utf8mb4_0900_ai_ci"
+  charset = "utf8mb4"
   ```
 
-  Passed through to the driver's `charset` connection option, which determines the collation used for string literals and comparisons on the connection (`collation_connection`). When unset, the driver uses its built-in default (mysql2 defaults to `utf8mb4_unicode_ci`), which may not match your database's collation. Set this to align the connection collation with your schema (e.g. MySQL 8's `utf8mb4_0900_ai_ci`).
+  <Note>
+  This option is **only available via TOML**. It is not supported as a DSN query parameter.
+  </Note>
+</ParamField>
+
+### collation
+
+<ParamField path="collation" type="string">
+  Sets the connection collation (e.g. `"utf8mb4_0900_ai_ci"`), which determines how string literals and comparisons are ordered/compared on the connection (`collation_connection`). A collation already implies its character set.
+
+  **MySQL / MariaDB only.** Mutually exclusive with `charset`.
+
+  ```toml
+  [[sources]]
+  id = "production"
+  dsn = "mysql://user:pass@localhost:3306/mydb"
+  collation = "utf8mb4_0900_ai_ci"
+  ```
+
+  When neither `charset` nor `collation` is set, the driver uses its built-in default (mysql2 defaults to `utf8mb4_unicode_ci`), which may not match your database's collation. Set this to align the connection collation with your schema (e.g. MySQL 8's `utf8mb4_0900_ai_ci`).
 
   <Note>
   This option is **only available via TOML**. It is not supported as a DSN query parameter.
@@ -764,7 +783,8 @@ default = 10
 | `domain` | string | ❌ | Windows domain (NTLM) |
 | `search_path` | string | ❌ | PostgreSQL schema search path (comma-separated) |
 | `timezone` | string | ❌ | MySQL/MariaDB: `Z`, `local`, or offset like `+09:00` |
-| `charset` | string | ❌ | MySQL/MariaDB: character set (`utf8mb4`) or collation (`utf8mb4_0900_ai_ci`) |
+| `charset` | string | ❌ | MySQL/MariaDB: connection character set (`utf8mb4`). Mutually exclusive with `collation` |
+| `collation` | string | ❌ | MySQL/MariaDB: connection collation (`utf8mb4_0900_ai_ci`). Mutually exclusive with `charset` |
 | `ssh_host` | string | ❌ | SSH server hostname |
 | `ssh_port` | number | ❌ | SSH server port (default: 22) |
 | `ssh_user` | string | ❌ | SSH username |
