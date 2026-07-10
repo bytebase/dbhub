@@ -1,8 +1,9 @@
 # Workflow for publishing the DBHub MCP Bundle (.mcpb) as a GitHub release asset.
 #
 # The .mcpb bundle is a self-contained package (server + database drivers +
-# read-only TOML config) that installs into Claude Desktop with a double click,
-# running locally over stdio — no remote HTTP endpoint or OAuth setup needed.
+# read-only TOML config) that installs with one click into MCPB-compatible
+# clients (Claude Desktop, Claude Code, MCP for Windows), running locally over
+# stdio — no remote HTTP endpoint or OAuth setup needed.
 #
 # Trigger modes (mirrors npm-publish.yml):
 # 1. Automatic: on push to main that modifies package.json — builds and attaches

@@ -1,24 +1,24 @@
 ---
 title: "MCP Bundle"
-description: "One-click, read-only Claude Desktop install via .mcpb"
+description: "One-click, read-only install via .mcpb for Claude Desktop and other MCPB clients"
 ---
 
-The [MCP Bundle](https://github.com/anthropics/mcpb) (`.mcpb`) is a one-click installation path for Claude Desktop — no Node.js install, no JSON config editing, and no remote HTTP endpoint or OAuth setup. It is the recommended way to give **non-technical users** curated database access.
+The [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (`.mcpb`) is a one-click installation path — no Node.js install, no JSON config editing, and no remote HTTP endpoint or OAuth setup. It is an open format governed by the Model Context Protocol project; clients that install it directly include **Claude Desktop**, **Claude Code**, and **MCP for Windows**. It is the recommended way to give **non-technical users** curated database access.
 
 ## Install
 
 1. Download `dbhub-<version>.mcpb` from the [latest GitHub release](https://github.com/bytebase/dbhub/releases/latest).
-2. Double-click the file (or drag it into Claude Desktop's **Settings → Extensions**).
+2. Install it in your client — in Claude Desktop, double-click the file (or drag it into **Settings → Extensions**).
 3. Enter your database connection string when prompted, e.g. `postgres://user:password@host:5432/dbname`. It is stored in the OS keychain, not in a config file.
 
-The bundle includes drivers for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, and runs locally over stdio.
+The bundle includes drivers for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, and runs locally over stdio. Clients without native `.mcpb` support (Cursor, VS Code, ...) can still run the unpacked bundle as a plain stdio MCP server: `node server/index.js --transport stdio --config dbhub.toml` with `DBHUB_DSN` set.
 
 ## Read-only by design
 
 The bundled configuration sets `readonly = true` and `max_rows = 1000` on `execute_sql`: mutating statements are rejected, and the database session is additionally set to read-only at the engine level. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone.
 
 <Note>
-The machine running Claude Desktop connects **directly** to the database, so the database must be reachable from it (VPN or network allow-list). AWS IAM and Azure AD authentication are not included in the bundle; repackage with those drivers added if you need them.
+The machine running the MCP client connects **directly** to the database, so the database must be reachable from it (VPN or network allow-list). AWS IAM and Azure AD authentication are not included in the bundle; repackage with those drivers added if you need them.
 </Note>
 
 ## Packaging your own bundle
@@ -33,7 +33,7 @@ pnpm run build:mcpb   # produces dist-mcpb/dbhub-<version>.mcpb
 pnpm run test:mcpb    # smoke-tests the packed bundle over stdio
 ```
 
-Anything in a `[[sources]]` or `[[tools]]` section of the [TOML configuration](/config/toml) works in the bundle, including `${ENV_VAR}` interpolation — the stock bundle uses `dsn = "${DBHUB_DSN}"`, with `DBHUB_DSN` supplied by Claude Desktop from the user's extension settings.
+Anything in a `[[sources]]` or `[[tools]]` section of the [TOML configuration](/config/toml) works in the bundle, including `${ENV_VAR}` interpolation — the stock bundle uses `dsn = "${DBHUB_DSN}"`, with `DBHUB_DSN` supplied by the client from the user's extension settings.
 
 <Warning>
 If you bake a DSN into your own bundle, remember that anyone can unzip an `.mcpb` and read it. Only embed credentials for a curated, read-only, least-privilege account.
