@@ -18,7 +18,7 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": ["index", "installation", "quickstart"]
+            "pages": ["index", "installation", "quickstart", "mcpb"]
           },
           {
             "group": "MCP Tools",

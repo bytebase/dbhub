@@ -1,0 +1,116 @@
+# Workflow for publishing the DBHub MCP Bundle (.mcpb) as a GitHub release asset.
+#
+# The .mcpb bundle is a self-contained package (server + database drivers +
+# read-only TOML config) that installs with one click into MCPB-compatible
+# clients (Claude Desktop, Claude Code, MCP for Windows), running locally over
+# stdio — no remote HTTP endpoint or OAuth setup needed.
+#
+# Trigger modes (mirrors npm-publish.yml):
+# 1. Automatic: on push to main that modifies package.json — builds and attaches
+#    the bundle to the GitHub release v<version>, creating the release if needed.
+#    Skips if that release already has the asset.
+# 2. Manual (workflow_dispatch): force a rebuild and re-upload of the asset for
+#    the current package.json version.
+
+name: Publish MCP Bundle
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "package.json"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases and upload assets
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Decide before installing anything — a skipped run costs only this step
+      # (jq and gh are preinstalled on ubuntu-latest).
+      - name: Determine version and whether to publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          ASSET="dbhub-${VERSION}.mcpb"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger: always rebuild and re-upload
+            SHOULD_PUBLISH="true"
+            echo "Manual trigger: publishing ${ASSET}"
+          elif gh release view "v${VERSION}" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "${ASSET}"; then
+            echo "Release v${VERSION} already has ${ASSET}. Skipping."
+            SHOULD_PUBLISH="false"
+          else
+            echo "Publishing ${ASSET} to release v${VERSION}"
+            SHOULD_PUBLISH="true"
+          fi
+
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "ASSET=${ASSET}" >> $GITHUB_ENV
+          echo "SHOULD_PUBLISH=${SHOULD_PUBLISH}" >> $GITHUB_ENV
+
+      # pnpm must be on PATH before setup-node can use the pnpm store cache
+      - name: Install pnpm
+        if: env.SHOULD_PUBLISH == 'true'
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        if: env.SHOULD_PUBLISH == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      # build-mcpb.mjs stages the bundle's node_modules with `npm install`, and
+      # Node 22.22.2 ships with broken npm (missing promise-retry) — bootstrap a
+      # working npm without invoking the broken one, same as npm-publish.yml.
+      - name: Upgrade npm
+        if: env.SHOULD_PUBLISH == 'true'
+        run: |
+          npm_tarball=$(curl -fsSL https://registry.npmjs.org/npm/latest | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).dist.tarball")
+          curl -fsSL "$npm_tarball" | tar xz -C /tmp
+          node /tmp/package/bin/npm-cli.js install -g npm@latest
+          rm -rf /tmp/package
+          echo "npm version: $(npm --version)"
+
+      - name: Install dependencies
+        if: env.SHOULD_PUBLISH == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build MCP Bundle
+        if: env.SHOULD_PUBLISH == 'true'
+        run: pnpm run build:mcpb
+
+      - name: Smoke test MCP Bundle
+        if: env.SHOULD_PUBLISH == 'true'
+        run: pnpm run test:mcpb
+
+      - name: Create release and upload asset
+        if: env.SHOULD_PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Create the release if it doesn't exist yet
+          if ! gh release view "v${VERSION}" > /dev/null 2>&1; then
+            PRERELEASE_FLAG=""
+            case "${VERSION}" in
+              *-*) PRERELEASE_FLAG="--prerelease" ;;
+            esac
+            gh release create "v${VERSION}" \
+              --title "v${VERSION}" \
+              --generate-notes \
+              ${PRERELEASE_FLAG}
+          fi
+
+          gh release upload "v${VERSION}" "dist-mcpb/${ASSET}" --clobber
+          echo "✅ Uploaded ${ASSET} to release v${VERSION}"

@@ -1,0 +1,74 @@
+{
+  "manifest_version": "0.3",
+  "name": "dbhub",
+  "display_name": "DBHub",
+  "version": "0.0.0",
+  "description": "Minimal, token-efficient database MCP server. Read-only access to PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite.",
+  "long_description": "DBHub bridges your AI assistant with your database through just two tools: `execute_sql` and `search_objects`. This bundle is configured read-only by design — writes are rejected by the SQL classifier and the database session is additionally set to read-only at the engine level — making it safe to hand to non-technical users for data exploration, reporting, and debugging. Connect it to PostgreSQL, MySQL, MariaDB, SQL Server, or SQLite by entering a single connection string.",
+  "author": {
+    "name": "Bytebase",
+    "url": "https://www.bytebase.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bytebase/dbhub"
+  },
+  "homepage": "https://dbhub.ai",
+  "documentation": "https://dbhub.ai/mcpb",
+  "support": "https://github.com/bytebase/dbhub/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": [
+    "database",
+    "sql",
+    "postgres",
+    "postgresql",
+    "mysql",
+    "mariadb",
+    "sqlserver",
+    "sqlite",
+    "read-only"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js",
+        "--transport",
+        "stdio",
+        "--config",
+        "${__dirname}/dbhub.toml"
+      ],
+      "env": {
+        "DBHUB_DSN": "${user_config.dsn}"
+      }
+    }
+  },
+  "user_config": {
+    "dsn": {
+      "type": "string",
+      "title": "Database connection string (DSN)",
+      "description": "Examples: postgres://user:password@localhost:5432/dbname | mysql://user:password@localhost:3306/dbname | mariadb://user:password@localhost:3306/dbname | sqlserver://user:password@localhost:1433/dbname | sqlite:///path/to/database.db. Append ?sslmode=require for SSL. Use a least-privilege, read-only database account.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "tools": [
+    {
+      "name": "execute_sql",
+      "description": "Execute SQL against the connected database (read-only: SELECT and other non-mutating statements only)"
+    },
+    {
+      "name": "search_objects",
+      "description": "Search and list database objects (schemas, tables, columns, indexes, procedures) with progressive detail levels"
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=22.5.0"
+    }
+  }
+}
