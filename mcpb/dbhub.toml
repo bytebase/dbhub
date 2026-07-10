@@ -1,0 +1,28 @@
+# DBHub configuration for the MCP Bundle (.mcpb) distribution.
+#
+# The connection string is supplied by the MCP client (e.g. Claude Desktop)
+# from the user's extension settings — stored in the OS keychain — and passed
+# to the server via the DBHUB_DSN environment variable declared in
+# manifest.json. It is interpolated into the `dsn` field below at load time.
+#
+# This bundle is read-only by design: execute_sql rejects mutating statements
+# and the database session is additionally set to read-only at the engine
+# level. Pair it with a least-privilege, read-only database account.
+#
+# To ship a different policy (multiple sources, custom tools, write access),
+# repackage the bundle with your own dbhub.toml — see
+# https://dbhub.ai/mcpb for the recipe.
+
+[[sources]]
+id = "default"
+dsn = "${DBHUB_DSN}"
+
+[[tools]]
+name = "execute_sql"
+source = "default"
+readonly = true
+max_rows = 1000
+
+[[tools]]
+name = "search_objects"
+source = "default"

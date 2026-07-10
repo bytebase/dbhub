@@ -14,6 +14,7 @@ DBHub is a zero-dependency, token efficient database MCP server implementing the
 - Test: `pnpm test` - Run all tests
 - Test Watch: `pnpm test:watch` - Run tests in watch mode
 - Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)
+- MCP Bundle: `pnpm run build:mcpb` - Package DBHub as a Claude Desktop `.mcpb` bundle (see `mcpb/` and `scripts/build-mcpb.mjs`); `pnpm run test:mcpb` smoke-tests the packed bundle over stdio. Published to GitHub releases by `.github/workflows/mcpb-release.yml`. The bundle is read-only by design (`mcpb/dbhub.toml`), with the DSN supplied via the `DBHUB_DSN` env var declared in `mcpb/manifest.json` (TOML `${ENV_VAR}` interpolation).
 
 ## Architecture Overview
 

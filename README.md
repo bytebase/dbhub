@@ -80,6 +80,10 @@ docker run --rm --init \
 npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 ```
 
+**Claude Desktop (MCP Bundle):**
+
+Download `dbhub-<version>.mcpb` from the [latest release](https://github.com/bytebase/dbhub/releases/latest), double-click it (or drag it into Claude Desktop's Settings → Extensions), and enter your database connection string. The bundle runs locally over stdio, is **read-only by design** (writes are rejected and the database session is set to read-only at the engine level), and needs no remote endpoint or OAuth setup — ideal for giving non-technical teammates curated, read-only database access. Pair it with a least-privilege, read-only database account. See the [MCP Bundle guide](https://dbhub.ai/mcpb) for details and for packaging your own bundle.
+
 **Demo Mode:**
 
 ```bash

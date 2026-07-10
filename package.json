@@ -21,6 +21,8 @@
     "build": "pnpm run generate:api-types && tsup && cd frontend && pnpm run build",
     "build:backend": "pnpm run generate:api-types && tsup",
     "build:frontend": "cd frontend && pnpm run build",
+    "build:mcpb": "pnpm run build:backend && node scripts/build-mcpb.mjs",
+    "test:mcpb": "node scripts/smoke-test-mcpb.mjs",
     "start": "node dist/index.js",
     "dev": "concurrently --kill-others \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
     "dev:backend": "NODE_ENV=development tsx src/index.ts --transport=http",
@@ -58,6 +60,7 @@
     "pg": "^8.13.3"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@testcontainers/mariadb": "^11.0.3",
     "@testcontainers/mssqlserver": "^11.0.3",
     "@testcontainers/mysql": "^11.0.3",

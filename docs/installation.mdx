@@ -62,6 +62,10 @@ SQLite uses the built-in `node:sqlite` module (Node.js 22.5+), so it requires no
 When a driver is not installed or a required dependency is missing (e.g., a transitive dependency like `@azure/core-client` for the SQL Server driver), DBHub will skip that connector at startup and log a message. All other connectors will work normally. SQLite (including `--demo` mode) needs no extra driver — it relies on the built-in `node:sqlite` module.
 </Note>
 
+## MCP Bundle (.mcpb)
+
+For Claude Desktop, the [MCP Bundle](/mcpb) is a one-click install: download the `.mcpb` from the [latest release](https://github.com/bytebase/dbhub/releases/latest), double-click, enter your connection string. Read-only by default, no Node.js or JSON editing required — the recommended path for non-technical users. The guide also covers packaging your own bundle.
+
 ## Docker
 
 <Tabs>
@@ -260,6 +264,10 @@ Verify DBHub is loaded:
 ### Claude Desktop
 
 ![Claude Desktop with DBHub](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/claude-desktop.webp)
+
+<Note>
+Prefer a one-click, read-only install with no JSON editing? Use the [MCP Bundle](/mcpb). The manual config below gives full control over flags and transports.
+</Note>
 
 <Tabs>
   <Tab title="MacOS/Linux">
