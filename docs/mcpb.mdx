@@ -11,7 +11,44 @@ The [MCP Bundle](https://github.com/modelcontextprotocol/mcpb) (`.mcpb`) is a on
 2. Install it in your client — in Claude Desktop, double-click the file (or drag it into **Settings → Extensions**).
 3. Enter your database connection string when prompted, e.g. `postgres://user:password@host:5432/dbname`. It is stored in the OS keychain, not in a config file.
 
-The bundle includes drivers for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, and runs locally over stdio. Clients without native `.mcpb` support (Cursor, VS Code, ...) can still run the unpacked bundle as a plain stdio MCP server: `node server/index.js --transport stdio --config dbhub.toml` with `DBHUB_DSN` set.
+The bundle includes drivers for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, and runs locally over stdio.
+
+### Clients without native .mcpb support
+
+Clients like Cursor and VS Code can still run the unpacked bundle as a plain stdio MCP server. An `.mcpb` is a zip archive; this path needs a local Node.js >= 22.5 (native `.mcpb` clients ship their own runtime):
+
+```bash
+# Unpack
+unzip dbhub-<version>.mcpb -d ~/dbhub-mcpb
+
+# Verify it runs (Ctrl-C to stop)
+DBHUB_DSN="postgres://user:password@host:5432/dbname" \
+  node ~/dbhub-mcpb/server/index.js --transport stdio --config ~/dbhub-mcpb/dbhub.toml
+```
+
+Then register it in the client's MCP config (e.g. `.cursor/mcp.json` or `.vscode/mcp.json`), using absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "node",
+      "args": [
+        "/home/you/dbhub-mcpb/server/index.js",
+        "--transport",
+        "stdio",
+        "--config",
+        "/home/you/dbhub-mcpb/dbhub.toml"
+      ],
+      "env": {
+        "DBHUB_DSN": "postgres://user:password@host:5432/dbname"
+      }
+    }
+  }
+}
+```
+
+Note the trade-off: here the DSN lives in a config file, not the OS keychain. For these clients the [npm install path](/installation) (`npx @bytebase/dbhub`) is usually simpler — the unpacked-bundle route only makes sense when you want the bundle's pinned, read-only configuration distributed as a single vetted artifact.
 
 ## Read-only by design
 
