@@ -34,7 +34,7 @@ process.on("exit", () => rmSync(bundleDir, { recursive: true, force: true }));
 
 const unpack = spawnSync(localBin("mcpb"), ["unpack", mcpbFile, bundleDir], { stdio: "inherit" });
 if (unpack.status !== 0) {
-  console.error("mcpb unpack failed");
+  console.error(`mcpb unpack failed${unpack.error ? `: ${unpack.error.message}` : ""}`);
   process.exit(1);
 }
 
@@ -67,14 +67,16 @@ const transport = new StdioClientTransport({
   stderr: "pipe",
 });
 
+// With stderr: "pipe" the transport exposes a PassThrough stream before the
+// process is spawned — attach before connect() so startup output (including
+// a startup crash) is always captured.
 let stderr = "";
+transport.stderr?.on("data", (chunk) => {
+  stderr += chunk.toString();
+});
+
 try {
   await client.connect(transport);
-  // Safe to attach after connect: the stream stays paused (buffering) until a
-  // listener is added, so startup output is not lost.
-  transport.stderr?.on("data", (chunk) => {
-    stderr += chunk;
-  });
   check("initialize", client.getServerVersion()?.name !== undefined);
 
   const { tools } = await client.listTools();
@@ -105,11 +107,12 @@ try {
     resultText(create)
   );
 } catch (err) {
-  console.error(`  FAIL  ${err.message}`);
+  console.error(`  FAIL  ${err instanceof Error ? err.message : String(err)}`);
   console.error(stderr);
   failures++;
 } finally {
-  await client.close();
+  // Best-effort: a close failure must not mask the real test outcome
+  await client.close().catch(() => {});
 }
 
 // The server logs "Skipping <name> connector: ..." when a driver package is
