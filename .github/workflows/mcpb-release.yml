@@ -71,6 +71,18 @@ jobs:
           node-version: "22"
           cache: "pnpm"
 
+      # build-mcpb.mjs stages the bundle's node_modules with `npm install`, and
+      # Node 22.22.2 ships with broken npm (missing promise-retry) — bootstrap a
+      # working npm without invoking the broken one, same as npm-publish.yml.
+      - name: Upgrade npm
+        if: env.SHOULD_PUBLISH == 'true'
+        run: |
+          npm_tarball=$(curl -fsSL https://registry.npmjs.org/npm/latest | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).dist.tarball")
+          curl -fsSL "$npm_tarball" | tar xz -C /tmp
+          node /tmp/package/bin/npm-cli.js install -g npm@latest
+          rm -rf /tmp/package
+          echo "npm version: $(npm --version)"
+
       - name: Install dependencies
         if: env.SHOULD_PUBLISH == 'true'
         run: pnpm install --frozen-lockfile
