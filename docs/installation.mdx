@@ -261,6 +261,28 @@ Verify DBHub is loaded:
 **References:**
 - [Claude Code MCP Documentation](https://code.claude.com/docs/en/mcp)
 
+### Autohand Code
+
+<Tabs>
+  <Tab title="Stdio">
+    ```bash
+    autohand mcp add dbhub npx @bytebase/dbhub@latest --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+    ```
+  </Tab>
+
+  <Tab title="HTTP">
+    Connect to a running DBHub HTTP server:
+
+    ```bash
+    autohand mcp add --transport http dbhub http://localhost:8080/mcp
+    ```
+  </Tab>
+</Tabs>
+
+Add `--scope project` after `mcp add` to keep either registration in the current workspace.
+
+**Reference:** [Autohand Code](https://github.com/autohandai/code-cli/)
+
 ### Claude Desktop
 
 ![Claude Desktop with DBHub](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/claude-desktop.webp)
@@ -774,4 +796,3 @@ DBHub can be integrated with [LibreChat](https://www.librechat.ai/) using either
 
 **References:**
 - [LibreChat MCP Documentation](https://www.librechat.ai/docs/configuration/librechat_yaml/object_structure/mcp_servers)
-
