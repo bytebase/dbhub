@@ -188,6 +188,20 @@ export class SQLServerConnector implements Connector {
    */
   private static readonly LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
+  /** Boolean spellings PostgreSQL accepts for an EXPLAIN option. */
+  private static readonly EXPLAIN_ON = /^(?:true|on|1)$/i;
+  private static readonly EXPLAIN_OFF = /^(?:false|off|0)$/i;
+
+  /**
+   * One option inside `EXPLAIN (...)`: a name, then optionally a value written
+   * either space-separated as PostgreSQL spells it (`ANALYZE false`) or with an
+   * equals sign, which the read-only classifier also accepts (`ANALYZE = 0`).
+   */
+  private static readonly EXPLAIN_OPTION = /^([A-Za-z_]+)(?:(?:\s*=\s*|\s+)(\S+))?$/;
+
+  /** A disabling boolean directly after a bare `EXPLAIN ANALYZE`. */
+  private static readonly EXPLAIN_BARE_DISABLED = /^(?:=\s*)?(?:false|off|0)\b/i;
+
   getId(): string {
     return this.sourceId;
   }
@@ -632,11 +646,20 @@ export class SQLServerConnector implements Connector {
     // into a SHOWPLAN_XML request so callers get a Postgres/MySQL-like
     // experience. SHOWPLAN_XML compiles the statement without executing it, so
     // this is read-only safe (further enforced in explainQuery).
+    //
+    // `EXPLAIN ANALYZE` keeps Postgres semantics: the statement really runs and
+    // the plan carries actual row counts. SHOWPLAN_XML cannot report those, so
+    // that form maps to SET STATISTICS XML instead (see explainAnalyzeQuery).
     const afterNoise = sqlQuery.slice(
       sqlQuery.match(SQLServerConnector.LEADING_NOISE)![0].length
     );
     if (/^explain\b/i.test(afterNoise)) {
-      return this.explainQuery(afterNoise.slice("explain".length).trim(), options.readonly);
+      const { analyze, query } = SQLServerConnector.parseExplainPrefix(
+        afterNoise.slice("explain".length).trim()
+      );
+      return analyze
+        ? this.explainAnalyzeQuery(query, options, parameters)
+        : this.explainQuery(query, options.readonly, parameters);
     }
 
     try {
@@ -670,32 +693,7 @@ export class SQLServerConnector implements Connector {
         }
       );
 
-      if (parameters && parameters.length > 0) {
-        // SQL Server uses @p1, @p2, etc. for parameters
-        parameters.forEach((param, index) => {
-          const paramName = `p${index + 1}`;
-          // Infer SQL Server type from JavaScript type
-          if (typeof param === 'string') {
-            request.input(paramName, sql.VarChar, param);
-          } else if (typeof param === 'number') {
-            if (Number.isInteger(param)) {
-              request.input(paramName, sql.Int, param);
-            } else {
-              request.input(paramName, sql.Float, param);
-            }
-          } else if (typeof param === 'boolean') {
-            request.input(paramName, sql.Bit, param);
-          } else if (param === null || param === undefined) {
-            request.input(paramName, sql.VarChar, param);
-          } else if (Array.isArray(param)) {
-            // For arrays, convert to JSON string
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          } else {
-            // For objects, convert to JSON string
-            request.input(paramName, sql.VarChar, JSON.stringify(param));
-          }
-        });
-      }
+      SQLServerConnector.bindParameters(request, parameters);
 
       let result;
       try {
@@ -717,6 +715,43 @@ export class SQLServerConnector implements Connector {
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Bind positional parameters as @p1, @p2, ... inferring the SQL Server type
+   * from each JavaScript value. Shared by every execution path so they cannot
+   * drift in how a given value is typed.
+   *
+   * Works for `batch` as well as `query`: node-mssql prepends the matching
+   * DECLARE/SET statements when the request is a batch.
+   */
+  private static bindParameters(request: sql.Request, parameters?: any[]): void {
+    if (!parameters || parameters.length === 0) {
+      return;
+    }
+
+    parameters.forEach((param, index) => {
+      const paramName = `p${index + 1}`;
+      if (typeof param === 'string') {
+        request.input(paramName, sql.VarChar, param);
+      } else if (typeof param === 'number') {
+        if (Number.isInteger(param)) {
+          request.input(paramName, sql.Int, param);
+        } else {
+          request.input(paramName, sql.Float, param);
+        }
+      } else if (typeof param === 'boolean') {
+        request.input(paramName, sql.Bit, param);
+      } else if (param === null || param === undefined) {
+        request.input(paramName, sql.VarChar, param);
+      } else if (Array.isArray(param)) {
+        // For arrays, convert to JSON string
+        request.input(paramName, sql.VarChar, JSON.stringify(param));
+      } else {
+        // For objects, convert to JSON string
+        request.input(paramName, sql.VarChar, JSON.stringify(param));
+      }
+    });
   }
 
   /**
@@ -799,28 +834,7 @@ export class SQLServerConnector implements Connector {
       },
     );
 
-    if (parameters && parameters.length > 0) {
-      parameters.forEach((param, index) => {
-        const paramName = `p${index + 1}`;
-        if (typeof param === 'string') {
-          request.input(paramName, sql.VarChar, param);
-        } else if (typeof param === 'number') {
-          if (Number.isInteger(param)) {
-            request.input(paramName, sql.Int, param);
-          } else {
-            request.input(paramName, sql.Float, param);
-          }
-        } else if (typeof param === 'boolean') {
-          request.input(paramName, sql.Bit, param);
-        } else if (param === null || param === undefined) {
-          request.input(paramName, sql.VarChar, param);
-        } else if (Array.isArray(param)) {
-          request.input(paramName, sql.VarChar, JSON.stringify(param));
-        } else {
-          request.input(paramName, sql.VarChar, JSON.stringify(param));
-        }
-      });
-    }
+    SQLServerConnector.bindParameters(request, parameters);
 
     let result;
     let queryFailed = false;
@@ -866,7 +880,11 @@ export class SQLServerConnector implements Connector {
    * off the shared pool, so a concurrent query can never land on a connection
    * with SHOWPLAN enabled (which would return a plan instead of its results).
    */
-  private async explainQuery(innerQuery: string, readonly?: boolean): Promise<SQLResult> {
+  private async explainQuery(
+    innerQuery: string,
+    readonly?: boolean,
+    parameters?: any[]
+  ): Promise<SQLResult> {
     // Validate against comment/string-stripped SQL so comment-only input counts
     // as empty and a SET SHOWPLAN can't hide behind comments.
     const cleaned = stripCommentsAndStrings(innerQuery, "sqlserver").trim();
@@ -904,7 +922,14 @@ export class SQLServerConnector implements Connector {
       await explainPool.connect();
       // max:1 + sequential awaits guarantee both batches hit the same session.
       await explainPool.request().batch("SET SHOWPLAN_XML ON");
-      const planResult = await explainPool.request().batch(innerQuery);
+
+      // The parameters belong on the statement being explained, not on the
+      // toggle. node-mssql turns them into DECLARE/SET, which SHOWPLAN compiles
+      // without executing — so the plan is the one for a parameterized query,
+      // estimated from density rather than from the literal values.
+      const planRequest = explainPool.request();
+      SQLServerConnector.bindParameters(planRequest, parameters);
+      const planResult = await planRequest.batch(innerQuery);
 
       // The plan is returned as the single column of the first row.
       const planRow = planResult.recordset?.[0];
@@ -918,6 +943,234 @@ export class SQLServerConnector implements Connector {
     } finally {
       await explainPool.close();
     }
+  }
+
+  /**
+   * Splits the modifiers between EXPLAIN and its statement, covering the same
+   * forms the read-only classifier recognises (see utils/allowed-keywords.ts):
+   * `ANALYZE`, `ANALYZE VERBOSE`, `(ANALYZE)`, `(ANALYZE, BUFFERS)`,
+   * `(ANALYZE false)`.
+   *
+   * Only ANALYZE carries a meaning here — it selects STATISTICS XML over
+   * SHOWPLAN_XML. The rest are PostgreSQL planner knobs with no SQL Server
+   * counterpart, so they are refused by name: silently dropping an option would
+   * quietly hand back something other than what was asked for.
+   */
+  private static parseExplainPrefix(afterExplain: string): { analyze: boolean; query: string } {
+    // Parenthesized list: (ANALYZE, ...) <statement>
+    if (afterExplain.startsWith("(")) {
+      const close = afterExplain.indexOf(")");
+      if (close < 0) {
+        throw new Error("EXPLAIN option list is missing its closing ')'");
+      }
+
+      let analyze = false;
+      for (const part of afterExplain.slice(1, close).split(",")) {
+        const token = part.trim();
+        if (!token) continue;
+
+        const parsed = SQLServerConnector.EXPLAIN_OPTION.exec(token);
+        if (!parsed) {
+          throw new Error(
+            `EXPLAIN option '${token}' is not supported on SQL Server — only ANALYZE is.`
+          );
+        }
+
+        const name = parsed[1];
+        if (!/^analyze$/i.test(name)) {
+          throw new Error(
+            `EXPLAIN option '${name}' is not supported on SQL Server — only ANALYZE is.`
+          );
+        }
+
+        const value = parsed[2];
+        if (value === undefined || SQLServerConnector.EXPLAIN_ON.test(value)) {
+          analyze = true;
+        } else if (SQLServerConnector.EXPLAIN_OFF.test(value)) {
+          analyze = false;
+        } else {
+          throw new Error(`EXPLAIN option 'ANALYZE' expects a boolean, got '${value}'.`);
+        }
+      }
+
+      return { analyze, query: afterExplain.slice(close + 1).trim() };
+    }
+
+    // Bare form: [ANALYZE [VERBOSE]] <statement>
+    const analyzeKeyword = /^analyze\b/i.exec(afterExplain);
+    if (!analyzeKeyword) {
+      return { analyze: false, query: afterExplain };
+    }
+
+    const rest = afterExplain.slice(analyzeKeyword[0].length).trim();
+
+    // PostgreSQL only takes a boolean in the parenthesized form, but the
+    // read-only classifier reads a disabling value here too — `ANALYZE false`,
+    // `ANALYZE = 0` — as a plain EXPLAIN. Left unhandled, the two layers
+    // disagree in the dangerous direction: the classifier waives the DML check
+    // for what it believes is a non-executing statement, while this path routes
+    // to the one that executes.
+    const disabled = SQLServerConnector.EXPLAIN_BARE_DISABLED.exec(rest);
+    if (disabled) {
+      return { analyze: false, query: rest.slice(disabled[0].length).trim() };
+    }
+
+    const trailing = /^([A-Za-z_]+)\b/.exec(rest);
+    if (trailing && /^verbose$/i.test(trailing[1])) {
+      throw new Error(
+        "EXPLAIN option 'VERBOSE' is not supported on SQL Server — only ANALYZE is."
+      );
+    }
+
+    return { analyze: true, query: rest };
+  }
+
+  /**
+   * Run a statement under SET STATISTICS XML and return its *actual* execution
+   * plan — the Postgres `EXPLAIN ANALYZE` contract.
+   *
+   * SHOWPLAN_XML (plain EXPLAIN) compiles without executing, so its plan carries
+   * only estimates. STATISTICS XML runs the statement, so the plan reports real
+   * row counts and execution counts. The flip side is that this path is *not*
+   * inherently read-only the way explainQuery is, so under `options.readonly` the
+   * statement runs inside a transaction that always rolls back.
+   *
+   * The dedicated single-connection pool serves the same purpose as in
+   * explainQuery: the STATISTICS XML session toggle must never leak onto a
+   * shared pool connection, where a concurrent query would inherit it.
+   */
+  private async explainAnalyzeQuery(
+    innerQuery: string,
+    options: ExecuteOptions,
+    parameters?: any[]
+  ): Promise<SQLResult> {
+    // Validate against comment/string-stripped SQL so comment-only input counts
+    // as empty and a SET STATISTICS can't hide behind comments.
+    const cleaned = stripCommentsAndStrings(innerQuery, "sqlserver").trim();
+    if (!cleaned) {
+      throw new Error("EXPLAIN ANALYZE requires a statement to analyze");
+    }
+
+    // Defense in depth: the SET STATISTICS XML toggle is what yields the plan,
+    // so the analyzed statement must not disable it or swap in SHOWPLAN — the
+    // latter would suppress execution, and the actual counts with it.
+    if (/\bset\s+statistics\b/i.test(cleaned)) {
+      throw new Error("EXPLAIN ANALYZE does not support SET STATISTICS statements");
+    }
+    if (/\bset\s+showplan\b/i.test(cleaned)) {
+      throw new Error("EXPLAIN ANALYZE does not support SET SHOWPLAN statements");
+    }
+
+    // Unlike plain EXPLAIN, this path executes, and its only read-only guard is
+    // the application-level rollback below — so the escapes matter more here,
+    // not less. transactionControl is set because that rollback is a real
+    // transaction a COMMIT could close, which is not true of explainQuery.
+    if (options.readonly) {
+      this.assertNoReadOnlyEscapes(innerQuery, { transactionControl: true });
+    }
+
+    if (!this.config) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    const explainPool = new sql.ConnectionPool({
+      ...this.config,
+      pool: { ...this.config.pool, max: 1, min: 1 },
+    });
+
+    try {
+      await explainPool.connect();
+      // max:1 + sequential awaits guarantee every batch hits the same session.
+      await explainPool.request().batch("SET STATISTICS XML ON");
+
+      let planResult: sql.IResult<any>;
+      if (options.readonly) {
+        planResult = await SQLServerConnector.batchRolledBack(
+          explainPool,
+          innerQuery,
+          parameters
+        );
+      } else {
+        const planRequest = explainPool.request();
+        SQLServerConnector.bindParameters(planRequest, parameters);
+        planResult = await planRequest.batch(innerQuery);
+      }
+
+      const planXml = SQLServerConnector.extractPlanXml(planResult);
+      return {
+        rows: planXml != null ? [{ plan: planXml }] : [],
+        rowCount: planXml != null ? 1 : 0,
+      };
+    } catch (error) {
+      // Named apart from the plain EXPLAIN path: this one ran the statement, so
+      // a failure here can mean the statement itself failed mid-execution.
+      throw new Error(`Failed to explain analyze query: ${(error as Error).message}`);
+    } finally {
+      await explainPool.close();
+    }
+  }
+
+  /**
+   * Run a batch inside a transaction that is always rolled back, so EXPLAIN
+   * ANALYZE can report a real plan without letting the statement's writes stick.
+   */
+  private static async batchRolledBack(
+    pool: sql.ConnectionPool,
+    innerQuery: string,
+    parameters?: any[]
+  ): Promise<sql.IResult<any>> {
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+
+    let queryFailed = false;
+    try {
+      const request = new sql.Request(transaction);
+      SQLServerConnector.bindParameters(request, parameters);
+      return await request.batch(innerQuery);
+    } catch (error) {
+      queryFailed = true;
+      throw error;
+    } finally {
+      try {
+        await transaction.rollback();
+      } catch (rollbackError) {
+        // A failed query already aborted the transaction, so a rollback error
+        // there is expected noise. After a *successful* query it means the
+        // writes may still be live — that must surface.
+        if (!queryFailed) {
+          throw new Error(
+            `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Pull the ShowPlanXML document out of a STATISTICS XML result.
+   *
+   * STATISTICS XML interleaves each statement's plan with that statement's own
+   * result sets, so the plan sits at no fixed index — and `recordset` (singular)
+   * would hand back the statement's data instead. Scan from the end for the
+   * first single-column row holding a plan document.
+   */
+  private static extractPlanXml(result: sql.IResult<any>): string | null {
+    const recordsets = (result.recordsets ?? []) as unknown as any[][];
+
+    for (let i = recordsets.length - 1; i >= 0; i--) {
+      const firstRow = recordsets[i]?.[0];
+      if (!firstRow) continue;
+
+      const values = Object.values(firstRow);
+      if (values.length !== 1) continue;
+
+      const value = values[0];
+      if (typeof value === "string" && value.includes("<ShowPlanXML")) {
+        return value;
+      }
+    }
+
+    return null;
   }
 }
 
