@@ -258,3 +258,78 @@ export function splitSQLStatements(sql: string, dialect?: ConnectorType): string
 
   return statements;
 }
+
+/** One T-SQL batch, as cut from a script by the `GO` separator. */
+export interface SQLServerBatch {
+  /** Batch text, with the terminating `GO` line removed. */
+  sql: string;
+  /** Repeat count from `GO <n>`; 1 when the separator carried no count. */
+  count: number;
+}
+
+/**
+ * A line separates batches when it holds nothing but `GO`, an optional repeat
+ * count, and an optional trailing line comment. `GOTO label` therefore stays a
+ * statement, and so does `GO 0`, which SSMS rejects rather than running zero
+ * times — letting it through as a separator would silently drop a batch.
+ */
+const GO_SEPARATOR_LINE = /^[^\S\n]*go(?:[^\S\n]+([1-9]\d*))?[^\S\n]*(?:--[^\n]*)?$/i;
+
+/**
+ * Split T-SQL on the `GO` batch separator the way SSMS and sqlcmd do.
+ *
+ * `GO` is a client directive, not T-SQL — the server never sees it. A caller
+ * that needs CREATE PROCEDURE (which must be alone in its batch), or a
+ * parse-time SET such as PARSEONLY to apply to statements rather than to
+ * itself, has to cut the script here and send each batch separately.
+ *
+ * Only a `GO` alone on its own line separates, so `GOTO`, `SELECT 'GO'` and a
+ * `GO` inside a comment are left alone. Returns one batch for a script with no
+ * separator at all, which lets the caller keep using its single-batch path.
+ */
+export function splitSQLServerBatches(sql: string): SQLServerBatch[] {
+  const scanToken = getScanner("sqlserver");
+  const batches: SQLServerBatch[] = [];
+  let batchStart = 0;
+  let lineStart = 0;
+  let i = 0;
+
+  const separatorCount = (lineEnd: number): number | null => {
+    const match = GO_SEPARATOR_LINE.exec(sql.substring(lineStart, lineEnd));
+    if (!match) { return null; }
+    return match[1] ? Number(match[1]) : 1;
+  };
+
+  const pushBatch = (end: number, count: number) => {
+    const text = sql.substring(batchStart, end);
+    if (text.trim().length > 0) { batches.push({ sql: text, count }); }
+  };
+
+  while (i < sql.length) {
+    const token = scanToken(sql, i);
+
+    // Only a newline the scanner calls plain ends a line: newlines inside a
+    // block comment or a string literal belong to that token, so a `GO` sitting
+    // on its own line *within* them must not separate anything.
+    if (token.type === TokenType.Plain && sql[i] === "\n") {
+      const count = separatorCount(i);
+      if (count !== null) {
+        pushBatch(lineStart, count);
+        batchStart = i + 1;
+      }
+      lineStart = i + 1;
+    }
+
+    i = token.end;
+  }
+
+  // A trailing `GO` needs no newline after it to close the batch it follows.
+  const trailingCount = separatorCount(sql.length);
+  if (trailingCount !== null) {
+    pushBatch(lineStart, trailingCount);
+    batchStart = sql.length;
+  }
+
+  pushBatch(sql.length, 1);
+  return batches;
+}

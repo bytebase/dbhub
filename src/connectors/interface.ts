@@ -27,6 +27,13 @@ export interface DatabaseMessage {
 export interface SQLResult {
   rows: any[];
   rowCount: number;
+  /**
+   * Every result set the SQL produced, in order, when it produced more than one
+   * (e.g. `SELECT 1; SELECT 2`). `rows` stays the first of them, so a caller
+   * that only ever expects one result set sees no change. Absent when the SQL
+   * produced a single result set or none.
+   */
+  resultSets?: any[][];
   /** Informational messages from the database (e.g. SQL Server STATISTICS TIME/IO, PRINT output) */
   messages?: DatabaseMessage[];
 }

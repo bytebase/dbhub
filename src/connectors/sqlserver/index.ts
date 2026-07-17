@@ -16,7 +16,11 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import {
+  stripCommentsAndStrings,
+  splitSQLServerBatches,
+  type SQLServerBatch,
+} from "../../utils/sql-parser.js";
 import {
   sqlServerDynamicSqlKeywords,
   sqlServerDynamicSqlPattern,
@@ -662,11 +666,27 @@ export class SQLServerConnector implements Connector {
         : this.explainQuery(query, options.readonly, parameters);
     }
 
+    // `GO` is a client directive the server never sees, so a script carrying one
+    // has to be cut up and sent batch by batch. Scripts without a separator —
+    // the overwhelming majority — stay on the single round trip below.
+    const batches = splitSQLServerBatches(sqlQuery);
+    if (batches.length === 0) {
+      // Nothing but separators (or nothing at all): no statement to run. SSMS
+      // treats that as a no-op, and falling through would hand the raw `GO`
+      // to the server, which has no idea what it is.
+      return { rows: [], rowCount: 0 };
+    }
+    if (batches.length > 1 || batches.some((batch) => batch.count > 1)) {
+      return this.executeBatches(batches, options, parameters);
+    }
+
     try {
-      // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sqlQuery;
+      // Exactly one batch here, so at most a trailing `GO`, which the splitter
+      // has already removed; send its text rather than the original, or the
+      // server would reject the separator.
+      let processedSQL = batches[0].sql;
       if (options.maxRows) {
-        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
+        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(processedSQL, options.maxRows);
       }
 
       // Engine-level read-only enforcement: SQL Server has no
@@ -680,26 +700,19 @@ export class SQLServerConnector implements Connector {
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
       const request = this.connection.request();
       const messages: DatabaseMessage[] = [];
-      request.on(
-        'info',
-        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-          messages.push({
-            text: info.message,
-            // SQL Server reports severity as a numeric class; info messages are < 10.
-            severity: info.class !== undefined ? String(info.class) : undefined,
-            code: info.number,
-            line: info.lineNumber,
-          });
-        }
-      );
+      SQLServerConnector.collectInfoMessages(request, messages);
 
       SQLServerConnector.bindParameters(request, parameters);
 
       const result = await request.query(processedSQL);
 
+      // `recordset` is only the first result set, so `SELECT 1; SELECT 2` would
+      // otherwise drop the second without saying so.
+      const resultSets = (result.recordsets ?? []) as unknown as any[][];
       return {
         rows: result.recordset || [],
         rowCount: result.rowsAffected[0] || 0,
+        ...(resultSets.length > 1 ? { resultSets } : {}),
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
@@ -793,6 +806,124 @@ export class SQLServerConnector implements Connector {
   }
 
   /**
+   * Route a request's informational messages — SET STATISTICS IO/TIME output,
+   * PRINT — into `messages`. SQL Server delivers them as events rather than as
+   * result sets, so they are invisible to the driver's normal return value.
+   */
+  private static collectInfoMessages(request: sql.Request, messages: DatabaseMessage[]): void {
+    request.on(
+      'info',
+      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+        messages.push({
+          text: info.message,
+          // SQL Server reports severity as a numeric class; info messages are < 10.
+          severity: info.class !== undefined ? String(info.class) : undefined,
+          code: info.number,
+          line: info.lineNumber,
+        });
+      }
+    );
+  }
+
+  /**
+   * Run a `GO`-separated script one batch per round trip.
+   *
+   * The single-batch path sends SQL through node-mssql's `request.query`, which
+   * is an sp_executesql RPC: one batch, inside a nested scope. Neither suits a
+   * script. CREATE PROCEDURE must be alone in its batch, and a session-scoped
+   * SET has to outlive the statement that set it — sp_executesql reverts it on
+   * scope exit. So batches go through `request.batch` instead.
+   *
+   * That costs the isolation sp_executesql was providing: `request.batch` runs
+   * at nest level 0 and leaves SET options on the session, and the shared pool
+   * hands that same session to the next caller — one stray `SET NOEXEC ON`
+   * would silently swallow every later query. Hence a private pool per call,
+   * pinned to one connection and closed at the end: the session dies with it and
+   * takes any leaked state along. The price is a connect per call, paid only by
+   * scripts that actually carry a separator.
+   */
+  private async executeBatches(
+    batches: SQLServerBatch[],
+    options: ExecuteOptions,
+    parameters?: any[]
+  ): Promise<SQLResult> {
+    if (!this.config) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    // A rollback guard cannot span batches: each `GO` ends the batch a
+    // transaction would have to live in, and DDL like CREATE PROCEDURE is
+    // exactly what such scripts carry. Refuse rather than half-enforce.
+    if (options.readonly) {
+      throw new Error(
+        "Read-only mode does not support the GO batch separator: a rollback guard cannot span batches"
+      );
+    }
+
+    // A batch can carry parameters — node-mssql prepends the DECLARE/SET, which
+    // is how the EXPLAIN paths bind them. What has no obvious answer is which
+    // batch of a multi-batch script they belong to: binding them to every batch
+    // would redeclare them per batch, binding them to one would need the caller
+    // to say which. Refuse until there is a use case that settles it.
+    if (parameters && parameters.length > 0) {
+      throw new Error("Parameters are not supported alongside the GO batch separator");
+    }
+
+    const batchPool = new sql.ConnectionPool({
+      ...this.config,
+      pool: { ...this.config.pool, max: 1, min: 1 },
+    });
+
+    const messages: DatabaseMessage[] = [];
+    const resultSets: any[][] = [];
+    let rowCount = 0;
+
+    try {
+      await batchPool.connect();
+
+      for (const [index, batch] of batches.entries()) {
+        const batchSQL = options.maxRows
+          ? SQLRowLimiter.applyMaxRowsForSQLServer(batch.sql, options.maxRows)
+          : batch.sql;
+
+        // max:1 + sequential awaits guarantee every batch hits the same session,
+        // which is the whole point: state has to carry from one to the next.
+        for (let run = 0; run < batch.count; run++) {
+          const request = batchPool.request();
+          SQLServerConnector.collectInfoMessages(request, messages);
+
+          let result: sql.IResult<any>;
+          try {
+            result = await request.batch(batchSQL);
+          } catch (error) {
+            // Name the batch: in a long script the server's line numbers are
+            // relative to the batch, which is useless without knowing which.
+            throw new Error(`batch ${index + 1} of ${batches.length}: ${(error as Error).message}`);
+          }
+
+          for (const recordset of (result.recordsets ?? []) as unknown as any[][]) {
+            resultSets.push(recordset);
+          }
+          rowCount += result.rowsAffected.reduce((sum, affected) => sum + affected, 0);
+        }
+      }
+    } catch (error) {
+      throw new Error(`Failed to execute query: ${(error as Error).message}`);
+    } finally {
+      await batchPool.close();
+    }
+
+    return {
+      rows: resultSets[0] ?? [],
+      // Summed across batches: a script's writes are one logical unit, and no
+      // single batch's count would describe it.
+      rowCount,
+      ...(resultSets.length > 1 ? { resultSets } : {}),
+      ...(messages.length > 0 ? { messages } : {}),
+    };
+  }
+
+  /**
    * Execute a query inside a transaction that always rolls back, preventing
    * any modifications from persisting. SQL Server has no native READ ONLY
    * transaction mode, so this is the defense-in-depth backstop behind the
@@ -812,17 +943,7 @@ export class SQLServerConnector implements Connector {
 
     const request = new sql.Request(transaction);
     const messages: DatabaseMessage[] = [];
-    request.on(
-      'info',
-      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-        messages.push({
-          text: info.message,
-          severity: info.class !== undefined ? String(info.class) : undefined,
-          code: info.number,
-          line: info.lineNumber,
-        });
-      },
-    );
+    SQLServerConnector.collectInfoMessages(request, messages);
 
     SQLServerConnector.bindParameters(request, parameters);
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripCommentsAndStrings, splitSQLStatements } from "../sql-parser.js";
+import { stripCommentsAndStrings, splitSQLStatements, splitSQLServerBatches } from "../sql-parser.js";
 
 describe("stripCommentsAndStrings", () => {
   describe("single-line comments (--)", () => {
@@ -619,4 +619,120 @@ describe("splitSQLStatements", () => {
     });
   });
 
+});
+
+describe("splitSQLServerBatches", () => {
+  const texts = (sql: string) => splitSQLServerBatches(sql).map((b) => b.sql.trim());
+
+  describe("basic splitting", () => {
+    it("returns the whole script as one batch when there is no GO", () => {
+      expect(splitSQLServerBatches("SELECT 1; SELECT 2;")).toEqual([
+        { sql: "SELECT 1; SELECT 2;", count: 1 },
+      ]);
+    });
+
+    it("splits on a GO line", () => {
+      expect(texts("SELECT 1\nGO\nSELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+
+    it("strips a trailing GO that has no newline after it", () => {
+      expect(texts("SELECT 1\nGO")).toEqual(["SELECT 1"]);
+    });
+
+    it("accepts CRLF line endings", () => {
+      expect(texts("SELECT 1\r\nGO\r\nSELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+
+    it("is case-insensitive and tolerates surrounding whitespace", () => {
+      expect(texts("SELECT 1\n   Go  \nSELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+
+    it("drops empty batches from consecutive or leading separators", () => {
+      expect(texts("GO\nSELECT 1\nGO\nGO\nSELECT 2\n")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+
+    it("returns nothing for a script that is only separators", () => {
+      expect(splitSQLServerBatches("GO\nGO\n")).toEqual([]);
+    });
+
+    it("allows a line comment after the separator", () => {
+      expect(texts("SELECT 1\nGO -- next up\nSELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
+    });
+  });
+
+  describe("repeat count", () => {
+    it("reads the count from GO <n>", () => {
+      expect(splitSQLServerBatches("SELECT 1\nGO 3\n")).toEqual([{ sql: "SELECT 1\n", count: 3 }]);
+    });
+
+    it("defaults the count to 1", () => {
+      expect(splitSQLServerBatches("SELECT 1\nGO\n")).toEqual([{ sql: "SELECT 1\n", count: 1 }]);
+    });
+
+    it("reads a count that carries a trailing comment", () => {
+      expect(splitSQLServerBatches("SELECT 1\nGO 2 -- twice\n")[0].count).toBe(2);
+    });
+
+    it("leaves GO 0 alone rather than silently dropping the batch", () => {
+      // SSMS rejects GO 0; passing it through surfaces that error instead of
+      // quietly running the batch zero times.
+      expect(texts("SELECT 1\nGO 0\n")).toEqual(["SELECT 1\nGO 0"]);
+    });
+  });
+
+  describe("GO that is not a separator", () => {
+    it("does not split on GOTO", () => {
+      expect(texts("SELECT 1\nGOTO done\nSELECT 2")).toEqual(["SELECT 1\nGOTO done\nSELECT 2"]);
+    });
+
+    it("does not split on GO with trailing tokens", () => {
+      expect(texts("SELECT 1\nGO SELECT 2")).toEqual(["SELECT 1\nGO SELECT 2"]);
+    });
+
+    it("does not split on GO inside a string literal", () => {
+      expect(texts("SELECT '\nGO\n' AS s")).toEqual(["SELECT '\nGO\n' AS s"]);
+    });
+
+    it("does not split on GO inside a block comment", () => {
+      expect(texts("SELECT 1\n/*\nGO\n*/\nSELECT 2")).toEqual(["SELECT 1\n/*\nGO\n*/\nSELECT 2"]);
+    });
+
+    it("does not split on GO inside a bracket-quoted identifier", () => {
+      expect(texts("SELECT 1 AS [\nGO\n]")).toEqual(["SELECT 1 AS [\nGO\n]"]);
+    });
+
+    it("still splits after a block comment closes", () => {
+      expect(texts("/* header\nGO\n*/\nSELECT 1\nGO\nSELECT 2")).toEqual([
+        "/* header\nGO\n*/\nSELECT 1",
+        "SELECT 2",
+      ]);
+    });
+
+    it("splits on the line after a line comment", () => {
+      expect(texts("SELECT 1 -- note\nGO\nSELECT 2")).toEqual(["SELECT 1 -- note", "SELECT 2"]);
+    });
+  });
+
+  describe("realistic scripts", () => {
+    it("separates procedures that each must start their own batch", () => {
+      const script = [
+        "CREATE PROCEDURE dbo.a AS SELECT 1;",
+        "GO",
+        "CREATE PROCEDURE dbo.b AS SELECT 2;",
+        "GO",
+      ].join("\n");
+      expect(texts(script)).toEqual([
+        "CREATE PROCEDURE dbo.a AS SELECT 1;",
+        "CREATE PROCEDURE dbo.b AS SELECT 2;",
+      ]);
+    });
+
+    it("keeps a parse-time SET in a batch of its own", () => {
+      expect(texts("SET PARSEONLY ON\nGO\nSELECT 1\nGO\nSET PARSEONLY OFF\nGO")).toEqual([
+        "SET PARSEONLY ON",
+        "SELECT 1",
+        "SET PARSEONLY OFF",
+      ]);
+    });
+  });
 });

@@ -929,9 +929,176 @@ describe('SQL Server Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id',
         {}
       );
-      
+
       // Should return all users (at least the original 3 plus any added in previous tests)
       expect(result.rows.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('GO batch separator', () => {
+    it('runs batches on one session, so state carries across GO', async () => {
+      // A temp table proves the session is pinned: on a fresh connection the
+      // INSERT would fail with "Invalid object name '#go_state'".
+      const result = await sqlServerTest.connector.executeSQL(
+        [
+          'CREATE TABLE #go_state (id INT)',
+          'GO',
+          'INSERT INTO #go_state VALUES (1),(2)',
+          'GO',
+          'SELECT COUNT(*) AS n FROM #go_state',
+          'GO',
+        ].join('\n'),
+        {}
+      );
+
+      expect(result.rows).toEqual([{ n: 2 }]);
+    });
+
+    it('creates several procedures in one call', async () => {
+      // Each CREATE PROCEDURE must open its own batch, so without GO support
+      // this whole script is rejected outright.
+      await sqlServerTest.connector.executeSQL(
+        [
+          'CREATE PROCEDURE dbo.go_probe_a AS SELECT 1 AS v;',
+          'GO',
+          'CREATE PROCEDURE dbo.go_probe_b AS SELECT 2 AS v;',
+          'GO',
+        ].join('\n'),
+        {}
+      );
+
+      const created = await sqlServerTest.connector.executeSQL(
+        "SELECT name FROM sys.procedures WHERE name IN ('go_probe_a', 'go_probe_b') ORDER BY name",
+        {}
+      );
+
+      expect(created.rows.map((r: any) => r.name)).toEqual(['go_probe_a', 'go_probe_b']);
+    });
+
+    it('leaves PARSEONLY applying to the statements rather than to itself', async () => {
+      // The trap this feature exists to remove: in a single batch, the closing
+      // SET PARSEONLY OFF is read at parse time and the INSERT really runs.
+      // Split across GO, each SET lands in its own batch and nothing executes.
+      const before = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) AS n FROM users',
+        {}
+      );
+
+      await sqlServerTest.connector.executeSQL(
+        [
+          'SET PARSEONLY ON',
+          'GO',
+          "INSERT INTO users (name, email, age) VALUES ('parseonly', 'parseonly@example.com', 1)",
+          'GO',
+          'SET PARSEONLY OFF',
+          'GO',
+        ].join('\n'),
+        {}
+      );
+
+      const after = await sqlServerTest.connector.executeSQL(
+        'SELECT COUNT(*) AS n FROM users',
+        {}
+      );
+
+      expect(after.rows[0].n).toBe(before.rows[0].n);
+    });
+
+    it('still surfaces a syntax error under PARSEONLY', async () => {
+      // Name the offending keyword: an unsplit script errors on `GO` itself,
+      // which would satisfy a looser match without PARSEONLY ever applying.
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          'SET PARSEONLY ON\nGO\nSELECT FROM WHERE\nGO',
+          {}
+        )
+      ).rejects.toThrow(/Incorrect syntax near the keyword 'FROM'/);
+    });
+
+    it('does not let session state outlive the call', async () => {
+      // NOEXEC crossing the GO is the feature; the per-call pool is what stops
+      // it from swallowing every query that follows.
+      const swallowed = await sqlServerTest.connector.executeSQL(
+        'SET NOEXEC ON\nGO\nSELECT 1 AS a\nGO',
+        {}
+      );
+      expect(swallowed.rows).toEqual([]);
+
+      const after = await sqlServerTest.connector.executeSQL('SELECT 1 AS a', {});
+      expect(after.rows).toEqual([{ a: 1 }]);
+    });
+
+    it('repeats a batch GO <n> times', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        [
+          'CREATE TABLE #go_repeat (id INT)',
+          'GO',
+          'INSERT INTO #go_repeat VALUES (1)',
+          'GO 3',
+          'SELECT COUNT(*) AS n FROM #go_repeat',
+          'GO',
+        ].join('\n'),
+        {}
+      );
+
+      expect(result.rows).toEqual([{ n: 3 }]);
+    });
+
+    it('returns every result set the script produced', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 AS a\nGO\nSELECT 2 AS b\nGO',
+        {}
+      );
+
+      expect(result.rows).toEqual([{ a: 1 }]);
+      expect(result.resultSets).toEqual([[{ a: 1 }], [{ b: 2 }]]);
+    });
+
+    it('names the batch that failed', async () => {
+      // Line numbers the server reports are relative to the batch, so the batch
+      // has to be identified for them to mean anything.
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          'SELECT 1\nGO\nSELECT * FROM no_such_table_xyz\nGO',
+          {}
+        )
+      ).rejects.toThrow(/batch 2 of 2/);
+    });
+
+    it('refuses GO in read-only mode', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('SELECT 1\nGO\nSELECT 2\nGO', { readonly: true })
+      ).rejects.toThrow(/GO batch separator/);
+    });
+
+    it('keeps the single-batch path for a script with a lone trailing GO', async () => {
+      // The splitter strips it; the server would reject it as syntax.
+      const result = await sqlServerTest.connector.executeSQL('SELECT 1 AS a\nGO', {});
+      expect(result.rows).toEqual([{ a: 1 }]);
+    });
+
+    it('treats a script of only separators as a no-op', async () => {
+      // The splitter yields no batches, so there is nothing to run. Falling
+      // through to the single-batch path would hand the raw `GO` to the
+      // server, which reads it as a procedure name.
+      const result = await sqlServerTest.connector.executeSQL('GO\nGO\n', {});
+      expect(result.rows).toEqual([]);
+      expect(result.rowCount).toBe(0);
+    });
+
+    it('does not split on GO inside a string literal', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        "SELECT '\nGO\n' AS s",
+        {}
+      );
+      expect(result.rows).toEqual([{ s: '\nGO\n' }]);
+    });
+
+    it('returns both result sets from a multi-statement single batch', async () => {
+      // recordset is only the first; without recordsets the second vanished.
+      const result = await sqlServerTest.connector.executeSQL('SELECT 1 AS a; SELECT 2 AS b;', {});
+      expect(result.rows).toEqual([{ a: 1 }]);
+      expect(result.resultSets).toEqual([[{ a: 1 }], [{ b: 2 }]]);
     });
   });
 });

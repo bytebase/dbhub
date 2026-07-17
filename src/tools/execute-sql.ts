@@ -75,6 +75,9 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         rows: result.rows,
         count: result.rowCount,
         source_id: effectiveSourceId,
+        // Only present when the SQL produced more than one result set; `rows`
+        // stays the first, so a single-result response is unchanged.
+        ...(result.resultSets ? { result_sets: result.resultSets } : {}),
         ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
       };
 
