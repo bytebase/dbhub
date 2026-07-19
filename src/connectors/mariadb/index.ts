@@ -17,6 +17,7 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
+import { isTiDBVersion } from "../../utils/server-flavor.js";
 
 /**
  * MariaDB DSN Parser
@@ -131,6 +132,9 @@ export class MariaDBConnector implements Connector {
   private pool: mariadb.Pool | null = null;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
+  // TiDB speaks the MySQL protocol but rejects `START TRANSACTION READ ONLY`
+  // unless tidb_enable_noop_functions is on. Detected once at connect time.
+  private supportsReadOnlyTransaction: boolean = true;
 
   getId(): string {
     return this.sourceId;
@@ -146,8 +150,9 @@ export class MariaDBConnector implements Connector {
 
       this.pool = mariadb.createPool(connectionConfig);
 
-      // Test the connection
-      await this.pool.query("SELECT 1");
+      // Test the connection and detect the server flavor in the same round trip.
+      const rows = await this.pool.query("SELECT VERSION() AS version");
+      this.supportsReadOnlyTransaction = !isTiDBVersion(rows?.[0]?.version);
     } catch (err) {
       console.error("Failed to connect to MariaDB database:", err);
       throw err;
@@ -618,8 +623,15 @@ export class MariaDBConnector implements Connector {
       // payloads (e.g. `SELECT 1--1;DROP TABLE t`) are instead rejected upstream by
       // the read-only classifier, which now splits `--`-hidden statements (see
       // scanSingleLineCommentMySQL in sql-parser.ts).
+      //
+      // TiDB rejects the READ ONLY modifier (see isTiDBVersion), so there we open
+      // a plain transaction and always ROLLBACK instead of COMMIT: any DML the
+      // classifier missed is discarded rather than persisted, while SELECT results
+      // are unaffected.
       if (options.readonly) {
-        await conn.query("START TRANSACTION READ ONLY");
+        await conn.query(
+          this.supportsReadOnlyTransaction ? "START TRANSACTION READ ONLY" : "START TRANSACTION"
+        );
       }
 
       // Apply maxRows limit to SELECT queries if specified
@@ -659,7 +671,7 @@ export class MariaDBConnector implements Connector {
       const rowCount = extractAffectedRows(results);
 
       if (options.readonly) {
-        await conn.query("COMMIT");
+        await conn.query(this.supportsReadOnlyTransaction ? "COMMIT" : "ROLLBACK");
       }
       return { rows, rowCount };
     } catch (error) {
