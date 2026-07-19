@@ -666,6 +666,18 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
  * Returns array of source configs and the source of the configuration
  */
 export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; tools?: import("../types/config.js").ToolConfig[]; source: string } | null> {
+  // Load .env before parsing TOML so `${VAR}` interpolation in the config file
+  // resolves against it — keeping credentials in .env and referencing them as
+  // `dsn = "${DSN}"` is the recommended pattern, and it only works if the file
+  // is loaded first.
+  //
+  // Scoped to TOML mode: on the DSN path resolveDSN() loads .env itself, and it
+  // has to do so after checking process.env in order to report whether a value
+  // came from the environment or from the file.
+  if (parseCommandLineArgs().config) {
+    loadEnvFiles();
+  }
+
   // 1. Try loading from TOML configuration file (skip if --demo flag is set)
   if (!isDemoMode()) {
     const tomlConfig = loadTomlConfig();

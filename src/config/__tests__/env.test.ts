@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
 
@@ -651,6 +654,27 @@ describe('Environment Configuration Tests', () => {
       await expect(resolveSourceConfigs()).resolves.toMatchObject({
         source: 'dbhub.toml',
       });
+    });
+
+    it('loads .env before TOML config so ${VAR} interpolation can resolve', async () => {
+      // interpolateEnvVars() reads process.env, so the file has to be loaded
+      // before the TOML is parsed for `dsn = "${DSN}"` to resolve.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-before-toml-'));
+      const cwd = process.cwd();
+      fs.writeFileSync(path.join(dir, '.env'), 'DSN_FROM_ENV_FILE=sqlite://interpolated.db\n');
+      process.chdir(dir);
+      process.argv = ['node', 'script.js', '--config', path.join(dir, 'dbhub.toml')];
+
+      try {
+        const { resolveSourceConfigs } = await import('../env.js');
+        await resolveSourceConfigs();
+
+        expect(process.env.DSN_FROM_ENV_FILE).toBe('sqlite://interpolated.db');
+      } finally {
+        process.chdir(cwd);
+        delete process.env.DSN_FROM_ENV_FILE;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
 
     it('allows DB_* env vars alongside TOML config', async () => {
