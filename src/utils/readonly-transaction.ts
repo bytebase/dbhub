@@ -43,11 +43,14 @@ export async function withReadOnlyTransaction<T>(
     return execute();
   }
 
-  await conn.query(
-    supportsReadOnlyTransaction ? "START TRANSACTION READ ONLY" : "START TRANSACTION"
-  );
-
+  // The BEGIN is inside the try so that a failure to open the transaction still
+  // attempts the best-effort rollback below: if BEGIN partially succeeded, or
+  // the server left the session with an open transaction, the connection must
+  // not go back to the pool dirty.
   try {
+    await conn.query(
+      supportsReadOnlyTransaction ? "START TRANSACTION READ ONLY" : "START TRANSACTION"
+    );
     const result = await execute();
     await conn.query(supportsReadOnlyTransaction ? "COMMIT" : "ROLLBACK");
     return result;

@@ -130,6 +130,31 @@ describe("readonly transaction strategy", () => {
       expect(conn.release).toHaveBeenCalled();
     });
 
+    it("attempts a rollback when the transaction fails to open", async () => {
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql);
+      conn.query.mockImplementation(async (arg: any) => {
+        const sql = typeof arg === "string" ? arg : arg.sql;
+        statements.push(sql);
+        if (sql === "START TRANSACTION READ ONLY") throw new Error("server gone");
+        return asMysql([{ id: 1 }]);
+      });
+      mysqlCreatePool.mockReturnValue(pool);
+
+      const connector = new MySQLConnector();
+      await connector.connect("mysql://user:pass@localhost:3306/db");
+
+      await expect(connector.executeSQL("SELECT 1", { readonly: true })).rejects.toThrow(
+        "server gone"
+      );
+
+      // A partially-opened transaction must still be rolled back, or the
+      // connection returns to the pool with an open transaction.
+      expect(statements).toContain("ROLLBACK");
+      // The query itself must never run once the read-only guard failed to open.
+      expect(statements).not.toContain("SELECT 1");
+      expect(conn.release).toHaveBeenCalled();
+    });
+
     it("surfaces the original error even if the rollback also fails", async () => {
       const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql);
       conn.query.mockImplementation(async (arg: any) => {
