@@ -20,6 +20,8 @@ import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import {
   sqlServerDynamicSqlKeywords,
   sqlServerDynamicSqlPattern,
+  sqlServerPassThroughKeywords,
+  sqlServerPassThroughPattern,
 } from "../../utils/allowed-keywords.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
@@ -634,7 +636,7 @@ export class SQLServerConnector implements Connector {
       sqlQuery.match(SQLServerConnector.LEADING_NOISE)![0].length
     );
     if (/^explain\b/i.test(afterNoise)) {
-      return this.explainQuery(afterNoise.slice("explain".length).trim());
+      return this.explainQuery(afterNoise.slice("explain".length).trim(), options.readonly);
     }
 
     try {
@@ -718,20 +720,19 @@ export class SQLServerConnector implements Connector {
   }
 
   /**
-   * Execute a query inside a transaction that always rolls back, preventing
-   * any modifications from persisting. SQL Server has no native READ ONLY
-   * transaction mode, so this is the defense-in-depth backstop behind the
-   * keyword classifier.
+   * Reject the constructs that escape SQL Server's read-only guards, for use by
+   * both read-only execution paths.
    *
-   * Because the rollback guard is application-level (not engine-enforced),
-   * we reject dangerous keywords in the stripped SQL before opening the
-   * transaction:
-   * - COMMIT/ROLLBACK: would end the outer transaction, letting writes persist
    * - Dynamic SQL (sqlServerDynamicSqlKeywords): can carry hidden COMMIT/ROLLBACK
    *   inside string literals that stripCommentsAndStrings removes
+   * - Pass-through data sources (sqlServerPassThroughKeywords): execute on a
+   *   remote or ad-hoc source, so a local rollback never reaches them
+   * - COMMIT/ROLLBACK, when `transactionControl` is set: would end the wrapping
+   *   transaction, letting writes persist. Only meaningful for the transaction
+   *   path; the EXPLAIN path opens no transaction of its own.
    *
-   * The dynamic SQL keywords are imported from the read-only classifier rather
-   * than redeclared, so the classifier and this backstop cannot drift apart.
+   * Both keyword lists are imported from the read-only classifier rather than
+   * redeclared, so the classifier and these backstops cannot drift apart.
    *
    * Note the COMMIT/ROLLBACK check is SQL Server-only by design. MySQL/MariaDB
    * wrap batches in a transaction too, but there `commit`, `prepare` and
@@ -739,12 +740,13 @@ export class SQLServerConnector implements Connector {
    * execute-sql.ts requires every split statement to pass the classifier — so a
    * transaction-control statement can never reach their backstop.
    */
-  private async executeReadOnly(
-    processedSQL: string,
-    parameters?: any[],
-  ): Promise<SQLResult> {
-    const cleaned = stripCommentsAndStrings(processedSQL, "sqlserver").toLowerCase();
-    if (/\b(?:commit|rollback)\b/.test(cleaned)) {
+  private assertNoReadOnlyEscapes(
+    sqlText: string,
+    { transactionControl = false }: { transactionControl?: boolean } = {},
+  ): void {
+    const cleaned = stripCommentsAndStrings(sqlText, "sqlserver").toLowerCase();
+
+    if (transactionControl && /\b(?:commit|rollback)\b/.test(cleaned)) {
       throw new Error(
         "Read-only mode: transaction control statements (COMMIT, ROLLBACK) are not allowed",
       );
@@ -756,6 +758,29 @@ export class SQLServerConnector implements Connector {
           .join(", ")}) is not allowed`,
       );
     }
+    if (sqlServerPassThroughPattern.test(cleaned)) {
+      throw new Error(
+        `Read-only mode: pass-through data sources (${sqlServerPassThroughKeywords
+          .map((k) => k.toUpperCase())
+          .join(", ")}) are not allowed`,
+      );
+    }
+  }
+
+  /**
+   * Execute a query inside a transaction that always rolls back, preventing
+   * any modifications from persisting. SQL Server has no native READ ONLY
+   * transaction mode, so this is the defense-in-depth backstop behind the
+   * keyword classifier.
+   *
+   * Dangerous constructs are rejected before the transaction opens; see
+   * assertNoReadOnlyEscapes.
+   */
+  private async executeReadOnly(
+    processedSQL: string,
+    parameters?: any[],
+  ): Promise<SQLResult> {
+    this.assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
 
     const transaction = new sql.Transaction(this.connection!);
     await transaction.begin();
@@ -841,12 +866,21 @@ export class SQLServerConnector implements Connector {
    * off the shared pool, so a concurrent query can never land on a connection
    * with SHOWPLAN enabled (which would return a plan instead of its results).
    */
-  private async explainQuery(innerQuery: string): Promise<SQLResult> {
+  private async explainQuery(innerQuery: string, readonly?: boolean): Promise<SQLResult> {
     // Validate against comment/string-stripped SQL so comment-only input counts
     // as empty and a SET SHOWPLAN can't hide behind comments.
     const cleaned = stripCommentsAndStrings(innerQuery, "sqlserver").trim();
     if (!cleaned) {
       throw new Error("EXPLAIN requires a statement to analyze");
+    }
+
+    // EXPLAIN is routed here before the read-only branch in executeSQL, so it
+    // opens no rolling-back transaction. SHOWPLAN_XML compiles without
+    // executing, but that single session toggle would otherwise be the whole
+    // guarantee — apply the same escape checks as executeReadOnly. Skipped
+    // outside read-only mode, where explaining an EXEC is legitimate.
+    if (readonly) {
+      this.assertNoReadOnlyEscapes(innerQuery);
     }
 
     // Defense in depth: the SET SHOWPLAN session toggle is what makes EXPLAIN
