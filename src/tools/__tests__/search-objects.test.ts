@@ -1351,6 +1351,11 @@ describe('search_database_objects tool', () => {
         if (schema === 'other_db') return ['secrets'];
         return ['misc'];
       });
+      vi.mocked(mockConnector.getViews).mockImplementation(async (schema?: string) => {
+        if (schema === 'configured_db') return ['order_summary'];
+        if (schema === 'other_db') return ['secret_view'];
+        return ['misc_view'];
+      });
     });
 
     it('scopes table search to the default schema and never fans out to other databases', async () => {
@@ -1368,6 +1373,40 @@ describe('search_database_objects tool', () => {
       // Only the configured database should have been inspected.
       expect(mockConnector.getTables).toHaveBeenCalledTimes(1);
       expect(mockConnector.getTables).toHaveBeenCalledWith('configured_db');
+    });
+
+    it('scopes view search to the default schema and never fans out to other databases', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'view', pattern: '%', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.schema)).toEqual(['configured_db']);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual(['order_summary']);
+      // Only the configured database should have been inspected.
+      expect(mockConnector.getViews).toHaveBeenCalledTimes(1);
+      expect(mockConnector.getViews).toHaveBeenCalledWith('configured_db');
+    });
+
+    it('falls back to the full schema list for views when no default is configured (null)', async () => {
+      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue(null);
+
+      const handler = createSearchDatabaseObjectsToolHandler();
+      const result = await handler(
+        { object_type: 'view', pattern: '%', detail_level: 'names' },
+        null
+      );
+
+      const parsed = parseToolResponse(result);
+      expect(parsed.data.results.map((r: any) => r.schema)).toEqual([
+        'configured_db',
+        'other_db',
+        'third_db',
+      ]);
     });
 
     it('scopes schema listing to the default schema', async () => {

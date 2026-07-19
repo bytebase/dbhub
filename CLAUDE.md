@@ -53,7 +53,7 @@ Key architectural patterns:
   - Runs in stateless mode (no SSE support) - GET requests to `/mcp` return 405 Method Not Allowed
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Tool Handlers**: Clean separation of MCP protocol concerns
-  - Tools accept optional `source_id` parameter for multi-database routing
+  - Multi-database routing is by tool name, not by parameter: one tool instance is registered per source, named `execute_sql_{source_id}` / `search_objects_{source_id}` (single-source configs keep the bare `execute_sql` / `search_objects` names). See `src/tools/index.ts` and `src/utils/tool-metadata.ts`. `source_id` appears in tool *output* metadata only.
 - **Token-Efficient Schema Exploration**: Unified search/list tool with progressive disclosure
   - `search_objects`: Single tool for both pattern-based search and listing all objects
   - Pattern parameter defaults to `%` (match all) - optional for listing use cases
@@ -107,7 +107,7 @@ DBHub supports three configuration methods (in priority order):
   - Path expansion for `~/` in file paths
   - Automatic password redaction in logs
   - First source is the default database
-- Usage in MCP tools: Add optional `source_id` parameter (e.g., `execute_sql(sql, source_id="prod_pg")`)
+- Usage in MCP tools: each source gets its own tool, suffixed with the normalized source id (e.g. `execute_sql_prod_pg(sql)`, `search_objects_staging_mysql(...)`)
 - See `dbhub.toml.example` for complete configuration reference
 - Documentation: https://dbhub.ai/config/toml
 

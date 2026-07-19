@@ -296,7 +296,7 @@ async function searchViews(
   if (schemaFilter) {
     schemasToSearch = [schemaFilter];
   } else {
-    schemasToSearch = await connector.getSchemas();
+    schemasToSearch = await resolveDefaultSchemas(connector);
   }
 
   // Search views in each schema
