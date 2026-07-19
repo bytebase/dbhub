@@ -69,7 +69,7 @@ DBHub supports three configuration methods (in priority order):
 ### 1. TOML Configuration File (Multi-Database)
 **Recommended for projects requiring multiple database connections**
 
-- Create `dbhub.toml` in your project directory or use `--config=path/to/config.toml`
+- Loaded only via `--config=path/to/config.toml`. A `dbhub.toml` in the current directory is **not** auto-discovered (removed deliberately — see `resolveTomlConfigPath` in `src/config/toml-loader.ts`); pass `--config=dbhub.toml` to load it
 - Configuration structure:
   - `[[sources]]` - Database connection definitions with unique `id` fields
   - `[[tools]]` - Tool configuration (execution settings, custom tools)

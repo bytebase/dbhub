@@ -5,14 +5,15 @@ title: "Command-Line Options"
 DBHub is configured by command-line flags, environment variables, `.env` files, and an optional [TOML configuration file](/config/toml).
 
 <Note>
-**TOML config and a DSN cannot be combined.** A TOML file defines database sources
-directly and supports multiple databases, while a DSN configures exactly one. If
-DBHub finds a TOML config *and* a DSN (`--dsn`, `DSN`, `DB_*` variables, or a DSN in
-a `.env` file), it exits with an error naming the conflicting DSN rather than
-silently ignoring one of them. Use one or the other.
+**TOML config is opt-in, and cannot be combined with a DSN.** TOML is loaded only
+when you pass `--config`; a `dbhub.toml` in the current directory is never picked up
+automatically. A TOML file defines database sources directly and supports multiple
+databases, while a DSN configures exactly one — so if you pass `--config` *and* a DSN
+(`--dsn`, `DSN`, `DB_*` variables, or a DSN in a `.env` file), DBHub exits with an
+error naming the conflict rather than silently ignoring one of them.
 </Note>
 
-**Choosing the database** — when no TOML config is present, the DSN is taken from the first of:
+**Choosing the database** — without `--config`, the DSN is taken from the first of:
 
 1. `--dsn` command-line argument (highest priority)
 2. `DSN` environment variable
@@ -285,10 +286,10 @@ This page covers command-line flags and environment variables. For TOML configur
 
 ### --config
 
-<ParamField path="--config" type="string" default="./dbhub.toml">
+<ParamField path="--config" type="string">
   Path to TOML configuration file for managing multiple database connections and advanced configurations.
 
-  Automatically loads `./dbhub.toml` if it exists in the current directory.
+  TOML configuration is loaded **only** when `--config` names it. A `dbhub.toml` in the current directory is not picked up automatically — pass `--config ./dbhub.toml` to use it.
 
   ```bash
   npx @bytebase/dbhub@latest --config ./dbhub.toml --transport http --port 8080

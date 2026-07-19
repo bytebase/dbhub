@@ -14,8 +14,10 @@ describe('TOML Configuration Tests', () => {
     // Create a temporary directory for test config files
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-test-'));
     process.chdir(tempDir);
-    // Clear command line arguments
-    process.argv = ['node', 'test'];
+    // TOML config is only loaded when --config names it explicitly (there is no
+    // cwd auto-discovery), so point --config at the file each test writes.
+    // Tests covering the absent/explicit-path cases override argv themselves.
+    process.argv = ['node', 'test', '--config', path.join(tempDir, 'dbhub.toml')];
   });
 
   afterEach(() => {
@@ -187,9 +189,26 @@ dsn = "mysql://user:pass@localhost:3306/db"
       expect(result?.source).toBe('custom.toml');
     });
 
-    it('should return null when no config file exists', () => {
+    it('should return null when --config is not supplied', () => {
+      process.argv = ['node', 'test'];
+
       const result = loadTomlConfig();
+
       expect(result).toBeNull();
+    });
+
+    it('should NOT auto-discover dbhub.toml in the current directory', () => {
+      // Auto-discovery was removed: running from a directory that happens to
+      // contain a dbhub.toml must not silently repoint DBHub at that database.
+      const tomlContent = `
+[[sources]]
+id = "ambient_db"
+dsn = "postgres://user:pass@localhost:5432/ambient"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+      process.argv = ['node', 'test'];
+
+      expect(loadTomlConfig()).toBeNull();
     });
 
     it('should load multiple sources', () => {

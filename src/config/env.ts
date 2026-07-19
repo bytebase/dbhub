@@ -719,7 +719,8 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
 
 /**
  * Resolve source configurations from TOML config or fallback to single DSN
- * Priority: TOML config (--config flag or ./dbhub.toml) > single DSN/env vars
+ * Sources come from either TOML config (--config flag only; no cwd auto-discovery)
+ * or a single DSN/env vars — never both. Supplying both throws.
  * Returns array of source configs and the source of the configuration
  */
 export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; tools?: import("../types/config.js").ToolConfig[]; source: string } | null> {
@@ -742,11 +743,11 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       const dsnConfig = detectDSNConfig();
       if (dsnConfig) {
         throw new Error(
-          `DSN configuration (${dsnConfig.source}) cannot be used with TOML configuration. ` +
+          `DSN configuration (${dsnConfig.source}) cannot be used with TOML configuration ` +
+          `(${tomlConfig.source}). ` +
           "TOML config defines database sources directly and supports multiple databases, " +
           "while a DSN configures a single database. " +
-          "Either remove the DSN configuration, or remove the TOML config file " +
-          "(or point --config elsewhere)."
+          "Either remove the DSN configuration, or drop the --config flag."
         );
       }
 

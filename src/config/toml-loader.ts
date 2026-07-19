@@ -53,13 +53,18 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 }
 
 /**
- * Resolve the path to the TOML configuration file
- * Priority: --config flag > ./dbhub.toml
+ * Resolve the path to the TOML configuration file.
+ *
+ * TOML config is loaded only when --config names it explicitly. A dbhub.toml
+ * sitting in the current directory is deliberately NOT auto-discovered: TOML
+ * config selects the database and cannot be combined with a DSN, so implicit
+ * discovery meant merely running DBHub from the wrong directory could silently
+ * repoint it at a different database, or make an explicitly supplied DSN
+ * appear to be ignored for no visible reason.
  */
 export function resolveTomlConfigPath(): string | null {
   const args = parseCommandLineArgs();
 
-  // 1. Check for --config flag (highest priority)
   if (args.config) {
     const configPath = expandHomeDir(args.config);
     if (!fs.existsSync(configPath)) {
@@ -68,12 +73,6 @@ export function resolveTomlConfigPath(): string | null {
       );
     }
     return configPath;
-  }
-
-  // 2. Check for dbhub.toml in current directory
-  const defaultConfigPath = path.join(process.cwd(), "dbhub.toml");
-  if (fs.existsSync(defaultConfigPath)) {
-    return defaultConfigPath;
   }
 
   return null;
