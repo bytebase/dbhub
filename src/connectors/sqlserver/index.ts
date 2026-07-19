@@ -198,17 +198,18 @@ export class SQLServerConnector implements Connector {
         this.config.options = {};
       }
 
-      // Hold the pool in a local so a failing connect() can still close it —
-      // `this.connection` is only assigned once connect() resolves, so without
-      // this the half-open pool would be unreachable (see closeQuietly).
-      const pool = new sql.ConnectionPool(this.config);
-      try {
-        this.connection = await pool.connect();
-      } catch (error) {
-        await closeQuietly(() => pool.close());
-        throw error;
-      }
+      // Assign before connecting so a failed connect() leaves the pool reachable
+      // for teardown below. connect() resolves to this same ConnectionPool.
+      this.connection = new sql.ConnectionPool(this.config);
+      await this.connection.connect();
     } catch (error) {
+      // Tear down the pool if it was created before the failure, otherwise it
+      // strands sockets and keeps the event loop alive (see closeQuietly).
+      if (this.connection) {
+        const connection = this.connection;
+        this.connection = undefined;
+        await closeQuietly(() => connection.close());
+      }
       throw error;
     }
   }

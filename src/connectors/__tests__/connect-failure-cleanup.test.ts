@@ -36,6 +36,16 @@ vi.mock("pg", () => ({
   },
 }));
 
+const mssqlPoolCtor = vi.fn();
+
+vi.mock("mssql", () => ({
+  default: {
+    ConnectionPool: function (this: any, ...args: any[]) {
+      return mssqlPoolCtor(...args);
+    },
+  },
+}));
+
 const { MySQLConnector } = await import("../mysql/index.js");
 const { MariaDBConnector } = await import("../mariadb/index.js");
 const { PostgresConnector } = await import("../postgres/index.js");
@@ -104,6 +114,21 @@ describe("connect() failure cleanup", () => {
       "ECONNREFUSED"
     );
     expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it("SQL Server closes the pool when the connection probe fails", async () => {
+    const { SQLServerConnector } = await import("../sqlserver/index.js");
+    const close = vi.fn();
+    mssqlPoolCtor.mockReturnValue({
+      connect: vi.fn().mockRejectedValue(PROBE_FAILURE),
+      close,
+    });
+
+    const connector = new SQLServerConnector();
+    await expect(connector.connect("sqlserver://u:p@localhost:1433/db")).rejects.toThrow(
+      "ECONNREFUSED"
+    );
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("SQLite releases the handle when the init script fails", async () => {
