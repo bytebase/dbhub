@@ -621,9 +621,19 @@ describe('Environment Configuration Tests', () => {
 
   describe('resolveSourceConfigs TOML/DSN conflict', () => {
     const originalArgv = process.argv;
+    const originalCwd = process.cwd();
+    let tempDir: string;
+    let configPath: string;
 
     beforeEach(() => {
-      process.argv = ['node', 'script.js'];
+      // Run from an empty directory so an ambient .env cannot reach the
+      // .env-before-TOML load that --config now triggers.
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'toml-dsn-conflict-'));
+      configPath = path.join(tempDir, 'dbhub.toml');
+      process.chdir(tempDir);
+      // --config is the only way TOML gets loaded, so it has to be present for
+      // the mocked loadTomlConfig() to stand for a state reachable at runtime.
+      process.argv = ['node', 'script.js', '--config', configPath];
       vi.mocked(loadTomlConfig).mockReturnValue({
         sources: [{ id: 'db1', type: 'sqlite', dsn: 'sqlite://a.db' }],
         source: 'dbhub.toml',
@@ -631,12 +641,14 @@ describe('Environment Configuration Tests', () => {
     });
 
     afterEach(() => {
+      process.chdir(originalCwd);
+      fs.rmSync(tempDir, { recursive: true, force: true });
       process.argv = originalArgv;
       vi.mocked(loadTomlConfig).mockReturnValue(null);
     });
 
     it('rejects a --dsn flag supplied alongside TOML config', async () => {
-      process.argv = ['node', 'script.js', '--dsn=sqlite://:memory:'];
+      process.argv = ['node', 'script.js', '--config', configPath, '--dsn=sqlite://:memory:'];
       const { resolveSourceConfigs } = await import('../env.js');
 
       await expect(resolveSourceConfigs()).rejects.toThrow(
