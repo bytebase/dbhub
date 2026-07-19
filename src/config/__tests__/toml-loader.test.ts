@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import fs from 'fs';
@@ -14,8 +14,9 @@ describe('TOML Configuration Tests', () => {
     // Create a temporary directory for test config files
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-test-'));
     process.chdir(tempDir);
-    // Clear command line arguments
-    process.argv = ['node', 'test'];
+    // Only --config selects a config file, so point it at the file each test
+    // writes. Tests covering the absent/explicit-path cases override argv.
+    process.argv = ['node', 'test', '--config', path.join(tempDir, 'dbhub.toml')];
   });
 
   afterEach(() => {
@@ -187,9 +188,49 @@ dsn = "mysql://user:pass@localhost:3306/db"
       expect(result?.source).toBe('custom.toml');
     });
 
-    it('should return null when no config file exists', () => {
+    it('should return null when --config is not supplied', () => {
+      process.argv = ['node', 'test'];
+
       const result = loadTomlConfig();
+
       expect(result).toBeNull();
+    });
+
+    it.each([
+      ['bare flag', ['node', 'test', '--config']],
+      ['empty value', ['node', 'test', '--config=']],
+    ])('should reject --config with no value (%s)', (_label, argv) => {
+      // Without this, parseCommandLineArgs() resolves the flag to the sentinel
+      // "true" and the failure surfaces as `not found: true`.
+      process.argv = argv;
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        expect(() => loadTomlConfig()).toThrow('process.exit: 1');
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('--config requires a value')
+        );
+      } finally {
+        exitSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('should ignore a dbhub.toml in the current directory', () => {
+      // Only --config selects a config file, so running from a directory that
+      // happens to contain one must not repoint DBHub at that database.
+      const tomlContent = `
+[[sources]]
+id = "ambient_db"
+dsn = "postgres://user:pass@localhost:5432/ambient"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+      process.argv = ['node', 'test'];
+
+      expect(loadTomlConfig()).toBeNull();
     });
 
     it('should load multiple sources', () => {

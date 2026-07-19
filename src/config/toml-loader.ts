@@ -3,7 +3,7 @@ import path from "path";
 import { homedir } from "os";
 import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
-import { parseCommandLineArgs } from "./env.js";
+import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
@@ -53,27 +53,29 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 }
 
 /**
- * Resolve the path to the TOML configuration file
- * Priority: --config flag > ./dbhub.toml
+ * Resolve the path to the TOML configuration file.
+ *
+ * TOML config is loaded only when --config names it. Keep it that way: TOML
+ * selects the database outright and cannot be combined with a DSN, so
+ * discovering a file implicitly (from the working directory, say) would let
+ * DBHub silently connect somewhere the user never named, and make an
+ * explicitly supplied DSN look ignored for no visible reason.
  */
 export function resolveTomlConfigPath(): string | null {
   const args = parseCommandLineArgs();
 
-  // 1. Check for --config flag (highest priority)
-  if (args.config) {
-    const configPath = expandHomeDir(args.config);
+  // A bare `--config`, or `--config=`, otherwise resolves to the sentinel
+  // "true" and surfaces as `not found: true`.
+  const configValue = requireFlagValue("config", args, "./dbhub.toml");
+
+  if (configValue) {
+    const configPath = expandHomeDir(configValue);
     if (!fs.existsSync(configPath)) {
       throw new Error(
         `Configuration file specified by --config flag not found: ${configPath}`
       );
     }
     return configPath;
-  }
-
-  // 2. Check for dbhub.toml in current directory
-  const defaultConfigPath = path.join(process.cwd(), "dbhub.toml");
-  if (fs.existsSync(defaultConfigPath)) {
-    return defaultConfigPath;
   }
 
   return null;

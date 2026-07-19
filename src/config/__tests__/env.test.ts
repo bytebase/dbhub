@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
+import { loadTomlConfig } from '../toml-loader.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
 vi.mock('../toml-loader.js', () => ({
@@ -612,6 +616,89 @@ describe('Environment Configuration Tests', () => {
       const result = resolveHost();
 
       expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
+    });
+  });
+
+  describe('resolveSourceConfigs TOML/DSN conflict', () => {
+    const originalArgv = process.argv;
+    const originalCwd = process.cwd();
+    let tempDir: string;
+    let configPath: string;
+
+    beforeEach(() => {
+      // Run from an empty directory so an ambient .env cannot reach the
+      // .env-before-TOML load that --config now triggers.
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'toml-dsn-conflict-'));
+      configPath = path.join(tempDir, 'dbhub.toml');
+      process.chdir(tempDir);
+      // --config is the only way TOML gets loaded, so it has to be present for
+      // the mocked loadTomlConfig() to stand for a state reachable at runtime.
+      process.argv = ['node', 'script.js', '--config', configPath];
+      vi.mocked(loadTomlConfig).mockReturnValue({
+        sources: [{ id: 'db1', type: 'sqlite', dsn: 'sqlite://a.db' }],
+        source: 'dbhub.toml',
+      } as any);
+    });
+
+    afterEach(() => {
+      process.chdir(originalCwd);
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      process.argv = originalArgv;
+      vi.mocked(loadTomlConfig).mockReturnValue(null);
+    });
+
+    it('rejects a --dsn flag supplied alongside TOML config', async () => {
+      process.argv = ['node', 'script.js', '--config', configPath, '--dsn=sqlite://:memory:'];
+      const { resolveSourceConfigs } = await import('../env.js');
+
+      await expect(resolveSourceConfigs()).rejects.toThrow(
+        /The --dsn flag cannot be used with TOML configuration \(dbhub.toml\)/
+      );
+    });
+
+    it('allows a DSN env var alongside TOML config', async () => {
+      // TOML interpolation reads process.env, so `dsn = "${DSN}"` in the config
+      // file is a supported way to keep credentials out of it. An exported DSN
+      // is config material for TOML, not a competing single-database setup.
+      process.env.DSN = 'postgres://user:pass@localhost:5432/mydb';
+      const { resolveSourceConfigs } = await import('../env.js');
+
+      await expect(resolveSourceConfigs()).resolves.toMatchObject({
+        source: 'dbhub.toml',
+      });
+    });
+
+    it('loads .env before TOML config so ${VAR} interpolation can resolve', async () => {
+      // interpolateEnvVars() reads process.env, so the file has to be loaded
+      // before the TOML is parsed for `dsn = "${DSN}"` to resolve.
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-before-toml-'));
+      const cwd = process.cwd();
+      fs.writeFileSync(path.join(dir, '.env'), 'DSN_FROM_ENV_FILE=sqlite://interpolated.db\n');
+      process.chdir(dir);
+      process.argv = ['node', 'script.js', '--config', path.join(dir, 'dbhub.toml')];
+
+      try {
+        const { resolveSourceConfigs } = await import('../env.js');
+        await resolveSourceConfigs();
+
+        expect(process.env.DSN_FROM_ENV_FILE).toBe('sqlite://interpolated.db');
+      } finally {
+        process.chdir(cwd);
+        delete process.env.DSN_FROM_ENV_FILE;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('allows DB_* env vars alongside TOML config', async () => {
+      // Same reasoning: these may exist purely to feed ${DB_PASSWORD}-style
+      // interpolation in the TOML file.
+      process.env.DB_TYPE = 'sqlite';
+      process.env.DB_NAME = 'test.db';
+      const { resolveSourceConfigs } = await import('../env.js');
+
+      await expect(resolveSourceConfigs()).resolves.toMatchObject({
+        source: 'dbhub.toml',
+      });
     });
   });
 });
