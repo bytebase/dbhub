@@ -17,6 +17,7 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
  * SQL Server DSN parser
@@ -197,7 +198,16 @@ export class SQLServerConnector implements Connector {
         this.config.options = {};
       }
 
-      this.connection = await new sql.ConnectionPool(this.config).connect();
+      // Hold the pool in a local so a failing connect() can still close it —
+      // `this.connection` is only assigned once connect() resolves, so without
+      // this the half-open pool would be unreachable (see closeQuietly).
+      const pool = new sql.ConnectionPool(this.config);
+      try {
+        this.connection = await pool.connect();
+      } catch (error) {
+        await closeQuietly(() => pool.close());
+        throw error;
+      }
     } catch (error) {
       throw error;
     }

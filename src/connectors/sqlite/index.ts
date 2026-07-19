@@ -26,6 +26,7 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
  * SQLite DSN Parser
@@ -200,6 +201,13 @@ export class SQLiteConnector implements Connector {
         this.db.exec(initScript);
       }
     } catch (error) {
+      // Close the handle if it was opened before the failure (e.g. a throwing
+      // init script), otherwise the database file stays locked (see closeQuietly).
+      if (this.db) {
+        const db = this.db;
+        this.db = null;
+        await closeQuietly(() => db.close());
+      }
       console.error("Failed to connect to SQLite database:", error);
       throw error;
     }
