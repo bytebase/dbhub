@@ -5,13 +5,13 @@ title: "TOML Configuration"
 TOML configuration is the recommended way to configure DBHub for multi-database setups and advanced configurations. It provides more flexibility than command-line options or environment variables.
 
 <Note>
-**TOML configuration is loaded only via `--config`.** A `dbhub.toml` in the current
-directory is not auto-discovered — start DBHub with `--config ./dbhub.toml`.
+Load a TOML file with `--config`:
 
-It also replaces DSN configuration rather than layering on top of it. DBHub exits
-with an error if you pass `--config` alongside a DSN (`--dsn`, `DSN`, `DB_*`
-variables, or a DSN in a `.env` file), since the two express conflicting intents:
-TOML defines sources for one or more databases, a DSN configures exactly one.
+```bash
+npx @bytebase/dbhub@latest --config ./dbhub.toml
+```
+
+A TOML file defines its own database sources, so it takes the place of DSN configuration. Passing `--config` alongside a DSN (`--dsn`, `DSN`, `DB_*` variables, or a DSN in a `.env` file) exits with an error naming the conflict.
 </Note>
 
 ## Overview

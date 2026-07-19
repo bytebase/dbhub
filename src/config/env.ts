@@ -242,18 +242,12 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
 }
 
 /**
- * Resolve DSN from command line args, environment variables, or .env files
- * Returns the DSN and its source, or null if not found
- */
-/**
  * Detect whether a single-database DSN is configured, and from where, without
  * applying anything to process.env.
  *
- * Used to reject the combination of TOML config and DSN config: TOML defines
- * sources for one or more databases, while a DSN configures exactly one, so
- * supplying both expresses two conflicting intents. Silently preferring one
- * (the previous behavior) meant a stray DSN looked ignored for no visible
- * reason.
+ * Backs the guard that keeps TOML config and DSN config mutually exclusive:
+ * TOML defines sources for one or more databases, while a DSN configures
+ * exactly one, so supplying both expresses two conflicting intents.
  *
  * The .env file is inspected via dotenv.parse rather than dotenv.config so that
  * merely checking for a conflict does not load unrelated settings.
@@ -298,6 +292,10 @@ export function detectDSNConfig(
   return null;
 }
 
+/**
+ * Resolve DSN from command line args, environment variables, or .env files
+ * Returns the DSN and its source, or null if not found
+ */
 export function resolveDSN(): { dsn: string; source: string; isDemo?: boolean } | null {
   // Get command line arguments
   const args = parseCommandLineArgs();
@@ -739,7 +737,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       }
       // TOML config and DSN config are mutually exclusive: TOML defines sources
       // for one or more databases, a DSN configures exactly one. Supplying both
-      // is ambiguous, so reject it rather than silently ignoring the DSN.
+      // is ambiguous, so surface it instead of picking one.
       const dsnConfig = detectDSNConfig();
       if (dsnConfig) {
         throw new Error(

@@ -64,12 +64,12 @@ Key architectural patterns:
 
 ## Configuration
 
-DBHub supports three configuration methods (in priority order):
+DBHub supports three configuration methods:
 
 ### 1. TOML Configuration File (Multi-Database)
 **Recommended for projects requiring multiple database connections**
 
-- Loaded only via `--config=path/to/config.toml`. A `dbhub.toml` in the current directory is **not** auto-discovered (removed deliberately — see `resolveTomlConfigPath` in `src/config/toml-loader.ts`); pass `--config=dbhub.toml` to load it
+- Load with `--config=path/to/config.toml` (see `resolveTomlConfigPath` in `src/config/toml-loader.ts`)
 - Configuration structure:
   - `[[sources]]` - Database connection definitions with unique `id` fields
   - `[[tools]]` - Tool configuration (execution settings, custom tools)
@@ -133,21 +133,20 @@ DBHub supports three configuration methods (in priority order):
 
 ### Configuration Priority Order
 
-**Database sources** are configured either by TOML *or* by a DSN — never both. TOML
-defines sources for one or more databases; a DSN configures exactly one. Supplying
-both is rejected at startup with an error naming the conflicting DSN source, rather
-than silently preferring one. See `detectDSNConfig`/`resolveSourceConfigs` in
-`src/config/env.ts`.
+**Database sources** come from either a TOML file (`--config`) or a DSN. TOML defines
+sources for one or more databases; a DSN configures exactly one. Passing both throws
+an error naming the conflicting DSN source — see `detectDSNConfig` and
+`resolveSourceConfigs` in `src/config/env.ts`.
 
-When no TOML config is present, the DSN is resolved in this order:
-1. `--dsn` command-line argument (highest)
+Without `--config`, the DSN is resolved in this order:
+1. `--dsn` command-line argument
 2. `DSN` environment variable
 3. Individual `DB_*` environment variables
 4. `.env` files (`.env.local` in development, `.env` in production)
 
-**All other settings** (`--transport`, `--port`, `--host`, `--allowed-hosts`, …) are
-not expressible in TOML and follow the conventional order:
-1. Command-line arguments (highest)
+**All other settings** (`--transport`, `--port`, `--host`, `--allowed-hosts`, …) live
+outside TOML and follow the same order:
+1. Command-line arguments
 2. Environment variables
 3. `.env` files
 4. Built-in defaults

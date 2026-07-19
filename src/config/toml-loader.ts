@@ -55,12 +55,11 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 /**
  * Resolve the path to the TOML configuration file.
  *
- * TOML config is loaded only when --config names it explicitly. A dbhub.toml
- * sitting in the current directory is deliberately NOT auto-discovered: TOML
- * config selects the database and cannot be combined with a DSN, so implicit
- * discovery meant merely running DBHub from the wrong directory could silently
- * repoint it at a different database, or make an explicitly supplied DSN
- * appear to be ignored for no visible reason.
+ * TOML config is loaded only when --config names it. Keep it that way: TOML
+ * selects the database outright and cannot be combined with a DSN, so
+ * discovering a file implicitly (from the working directory, say) would let
+ * DBHub silently connect somewhere the user never named, and make an
+ * explicitly supplied DSN look ignored for no visible reason.
  */
 export function resolveTomlConfigPath(): string | null {
   const args = parseCommandLineArgs();

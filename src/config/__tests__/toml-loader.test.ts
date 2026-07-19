@@ -14,9 +14,8 @@ describe('TOML Configuration Tests', () => {
     // Create a temporary directory for test config files
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-test-'));
     process.chdir(tempDir);
-    // TOML config is only loaded when --config names it explicitly (there is no
-    // cwd auto-discovery), so point --config at the file each test writes.
-    // Tests covering the absent/explicit-path cases override argv themselves.
+    // Only --config selects a config file, so point it at the file each test
+    // writes. Tests covering the absent/explicit-path cases override argv.
     process.argv = ['node', 'test', '--config', path.join(tempDir, 'dbhub.toml')];
   });
 
@@ -197,9 +196,9 @@ dsn = "mysql://user:pass@localhost:3306/db"
       expect(result).toBeNull();
     });
 
-    it('should NOT auto-discover dbhub.toml in the current directory', () => {
-      // Auto-discovery was removed: running from a directory that happens to
-      // contain a dbhub.toml must not silently repoint DBHub at that database.
+    it('should ignore a dbhub.toml in the current directory', () => {
+      // Only --config selects a config file, so running from a directory that
+      // happens to contain one must not repoint DBHub at that database.
       const tomlContent = `
 [[sources]]
 id = "ambient_db"
