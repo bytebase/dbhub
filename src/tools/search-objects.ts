@@ -105,7 +105,11 @@ async function getTableRowCount(
     // Fallback: COUNT(*) for connectors without a statistics-based implementation
     const qualifiedTable = quoteQualifiedIdentifier(tableName, schemaName, connector.id);
     const countQuery = `SELECT COUNT(*) as count FROM ${qualifiedTable}`;
-    const result = await connector.executeSQL(countQuery, { maxRows: 1 });
+    // search_objects is a read-only tool, so pass readonly through to engage the
+    // connector's engine-level backstop. The SQL here is server-generated, but
+    // keeping the flag set makes "read-only tools always execute read-only" an
+    // invariant that holds by inspection rather than by argument.
+    const result = await connector.executeSQL(countQuery, { maxRows: 1, readonly: true });
 
     if (result.rows && result.rows.length > 0) {
       return Number(result.rows[0].count || result.rows[0].COUNT || 0);

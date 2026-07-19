@@ -51,15 +51,38 @@ const mutatingPatternWithReplace = new RegExp(
 );
 
 /**
- * Extended pattern for SQL Server: adds T-SQL dynamic SQL primitives that can
- * run arbitrary (including mutating) statements.
+ * T-SQL dynamic SQL primitives that can run arbitrary (including mutating)
+ * statements.
  * - EXEC/EXECUTE: direct dynamic SQL execution
  * - sp_executesql: system proc for parameterized dynamic SQL (callable without
  *   EXEC as the first statement in a batch)
  * - xp_cmdshell: OS command execution
+ *
+ * Shared with the SQL Server connector's read-only backstop
+ * (see executeReadOnly in src/connectors/sqlserver/index.ts), which re-checks
+ * these because its rollback guard is application-level rather than
+ * engine-enforced. Keep this list as the single source of truth: adding a
+ * keyword here must tighten both the classifier and the backstop.
+ */
+export const sqlServerDynamicSqlKeywords = [
+  "execute",
+  "exec",
+  "sp_executesql",
+  "xp_cmdshell",
+] as const;
+
+/** Matches any SQL Server dynamic SQL primitive as a whole word */
+export const sqlServerDynamicSqlPattern = new RegExp(
+  `\\b(?:${sqlServerDynamicSqlKeywords.join("|")})\\b`,
+  "i",
+);
+
+/**
+ * Extended pattern for SQL Server: base mutating keywords plus the dynamic SQL
+ * primitives above.
  */
 const mutatingPatternSqlServer = new RegExp(
-  `\\b(?:${[...mutatingKeywords, "execute", "exec", "sp_executesql", "xp_cmdshell"].join("|")})\\b`,
+  `\\b(?:${[...mutatingKeywords, ...sqlServerDynamicSqlKeywords].join("|")})\\b`,
   "i",
 );
 

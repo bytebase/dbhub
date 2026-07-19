@@ -17,6 +17,7 @@ import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-data
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { isTiDBVersion } from "../../utils/server-flavor.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
@@ -631,74 +632,53 @@ export class MariaDBConnector implements Connector {
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
     try {
-      // Engine-level read-only backstop: run the batch inside a READ ONLY
-      // transaction so MariaDB rejects DML writes (INSERT/UPDATE/DELETE/REPLACE)
-      // that the keyword classifier missed (e.g. function-based writes). Note this
-      // does NOT stop DDL: statements like DROP/CREATE perform an implicit COMMIT
-      // that ends the read-only transaction first, so DDL escapes. Stacked-DDL
-      // payloads (e.g. `SELECT 1--1;DROP TABLE t`) are instead rejected upstream by
-      // the read-only classifier, which now splits `--`-hidden statements (see
-      // scanSingleLineCommentMySQL in sql-parser.ts).
-      //
-      // TiDB rejects the READ ONLY modifier (see isTiDBVersion), so there we open
-      // a plain transaction and always ROLLBACK instead of COMMIT: any DML the
-      // classifier missed is discarded rather than persisted, while SELECT results
-      // are unaffected.
-      if (options.readonly) {
-        await conn.query(
-          this.supportsReadOnlyTransaction ? "START TRANSACTION READ ONLY" : "START TRANSACTION"
-        );
-      }
+      // Engine-level read-only backstop (shared with MySQL); see
+      // withReadOnlyTransaction for the semantics and the TiDB caveat.
+      return await withReadOnlyTransaction(
+        conn,
+        options.readonly,
+        this.supportsReadOnlyTransaction,
+        async () => {
+          // Apply maxRows limit to SELECT queries if specified
+          let processedSQL = sql;
+          if (options.maxRows) {
+            // Handle multi-statement SQL by processing each statement individually
+            const statements = splitSQLStatements(sql, "mariadb");
 
-      // Apply maxRows limit to SELECT queries if specified
-      let processedSQL = sql;
-      if (options.maxRows) {
-        // Handle multi-statement SQL by processing each statement individually
-        const statements = splitSQLStatements(sql, "mariadb");
+            const processedStatements = statements.map(statement =>
+              SQLRowLimiter.applyMaxRows(statement, options.maxRows)
+            );
 
-        const processedStatements = statements.map(statement =>
-          SQLRowLimiter.applyMaxRows(statement, options.maxRows)
-        );
+            processedSQL = processedStatements.join('; ');
+            if (sql.trim().endsWith(';')) {
+              processedSQL += ';';
+            }
+          }
 
-        processedSQL = processedStatements.join('; ');
-        if (sql.trim().endsWith(';')) {
-          processedSQL += ';';
+          // Use dedicated connection - MariaDB driver returns rows directly for single statements
+          // Pass parameters if provided
+          let results: any;
+          if (parameters && parameters.length > 0) {
+            try {
+              results = await conn.query(processedSQL, parameters);
+            } catch (error) {
+              console.error(`[MariaDB executeSQL] ERROR: ${(error as Error).message}`);
+              console.error(`[MariaDB executeSQL] SQL: ${processedSQL}`);
+              console.error(`[MariaDB executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+              throw error;
+            }
+          } else {
+            results = await conn.query(processedSQL);
+          }
+
+          // Parse results using shared utility that handles both single and multi-statement queries
+          const rows = parseQueryResults(results);
+          const rowCount = extractAffectedRows(results);
+
+          return { rows, rowCount };
         }
-      }
-
-      // Use dedicated connection - MariaDB driver returns rows directly for single statements
-      // Pass parameters if provided
-      let results: any;
-      if (parameters && parameters.length > 0) {
-        try {
-          results = await conn.query(processedSQL, parameters);
-        } catch (error) {
-          console.error(`[MariaDB executeSQL] ERROR: ${(error as Error).message}`);
-          console.error(`[MariaDB executeSQL] SQL: ${processedSQL}`);
-          console.error(`[MariaDB executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-          throw error;
-        }
-      } else {
-        results = await conn.query(processedSQL);
-      }
-
-      // Parse results using shared utility that handles both single and multi-statement queries
-      const rows = parseQueryResults(results);
-      const rowCount = extractAffectedRows(results);
-
-      if (options.readonly) {
-        await conn.query(this.supportsReadOnlyTransaction ? "COMMIT" : "ROLLBACK");
-      }
-      return { rows, rowCount };
+      );
     } catch (error) {
-      if (options.readonly) {
-        // Best-effort rollback so the connection returns to the pool clean.
-        try {
-          await conn.query("ROLLBACK");
-        } catch {
-          // ignore rollback failure; the original error is more useful
-        }
-      }
       console.error("Error executing query:", error);
       throw error;
     } finally {
