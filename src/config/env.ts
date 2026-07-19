@@ -651,9 +651,21 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
 /**
  * Resolve source configurations from TOML config or fallback to single DSN
  * Priority: TOML config (--config flag or ./dbhub.toml) > single DSN/env vars
+ *
+ * Loads .env files first so that environment variables are available for
+ * ${VAR_NAME} interpolation in dbhub.toml. Without this, .env is only loaded
+ * inside resolveDSN() (the fallback path), meaning TOML configs never get
+ * .env-backed variable resolution.
+ *
  * Returns array of source configs and the source of the configuration
  */
 export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; tools?: import("../types/config.js").ToolConfig[]; source: string } | null> {
+  // 0. Load .env files first so that environment variables are available
+  //    for TOML interpolation (${VAR_NAME}) when using --config.
+  //    Without this, .env is only loaded inside resolveDSN() (the fallback
+  //    path), meaning TOML configs never get .env-backed variable resolution.
+  loadEnvFiles();
+
   // 1. Try loading from TOML configuration file (skip if --demo flag is set)
   if (!isDemoMode()) {
     const tomlConfig = loadTomlConfig();
