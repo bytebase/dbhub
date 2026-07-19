@@ -708,8 +708,6 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
         );
       }
 
-      // Note: --readonly flag is deprecated but no longer blocks TOML usage
-      // The warning is shown in isReadOnlyMode() function
       return tomlConfig;
     }
   }
