@@ -217,6 +217,8 @@ Sources define database connections. Each source represents a database that DBHu
   **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `instanceName`, `authentication`, `domain` — may be set alongside a `dsn` and are applied when the DSN omits them.
 
   If such a field is set to a value that **contradicts** the DSN (e.g. `dsn = "...?sslmode=disable"` together with `sslmode = "require"`, or a `host`/`user`/`database` that differs from the DSN), DBHub rejects the configuration at startup rather than silently ignoring the field. Set each value in only one place, or make the two values match.
+
+  The conflict check compares values that are present in **both** places, so it cannot catch a field the DSN omits entirely. In particular, a `database` field alongside a DSN with no database component (`dsn = "mysql://user:pass@host:3306/"`) is ignored rather than rejected — the connection is made without a default database. Name the database inside the DSN.
   </Note>
 </ParamField>
 
