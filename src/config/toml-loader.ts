@@ -314,6 +314,15 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     if (source.database && info.database && source.database !== info.database) {
       conflict("database", source.database, info.database);
     }
+    // A `database` field is never injected into the DSN, so pairing one with a
+    // DSN that names no database would silently connect without a default
+    // database. Fail loudly instead, mirroring the password check below.
+    if (source.database && !info.database) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has a 'database' field but the DSN names no database. ` +
+          `The field is ignored at connection time — add the database to the DSN, or use individual connection parameters instead of a DSN.`
+      );
+    }
     if (source.user && info.user && source.user !== info.user) {
       conflict("user", source.user, info.user);
     }

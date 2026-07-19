@@ -223,3 +223,40 @@ describe('DSN Parser - SQL Server NTLM Authentication', () => {
     expect(config.password).toBe('password');
   });
 });
+
+describe('DSN Parser - missing database component', () => {
+  describe.each([
+    { label: 'MySQL', connector: () => new MySQLConnector(), scheme: 'mysql' },
+    { label: 'MariaDB', connector: () => new MariaDBConnector(), scheme: 'mariadb' },
+  ])('$label', ({ label, connector, scheme }) => {
+    const parser = connector().dsnParser;
+
+    it.each([
+      { form: 'trailing slash', dsn: `${scheme}://user:pass@localhost:3306/` },
+      { form: 'no path', dsn: `${scheme}://user:pass@localhost:3306` },
+      { form: 'query string only', dsn: `${scheme}://user:pass@localhost:3306/?sslmode=disable` },
+    ])('rejects a DSN with $form', async ({ dsn }) => {
+      await expect(parser.parse(dsn)).rejects.toThrow(`${label} DSN must name a database`);
+    });
+
+    it('points the user at the TOML config for multi-database setups', async () => {
+      await expect(parser.parse(`${scheme}://user:pass@localhost:3306/`)).rejects.toThrow(
+        /https:\/\/dbhub\.ai\/config\/toml/
+      );
+    });
+
+    it('does not leak the password in the error message', async () => {
+      // The error echoes the DSN back, so it must be obfuscated first
+      await expect(parser.parse(`${scheme}://user:hunter2@localhost:3306/`)).rejects.toThrow(
+        expect.objectContaining({
+          message: expect.not.stringContaining('hunter2'),
+        })
+      );
+    });
+
+    it('still accepts a DSN that names a database', async () => {
+      const config = await parser.parse(`${scheme}://user:pass@localhost:3306/mydb`);
+      expect(config.database).toBe('mydb');
+    });
+  });
+});

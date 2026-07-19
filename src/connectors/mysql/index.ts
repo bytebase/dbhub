@@ -13,6 +13,7 @@ import {
 } from "../interface.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
+import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
@@ -49,10 +50,13 @@ class MySQLDSNParser implements DSNParser {
       // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
+      const database = url.pathname ? url.pathname.substring(1) : ''; // Remove leading '/' if exists
+      requireDatabaseInDSN(database, dsn, "MySQL");
+
       const config: mysql.ConnectionOptions = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 3306,
-        database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
+        database,
         user: url.username,
         password: url.password,
         multipleStatements: true, // Enable native multi-statement support
@@ -116,6 +120,10 @@ class MySQLDSNParser implements DSNParser {
 
       return config;
     } catch (error) {
+      // Surface the actionable missing-database message as-is
+      if (error instanceof MissingDatabaseError) {
+        throw error;
+      }
       throw new Error(
         `Failed to parse MySQL DSN: ${error instanceof Error ? error.message : String(error)}`
       );

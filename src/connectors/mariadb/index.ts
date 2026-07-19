@@ -13,6 +13,7 @@ import {
 } from "../interface.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
+import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
@@ -46,10 +47,13 @@ class MariadbDSNParser implements DSNParser {
       // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
+      const database = url.pathname ? url.pathname.substring(1) : ''; // Remove leading '/' if exists
+      requireDatabaseInDSN(database, dsn, "MariaDB");
+
       const connectionConfig: mariadb.ConnectionConfig = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 3306,
-        database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
+        database,
         user: url.username,
         password: url.password,
         multipleStatements: true, // Enable native multi-statement support
@@ -103,6 +107,10 @@ class MariadbDSNParser implements DSNParser {
 
       return connectionConfig;
     } catch (error) {
+      // Surface the actionable missing-database message as-is
+      if (error instanceof MissingDatabaseError) {
+        throw error;
+      }
       throw new Error(
         `Failed to parse MariaDB DSN: ${error instanceof Error ? error.message : String(error)}`
       );
