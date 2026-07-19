@@ -76,13 +76,8 @@ export function parseCommandLineArgs() {
 
 /**
  * Locate the env file that loadEnvFiles() would load, without loading it.
- *
- * Split out so the TOML/DSN conflict check can inspect a .env file's contents
- * without the side effect of applying it to process.env — in TOML mode the
- * .env file is otherwise never loaded, and loading it would silently change
- * unrelated settings such as PORT and TRANSPORT.
  */
-export function findEnvFile(): string | null {
+function findEnvFile(): string | null {
   // Determine if we're in development or production mode
   const isDevelopment = process.env.NODE_ENV === "development" || process.argv[1]?.includes("tsx");
 
@@ -239,57 +234,6 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
     dsn,
     source: 'individual environment variables'
   };
-}
-
-/**
- * Detect whether a single-database DSN is configured, and from where, without
- * applying anything to process.env.
- *
- * Backs the guard that keeps TOML config and DSN config mutually exclusive:
- * TOML defines sources for one or more databases, while a DSN configures
- * exactly one, so supplying both expresses two conflicting intents.
- *
- * The .env file is inspected via dotenv.parse rather than dotenv.config so that
- * merely checking for a conflict does not load unrelated settings.
- */
-export function detectDSNConfig(
-  // Injectable so tests do not depend on the developer's own .env file.
-  envPath: string | null = findEnvFile()
-): { source: string } | null {
-  const args = parseCommandLineArgs();
-
-  if (args.dsn) {
-    return { source: "--dsn command line argument" };
-  }
-
-  if (process.env.DSN) {
-    return { source: "DSN environment variable" };
-  }
-
-  if (buildDSNFromEnvParams()) {
-    return { source: "DB_* environment variables" };
-  }
-
-  // A .env file is not loaded in TOML mode, so inspect it read-only.
-  if (envPath) {
-    let parsed: Record<string, string>;
-    try {
-      parsed = dotenv.parse(fs.readFileSync(envPath));
-    } catch {
-      // An unreadable .env is not a conflict; leave it to the normal load path.
-      return null;
-    }
-
-    const envFileName = path.basename(envPath);
-    if (parsed.DSN) {
-      return { source: `DSN in ${envFileName}` };
-    }
-    if (parsed.DB_TYPE && parsed.DB_NAME) {
-      return { source: `DB_* parameters in ${envFileName}` };
-    }
-  }
-
-  return null;
 }
 
 /**
@@ -735,17 +679,20 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
           "Either remove the --id flag or use command-line DSN configuration instead."
         );
       }
-      // TOML config and DSN config are mutually exclusive: TOML defines sources
-      // for one or more databases, a DSN configures exactly one. Supplying both
-      // is ambiguous, so surface it instead of picking one.
-      const dsnConfig = detectDSNConfig();
-      if (dsnConfig) {
+      // TOML config and a --dsn flag are mutually exclusive: TOML defines
+      // sources for one or more databases, a DSN configures exactly one, so
+      // passing both flags is ambiguous.
+      //
+      // Only the flag counts. DSN environment variables — whether exported or
+      // read from a .env file — are left alone, because TOML interpolation
+      // legitimately reads them: `dsn = "${DSN}"` is a supported way to keep
+      // credentials out of the config file.
+      if (parseCommandLineArgs().dsn) {
         throw new Error(
-          `DSN configuration (${dsnConfig.source}) cannot be used with TOML configuration ` +
-          `(${tomlConfig.source}). ` +
+          `The --dsn flag cannot be used with TOML configuration (${tomlConfig.source}). ` +
           "TOML config defines database sources directly and supports multiple databases, " +
           "while a DSN configures a single database. " +
-          "Either remove the DSN configuration, or drop the --config flag."
+          "Either remove the --dsn flag or drop the --config flag."
         );
       }
 

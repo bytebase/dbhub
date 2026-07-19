@@ -134,9 +134,12 @@ DBHub supports three configuration methods:
 ### Configuration Priority Order
 
 **Database sources** come from either a TOML file (`--config`) or a DSN. TOML defines
-sources for one or more databases; a DSN configures exactly one. Passing both throws
-an error naming the conflicting DSN source — see `detectDSNConfig` and
-`resolveSourceConfigs` in `src/config/env.ts`.
+sources for one or more databases; a DSN configures exactly one, so `--config` and
+`--dsn` together throw — see `resolveSourceConfigs` in `src/config/env.ts`.
+
+The guard is deliberately limited to the `--dsn` flag. `DSN` and `DB_*` environment
+variables (exported or from `.env`) are left alone because TOML `${VAR}` interpolation
+reads them: `dsn = "${DSN}"` is a supported way to keep credentials out of the file.
 
 Without `--config`, the DSN is resolved in this order:
 1. `--dsn` command-line argument

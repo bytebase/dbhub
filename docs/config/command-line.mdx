@@ -7,7 +7,9 @@ DBHub connects to your database in one of two ways:
 - **A DSN** — one connection string for a single database.
 - **A [TOML file](/config/toml)** — passed with `--config`, for one or more databases plus per-source and per-tool settings.
 
-Choose one. A TOML file defines its sources itself, so passing `--config` together with a DSN (`--dsn`, `DSN`, `DB_*` variables, or a DSN in a `.env` file) exits with an error naming the conflict.
+Choose one. A TOML file defines its sources itself, so `--config` and `--dsn` cannot be combined.
+
+Environment variables are a different matter: `DSN` and `DB_*` stay available to a TOML file through [`${VAR}` interpolation](/config/toml#environment-variable-interpolation), which is the recommended way to keep credentials out of the file.
 
 When you use a DSN, DBHub takes it from the first of:
 

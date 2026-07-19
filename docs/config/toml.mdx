@@ -11,7 +11,7 @@ Load a TOML file with `--config`:
 npx @bytebase/dbhub@latest --config ./dbhub.toml
 ```
 
-A TOML file defines its own database sources, so it takes the place of DSN configuration. Passing `--config` alongside a DSN (`--dsn`, `DSN`, `DB_*` variables, or a DSN in a `.env` file) exits with an error naming the conflict.
+A TOML file defines its own database sources, so `--config` and `--dsn` cannot be combined. Environment variables such as `DSN` and `DB_*` remain available to the file through [`${VAR}` interpolation](#environment-variable-interpolation).
 </Note>
 
 ## Overview

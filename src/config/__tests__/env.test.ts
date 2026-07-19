@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import { buildDSNFromEnvParams, detectDSNConfig, resolveDSN, resolveHost, resolveId } from '../env.js';
+import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
@@ -619,71 +616,6 @@ describe('Environment Configuration Tests', () => {
     });
   });
 
-  describe('detectDSNConfig', () => {
-    // envPath is passed explicitly throughout so these never depend on whether
-    // the developer running them happens to have a .env file.
-    const originalArgv = process.argv;
-
-    beforeEach(() => {
-      process.argv = ['node', 'script.js'];
-    });
-
-    afterEach(() => {
-      process.argv = originalArgv;
-    });
-
-    it('returns null when no DSN is configured anywhere', () => {
-      expect(detectDSNConfig(null)).toBeNull();
-    });
-
-    it('detects the --dsn flag', () => {
-      process.argv = ['node', 'script.js', '--dsn=sqlite://:memory:'];
-
-      expect(detectDSNConfig(null)).toEqual({ source: '--dsn command line argument' });
-    });
-
-    it('detects the DSN environment variable', () => {
-      process.env.DSN = 'sqlite://:memory:';
-
-      expect(detectDSNConfig(null)).toEqual({ source: 'DSN environment variable' });
-    });
-
-    it('detects individual DB_* environment variables', () => {
-      process.env.DB_TYPE = 'sqlite';
-      process.env.DB_NAME = 'test.db';
-
-      expect(detectDSNConfig(null)).toEqual({ source: 'DB_* environment variables' });
-    });
-
-    it('detects a DSN in a .env file without applying it to process.env', () => {
-      const envFile = path.join(os.tmpdir(), `detect_dsn_${Date.now()}.env`);
-      fs.writeFileSync(envFile, 'DSN=sqlite://from-env-file.db\nPORT=9999\n');
-
-      try {
-        expect(detectDSNConfig(envFile)).toEqual({
-          source: `DSN in ${path.basename(envFile)}`,
-        });
-        // The whole point of parsing rather than loading: checking for a
-        // conflict must not pull unrelated settings into the process.
-        expect(process.env.DSN).toBeUndefined();
-        expect(process.env.PORT).not.toBe('9999');
-      } finally {
-        fs.unlinkSync(envFile);
-      }
-    });
-
-    it('ignores a .env file that configures no database', () => {
-      const envFile = path.join(os.tmpdir(), `detect_nodsn_${Date.now()}.env`);
-      fs.writeFileSync(envFile, 'PORT=9999\nTRANSPORT=http\n');
-
-      try {
-        expect(detectDSNConfig(envFile)).toBeNull();
-      } finally {
-        fs.unlinkSync(envFile);
-      }
-    });
-  });
-
   describe('resolveSourceConfigs TOML/DSN conflict', () => {
     const originalArgv = process.argv;
 
@@ -700,30 +632,37 @@ describe('Environment Configuration Tests', () => {
       vi.mocked(loadTomlConfig).mockReturnValue(null);
     });
 
-    it('rejects a DSN env var supplied alongside TOML config', async () => {
-      process.env.DSN = 'sqlite://:memory:';
-      const { resolveSourceConfigs } = await import('../env.js');
-
-      await expect(resolveSourceConfigs()).rejects.toThrow(
-        /DSN configuration \(DSN environment variable\) cannot be used with TOML configuration/
-      );
-    });
-
     it('rejects a --dsn flag supplied alongside TOML config', async () => {
       process.argv = ['node', 'script.js', '--dsn=sqlite://:memory:'];
       const { resolveSourceConfigs } = await import('../env.js');
 
       await expect(resolveSourceConfigs()).rejects.toThrow(
-        /DSN configuration \(--dsn command line argument\) cannot be used with TOML configuration/
+        /The --dsn flag cannot be used with TOML configuration \(dbhub.toml\)/
       );
     });
 
-    it('names the conflicting source so the user knows what to remove', async () => {
+    it('allows a DSN env var alongside TOML config', async () => {
+      // TOML interpolation reads process.env, so `dsn = "${DSN}"` in the config
+      // file is a supported way to keep credentials out of it. An exported DSN
+      // is config material for TOML, not a competing single-database setup.
+      process.env.DSN = 'postgres://user:pass@localhost:5432/mydb';
+      const { resolveSourceConfigs } = await import('../env.js');
+
+      await expect(resolveSourceConfigs()).resolves.toMatchObject({
+        source: 'dbhub.toml',
+      });
+    });
+
+    it('allows DB_* env vars alongside TOML config', async () => {
+      // Same reasoning: these may exist purely to feed ${DB_PASSWORD}-style
+      // interpolation in the TOML file.
       process.env.DB_TYPE = 'sqlite';
       process.env.DB_NAME = 'test.db';
       const { resolveSourceConfigs } = await import('../env.js');
 
-      await expect(resolveSourceConfigs()).rejects.toThrow(/DB_\* environment variables/);
+      await expect(resolveSourceConfigs()).resolves.toMatchObject({
+        source: 'dbhub.toml',
+      });
     });
   });
 });
