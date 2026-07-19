@@ -86,13 +86,14 @@ function findEnvFile(): string | null {
     ? [".env.local", ".env"] // In development, try .env.local first, then .env
     : [".env"]; // In production, only look for .env
 
-  // Build paths to check for environment files
+  // Build paths to check for environment files. The working directory is
+  // checked before the package root, so a project's own .env wins over one
+  // shipped alongside the install.
   const envPaths = [];
   for (const fileName of envFileNames) {
     envPaths.push(
-      fileName, // Current working directory
-      path.join(__dirname, "..", "..", fileName), // Two levels up (src/config -> src -> root)
-      path.join(process.cwd(), fileName) // Explicit current working directory
+      path.join(process.cwd(), fileName), // Current working directory
+      path.join(__dirname, "..", "..", fileName) // Two levels up (src/config -> src -> root)
     );
   }
 
@@ -357,7 +358,7 @@ export function resolvePort(): { port: number; source: string } {
  *
  * Returns the trimmed value, or undefined if the flag is absent.
  */
-function requireFlagValue(
+export function requireFlagValue(
   flag: string,
   args: Record<string, string>,
   example: string
