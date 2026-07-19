@@ -17,6 +17,10 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import {
+  sqlServerDynamicSqlKeywords,
+  sqlServerDynamicSqlPattern,
+} from "../../utils/allowed-keywords.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
@@ -723,8 +727,17 @@ export class SQLServerConnector implements Connector {
    * we reject dangerous keywords in the stripped SQL before opening the
    * transaction:
    * - COMMIT/ROLLBACK: would end the outer transaction, letting writes persist
-   * - EXEC/EXECUTE/sp_executesql/xp_cmdshell: dynamic SQL can carry hidden
-   *   COMMIT/ROLLBACK inside string literals that stripCommentsAndStrings removes
+   * - Dynamic SQL (sqlServerDynamicSqlKeywords): can carry hidden COMMIT/ROLLBACK
+   *   inside string literals that stripCommentsAndStrings removes
+   *
+   * The dynamic SQL keywords are imported from the read-only classifier rather
+   * than redeclared, so the classifier and this backstop cannot drift apart.
+   *
+   * Note the COMMIT/ROLLBACK check is SQL Server-only by design. MySQL/MariaDB
+   * wrap batches in a transaction too, but there `commit`, `prepare` and
+   * `execute` are absent from their allow-lists in allowedKeywords, and
+   * execute-sql.ts requires every split statement to pass the classifier — so a
+   * transaction-control statement can never reach their backstop.
    */
   private async executeReadOnly(
     processedSQL: string,
@@ -736,9 +749,11 @@ export class SQLServerConnector implements Connector {
         "Read-only mode: transaction control statements (COMMIT, ROLLBACK) are not allowed",
       );
     }
-    if (/\b(?:exec|execute|sp_executesql|xp_cmdshell)\b/.test(cleaned)) {
+    if (sqlServerDynamicSqlPattern.test(cleaned)) {
       throw new Error(
-        "Read-only mode: dynamic SQL execution (EXEC, EXECUTE, sp_executesql, xp_cmdshell) is not allowed",
+        `Read-only mode: dynamic SQL execution (${sqlServerDynamicSqlKeywords
+          .map((k) => k.toUpperCase())
+          .join(", ")}) is not allowed`,
       );
     }
 
