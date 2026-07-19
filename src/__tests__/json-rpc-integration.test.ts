@@ -8,17 +8,33 @@ describe('JSON RPC Integration Tests', () => {
   let serverProcess: ChildProcess | null = null;
   let testDbPath: string;
   let baseUrl: string;
+  let isolatedCwd: string;
   const testPort = 3001;
+  const startupLogs: string[] = [];
 
   beforeAll(async () => {
     // Create a temporary SQLite database file
     const tempDir = os.tmpdir();
     testDbPath = path.join(tempDir, `json_rpc_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
-    
+
+    // The server discovers ./dbhub.toml relative to its own cwd, and TOML config
+    // outranks the DSN env var below. Running from the repo root would therefore
+    // silently ignore DSN and connect to whatever a developer's local (gitignored)
+    // dbhub.toml names, so the server would fail to start on any machine that has
+    // one. Spawn from an empty directory to isolate config discovery.
+    isolatedCwd = fs.mkdtempSync(path.join(tempDir, 'json_rpc_cwd_'));
+
     baseUrl = `http://localhost:${testPort}`;
-    
+
+    // Invoke tsx directly via node rather than `pnpm dev`: `pnpm dev` runs the
+    // backend and the Vite frontend under `concurrently`, and the frontend is both
+    // unnecessary here and leaked a stray dev server on every run.
+    const tsxCli = path.resolve(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const entry = path.resolve(process.cwd(), 'src', 'index.ts');
+
     // Start the server as a child process
-    serverProcess = spawn('pnpm', ['dev'], {
+    serverProcess = spawn(process.execPath, [tsxCli, entry, '--transport=http'], {
+      cwd: isolatedCwd,
       env: {
         ...process.env,
         DSN: `sqlite://${testDbPath}`,
@@ -29,13 +45,15 @@ describe('JSON RPC Integration Tests', () => {
       stdio: 'pipe'
     });
 
-    // Handle server output
+    // Handle server output. Retained for the failure message below: without the
+    // server's own logs, a startup failure surfaces only as a timeout with no
+    // indication of the cause.
     serverProcess.stdout?.on('data', (data) => {
-      console.log(`Server stdout: ${data}`);
+      startupLogs.push(data.toString());
     });
 
     serverProcess.stderr?.on('data', (data) => {
-      console.error(`Server stderr: ${data}`);
+      startupLogs.push(data.toString());
     });
 
     // Wait for server to start up
@@ -65,7 +83,7 @@ describe('JSON RPC Integration Tests', () => {
     }
     
     if (!serverReady) {
-      throw new Error('Server did not start within expected time');
+      throw new Error(`Server did not start within expected time. Logs:\n${startupLogs.join('')}`);
     }
     
     // Create test tables and data via HTTP request
@@ -104,17 +122,22 @@ describe('JSON RPC Integration Tests', () => {
       serverProcess.kill('SIGTERM');
       
       // Wait for process to exit
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         if (serverProcess) {
-          serverProcess.on('exit', resolve);
-          setTimeout(() => {
+          // Without clearing this on normal exit, the pending timer keeps
+          // the Vitest process alive until the 5s tail elapses.
+          const killTimeout = setTimeout(() => {
             if (serverProcess && !serverProcess.killed) {
               serverProcess.kill('SIGKILL');
             }
-            resolve(void 0);
+            resolve();
           }, 5000);
+          serverProcess.on('exit', () => {
+            clearTimeout(killTimeout);
+            resolve();
+          });
         } else {
-          resolve(void 0);
+          resolve();
         }
       });
     }
@@ -122,6 +145,11 @@ describe('JSON RPC Integration Tests', () => {
     // Clean up the test database file
     if (testDbPath && fs.existsSync(testDbPath)) {
       fs.unlinkSync(testDbPath);
+    }
+
+    // Clean up the isolated working directory
+    if (isolatedCwd && fs.existsSync(isolatedCwd)) {
+      fs.rmSync(isolatedCwd, { recursive: true, force: true });
     }
   });
 
@@ -150,6 +178,13 @@ describe('JSON RPC Integration Tests', () => {
     // Server uses JSON responses in stateless mode (no SSE)
     return await response.json();
   }
+
+  it('uses the DSN env var, not an ambient dbhub.toml', () => {
+    // Guards the isolated cwd above: if the server is ever spawned from the repo
+    // root again, a developer's local dbhub.toml wins over DSN and this reports
+    // the cause directly instead of an opaque startup timeout.
+    expect(startupLogs.join('')).toContain('Configuration source: environment variable');
+  });
 
   describe('execute_sql JSON RPC calls', () => {
     it('should execute a simple SELECT query successfully', async () => {
