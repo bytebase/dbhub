@@ -193,12 +193,20 @@ Command-line flags are passed when starting DBHub. These have the highest priori
   </Note>
 
   <Warning>
-    **Omitting the database component is not supported.** For MySQL and MariaDB
-    a DSN such as `mysql://user:pass@localhost:3306/` is currently accepted and
-    connects without a default database, which makes schema discovery enumerate
-    every database on the server. This behavior is untested and may change —
-    do not rely on it. Always name a database, and use a TOML config for
-    multi-database setups.
+    **The database component is required.** For MySQL and MariaDB, a DSN that
+    names no database — `mysql://user:pass@localhost:3306/` or
+    `mysql://user:pass@localhost:3306` — is rejected at startup:
+
+    ```
+    MySQL DSN must name a database.
+    Provided: mysql://user:*******@localhost:3306/
+    Add the database to the DSN, e.g. ...:3306/mydb
+    ```
+
+    MySQL can connect without a default database, but DBHub does not support
+    it: unqualified SQL fails with "No database selected", and schema discovery
+    would fan out across every database on the server. Use a
+    [TOML config](/config/toml) with one source per database instead.
   </Warning>
 
   **DSN Query Parameters:**

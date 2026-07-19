@@ -587,6 +587,20 @@ database = "other_db"
         expect(() => loadTomlConfig()).toThrow("conflicting database");
       });
 
+      it('should throw error when a database field is paired with a DSN naming no database', () => {
+        // The field is never injected into the DSN, so accepting this would
+        // silently connect without a default database
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/"
+database = "myapp"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("the DSN names no database");
+      });
+
       it('should throw error when password field conflicts with DSN password', () => {
         const tomlContent = `
 [[sources]]
