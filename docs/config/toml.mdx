@@ -4,6 +4,14 @@ title: "TOML Configuration"
 
 TOML configuration is the recommended way to configure DBHub for multi-database setups and advanced configurations. It provides more flexibility than command-line options or environment variables.
 
+<Note>
+TOML configuration replaces DSN configuration rather than layering on top of it.
+DBHub exits with an error if it finds a TOML config alongside a DSN (`--dsn`, `DSN`,
+`DB_*` variables, or a DSN in a `.env` file), since the two express conflicting
+intents: TOML defines sources for one or more databases, a DSN configures exactly
+one. Remove the DSN, or point `--config` elsewhere.
+</Note>
+
 ## Overview
 
 TOML configuration enables:

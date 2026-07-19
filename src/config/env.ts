@@ -75,10 +75,14 @@ export function parseCommandLineArgs() {
 }
 
 /**
- * Load environment files from various locations
- * Returns the name of the file that was loaded, or null if none was found
+ * Locate the env file that loadEnvFiles() would load, without loading it.
+ *
+ * Split out so the TOML/DSN conflict check can inspect a .env file's contents
+ * without the side effect of applying it to process.env — in TOML mode the
+ * .env file is otherwise never loaded, and loading it would silently change
+ * unrelated settings such as PORT and TRANSPORT.
  */
-export function loadEnvFiles(): string | null {
+export function findEnvFile(): string | null {
   // Determine if we're in development or production mode
   const isDevelopment = process.env.NODE_ENV === "development" || process.argv[1]?.includes("tsx");
 
@@ -97,44 +101,56 @@ export function loadEnvFiles(): string | null {
     );
   }
 
-  // Try to load the first env file found from the prioritized locations
   for (const envPath of envPaths) {
-    console.error(`Checking for env file: ${envPath}`);
     if (fs.existsSync(envPath)) {
-      dotenv.config({ path: envPath });
-
-      // Check for deprecated environment variables
-      if (process.env.READONLY !== undefined) {
-        console.error("\nERROR: READONLY environment variable is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  readonly = true\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
-        process.exit(1);
-      }
-
-      if (process.env.MAX_ROWS !== undefined) {
-        console.error("\nERROR: MAX_ROWS environment variable is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  max_rows = 1000\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
-        process.exit(1);
-      }
-
-      // Return the name of the file that was loaded
-      return path.basename(envPath);
+      return envPath;
     }
+  }
+
+  return null;
+}
+
+/**
+ * Load environment files from various locations
+ * Returns the name of the file that was loaded, or null if none was found
+ */
+export function loadEnvFiles(): string | null {
+  const envPath = findEnvFile();
+
+  if (envPath) {
+    dotenv.config({ path: envPath });
+
+    // Check for deprecated environment variables
+    if (process.env.READONLY !== undefined) {
+      console.error("\nERROR: READONLY environment variable is no longer supported.");
+      console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+      console.error("  [[sources]]");
+      console.error("  id = \"default\"");
+      console.error("  dsn = \"...\"\n");
+      console.error("  [[tools]]");
+      console.error("  name = \"execute_sql\"");
+      console.error("  source = \"default\"");
+      console.error("  readonly = true\n");
+      console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
+      process.exit(1);
+    }
+
+    if (process.env.MAX_ROWS !== undefined) {
+      console.error("\nERROR: MAX_ROWS environment variable is no longer supported.");
+      console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+      console.error("  [[sources]]");
+      console.error("  id = \"default\"");
+      console.error("  dsn = \"...\"\n");
+      console.error("  [[tools]]");
+      console.error("  name = \"execute_sql\"");
+      console.error("  source = \"default\"");
+      console.error("  max_rows = 1000\n");
+      console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
+      process.exit(1);
+    }
+
+    // Return the name of the file that was loaded
+    return path.basename(envPath);
   }
 
   return null;
@@ -229,6 +245,59 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
  * Resolve DSN from command line args, environment variables, or .env files
  * Returns the DSN and its source, or null if not found
  */
+/**
+ * Detect whether a single-database DSN is configured, and from where, without
+ * applying anything to process.env.
+ *
+ * Used to reject the combination of TOML config and DSN config: TOML defines
+ * sources for one or more databases, while a DSN configures exactly one, so
+ * supplying both expresses two conflicting intents. Silently preferring one
+ * (the previous behavior) meant a stray DSN looked ignored for no visible
+ * reason.
+ *
+ * The .env file is inspected via dotenv.parse rather than dotenv.config so that
+ * merely checking for a conflict does not load unrelated settings.
+ */
+export function detectDSNConfig(
+  // Injectable so tests do not depend on the developer's own .env file.
+  envPath: string | null = findEnvFile()
+): { source: string } | null {
+  const args = parseCommandLineArgs();
+
+  if (args.dsn) {
+    return { source: "--dsn command line argument" };
+  }
+
+  if (process.env.DSN) {
+    return { source: "DSN environment variable" };
+  }
+
+  if (buildDSNFromEnvParams()) {
+    return { source: "DB_* environment variables" };
+  }
+
+  // A .env file is not loaded in TOML mode, so inspect it read-only.
+  if (envPath) {
+    let parsed: Record<string, string>;
+    try {
+      parsed = dotenv.parse(fs.readFileSync(envPath));
+    } catch {
+      // An unreadable .env is not a conflict; leave it to the normal load path.
+      return null;
+    }
+
+    const envFileName = path.basename(envPath);
+    if (parsed.DSN) {
+      return { source: `DSN in ${envFileName}` };
+    }
+    if (parsed.DB_TYPE && parsed.DB_NAME) {
+      return { source: `DB_* parameters in ${envFileName}` };
+    }
+  }
+
+  return null;
+}
+
 export function resolveDSN(): { dsn: string; source: string; isDemo?: boolean } | null {
   // Get command line arguments
   const args = parseCommandLineArgs();
@@ -667,6 +736,20 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
           "Either remove the --id flag or use command-line DSN configuration instead."
         );
       }
+      // TOML config and DSN config are mutually exclusive: TOML defines sources
+      // for one or more databases, a DSN configures exactly one. Supplying both
+      // is ambiguous, so reject it rather than silently ignoring the DSN.
+      const dsnConfig = detectDSNConfig();
+      if (dsnConfig) {
+        throw new Error(
+          `DSN configuration (${dsnConfig.source}) cannot be used with TOML configuration. ` +
+          "TOML config defines database sources directly and supports multiple databases, " +
+          "while a DSN configures a single database. " +
+          "Either remove the DSN configuration, or remove the TOML config file " +
+          "(or point --config elsewhere)."
+        );
+      }
+
       // Note: --readonly flag is deprecated but no longer blocks TOML usage
       // The warning is shown in isReadOnlyMode() function
       return tomlConfig;

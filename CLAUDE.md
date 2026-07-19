@@ -118,8 +118,8 @@ DBHub supports three configuration methods (in priority order):
   - Set individual parameters: `DB_TYPE`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
 - SSH tunnel via environment: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD`, `SSH_KEY`, `SSH_PASSPHRASE`
 
-### 3. Command-Line Arguments (Single Database, Highest Priority)
-- `--dsn`: Database connection string
+### 3. Command-Line Arguments
+- `--dsn`: Database connection string (single database; cannot be combined with TOML config)
 - `--transport`: `stdio` (default) or `http` for streamable HTTP transport (endpoint: `/mcp`)
 - `--port`: HTTP server port (default: 8080)
 - `--host`: HTTP bind host (default: `0.0.0.0`; env `DBHUB_HOST`)
@@ -132,10 +132,25 @@ DBHub supports three configuration methods (in priority order):
 - Documentation: https://dbhub.ai/config/command-line
 
 ### Configuration Priority Order
-1. Command-line arguments (highest)
-2. TOML config file (if present)
-3. Environment variables
+
+**Database sources** are configured either by TOML *or* by a DSN — never both. TOML
+defines sources for one or more databases; a DSN configures exactly one. Supplying
+both is rejected at startup with an error naming the conflicting DSN source, rather
+than silently preferring one. See `detectDSNConfig`/`resolveSourceConfigs` in
+`src/config/env.ts`.
+
+When no TOML config is present, the DSN is resolved in this order:
+1. `--dsn` command-line argument (highest)
+2. `DSN` environment variable
+3. Individual `DB_*` environment variables
 4. `.env` files (`.env.local` in development, `.env` in production)
+
+**All other settings** (`--transport`, `--port`, `--host`, `--allowed-hosts`, …) are
+not expressible in TOML and follow the conventional order:
+1. Command-line arguments (highest)
+2. Environment variables
+3. `.env` files
+4. Built-in defaults
 
 ## Database Connectors
 
