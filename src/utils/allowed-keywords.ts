@@ -78,6 +78,38 @@ export const sqlServerDynamicSqlPattern = new RegExp(
 );
 
 /**
+ * T-SQL pass-through / ad-hoc data source table functions. Unlike the dynamic
+ * SQL primitives above, these appear as ordinary table sources inside a plain
+ * SELECT, so both read-only layers miss them:
+ * - The classifier cannot see the payload, because OPENQUERY carries it as a
+ *   string literal that stripCommentsAndStrings deliberately removes.
+ * - The rollback backstop cannot contain it, because the work executes on the
+ *   remote/ad-hoc source rather than in the local transaction.
+ *
+ * OPENROWSET additionally reads server-side files in its BULK form
+ * (`OPENROWSET(BULK N'C:\...', SINGLE_CLOB)`), which exfiltrates data without
+ * writing anything.
+ *
+ * Shared with executeReadOnly in src/connectors/sqlserver/index.ts on the same
+ * single-source-of-truth basis as sqlServerDynamicSqlKeywords.
+ */
+export const sqlServerPassThroughKeywords = [
+  "openquery",
+  "openrowset",
+  "opendatasource",
+] as const;
+
+/**
+ * Matches a pass-through data source in call position. The trailing `\s*\(` is
+ * required so an ordinary column named `openquery` still classifies as
+ * read-only — only the invocation form is a bypass.
+ */
+export const sqlServerPassThroughPattern = new RegExp(
+  `\\b(?:${sqlServerPassThroughKeywords.join("|")})\\s*\\(`,
+  "i",
+);
+
+/**
  * Extended pattern for SQL Server: base mutating keywords plus the dynamic SQL
  * primitives above.
  */
@@ -144,6 +176,13 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
     allowedKeywords[connectorType as ConnectorType] || [];
 
   if (!keywordList.includes(firstWord)) {
+    return false;
+  }
+
+  // SQL Server pass-through data sources escape both read-only layers, so they
+  // are rejected wherever they appear — not just under WITH, since the common
+  // form is a plain `SELECT ... FROM OPENQUERY(...)`.
+  if (connectorType === "sqlserver" && sqlServerPassThroughPattern.test(cleanedSQL)) {
     return false;
   }
 

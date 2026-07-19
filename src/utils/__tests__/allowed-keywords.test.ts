@@ -284,6 +284,64 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("SQL Server pass-through data source bypass prevention", () => {
+    it("should reject OPENQUERY, whose payload runs on the remote server", () => {
+      expect(
+        isReadOnlySQL("SELECT * FROM OPENQUERY(linked_srv, 'DELETE FROM customers')", "sqlserver")
+      ).toBe(false);
+    });
+
+    it("should reject OPENROWSET bulk file reads", () => {
+      expect(
+        isReadOnlySQL("SELECT * FROM OPENROWSET(BULK N'C:\\secrets\\config.ini', SINGLE_CLOB) AS x", "sqlserver")
+      ).toBe(false);
+    });
+
+    it("should reject OPENDATASOURCE ad-hoc connections", () => {
+      expect(
+        isReadOnlySQL(
+          "SELECT * FROM OPENDATASOURCE('SQLNCLI', 'Server=evil;Trusted_Connection=yes').db.dbo.t",
+          "sqlserver"
+        )
+      ).toBe(false);
+    });
+
+    it("should reject OPENQUERY nested inside a CTE", () => {
+      expect(
+        isReadOnlySQL(
+          "WITH cte AS (SELECT * FROM OPENQUERY(srv, 'DROP TABLE t')) SELECT * FROM cte",
+          "sqlserver"
+        )
+      ).toBe(false);
+    });
+
+    it("should reject OPENQUERY after multi-statement split", () => {
+      expect(
+        areAllStatementsReadOnly("SELECT 1; SELECT * FROM OPENQUERY(srv, 'DELETE FROM t')", "sqlserver")
+      ).toBe(false);
+    });
+
+    it("should not reject the word openquery inside a string literal", () => {
+      expect(isReadOnlySQL("SELECT * FROM logs WHERE note = 'openquery(x)'", "sqlserver")).toBe(true);
+    });
+
+    it("should not reject the word openrowset in a comment", () => {
+      expect(isReadOnlySQL("/* OPENROWSET(BULK 'x') */ SELECT 1", "sqlserver")).toBe(true);
+    });
+
+    it("should not reject identifiers that merely start with a pass-through name", () => {
+      expect(isReadOnlySQL("SELECT openquery_audit FROM logs", "sqlserver")).toBe(true);
+    });
+
+    it("should not reject a bare column named openquery (no call syntax)", () => {
+      expect(isReadOnlySQL("SELECT openquery FROM logs", "sqlserver")).toBe(true);
+    });
+
+    it("should leave other dialects unaffected", () => {
+      expect(isReadOnlySQL("SELECT * FROM openquery(a, b)", "postgres")).toBe(true);
+    });
+  });
+
   describe("edge cases", () => {
     it("should treat empty SQL after comment stripping as not read-only", () => {
       expect(isReadOnlySQL("-- just a comment", "postgres")).toBe(false);
