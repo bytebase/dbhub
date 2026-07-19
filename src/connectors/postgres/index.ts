@@ -21,6 +21,7 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
+import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
  * PostgreSQL DSN Parser
@@ -195,6 +196,13 @@ export class PostgresConnector implements Connector {
       const client = await this.pool.connect();
       client.release();
     } catch (err) {
+      // Tear down the pool if it was created before the failure, otherwise it
+      // strands sockets and keeps the event loop alive (see closeQuietly).
+      if (this.pool) {
+        const pool = this.pool;
+        this.pool = null;
+        await closeQuietly(() => pool.end());
+      }
       console.error("Failed to connect to PostgreSQL database:", err);
       throw err;
     }

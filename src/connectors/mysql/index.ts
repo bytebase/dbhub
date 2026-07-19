@@ -18,6 +18,7 @@ import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statem
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { isTiDBVersion } from "../../utils/server-flavor.js";
+import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
  * MySQL DSN Parser
@@ -172,6 +173,13 @@ export class MySQLConnector implements Connector {
       const [rows] = (await this.pool.query("SELECT VERSION() AS version")) as [any[], any];
       this.supportsReadOnlyTransaction = !isTiDBVersion(rows[0]?.version);
     } catch (err) {
+      // Tear down the pool if it was created before the failure, otherwise it
+      // strands sockets and keeps the event loop alive (see closeQuietly).
+      if (this.pool) {
+        const pool = this.pool;
+        this.pool = null;
+        await closeQuietly(() => pool.end());
+      }
       console.error("Failed to connect to MySQL database:", err);
       throw err;
     }
