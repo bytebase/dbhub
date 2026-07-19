@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -57,6 +57,12 @@ describe("connect() failure cleanup", () => {
     vi.clearAllMocks();
     // The connectors log the failure; keep test output readable.
     vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restore the console spy: clearAllMocks() resets calls but leaves the spy
+    // installed, so without this each test stacks another wrapper on the last.
+    vi.restoreAllMocks();
   });
 
   it("MySQL closes the pool when the version probe fails", async () => {
