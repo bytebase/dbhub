@@ -181,33 +181,16 @@ Command-line flags are passed when starting DBHub. These have the highest priori
   </Tabs>
 
   <Note>
-    **One connection targets one database.** The database named in the DSN is
-    fixed for the life of the connection. `USE other_db;` does not switch it:
-    the statement is rejected in read-only mode, and even with writes enabled
-    each query checks out a fresh pooled connection, so the change would not
-    carry to the next tool call.
+    **One connection targets one database.** The database component is required,
+    and the database it names is fixed for the life of the connection.
+    `USE other_db;` does not switch it: the statement is rejected in read-only
+    mode, and even with writes enabled each query checks out a fresh pooled
+    connection, so the change would not carry to the next tool call.
 
     To work with several databases, define one `[[sources]]` entry per database
     in a [TOML config file](/config/toml) and run a single DBHub instance —
     each source gets its own set of tools.
   </Note>
-
-  <Warning>
-    **The database component is required.** For MySQL and MariaDB, a DSN that
-    names no database — `mysql://user:pass@localhost:3306/` or
-    `mysql://user:pass@localhost:3306` — is rejected at startup:
-
-    ```
-    MySQL DSN must name a database.
-    Provided: mysql://user:*******@localhost:3306/
-    Add the database to the DSN, e.g. ...:3306/mydb
-    ```
-
-    MySQL can connect without a default database, but DBHub does not support
-    it: unqualified SQL fails with "No database selected", and schema discovery
-    would fan out across every database on the server. Use a
-    [TOML config](/config/toml) with one source per database instead.
-  </Warning>
 
   **DSN Query Parameters:**
 
