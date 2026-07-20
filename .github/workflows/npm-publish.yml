@@ -37,7 +37,7 @@ on:
     branches:
       - main
     paths:
-      - 'package.json'
+      - "package.json"
 
 jobs:
   build-and-publish:
@@ -60,7 +60,6 @@ jobs:
       # Upgrade npm for OIDC trusted publishing support (requires npm 11.5+).
       # Bootstrap without npm since Node 22.22.2 ships with broken npm (missing promise-retry).
       # Pinned to 11.x: npm 12.0.0's `publish --provenance` is broken
-      # (Cannot find module 'sigstore'), which failed the 0.23.0 release.
       - name: Upgrade npm
         run: |
           npm_tarball=$(curl -fsSL https://registry.npmjs.org/npm/latest | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).dist.tarball")
@@ -88,14 +87,14 @@ jobs:
         run: |
           # Get current version from package.json
           CURRENT_VERSION=$(jq -r '.version' package.json)
-          
+
           # CASE 1: Manual workflow trigger with specified version
           if [ -n "${{ inputs.version }}" ]; then
             VERSION="${{ inputs.version }}"
             TAG="${{ inputs.tag }}"
             SHOULD_PUBLISH="true"
             echo "Manual trigger: Using provided version ${VERSION} with tag ${TAG}"
-          
+
           # CASE 2: Automatic trigger from package.json changes
           else
             VERSION="${CURRENT_VERSION}"
@@ -121,12 +120,12 @@ jobs:
               fi
             fi
           fi
-          
+
           # Store values as environment variables for use in later steps
           echo "PACKAGE_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "NPM_TAG=${TAG}" >> $GITHUB_ENV
           echo "SHOULD_PUBLISH=${SHOULD_PUBLISH}" >> $GITHUB_ENV
-          
+
           # Summary message
           if [ "${SHOULD_PUBLISH}" = "true" ]; then
             echo "Publishing version: ${VERSION} with tag: ${TAG}"
@@ -165,7 +164,7 @@ jobs:
           # No NODE_AUTH_TOKEN needed - authentication via GitHub OIDC
           npm publish --access public --tag ${{ env.NPM_TAG }} --provenance
           echo "✅ Successfully published to npm with provenance!"
-          
+
       # Display a message when skipping publication
       - name: Skip publishing
         if: env.SHOULD_PUBLISH != 'true'
