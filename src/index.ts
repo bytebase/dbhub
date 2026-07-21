@@ -10,6 +10,7 @@ const connectorModules = [
   { load: () => import("./connectors/sqlite/index.js"), name: "SQLite", driver: "node:sqlite" },
   { load: () => import("./connectors/mysql/index.js"), name: "MySQL", driver: "mysql2" },
   { load: () => import("./connectors/mariadb/index.js"), name: "MariaDB", driver: "mariadb" },
+  { load: () => import("./connectors/hana/index.js"), name: "SAP HANA", driver: "@sap/hana-client" },
 ];
 
 loadConnectors(connectorModules)

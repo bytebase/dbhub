@@ -2,7 +2,7 @@
   "name": "dbhub",
   "version": "0.24.0",
   "mcpName": "io.github.bytebase/dbhub",
-  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB",
+  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, SQLite, MariaDB, SAP HANA",
   "repository": {
     "type": "git",
     "url": "https://github.com/bytebase/dbhub.git"
@@ -54,6 +54,7 @@
   "optionalDependencies": {
     "@aws-sdk/rds-signer": "^3.1001.0",
     "@azure/identity": "^4.8.0",
+    "@sap/hana-client": "^2.20.0",
     "mariadb": "^3.4.0",
     "mssql": "^11.0.1",
     "mysql2": "^3.13.0",

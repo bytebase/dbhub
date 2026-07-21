@@ -6,6 +6,7 @@ import { PostgresConnector } from '../postgres/index.js';
 import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
 import { SQLServerConnector } from '../sqlserver/index.js';
+import { HanaConnector } from '../hana/index.js';
 
 describe('DSN Parser - PostgreSQL SSL Modes', () => {
   const connector = new PostgresConnector();
@@ -258,5 +259,100 @@ describe('DSN Parser - missing database component', () => {
       const config = await parser.parse(`${scheme}://user:pass@localhost:3306/mydb`);
       expect(config.database).toBe('mydb');
     });
+  });
+});
+
+describe('DSN Parser - SAP HANA', () => {
+  const parser = new HanaConnector().dsnParser;
+
+  it('parses host, port, user and password', async () => {
+    const config = await parser.parse('hana://user:pass@hana.example.com:30015');
+    expect(config.host).toBe('hana.example.com');
+    expect(config.port).toBe(30015);
+    expect(config.uid).toBe('user');
+    expect(config.pwd).toBe('pass');
+  });
+
+  it('defaults the port to 30015 when omitted', async () => {
+    const config = await parser.parse('hana://user:pass@hana.example.com');
+    expect(config.port).toBe(30015);
+  });
+
+  it('reads the tenant database from the path segment', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015/H00');
+    expect(config.databaseName).toBe('H00');
+  });
+
+  it('reads the tenant database from the databaseName query param', async () => {
+    const config = await parser.parse('hana://user:pass@host:30041?databaseName=TENANT1');
+    expect(config.databaseName).toBe('TENANT1');
+  });
+
+  it('maps sslmode=disable to encrypt=false', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015?sslmode=disable');
+    expect(config.encrypt).toBe(false);
+  });
+
+  it('maps sslmode=require to encrypt=true without certificate validation', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015?sslmode=require');
+    expect(config.encrypt).toBe(true);
+    expect(config.sslValidateCertificate).toBe(false);
+  });
+
+  it('maps sslmode=verify-full to encrypt=true with certificate validation', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015?sslmode=verify-full');
+    expect(config.encrypt).toBe(true);
+    expect(config.sslValidateCertificate).toBe(true);
+  });
+
+  it('rejects contradictory TLS config (verify-full with encrypt=false)', async () => {
+    await expect(
+      parser.parse('hana://user:pass@host:30015?sslmode=verify-full&encrypt=false')
+    ).rejects.toThrow(/Contradictory TLS config/);
+  });
+
+  it('parses encrypt case-insensitively', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015?encrypt=TRUE');
+    expect(config.encrypt).toBe(true);
+  });
+
+  it('rejects an invalid boolean for encrypt', async () => {
+    await expect(
+      parser.parse('hana://user:pass@host:30015?encrypt=yes')
+    ).rejects.toThrow(/Invalid boolean/);
+  });
+
+  it('rejects an unknown sslmode', async () => {
+    await expect(
+      parser.parse('hana://user:pass@host:30015?sslmode=bogus')
+    ).rejects.toThrow(/Invalid sslmode/);
+  });
+
+  it('maps connectionTimeoutSeconds to connectTimeout in milliseconds', async () => {
+    const config = await parser.parse('hana://user:pass@host:30015', {
+      connectionTimeoutSeconds: 15,
+    });
+    expect(config.connectTimeout).toBe(15000);
+  });
+
+  it('accepts its own sample DSN as valid', () => {
+    expect(parser.isValidDSN(parser.getSampleDSN())).toBe(true);
+  });
+
+  it('only accepts the hana:// scheme', () => {
+    expect(parser.isValidDSN('hana://u:p@h:30015')).toBe(true);
+    expect(parser.isValidDSN('hdb://u:p@h:30015')).toBe(false);
+  });
+
+  it('rejects a non-HANA DSN', async () => {
+    await expect(parser.parse('mysql://user:pass@host:3306/db')).rejects.toThrow(
+      'Invalid SAP HANA DSN format'
+    );
+  });
+
+  it('does not leak the password in the error message', async () => {
+    await expect(parser.parse('postgres://user:hunter2@host:5432/db')).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining('hunter2') })
+    );
   });
 });

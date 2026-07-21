@@ -27,7 +27,8 @@ src/
 │   ├── mysql/           # MySQL connector
 │   ├── mariadb/         # MariaDB connector
 │   ├── sqlserver/       # SQL Server connector
-│   └── sqlite/          # SQLite connector
+│   ├── sqlite/          # SQLite connector
+│   └── hana/            # SAP HANA connector
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
 │   └── search-objects.ts  # Unified search/list with progressive disclosure
@@ -167,7 +168,9 @@ outside TOML and follow the same order:
   - SQL Server (named instance): `sqlserver://user:password@localhost:1433/dbname?instanceName=ENV1`
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - SQLite: `sqlite:///path/to/database.db` or `sqlite:///:memory:`
-- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL only, CA + hostname verification). Use `sslrootcert` to specify CA certificate path for verify modes.
+  - SAP HANA: `hana://user:password@localhost:30015?encrypt=true&sslmode=verify-full`
+  - SAP HANA (multitenant/HANA Cloud, tenant in path): `hana://user:password@host:443/TENANT?encrypt=true`
+- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL only, CA + hostname verification). Use `sslrootcert` to specify CA certificate path for verify modes. For SAP HANA, `sslmode` maps to the driver's `encrypt`/`sslValidateCertificate` options.
 
 ## Testing Approach
 

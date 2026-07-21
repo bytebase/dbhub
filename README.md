@@ -25,7 +25,7 @@
             |                  |    |              |    |                  |
             |  Copilot CLI     +--->+              +--->+    MariaDB       |
             |                  |    |              |    |                  |
-            |                  |    |              |    |                  |
+            |                  |    |              +--->+    SAP HANA      |
             +------------------+    +--------------+    +------------------+
                  MCP Clients           MCP Server             Databases
 ```
@@ -33,14 +33,18 @@
 DBHub is a zero-dependency, token efficient MCP server implementing the Model Context Protocol (MCP) server interface. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases:
 
 - **Local Development First**: Zero dependency, token efficient with just two MCP tools to maximize context window
-- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite through a single interface
+- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, SQLite, and SAP HANA through a single interface
 - **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
 - **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
 - **Secure Access**: SSH tunneling and SSL/TLS encryption
 
 ## Supported Databases
 
-PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite.
+PostgreSQL, MySQL, SQL Server, MariaDB, SQLite, and SAP HANA (2.0 and HANA Cloud).
+
+> SAP HANA requires the optional native driver `@sap/hana-client`, which ships
+> platform-specific binaries (glibc — not Alpine/musl). DSN format:
+> `hana://user:password@host:30015?encrypt=true&sslmode=verify-full`.
 
 ## MCP Tools
 

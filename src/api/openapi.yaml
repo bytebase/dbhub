@@ -102,7 +102,7 @@ components:
           example: Production read replica for analytics queries
         type:
           type: string
-          enum: [postgres, mysql, mariadb, sqlserver, sqlite]
+          enum: [postgres, mysql, mariadb, sqlserver, sqlite, hana]
           description: Database type
           example: postgres
         host:

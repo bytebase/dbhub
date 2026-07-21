@@ -396,7 +396,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "hana"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
@@ -498,10 +498,11 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
     if (
       (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
-      source.type !== "postgres"
+      source.type !== "postgres" &&
+      source.type !== "hana"
     ) {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is only supported for PostgreSQL. ` +
+        `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is only supported for PostgreSQL and SAP HANA. ` +
           `Valid values for ${source.type}: disable, require`
       );
     }
@@ -910,10 +911,12 @@ export function buildDSNFromSource(source: SourceConfig): string {
   const passwordRequired =
     source.authentication !== "azure-active-directory-access-token" &&
     !isAwsIamPasswordless;
-  if (!source.host || !source.user || !source.database) {
+  // HANA connects by host:port; the tenant/database is optional.
+  const databaseRequired = source.type !== "hana";
+  if (!source.host || !source.user || (databaseRequired && !source.database)) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +
-        `Required: type, host, user, database`
+        `Required: type, host, user${databaseRequired ? ", database" : ""}`
     );
   }
   if (passwordRequired && !source.password) {
@@ -934,10 +937,11 @@ export function buildDSNFromSource(source: SourceConfig): string {
   // Encode credentials
   const encodedUser = encodeURIComponent(source.user);
   const encodedPassword = source.password ? encodeURIComponent(source.password) : "";
-  const encodedDatabase = encodeURIComponent(source.database);
+  const encodedDatabase = source.database ? encodeURIComponent(source.database) : "";
 
-  // Build base DSN
-  let dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}/${encodedDatabase}`;
+  // Build base DSN. The database path is omitted when absent (HANA without a tenant).
+  const databasePath = encodedDatabase ? `/${encodedDatabase}` : "";
+  let dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}${databasePath}`;
 
   // Collect query parameters
   const queryParams: string[] = [];

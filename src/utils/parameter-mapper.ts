@@ -16,6 +16,7 @@ export const PARAMETER_STYLES = {
   mariadb: "positional", // ?, ?, ?
   sqlserver: "named", // @p1, @p2, @p3
   sqlite: "positional", // ?, ?, ?
+  hana: "positional", // ?, ?, ?
 } as const;
 
 /**

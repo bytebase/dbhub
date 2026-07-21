@@ -14,6 +14,8 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // SQL Server has no native EXPLAIN statement; the connector translates a
   // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
   sqlserver: ["select", "with", "explain"],
+  // HANA's EXPLAIN PLAN writes to a plan table rather than returning rows.
+  hana: ["select", "with"],
 };
 
 /**
@@ -125,6 +127,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPatternSqlServer,
+  hana: mutatingPattern,
 };
 
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;

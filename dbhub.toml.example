@@ -217,6 +217,33 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # dsn = "sqlite:///:memory:"
 
 # ============================================================================
+# SAP HANA (2.0 and HANA Cloud)
+# ============================================================================
+# Requires the optional native driver: pnpm add @sap/hana-client
+# (ships glibc binaries — not available on Alpine/musl images).
+
+# HANA - DSN format (single-container instance; default SQL port 3<inst>15)
+# [[sources]]
+# id = "local_hana"
+# dsn = "hana://SYSTEM:password@hana-host:30015?encrypt=true&sslmode=verify-full"
+
+# HANA - Individual parameters (database = tenant name on a multitenant system)
+# [[sources]]
+# id = "hana_tenant"
+# type = "hana"
+# host = "hana-host"
+# port = 30041
+# database = "TENANT1"
+# user = "APP_USER"
+# password = "secret"
+# sslmode = "verify-full"
+
+# SAP HANA Cloud (TLS is mandatory; typically port 443)
+# [[sources]]
+# id = "hana_cloud"
+# dsn = "hana://APP_USER:password@xxxxx.hana.prod-region.hanacloud.ondemand.com:443?encrypt=true&sslmode=verify-full"
+
+# ============================================================================
 # TOOL CONFIGURATION (Optional)
 # ============================================================================
 #

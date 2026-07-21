@@ -191,6 +191,9 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
   mariadb: scanTokenMySQL,
   sqlite: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
+  // HANA uses ANSI comments (-- and /* */), single-quoted strings and
+  // double-quoted identifiers — exactly the ANSI scanner.
+  hana: scanTokenAnsi,
 };
 
 function getScanner(dialect?: ConnectorType): TokenScanner {

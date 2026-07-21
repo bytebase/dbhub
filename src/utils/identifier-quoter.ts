@@ -34,7 +34,8 @@ export function quoteIdentifier(identifier: string, dbType: ConnectorType): stri
   switch (dbType) {
     case "postgres":
     case "sqlite":
-      // PostgreSQL and SQLite use double quotes
+    case "hana":
+      // PostgreSQL, SQLite and SAP HANA use double quotes
       // Escape existing double quotes by doubling them
       return `"${identifier.replace(/"/g, '""')}"`;
 

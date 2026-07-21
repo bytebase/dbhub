@@ -34,6 +34,8 @@ const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   mariadb: ["ER_ACCESS_DENIED_ERROR", 1045, 1698],
   sqlserver: ["ELOGIN"],
   sqlite: [], // no network/auth layer
+  // HANA: SQL error 10 = "authentication failed" (SQLSTATE 28000).
+  hana: [10, "28000"],
 };
 
 function unreachableMessage(sourceId: string): string {
@@ -79,9 +81,13 @@ export function classifyConnectionError(
 
   const authCodes = AUTH_CODES[connectorType];
   const errno = err.errno;
+  const sqlState = err.sqlState;
   if (
     (typeof code === "string" && authCodes.includes(code)) ||
-    (typeof errno === "number" && authCodes.includes(errno))
+    // @sap/hana-client reports a numeric code and a sqlState.
+    (typeof code === "number" && authCodes.includes(code)) ||
+    (typeof errno === "number" && authCodes.includes(errno)) ||
+    (typeof sqlState === "string" && authCodes.includes(sqlState))
   ) {
     return { code: "AUTH_FAILED", message: authMessage(sourceId) };
   }
