@@ -339,6 +339,240 @@ describe('SQL Server Connector Integration Tests', () => {
       ).rejects.toThrow(/requires a statement/i);
     });
 
+    it('should return an actual execution plan for EXPLAIN ANALYZE <query> (STATISTICS XML)', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN ANALYZE SELECT * FROM users WHERE age > 30',
+        {}
+      );
+
+      expect(result.rows).toHaveLength(1);
+      const planXml = result.rows[0].plan as string;
+      expect(typeof planXml).toBe('string');
+      expect(planXml).toContain('ShowPlanXML');
+      expect(planXml).toContain('users');
+      // RunTimeInformation/ActualRows only appear in an *actual* plan
+      // (SET STATISTICS XML). SHOWPLAN_XML never emits them.
+      expect(planXml).toContain('RunTimeInformation');
+      expect(planXml).toMatch(/ActualRows/i);
+    });
+
+    it('should execute the statement under EXPLAIN ANALYZE', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
+        {}
+      );
+      expect(Number(before.rows[0].count)).toBe(0);
+
+      // Unlike EXPLAIN, EXPLAIN ANALYZE really runs the statement.
+      await sqlServerTest.connector.executeSQL(
+        "EXPLAIN ANALYZE INSERT INTO users (name, email, age) VALUES ('Exec', 'explain-analyze-exec@example.com', 42)",
+        {}
+      );
+
+      const after = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(1);
+    });
+
+    it('should roll back writes under EXPLAIN ANALYZE in readonly mode', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
+        {}
+      );
+      expect(Number(before.rows[0].count)).toBe(0);
+
+      const result = await sqlServerTest.connector.executeSQL(
+        "EXPLAIN ANALYZE INSERT INTO users (name, email, age) VALUES ('RO', 'explain-analyze-ro@example.com', 42)",
+        { readonly: true }
+      );
+      // The plan still comes back...
+      expect(result.rows[0].plan as string).toContain('ShowPlanXML');
+
+      // ...but the write must not persist.
+      const after = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(0);
+    });
+
+    it('should translate EXPLAIN ANALYZE even when preceded by a comment', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        '/* real numbers please */ EXPLAIN ANALYZE SELECT * FROM users',
+        {}
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+    });
+
+    it('should reject SET STATISTICS smuggled into an EXPLAIN ANALYZE query', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          'EXPLAIN ANALYZE SET STATISTICS XML OFF SELECT * FROM users',
+          {}
+        )
+      ).rejects.toThrow(/SET STATISTICS/i);
+    });
+
+    it('should reject an empty EXPLAIN ANALYZE', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE   ', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
+    it('should accept the parenthesized EXPLAIN (ANALYZE) form', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN (ANALYZE) SELECT name FROM users WHERE age > 30',
+        {}
+      );
+      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+    });
+
+    it('should treat EXPLAIN (ANALYZE false) as a plain estimated EXPLAIN', async () => {
+      // Matches the read-only classifier, which does not count disabled ANALYZE
+      // as executing. An estimated plan has no runtime counters.
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN (ANALYZE false) SELECT name FROM users WHERE age > 30',
+        {}
+      );
+      const plan = result.rows[0].plan as string;
+      expect(plan).toContain('ShowPlanXML');
+      expect(plan).not.toContain('RunTimeInformation');
+    });
+
+    it('should accept the equals spelling the read-only classifier recognizes', async () => {
+      // The classifier reads `ANALYZE = false` as a disabled ANALYZE, i.e. a
+      // plain EXPLAIN. Erroring here would reject what that layer waves through.
+      for (const sql of [
+        'EXPLAIN (ANALYZE = false) SELECT name FROM users WHERE age > 30',
+        'EXPLAIN (ANALYZE = 0) SELECT name FROM users WHERE age > 30',
+        'EXPLAIN ANALYZE = false SELECT name FROM users WHERE age > 30',
+        'EXPLAIN ANALYZE false SELECT name FROM users WHERE age > 30',
+      ]) {
+        const result = await sqlServerTest.connector.executeSQL(sql, {});
+        const plan = result.rows[0].plan as string;
+        expect(plan, sql).toContain('ShowPlanXML');
+        expect(plan, sql).not.toContain('RunTimeInformation');
+      }
+    });
+
+    it('should still enable ANALYZE for the equals spelling', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN (ANALYZE = true) SELECT name FROM users WHERE age > 30',
+        {}
+      );
+      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+    });
+
+    it('should block pass-through data sources under readonly EXPLAIN ANALYZE', async () => {
+      // OPENQUERY executes on the remote source, so the rollback guard never
+      // reaches it — the same escape the plain EXPLAIN path blocks.
+      await expect(
+        sqlServerTest.connector.executeSQL(
+          "EXPLAIN ANALYZE SELECT * FROM OPENQUERY(remote, 'SELECT 1')",
+          { readonly: true }
+        )
+      ).rejects.toThrow(/pass-through data sources/i);
+    });
+
+    it('should bind parameters for EXPLAIN ANALYZE', async () => {
+      // Binding is what makes this work at all: an unbound @p1 fails with
+      // "Must declare the scalar variable", so succeeding proves it was bound.
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
+        {},
+        [2]
+      );
+
+      const plan = result.rows[0].plan as string;
+      expect(plan).toContain('RunTimeInformation');
+      // Two of the three rows pass the filter, so the value reached the server
+      // rather than merely being declared.
+      expect(plan).toMatch(/ActualRows="2"/);
+    });
+
+    it('should bind parameters for plain EXPLAIN', async () => {
+      // SHOWPLAN compiles without executing, so the DECLARE/SET node-mssql
+      // prepends never assigns — but the statement must still compile, and the
+      // plan comes back estimated.
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN SELECT name FROM users WHERE age > @p1',
+        {},
+        [30]
+      );
+
+      const plan = result.rows[0].plan as string;
+      expect(plan).toContain('ShowPlanXML');
+      expect(plan).not.toContain('RunTimeInformation');
+    });
+
+    it('should bind parameters for EXPLAIN ANALYZE in readonly mode', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
+        { readonly: true },
+        [1]
+      );
+
+      const plan = result.rows[0].plan as string;
+      expect(plan).toContain('RunTimeInformation');
+      expect(plan).toMatch(/ActualRows="1"/);
+    });
+
+    it('should block dynamic SQL under readonly EXPLAIN ANALYZE', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE EXEC GetUserCount', {
+          readonly: true,
+        })
+      ).rejects.toThrow(/dynamic SQL/i);
+    });
+
+    it('should not execute the statement under EXPLAIN (ANALYZE off)', async () => {
+      const before = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
+        {}
+      );
+      expect(Number(before.rows[0].count)).toBe(0);
+
+      await sqlServerTest.connector.executeSQL(
+        "EXPLAIN (ANALYZE off) INSERT INTO users (name, email, age) VALUES ('Off', 'analyze-off@example.com', 7)",
+        {}
+      );
+
+      const after = await sqlServerTest.connector.executeSQL(
+        "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
+        {}
+      );
+      expect(Number(after.rows[0].count)).toBe(0);
+    });
+
+    it('should reject PostgreSQL-only EXPLAIN options with a clear message', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE, BUFFERS) SELECT name FROM users', {})
+      ).rejects.toThrow(/BUFFERS/i);
+
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE VERBOSE SELECT name FROM users', {})
+      ).rejects.toThrow(/VERBOSE/i);
+
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN (COSTS) SELECT name FROM users', {})
+      ).rejects.toThrow(/COSTS/i);
+    });
+
+    it('should reject an unterminated EXPLAIN option list', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE SELECT name FROM users', {})
+      ).rejects.toThrow(/option list/i);
+    });
+
+    it('should reject an empty EXPLAIN (ANALYZE) with no statement', async () => {
+      await expect(
+        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE)   ', {})
+      ).rejects.toThrow(/requires a statement/i);
+    });
+
     it('should handle SQL Server IDENTITY columns', async () => {
       await sqlServerTest.connector.executeSQL(`
         CREATE TABLE identity_test (
