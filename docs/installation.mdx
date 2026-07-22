@@ -66,6 +66,10 @@ When a driver is not installed or a required dependency is missing (e.g., a tran
 
 The [MCP Bundle](/mcpb) is a one-click install for MCPB-compatible clients — Claude Desktop, Claude Code, MCP for Windows: download the `.mcpb` from the [latest release](https://github.com/bytebase/dbhub/releases/latest), install, enter your connection string. Read-only by default, no Node.js or JSON editing required — the recommended path for non-technical users. The guide also covers packaging your own bundle.
 
+## Claude Code Plugin
+
+The [Claude Code Plugin](/claude-code-plugin) registers the DBHub MCP server in Claude Code with one install command and adds `/dbhub:setup` and `/dbhub:explore` skills. Claude Code prompts for the connection string and keeps it in secure storage. Read-only by design, like the MCP Bundle.
+
 ## Docker
 
 <Tabs>
@@ -134,6 +138,10 @@ The [MCP Bundle](/mcpb) is a one-click install for MCPB-compatible clients — C
 Once DBHub is installed and running, configure your MCP client to connect to it.
 
 ### Claude Code
+
+<Note>
+Prefer a one-command, read-only install with a prompted connection string? Use the [Claude Code Plugin](/claude-code-plugin). The manual registration below gives full control over flags, transports, and TOML configs.
+</Note>
 
 <Tabs>
   <Tab title="CLI">

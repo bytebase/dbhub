@@ -14,6 +14,7 @@ DBHub is a zero-dependency, token efficient database MCP server implementing the
 - Test: `pnpm test` - Run all tests
 - Test Watch: `pnpm test:watch` - Run tests in watch mode
 - Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)
+- Claude Code Plugin: `plugin/` packages DBHub as a Claude Code plugin — `.mcp.json` launches `npx @bytebase/dbhub` (pinned to the plugin version) against the bundled read-only `plugin/dbhub.toml` (DSN prompted via `userConfig` in `plugin/.claude-plugin/plugin.json`, passed as `DBHUB_DSN`), plus `/dbhub:setup` and `/dbhub:explore` skills. On release, bump the version in `plugin/.claude-plugin/plugin.json` and `plugin/.mcp.json` — `src/__tests__/plugin-consistency.test.ts` fails CI if they drift from `package.json` or if `plugin/dbhub.toml` diverges from `mcpb/dbhub.toml`. Validate with `claude plugin validate ./plugin`; test with `claude --plugin-dir ./plugin`.
 - MCP Bundle: `pnpm run build:mcpb` - Package DBHub as an `.mcpb` bundle for MCPB-compatible clients (Claude Desktop, Claude Code, MCP for Windows; see `mcpb/` and `scripts/build-mcpb.mjs`); `pnpm run test:mcpb` smoke-tests the packed bundle over stdio. Published to GitHub releases by `.github/workflows/mcpb-release.yml`. The bundle is read-only by design (`mcpb/dbhub.toml`), with the DSN supplied via the `DBHUB_DSN` env var declared in `mcpb/manifest.json` (TOML `${ENV_VAR}` interpolation).
 
 ## Architecture Overview

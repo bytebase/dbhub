@@ -1,0 +1,24 @@
+# DBHub configuration for the Claude Code plugin. The DSN comes from the
+# plugin's user configuration (prompted on install, stored in secure storage)
+# and reaches the server as DBHUB_DSN, interpolated below at load time.
+#
+# Read-only by design; results capped at 1000 rows. For a different policy
+# (write access, multiple sources, custom tools), run DBHub with your own
+# config instead: https://dbhub.ai/config/toml
+#
+# The [[sources]]/[[tools]] body must stay identical to mcpb/dbhub.toml —
+# enforced by src/__tests__/plugin-consistency.test.ts.
+
+[[sources]]
+id = "default"
+dsn = "${DBHUB_DSN}"
+
+[[tools]]
+name = "execute_sql"
+source = "default"
+readonly = true
+max_rows = 1000
+
+[[tools]]
+name = "search_objects"
+source = "default"

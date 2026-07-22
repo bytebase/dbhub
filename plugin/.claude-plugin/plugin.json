@@ -1,0 +1,30 @@
+{
+  "name": "dbhub",
+  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, with skills for connection setup and schema exploration",
+  "version": "0.24.0",
+  "author": {
+    "name": "Bytebase",
+    "url": "https://www.bytebase.com"
+  },
+  "homepage": "https://dbhub.ai",
+  "repository": "https://github.com/bytebase/dbhub",
+  "license": "MIT",
+  "keywords": [
+    "database",
+    "sql",
+    "postgres",
+    "mysql",
+    "mariadb",
+    "sqlserver",
+    "sqlite"
+  ],
+  "userConfig": {
+    "dsn": {
+      "type": "string",
+      "title": "Database connection string (DSN)",
+      "description": "Examples: postgres://user:password@localhost:5432/dbname | mysql://user:password@localhost:3306/dbname | mariadb://user:password@localhost:3306/dbname | sqlserver://user:password@localhost:1433/dbname | sqlite:///path/to/database.db. Append ?sslmode=require for SSL. Use a least-privilege, read-only database account.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

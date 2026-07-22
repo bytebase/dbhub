@@ -1,0 +1,43 @@
+---
+title: "Claude Code Plugin"
+description: "Install DBHub in Claude Code as a plugin — read-only MCP server plus setup and schema-exploration skills"
+---
+
+The Claude Code plugin is the native install path for [Claude Code](https://code.claude.com): one install command registers the DBHub MCP server and adds two skills that teach Claude how to connect and how to explore schemas token-efficiently. Like the [MCP Bundle](/mcpb), it is **read-only by design**.
+
+The plugin lives in the [`plugin/`](https://github.com/bytebase/dbhub/tree/main/plugin) directory of the DBHub repository and includes:
+
+- **MCP server** — runs `npx @bytebase/dbhub` (pinned to the plugin version) over stdio against a bundled read-only configuration.
+- **`/dbhub:setup`** — helps you build the connection string, troubleshoot connection failures, and graduate to a multi-database TOML config when you outgrow the plugin.
+- **`/dbhub:explore`** — teaches Claude the progressive-disclosure workflow for [`search_objects`](/tools/search-objects) (`names` → `summary` → `full`), keeping schema exploration cheap on large databases.
+
+## Install
+
+From a checkout of the repository:
+
+```bash
+git clone https://github.com/bytebase/dbhub.git
+claude --plugin-dir ./dbhub/plugin
+```
+
+Once the plugin is published to the community marketplace, install it with `/plugin install dbhub@claude-community` instead.
+
+Claude Code prompts for your database connection string (DSN) on install and stores it in secure storage — it never lives in a config file. Example: `postgres://user:password@localhost:5432/dbname` (run `/dbhub:setup` for help building one). To change it later, open `/plugin` → **dbhub** → configuration.
+
+<Note>
+Requires Node.js >= 22.5.0 on the machine running Claude Code — `npx` fetches the `@bytebase/dbhub` package on first launch. The machine connects **directly** to the database, so the database must be reachable from it (VPN or network allow-list).
+</Note>
+
+## Read-only by design
+
+The bundled configuration sets `readonly = true` and `max_rows = 1000` on `execute_sql`: mutating statements are rejected, and the database session is additionally set to read-only at the engine level. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone.
+
+## When to use the plugin vs. `claude mcp add`
+
+The plugin covers the common case: one database, read-only, zero config files. For write access, multiple databases, SSH tunnels, or [custom tools](/tools/custom-tools), register DBHub directly with your own [TOML configuration](/config/toml):
+
+```bash
+claude mcp add dbhub -- npx -y @bytebase/dbhub@latest --transport stdio --config /path/to/dbhub.toml
+```
+
+Disable the plugin's MCP server afterwards (`/plugin` → **dbhub**) to avoid two overlapping DBHub instances. See the [Installation guide](/installation#claude-code) for all Claude Code registration options, including HTTP transport and project-scoped `.mcp.json`.
