@@ -1,0 +1,17 @@
+{
+  "name": "dbhub",
+  "owner": {
+    "name": "Bytebase",
+    "url": "https://www.bytebase.com"
+  },
+  "metadata": {
+    "description": "Official DBHub plugin marketplace — install the DBHub database MCP server with setup and schema-exploration skills"
+  },
+  "plugins": [
+    {
+      "name": "dbhub",
+      "source": "./plugin",
+      "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, with skills for connection setup and schema exploration"
+    }
+  ]
+}

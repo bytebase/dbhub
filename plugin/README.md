@@ -10,13 +10,14 @@ Claude Code plugin for [DBHub](https://dbhub.ai) — a minimal, token-efficient 
 
 ## Installation
 
-From a checkout of this repo:
+Inside Claude Code (the repo doubles as a plugin marketplace via `.claude-plugin/marketplace.json`):
 
-```bash
-claude --plugin-dir ./plugin
+```
+/plugin marketplace add bytebase/dbhub
+/plugin install dbhub@dbhub
 ```
 
-Once published to the community marketplace, install with `/plugin install dbhub@claude-community`.
+For development on the plugin itself, load it from a checkout instead: `claude --plugin-dir ./plugin`.
 
 Claude Code prompts for your database connection string (DSN) on install and stores it in secure storage, e.g. `postgres://user:password@localhost:5432/dbname` — run `/dbhub:setup` for help building one. To change it later, open `/plugin` → dbhub → configuration.
 

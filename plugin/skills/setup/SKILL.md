@@ -29,6 +29,7 @@ The database connection string (DSN) is entered in the plugin's configuration di
   ```
   A JSON `initialize` response means the config parsed and the server started; a connection error points at host/port/credentials/SSL.
 - Common causes: database unreachable from this machine (host/port, VPN, firewall), wrong `sslmode`, un-encoded special characters in the password, a SQLite path that isn't absolute.
+- If the server dies instantly with `sh: dbhub: command not found`, the npx cache entry is corrupted (concurrent npx runs can race during install). Find and remove the entry for `@bytebase/dbhub` under `~/.npm/_npx/*/package.json`, then reconnect — npx will reinstall it cleanly.
 - Requires Node.js >= 22.5.0 (`node --version`).
 
 ## When this plugin isn't enough

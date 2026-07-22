@@ -13,14 +13,14 @@ The plugin lives in the [`plugin/`](https://github.com/bytebase/dbhub/tree/main/
 
 ## Install
 
-From a checkout of the repository:
+Inside Claude Code, add the DBHub marketplace (defined in this repository) and install:
 
-```bash
-git clone https://github.com/bytebase/dbhub.git
-claude --plugin-dir ./dbhub/plugin
+```
+/plugin marketplace add bytebase/dbhub
+/plugin install dbhub@dbhub
 ```
 
-Once the plugin is published to the community marketplace, install it with `/plugin install dbhub@claude-community` instead.
+For development on the plugin itself, load it directly from a checkout instead: `claude --plugin-dir ./dbhub/plugin`.
 
 Claude Code prompts for your database connection string (DSN) on install and stores it in secure storage — it never lives in a config file. Example: `postgres://user:password@localhost:5432/dbname` (run `/dbhub:setup` for help building one). To change it later, open `/plugin` → **dbhub** → configuration.
 
