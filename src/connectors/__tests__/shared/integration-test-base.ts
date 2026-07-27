@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { Connector } from '../../interface.js';
 
 export interface DatabaseTestConfig {
@@ -320,6 +320,29 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         const result = await this.connector.getTableSchema('nonexistent_table');
         expect(Array.isArray(result)).toBe(true);
         expect(result.length).toBe(0);
+      });
+
+      it('should keep the failing statement and its parameters out of stderr', async () => {
+        // A failing statement carries whatever the caller put in it, and stderr
+        // is retained and read more widely than the database itself — on the
+        // stdio transport it is the MCP client that collects it. The error is
+        // re-thrown to the caller, so nothing needs to be logged here.
+        // Parameters are passed because the connectors only reached their
+        // logging on the parameterized path.
+        const marker = 'dbhub_stderr_marker_value';
+        const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+          await expect(
+            this.connector.executeSQL('SELECT * FROM nonexistent_table', {}, [marker])
+          ).rejects.toThrow();
+
+          const logged = stderr.mock.calls.map((args) => args.join(' ')).join('\n');
+          expect(logged).not.toContain(marker);
+          expect(logged).not.toContain('nonexistent_table');
+        } finally {
+          stderr.mockRestore();
+        }
       });
     });
   }

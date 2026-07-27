@@ -636,11 +636,6 @@ export class PostgresConnector implements Connector {
             } catch {
               // ignore; the original error is more useful
             }
-            console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
-            console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
-            if (parameters && parameters.length > 0) {
-              console.error(`[PostgreSQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-            }
             throw error;
           }
         }
@@ -648,14 +643,7 @@ export class PostgresConnector implements Connector {
         // Use parameters if provided
         let result;
         if (parameters && parameters.length > 0) {
-          try {
-            result = await client.query(processedStatement, parameters);
-          } catch (error) {
-            console.error(`[PostgreSQL executeSQL] ERROR: ${(error as Error).message}`);
-            console.error(`[PostgreSQL executeSQL] SQL: ${processedStatement}`);
-            console.error(`[PostgreSQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-            throw error;
-          }
+          result = await client.query(processedStatement, parameters);
         } else {
           result = await client.query(processedStatement);
         }

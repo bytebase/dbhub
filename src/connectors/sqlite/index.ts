@@ -496,15 +496,8 @@ export class SQLiteConnector implements Connector {
         if (isReadStatement) {
           // Pass parameters if provided
           if (parameters && parameters.length > 0) {
-            try {
-              const rows = this.prepare(processedStatement).all(...parameters);
-              return { rows, rowCount: rows.length };
-            } catch (error) {
-              console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
-              console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
-              console.error(`[SQLite executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-              throw error;
-            }
+            const rows = this.prepare(processedStatement).all(...parameters);
+            return { rows, rowCount: rows.length };
           } else {
             const rows = this.prepare(processedStatement).all();
             return { rows, rowCount: rows.length };
@@ -513,14 +506,7 @@ export class SQLiteConnector implements Connector {
           // Use run() for statements that don't return data
           let result;
           if (parameters && parameters.length > 0) {
-            try {
-              result = this.prepare(processedStatement).run(...parameters);
-            } catch (error) {
-              console.error(`[SQLite executeSQL] ERROR: ${(error as Error).message}`);
-              console.error(`[SQLite executeSQL] SQL: ${processedStatement}`);
-              console.error(`[SQLite executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-              throw error;
-            }
+            result = this.prepare(processedStatement).run(...parameters);
           } else {
             result = this.prepare(processedStatement).run();
           }

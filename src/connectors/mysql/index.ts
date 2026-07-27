@@ -677,14 +677,7 @@ export class MySQLConnector implements Connector {
           // Pass parameters if provided, with optional query timeout
           let results: any;
           if (parameters && parameters.length > 0) {
-            try {
-              results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs }, parameters);
-            } catch (error) {
-              console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
-              console.error(`[MySQL executeSQL] SQL: ${processedSQL}`);
-              console.error(`[MySQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-              throw error;
-            }
+            results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs }, parameters);
           } else {
             results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs });
           }
@@ -700,9 +693,6 @@ export class MySQLConnector implements Connector {
           return { rows, rowCount };
         }
       );
-    } catch (error) {
-      console.error("Error executing query:", error);
-      throw error;
     } finally {
       // Always release the connection back to the pool
       conn.release();

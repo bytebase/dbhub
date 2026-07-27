@@ -695,17 +695,7 @@ export class SQLServerConnector implements Connector {
 
       SQLServerConnector.bindParameters(request, parameters);
 
-      let result;
-      try {
-        result = await request.query(processedSQL);
-      } catch (error) {
-        if (parameters && parameters.length > 0) {
-          console.error(`[SQL Server executeSQL] ERROR: ${(error as Error).message}`);
-          console.error(`[SQL Server executeSQL] SQL: ${processedSQL}`);
-          console.error(`[SQL Server executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-        }
-        throw error;
-      }
+      const result = await request.query(processedSQL);
 
       return {
         rows: result.recordset || [],
@@ -842,11 +832,6 @@ export class SQLServerConnector implements Connector {
       result = await request.query(processedSQL);
     } catch (error) {
       queryFailed = true;
-      console.error(`[SQL Server executeReadOnly] ERROR: ${(error as Error).message}`);
-      console.error(`[SQL Server executeReadOnly] SQL: ${processedSQL}`);
-      if (parameters && parameters.length > 0) {
-        console.error(`[SQL Server executeReadOnly] Parameters: ${JSON.stringify(parameters)}`);
-      }
       throw error;
     } finally {
       try {

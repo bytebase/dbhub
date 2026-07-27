@@ -659,14 +659,7 @@ export class MariaDBConnector implements Connector {
           // Pass parameters if provided
           let results: any;
           if (parameters && parameters.length > 0) {
-            try {
-              results = await conn.query(processedSQL, parameters);
-            } catch (error) {
-              console.error(`[MariaDB executeSQL] ERROR: ${(error as Error).message}`);
-              console.error(`[MariaDB executeSQL] SQL: ${processedSQL}`);
-              console.error(`[MariaDB executeSQL] Parameters: ${JSON.stringify(parameters)}`);
-              throw error;
-            }
+            results = await conn.query(processedSQL, parameters);
           } else {
             results = await conn.query(processedSQL);
           }
@@ -678,9 +671,6 @@ export class MariaDBConnector implements Connector {
           return { rows, rowCount };
         }
       );
-    } catch (error) {
-      console.error("Error executing query:", error);
-      throw error;
     } finally {
       // Always release the connection back to the pool
       conn.release();
