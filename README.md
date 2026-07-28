@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.bytebase%2Fdbhub.svg)](https://mcptoplist.com/server/io.github.bytebase%2Fdbhub)
+
 > [!NOTE]  
 > Brought to you by [Bytebase](https://www.bytebase.com/), open-source database DevSecOps platform.
 
