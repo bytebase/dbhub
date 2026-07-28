@@ -8,15 +8,20 @@ import { ToolConfig, ParameterConfig } from "../types/config.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import {
   createToolSuccessResponse,
-  createToolErrorResponse,
 } from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import {
-  isAllowedInReadonlyMode,
   createReadonlyViolationMessage,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
+import { areAllStatementsReadOnly } from "../utils/allowed-keywords.js";
+import {
+  PARAMETER_VALIDATION_ERROR_MESSAGE,
+  createGenericExecutionErrorView,
+  createSafeToolErrorView,
+  tryCreateSafeExecutionErrorView,
+} from "../utils/safe-execution-error.js";
 
 /**
  * Build a Zod schema from parameter definitions
@@ -162,7 +167,7 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
   return async (args: any, extra: any) => {
     const startTime = Date.now();
     let success = true;
-    let errorMessage: string | undefined;
+    let requestStoreError: string | undefined;
     let paramValues: any[] = [];
 
     try {
@@ -183,10 +188,14 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
 
       // 5. Check if SQL is allowed based on readonly mode
       const isReadonly = executeOptions.readonly === true;
-      if (isReadonly && !isAllowedInReadonlyMode(toolConfig.statement, connector.id)) {
-        errorMessage = createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id);
+      if (isReadonly && !areAllStatementsReadOnly(toolConfig.statement, connector.id)) {
         success = false;
-        return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
+        const view = createSafeToolErrorView(
+          "READONLY_VIOLATION",
+          createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id)
+        );
+        requestStoreError = view.requestStoreError;
+        return view.response;
       }
 
       // 6. Map parameters to array format for SQL execution
@@ -212,23 +221,32 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
       return createToolSuccessResponse(responseData);
     } catch (error) {
       success = false;
-      errorMessage = (error as Error).message;
-
-      // A connection/access failure is not a SQL problem — classify and return
-      // it cleanly, ahead of the ZodError / SQL-context augmentation below.
-      const classified = tryClassifyConnectionError(error, toolConfig.source, toolConfig.source);
-      if (classified) return classified;
-
-      // Provide helpful error messages for common issues
-      if (error instanceof z.ZodError) {
-        const issues = error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-        errorMessage = `Parameter validation failed: ${issues}`;
-      } else {
-        // Add SQL context to execution errors for debugging
-        errorMessage = `${errorMessage}\n\nSQL: ${toolConfig.statement}\nParameters: ${JSON.stringify(paramValues)}`;
+      const safeExecutionView = tryCreateSafeExecutionErrorView(error);
+      if (safeExecutionView) {
+        requestStoreError = safeExecutionView.requestStoreError;
+        return safeExecutionView.response;
       }
 
-      return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
+      // A connection/access failure is not a SQL problem — classify and return
+      // it cleanly, ahead of the ZodError / generic fallback below.
+      const classified = tryClassifyConnectionError(error, toolConfig.source, toolConfig.source);
+      if (classified) {
+        requestStoreError = classified.requestStoreError;
+        return classified.response;
+      }
+
+      if (error instanceof z.ZodError) {
+        const validationView = createSafeToolErrorView(
+          "EXECUTION_ERROR",
+          PARAMETER_VALIDATION_ERROR_MESSAGE
+        );
+        requestStoreError = validationView.requestStoreError;
+        return validationView.response;
+      }
+
+      const genericView = createGenericExecutionErrorView();
+      requestStoreError = genericView.requestStoreError;
+      return genericView.response;
     } finally {
       // Track the request
       trackToolRequest(
@@ -240,7 +258,7 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
         startTime,
         extra,
         success,
-        errorMessage
+        requestStoreError
       );
     }
   };

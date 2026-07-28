@@ -38,7 +38,7 @@ function scanSingleLineCommentMySQL(sql: string, i: number): SQLToken | null {
     return null;
   }
   let j = i;
-  while (j < sql.length && sql[j] !== "\n") { j++; }
+  while (j < sql.length && sql[j] !== "\n" && sql[j] !== "\r") { j++; }
   return { type: TokenType.Comment, end: j };
 }
 
@@ -51,16 +51,25 @@ function scanMultiLineComment(sql: string, i: number): SQLToken | null {
 }
 
 /**
- * MySQL/MariaDB-specific multi-line comment scanner that preserves conditional comments.
- * MySQL conditional comments (`/*!nnnnn ... *\/`) and MariaDB-specific comments
- * (`/*M! ... *\/`) are executable. Stripping them would let malicious SQL bypass
- * read-only checks, so we return null to let them pass through as plain text.
+ * MySQL-family multi-line comment scanner. MySQL `/*! ... *\/` comments are
+ * executable on both MySQL and MariaDB. MariaDB's `/*M! ... *\/` extension is
+ * executable only on the MariaDB dialect; standard MySQL treats it as an
+ * ordinary block comment.
  */
-function scanMultiLineCommentMySQL(sql: string, i: number): SQLToken | null {
+function scanMultiLineCommentMySQL(
+  sql: string,
+  i: number,
+  preserveMariaDBExecutableComment: boolean
+): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
   const next = sql[i + 2];
   const nextNext = sql[i + 3];
-  if (next === "!" || (next === "M" && nextNext === "!")) { return null; }
+  if (
+    next === "!" ||
+    (preserveMariaDBExecutableComment && next === "M" && nextNext === "!")
+  ) {
+    return null;
+  }
   return scanMultiLineComment(sql, i);
 }
 
@@ -87,11 +96,35 @@ function scanSingleQuotedString(sql: string, i: number): SQLToken | null {
   return { type: TokenType.QuotedBlock, end: j };
 }
 
+function scanSingleQuotedStringMySQL(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "'") { return null; }
+  let j = i + 1;
+  while (j < sql.length) {
+    if (sql[j] === "\\") { j = Math.min(j + 2, sql.length); }
+    else if (sql[j] === "'" && sql[j + 1] === "'") { j += 2; }
+    else if (sql[j] === "'") { j++; break; }
+    else { j++; }
+  }
+  return { type: TokenType.QuotedBlock, end: j };
+}
+
 function scanDoubleQuotedString(sql: string, i: number): SQLToken | null {
   if (sql[i] !== '"') { return null; }
   let j = i + 1;
   while (j < sql.length) {
     if (sql[j] === '"' && sql[j + 1] === '"') { j += 2; }
+    else if (sql[j] === '"') { j++; break; }
+    else { j++; }
+  }
+  return { type: TokenType.QuotedBlock, end: j };
+}
+
+function scanDoubleQuotedStringMySQL(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== '"') { return null; }
+  let j = i + 1;
+  while (j < sql.length) {
+    if (sql[j] === "\\") { j = Math.min(j + 2, sql.length); }
+    else if (sql[j] === '"' && sql[j + 1] === '"') { j += 2; }
     else if (sql[j] === '"') { j++; break; }
     else { j++; }
   }
@@ -117,6 +150,17 @@ function scanDollarQuotedBlock(sql: string, i: number): SQLToken | null {
 }
 
 function scanBacktickQuotedIdentifier(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "`") { return null; }
+  let j = i + 1;
+  while (j < sql.length) {
+    if (sql[j] === "`" && sql[j + 1] === "`") { j += 2; }
+    else if (sql[j] === "`") { j++; break; }
+    else { j++; }
+  }
+  return { type: TokenType.QuotedBlock, end: j };
+}
+
+function scanBacktickQuotedIdentifierMySQL(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "`") { return null; }
   let j = i + 1;
   while (j < sql.length) {
@@ -157,10 +201,19 @@ function scanTokenPostgres(sql: string, i: number): SQLToken {
 
 function scanTokenMySQL(sql: string, i: number): SQLToken {
   return scanSingleLineCommentMySQL(sql, i)
-    ?? scanMultiLineCommentMySQL(sql, i)
-    ?? scanSingleQuotedString(sql, i)
-    ?? scanDoubleQuotedString(sql, i)
-    ?? scanBacktickQuotedIdentifier(sql, i)
+    ?? scanMultiLineCommentMySQL(sql, i, false)
+    ?? scanSingleQuotedStringMySQL(sql, i)
+    ?? scanDoubleQuotedStringMySQL(sql, i)
+    ?? scanBacktickQuotedIdentifierMySQL(sql, i)
+    ?? plainToken(i);
+}
+
+function scanTokenMariaDB(sql: string, i: number): SQLToken {
+  return scanSingleLineCommentMySQL(sql, i)
+    ?? scanMultiLineCommentMySQL(sql, i, true)
+    ?? scanSingleQuotedStringMySQL(sql, i)
+    ?? scanDoubleQuotedStringMySQL(sql, i)
+    ?? scanBacktickQuotedIdentifierMySQL(sql, i)
     ?? plainToken(i);
 }
 
@@ -188,7 +241,7 @@ type TokenScanner = (sql: string, i: number) => SQLToken;
 const dialectScanners: Record<ConnectorType, TokenScanner> = {
   postgres: scanTokenPostgres,
   mysql: scanTokenMySQL,
-  mariadb: scanTokenMySQL,
+  mariadb: scanTokenMariaDB,
   sqlite: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
 };

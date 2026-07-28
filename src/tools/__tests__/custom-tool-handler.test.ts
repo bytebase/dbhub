@@ -7,6 +7,8 @@ import {
 } from "../custom-tool-handler.js";
 import { ConnectorManager } from "../../connectors/manager.js";
 import type { ToolConfig, ParameterConfig } from "../../types/config.js";
+import { requestStore } from "../../requests/index.js";
+import { SafeExecutionError } from "../../utils/safe-execution-error.js";
 
 // Auto-mock the connector manager so we control connection/execution behavior
 vi.mock("../../connectors/manager.js");
@@ -366,6 +368,7 @@ describe("Custom Tool Handler", () => {
   describe("createCustomToolHandler connection error classification", () => {
     afterEach(() => {
       vi.clearAllMocks();
+      requestStore.clear();
     });
 
     it("returns SOURCE_UNREACHABLE (not a SQL error) when the connector throws a network error", async () => {
@@ -395,9 +398,208 @@ describe("Custom Tool Handler", () => {
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe("SOURCE_UNREACHABLE");
-      expect(payload.details.source_id).toBe(toolConfig.source);
+      expect(payload.details).toBeUndefined();
       // Connection failures must NOT be augmented with SQL-context debugging info
       expect(payload.error).not.toContain("SQL:");
+      expect(payload.error).not.toContain(toolConfig.source);
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        `SOURCE_UNREACHABLE: ${payload.error}`
+      );
+    });
+
+    it("uses the same safe guardrail view as execute_sql", async () => {
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "mysql",
+        getId: () => "prod",
+        executeSQL: vi.fn().mockRejectedValue(
+          new SafeExecutionError("MYSQL_READONLY_GUARDRAIL", "dangerous_function", {
+            cause: new Error("RAW_CAUSE_SENTINEL"),
+          })
+        ),
+      } as any);
+
+      const toolConfig: ToolConfig = {
+        name: "dangerous_tool",
+        source: "prod",
+        description: "test",
+        statement: "SELECT SLEEP(1)",
+        readonly: true,
+      } as any;
+      const handler = createCustomToolHandler(toolConfig);
+      const res: any = await handler({}, {});
+      const payload = JSON.parse(res.content[0].text);
+
+      expect(payload).toMatchObject({
+        code: "MYSQL_READONLY_GUARDRAIL",
+        error: "MySQL read-only guardrail rejected the query.",
+      });
+      expect(JSON.stringify(payload)).not.toContain("RAW_CAUSE_SENTINEL");
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        "MYSQL_READONLY_GUARDRAIL: MySQL read-only guardrail rejected the query."
+      );
+    });
+
+    it("maps safety precondition errors to the frozen custom-tool view", async () => {
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "mysql",
+        getId: () => "prod",
+        executeSQL: vi.fn().mockRejectedValue(
+          new SafeExecutionError(
+            "MYSQL_SAFETY_CHECK_FAILED",
+            "statement_plan_unsupported",
+            { cause: new Error("RAW_PLAN_SENTINEL") }
+          )
+        ),
+      } as any);
+      const toolConfig: ToolConfig = {
+        name: "safe_plan_tool",
+        source: "prod",
+        description: "test",
+        statement: "SELECT 1",
+        readonly: true,
+      } as any;
+
+      const response: any = await createCustomToolHandler(toolConfig)({}, {});
+      const payload = JSON.parse(response.content[0].text);
+
+      expect(payload).toMatchObject({
+        code: "MYSQL_SAFETY_CHECK_FAILED",
+        error: "MySQL safety precondition failed.",
+      });
+      expect(JSON.stringify(payload)).not.toContain("RAW_PLAN_SENTINEL");
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        "MYSQL_SAFETY_CHECK_FAILED: MySQL safety precondition failed."
+      );
+    });
+
+    it("uses the frozen readonly violation view and request-store format", async () => {
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      const executeSQL = vi.fn();
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "mysql",
+        getId: () => "SOURCE_SENTINEL",
+        executeSQL,
+      } as any);
+      const toolConfig: ToolConfig = {
+        name: "TOOL_SENTINEL",
+        source: "SOURCE_SENTINEL",
+        description: "test",
+        statement: "DELETE FROM users",
+        readonly: true,
+      } as any;
+
+      const response: any = await createCustomToolHandler(toolConfig)({}, {});
+      const payload = JSON.parse(response.content[0].text);
+
+      expect(payload).toEqual({
+        success: false,
+        error:
+          "The tool cannot execute this statement in readonly mode. Only read-only SQL operations are allowed.",
+        code: "READONLY_VIOLATION",
+      });
+      expect(executeSQL).not.toHaveBeenCalled();
+      expect(requestStore.getAll("SOURCE_SENTINEL")[0]?.error).toBe(
+        "READONLY_VIOLATION: The tool cannot execute this statement in readonly mode. Only read-only SQL operations are allowed."
+      );
+      expect(JSON.stringify(payload)).not.toContain("SOURCE_SENTINEL");
+      expect(JSON.stringify(payload)).not.toContain("TOOL_SENTINEL");
+    });
+
+    it.each([
+      ["stacked DDL", "SELECT 1; DROP TABLE users"],
+      ["stacked DML", "SELECT 1; INSERT INTO users (id) VALUES (1)"],
+      ["server file write", "SELECT 1 INTO OUTFILE '/tmp/dbhub-guardrail'"],
+    ])("rejects %s before a readonly custom tool reaches the connector", async (_, statement) => {
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      const executeSQL = vi.fn();
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "mysql",
+        getId: () => "prod",
+        executeSQL,
+      } as any);
+      const toolConfig: ToolConfig = {
+        name: "readonly_batch",
+        source: "prod",
+        description: "test",
+        statement,
+        readonly: true,
+      } as any;
+
+      const response: any = await createCustomToolHandler(toolConfig)({}, {});
+      const payload = JSON.parse(response.content[0].text);
+
+      expect(payload.code).toBe("READONLY_VIOLATION");
+      expect(executeSQL).not.toHaveBeenCalled();
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        `READONLY_VIOLATION: ${payload.error}`
+      );
+    });
+
+    it("does not expose parameter names, SQL, values, or raw database errors", async () => {
+      const parameterSentinel = "secret_parameter_name";
+      const sqlSentinel = "RAW_SQL_SENTINEL";
+      const valueSentinel = "RAW_VALUE_SENTINEL";
+
+      const validationConfig: ToolConfig = {
+        name: "validation_tool",
+        source: "prod",
+        description: "test",
+        statement: "SELECT 1",
+        parameters: [
+          {
+            name: parameterSentinel,
+            type: "integer",
+            description: "secret",
+          },
+        ],
+      } as any;
+      const validationResponse: any = await createCustomToolHandler(validationConfig)(
+        { [parameterSentinel]: "wrong" },
+        {}
+      );
+      const validationPayload = JSON.parse(validationResponse.content[0].text);
+      expect(validationPayload).toMatchObject({
+        code: "EXECUTION_ERROR",
+        error: "Parameter validation failed.",
+      });
+      expect(JSON.stringify(validationPayload)).not.toContain(parameterSentinel);
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        "EXECUTION_ERROR: Parameter validation failed."
+      );
+
+      requestStore.clear();
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue({
+        id: "mysql",
+        getId: () => "prod",
+        executeSQL: vi.fn().mockRejectedValue(new Error("RAW_DB_SENTINEL")),
+      } as any);
+      const executionConfig: ToolConfig = {
+        name: "execution_tool",
+        source: "prod",
+        description: "test",
+        statement: `SELECT ? /* ${sqlSentinel} */`,
+        parameters: [
+          { name: "value", type: "string", description: "value" },
+        ],
+      } as any;
+      const executionResponse: any = await createCustomToolHandler(executionConfig)(
+        { value: valueSentinel },
+        {}
+      );
+      const serialized = executionResponse.content[0].text;
+      expect(JSON.parse(serialized)).toMatchObject({
+        code: "EXECUTION_ERROR",
+        error: "Database query execution failed.",
+      });
+      expect(serialized).not.toContain(sqlSentinel);
+      expect(serialized).not.toContain(valueSentinel);
+      expect(serialized).not.toContain("RAW_DB_SENTINEL");
+      expect(requestStore.getAll("prod")[0]?.error).toBe(
+        "EXECUTION_ERROR: Database query execution failed."
+      );
     });
   });
 });

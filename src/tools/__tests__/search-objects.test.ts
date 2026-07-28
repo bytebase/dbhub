@@ -1233,7 +1233,10 @@ describe('search_database_objects tool', () => {
 
       expect(result.isError).toBe(true);
       expect(payload.code).toBe('AUTH_FAILED');
-      expect(payload.details.source_id).toBe('mssql');
+      expect(payload.error).toBe(
+        'Authentication failed for the database source. Verify the credentials/access are valid, then retry.'
+      );
+      expect(payload.details).toBeUndefined();
     });
   });
 

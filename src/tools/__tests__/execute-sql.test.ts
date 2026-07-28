@@ -3,6 +3,8 @@ import { createExecuteSqlToolHandler } from '../execute-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
 import { getToolRegistry } from '../registry.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
+import { requestStore } from '../../requests/index.js';
+import { SafeExecutionError } from '../../utils/safe-execution-error.js';
 
 // Mock dependencies
 vi.mock('../../connectors/manager.js');
@@ -19,6 +21,7 @@ const createMockConnector = (id: ConnectorType = 'sqlite', sourceId: string = 'd
   clone: vi.fn(),
   getSchemas: vi.fn(),
   getTables: vi.fn(),
+  getViews: vi.fn(),
   tableExists: vi.fn(),
   getTableSchema: vi.fn(),
   getTableIndexes: vi.fn(),
@@ -38,6 +41,7 @@ describe('execute-sql tool', () => {
   const mockGetToolRegistry = vi.mocked(getToolRegistry);
 
   beforeEach(() => {
+    requestStore.clear();
     mockConnector = createMockConnector('sqlite');
     mockGetCurrentConnector.mockReturnValue(mockConnector);
 
@@ -88,8 +92,12 @@ describe('execute-sql tool', () => {
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
       expect(parsedResult.success).toBe(false);
-      expect(parsedResult.error).toBe('Database error');
+      expect(parsedResult.error).toBe('Database query execution failed.');
       expect(parsedResult.code).toBe('EXECUTION_ERROR');
+      expect(requestStore.getAll('test_source')[0]?.error).toBe(
+        'EXECUTION_ERROR: Database query execution failed.'
+      );
+      expect(requestStore.getAll('test_source')[0]?.error).not.toContain('Database error');
     });
 
     it('returns SOURCE_UNREACHABLE when the connector throws a network error', async () => {
@@ -109,7 +117,13 @@ describe('execute-sql tool', () => {
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe('SOURCE_UNREACHABLE');
-      expect(payload.details.source_id).toBe('prod');
+      expect(payload.error).toBe(
+        'The database source is unreachable. Verify the database is running and reachable (host, port, network), then retry.'
+      );
+      expect(payload.details).toBeUndefined();
+      expect(requestStore.getAll('prod')[0]?.error).toBe(
+        `SOURCE_UNREACHABLE: ${payload.error}`
+      );
     });
 
     it('falls through to EXECUTION_ERROR when the source config is null', async () => {
@@ -148,7 +162,54 @@ describe('execute-sql tool', () => {
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe('SOURCE_UNREACHABLE');
-      expect(payload.details.source_id).toBe('default');
+      expect(payload.details).toBeUndefined();
+    });
+
+    it('maps SafeExecutionError without exposing its cause', async () => {
+      const sentinel = 'RAW_CAUSE_SENTINEL';
+      vi.mocked(mockConnector.executeSQL).mockRejectedValue(
+        new SafeExecutionError(
+          'MYSQL_READONLY_GUARDRAIL',
+          'dangerous_function',
+          { cause: new Error(sentinel) }
+        )
+      );
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT SLEEP(1)' }, null);
+      const payload = parseToolResponse(result);
+
+      expect(payload).toMatchObject({
+        code: 'MYSQL_READONLY_GUARDRAIL',
+        error: 'MySQL read-only guardrail rejected the query.',
+      });
+      expect(JSON.stringify(payload)).not.toContain(sentinel);
+      expect(requestStore.getAll('test_source')[0]?.error).toBe(
+        'MYSQL_READONLY_GUARDRAIL: MySQL read-only guardrail rejected the query.'
+      );
+    });
+
+    it('maps MySQL safety precondition failures through the same safe view', async () => {
+      vi.mocked(mockConnector.executeSQL).mockRejectedValue(
+        new SafeExecutionError(
+          'MYSQL_SAFETY_CHECK_FAILED',
+          'sql_mode_unavailable',
+          { cause: new Error('RAW_MODE_SENTINEL') }
+        )
+      );
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT 1' }, null);
+      const payload = parseToolResponse(result);
+
+      expect(payload).toMatchObject({
+        code: 'MYSQL_SAFETY_CHECK_FAILED',
+        error: 'MySQL safety precondition failed.',
+      });
+      expect(JSON.stringify(payload)).not.toContain('RAW_MODE_SENTINEL');
+      expect(requestStore.getAll('test_source')[0]?.error).toBe(
+        'MYSQL_SAFETY_CHECK_FAILED: MySQL safety precondition failed.'
+      );
     });
   });
 
@@ -198,6 +259,12 @@ describe('execute-sql tool', () => {
       expect(result.isError).toBe(true);
       const parsedResult = parseToolResponse(result);
       expect(parsedResult.code).toBe('READONLY_VIOLATION');
+      expect(parsedResult.error).toBe(
+        'The tool cannot execute this statement in readonly mode. Only read-only SQL operations are allowed.'
+      );
+      expect(requestStore.getAll('test_source')[0]?.error).toBe(
+        `READONLY_VIOLATION: ${parsedResult.error}`
+      );
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
@@ -208,6 +275,19 @@ describe('execute-sql tool', () => {
 
       expect(result.isError).toBe(true);
       expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+    });
+
+    it.each([
+      ['bare CR', "SELECT 1 -- comment\r; DROP TABLE victim"],
+      ['CRLF', "SELECT 1 -- comment\r\n; DROP TABLE victim"],
+    ])('should reject a MySQL stacked DROP after a %s line ending', async (_, sql) => {
+      const mysqlConnector = createMockConnector('mysql', 'test_source');
+      mockGetCurrentConnector.mockReturnValue(mysqlConnector);
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
+      expect(mysqlConnector.executeSQL).not.toHaveBeenCalled();
     });
 
   });

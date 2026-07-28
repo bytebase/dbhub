@@ -5,11 +5,16 @@
 
 import { ConnectorType } from "../connectors/interface.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { isReadOnlySQL, allowedKeywords } from "./allowed-keywords.js";
+import { isReadOnlySQL } from "./allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "./client-identifier.js";
 import { classifyConnectionError } from "./error-classifier.js";
-import { createToolErrorResponse } from "./response-formatter.js";
+import {
+  READONLY_VIOLATION_MESSAGE,
+  createGenericExecutionErrorView,
+  createSafeToolErrorView,
+  type SafeToolErrorView,
+} from "./safe-execution-error.js";
 
 /**
  * Request metadata for tracking
@@ -43,11 +48,11 @@ export { isReadOnlySQL as isAllowedInReadonlyMode };
  * @returns Formatted error message
  */
 export function createReadonlyViolationMessage(
-  toolName: string,
-  sourceId: string,
-  connectorType: ConnectorType
+  _toolName: string,
+  _sourceId: string,
+  _connectorType: ConnectorType
 ): string {
-  return `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
+  return READONLY_VIOLATION_MESSAGE;
 }
 
 /**
@@ -56,14 +61,14 @@ export function createReadonlyViolationMessage(
  * @param startTime Request start timestamp
  * @param extra MCP extra context for client identification
  * @param success Whether the request succeeded
- * @param error Optional error message
+ * @param requestStoreError Optional stable, safe error string
  */
 export function trackToolRequest(
   metadata: RequestMetadata,
   startTime: number,
   extra: any,
   success: boolean,
-  error?: string
+  requestStoreError?: string
 ): void {
   requestStore.add({
     id: crypto.randomUUID(),
@@ -74,7 +79,7 @@ export function trackToolRequest(
     durationMs: Date.now() - startTime,
     client: getClientIdentifier(extra),
     success,
-    error,
+    error: requestStoreError,
   });
 }
 
@@ -90,7 +95,7 @@ export function tryClassifyConnectionError(
   error: unknown,
   rawSourceId: string | undefined,
   displaySourceId: string
-): ReturnType<typeof createToolErrorResponse> | null {
+): SafeToolErrorView | null {
   // Defensive: getSourceConfig throws if the manager is uninitialized. Keep
   // this helper as total as classifyConnectionError itself — never throw from
   // within a caller's catch block.
@@ -103,9 +108,7 @@ export function tryClassifyConnectionError(
   if (!connectorType) return null;
   const classified = classifyConnectionError(error, connectorType, displaySourceId);
   if (!classified) return null;
-  return createToolErrorResponse(classified.message, classified.code, {
-    source_id: displaySourceId,
-  });
+  return createSafeToolErrorView(classified.code, classified.message);
 }
 
 /**
@@ -121,7 +124,7 @@ export function withRequestTracking<TArgs = any, TResult = any>(
   return async (args: TArgs, extra: any): Promise<TResult> => {
     const startTime = Date.now();
     let success = true;
-    let errorMessage: string | undefined;
+    let requestStoreError: string | undefined;
     let result: TResult | undefined;
     let error: Error | undefined;
 
@@ -131,11 +134,11 @@ export function withRequestTracking<TArgs = any, TResult = any>(
     } catch (err) {
       success = false;
       error = err as Error;
-      errorMessage = error.message;
+      requestStoreError = createGenericExecutionErrorView().requestStoreError;
       throw err;
     } finally {
       const metadata = getMetadata(args, result, error);
-      trackToolRequest(metadata, startTime, extra, success, errorMessage);
+      trackToolRequest(metadata, startTime, extra, success, requestStoreError);
     }
   };
 }

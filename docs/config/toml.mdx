@@ -571,7 +571,16 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
   This is a **tool-level** setting, not a source-level setting. Configure it in the `[[tools]]` section, not in `[[sources]]`.
   </Note>
 
-  See [Execute SQL documentation](/tools/execute-sql#readonly-mode) for more details.
+  On standard MySQL Community Server 5.7, 8.x, and 9.x, `readonly = true` also enables a
+  target-connection `@@SESSION.sql_mode` check and rejects calls to the
+  documented dangerous-function list before user SQL is sent. This additional
+  contract does not apply to TiDB, unknown MySQL-protocol implementations,
+  writable tools, or the separate MariaDB connector. Always use a
+  least-privilege, read-only database account. The fixed runtime validation
+  matrix covers MySQL 5.7.44, 8.0.36, 8.4.10, and 9.7.1; other minor versions
+  are not claimed as identically validated environments.
+
+  See [Execute SQL documentation](/tools/execute-sql#read-only-mode) for more details.
 </ParamField>
 
 ### max_rows

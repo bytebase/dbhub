@@ -15,12 +15,30 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
+import {
+  parseQueryResults,
+  extractAffectedRows,
+} from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
-import { isTiDBVersion } from "../../utils/server-flavor.js";
+import {
+  detectMySQLServerFlavor,
+  isTiDBVersion,
+  type MySQLServerFlavor,
+} from "../../utils/server-flavor.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
+import {
+  buildExecutableMySQLBatch,
+  MySQLStatementPlanError,
+  planMySQLStatements,
+  type MySQLStatementPlan,
+} from "../../utils/mysql-sql-scanner.js";
+import {
+  classifyMySQLReadonlyQuery,
+  parseMySQLSqlMode,
+} from "../../utils/mysql-readonly-classifier.js";
+import { SafeExecutionError } from "../../utils/safe-execution-error.js";
 
 /**
  * MySQL DSN Parser
@@ -51,7 +69,7 @@ class MySQLDSNParser implements DSNParser {
       // This will handle special characters in passwords, etc.
       const url = new SafeURL(dsn);
 
-      const database = url.pathname ? url.pathname.substring(1) : ''; // Remove leading '/' if exists
+      const database = url.pathname ? url.pathname.substring(1) : ""; // Remove leading '/' if exists
       requireDatabaseInDSN(database, dsn, "MySQL");
 
       const config: mysql.ConnectionOptions = {
@@ -111,7 +129,7 @@ class MySQLDSNParser implements DSNParser {
         config.authPlugins = {
           mysql_clear_password: () => () => {
             return Buffer.from(url.password + "\0");
-          }
+          },
         };
         // AWS IAM authentication requires SSL, enable if not already configured
         if (config.ssl === undefined) {
@@ -137,7 +155,7 @@ class MySQLDSNParser implements DSNParser {
 
   isValidDSN(dsn: string): boolean {
     try {
-      return dsn.startsWith('mysql://');
+      return dsn.startsWith("mysql://");
     } catch (error) {
       return false;
     }
@@ -159,6 +177,8 @@ export class MySQLConnector implements Connector {
   // TiDB speaks the MySQL protocol but rejects `START TRANSACTION READ ONLY`
   // unless tidb_enable_noop_functions is on. Detected once at connect time.
   private supportsReadOnlyTransaction: boolean = true;
+  private serverFlavor: MySQLServerFlavor = "unsupported_or_unknown";
+  private hasCustomQueryFormat: boolean = false;
 
   getId(): string {
     return this.sourceId;
@@ -168,9 +188,20 @@ export class MySQLConnector implements Connector {
     return new MySQLConnector();
   }
 
+  private planReadonlyStatements(
+    sql: string,
+    parameters: readonly unknown[]
+  ): readonly MySQLStatementPlan[] {
+    return planMySQLStatements(sql, parameters, {
+      hasCustomQueryFormat: this.hasCustomQueryFormat,
+    });
+  }
+
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionOptions = await this.dsnParser.parse(dsn, config);
+      this.hasCustomQueryFormat =
+        (connectionOptions as { queryFormat?: unknown }).queryFormat !== undefined;
       this.pool = mysql.createPool(connectionOptions);
 
       // Store query timeout for per-query application
@@ -179,8 +210,17 @@ export class MySQLConnector implements Connector {
       }
 
       // Test the connection and detect the server flavor in the same round trip.
-      const [rows] = (await this.pool.query("SELECT VERSION() AS version")) as [any[], any];
-      this.supportsReadOnlyTransaction = !isTiDBVersion(rows[0]?.version);
+      let version: unknown;
+      try {
+        const [rows] = (await this.pool.query("SELECT VERSION() AS version")) as [any[], any];
+        version = rows[0]?.version;
+      } catch (cause) {
+        throw new SafeExecutionError("MYSQL_SAFETY_CHECK_FAILED", "flavor_probe_failed", {
+          cause,
+        });
+      }
+      this.serverFlavor = detectMySQLServerFlavor(version);
+      this.supportsReadOnlyTransaction = !isTiDBVersion(version);
     } catch (err) {
       // Tear down the pool if it was created before the failure, otherwise it
       // strands sockets and keeps the event loop alive (see closeQuietly).
@@ -189,7 +229,12 @@ export class MySQLConnector implements Connector {
         this.pool = null;
         await closeQuietly(() => pool.end());
       }
-      console.error("Failed to connect to MySQL database:", err);
+      this.hasCustomQueryFormat = false;
+      if (err instanceof SafeExecutionError) {
+        console.error(`[MySQL connect] ${err.code} (${err.category})`);
+      } else {
+        console.error("[MySQL connect] Connection failed.");
+      }
       throw err;
     }
   }
@@ -199,6 +244,7 @@ export class MySQLConnector implements Connector {
       await this.pool.end();
       this.pool = null;
     }
+    this.hasCustomQueryFormat = false;
   }
 
   async getSchemas(): Promise<string[]> {
@@ -458,7 +504,10 @@ export class MySQLConnector implements Connector {
     }
   }
 
-  async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
+  async getStoredProcedures(
+    schema?: string,
+    routineType?: "procedure" | "function"
+  ): Promise<string[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
@@ -649,7 +698,85 @@ export class MySQLConnector implements Connector {
     // Get a dedicated connection from the pool to ensure session consistency
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
+    const targetState: { disposition: "release" | "destroy" } = {
+      disposition: "release",
+    };
     try {
+      let executionSQL = sql;
+      let executionParameters = parameters ?? [];
+      let maxRowsAppliedFromStatementPlans = false;
+      const usesHardenedReadonlyPath =
+        options.readonly === true &&
+        (this.serverFlavor === "mysql_5_7" ||
+          this.serverFlavor === "mysql_8" ||
+          this.serverFlavor === "mysql_9");
+
+      if (usesHardenedReadonlyPath) {
+        let sqlMode: string;
+        try {
+          const [modeRows] = (await conn.query("SELECT @@SESSION.sql_mode AS sql_mode")) as [
+            any[],
+            any,
+          ];
+          sqlMode = modeRows[0]?.sql_mode;
+          parseMySQLSqlMode(sqlMode);
+        } catch (cause) {
+          targetState.disposition = "destroy";
+          throw new SafeExecutionError("MYSQL_SAFETY_CHECK_FAILED", "sql_mode_unavailable", {
+            cause,
+          });
+        }
+
+        const modeClassification = classifyMySQLReadonlyQuery([], sqlMode);
+        if (!modeClassification.allowed) {
+          throw new SafeExecutionError("MYSQL_READONLY_GUARDRAIL", modeClassification.category);
+        }
+
+        let plans: readonly MySQLStatementPlan[];
+        try {
+          plans = this.planReadonlyStatements(sql, executionParameters);
+        } catch (error) {
+          if (error instanceof MySQLStatementPlanError) {
+            if (error.category === "statement_plan_invariant_failed") {
+              targetState.disposition = "destroy";
+            }
+            throw new SafeExecutionError("MYSQL_SAFETY_CHECK_FAILED", error.category, {
+              cause: error,
+            });
+          }
+          targetState.disposition = "destroy";
+          throw new SafeExecutionError(
+            "MYSQL_SAFETY_CHECK_FAILED",
+            "statement_plan_invariant_failed",
+            { cause: error }
+          );
+        }
+
+        const classification = classifyMySQLReadonlyQuery(plans, sqlMode, executionParameters);
+        if (!classification.allowed) {
+          throw new SafeExecutionError("MYSQL_READONLY_GUARDRAIL", classification.category);
+        }
+
+        const executableBatch = buildExecutableMySQLBatch(sql, executionParameters, plans);
+        executionSQL = executableBatch.sql;
+        executionParameters = executableBatch.parameters;
+        if (executionSQL.length === 0) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (options.maxRows) {
+          executionSQL = plans
+            .filter((plan) => plan.executionKind === "executable")
+            .map((plan) =>
+              SQLRowLimiter.applyMaxRows(
+                sql.slice(plan.sourceSpan.start, plan.sourceSpan.end),
+                options.maxRows
+              )
+            )
+            .join("; ");
+          maxRowsAppliedFromStatementPlans = true;
+        }
+      }
+
       // Engine-level read-only backstop (shared with MariaDB); see
       // withReadOnlyTransaction for the semantics and the TiDB caveat.
       return await withReadOnlyTransaction(
@@ -658,31 +785,32 @@ export class MySQLConnector implements Connector {
         this.supportsReadOnlyTransaction,
         async () => {
           // Apply maxRows limit to SELECT queries if specified
-          let processedSQL = sql;
-          if (options.maxRows) {
+          let processedSQL = executionSQL;
+          if (options.maxRows && !maxRowsAppliedFromStatementPlans) {
             // Handle multi-statement SQL by processing each statement individually
-            const statements = splitSQLStatements(sql, "mysql");
+            const statements = splitSQLStatements(executionSQL, "mysql");
 
-            const processedStatements = statements.map(statement =>
+            const processedStatements = statements.map((statement) =>
               SQLRowLimiter.applyMaxRows(statement, options.maxRows)
             );
 
-            processedSQL = processedStatements.join('; ');
-            if (sql.trim().endsWith(';')) {
-              processedSQL += ';';
+            processedSQL = processedStatements.join("; ");
+            if (executionSQL.trim().endsWith(";")) {
+              processedSQL += ";";
             }
           }
 
           // Use dedicated connection with multipleStatements: true support
           // Pass parameters if provided, with optional query timeout
           let results: any;
-          if (parameters && parameters.length > 0) {
+          if (executionParameters.length > 0) {
             try {
-              results = await conn.query({ sql: processedSQL, timeout: this.queryTimeoutMs }, parameters);
+              results = await conn.query(
+                { sql: processedSQL, timeout: this.queryTimeoutMs },
+                executionParameters
+              );
             } catch (error) {
-              console.error(`[MySQL executeSQL] ERROR: ${(error as Error).message}`);
-              console.error(`[MySQL executeSQL] SQL: ${processedSQL}`);
-              console.error(`[MySQL executeSQL] Parameters: ${JSON.stringify(parameters)}`);
+              console.error("[MySQL executeSQL] Query execution failed.");
               throw error;
             }
           } else {
@@ -701,11 +829,18 @@ export class MySQLConnector implements Connector {
         }
       );
     } catch (error) {
-      console.error("Error executing query:", error);
+      if (error instanceof SafeExecutionError) {
+        console.error(`[MySQL executeSQL] ${error.code} (${error.category})`);
+      } else {
+        console.error("[MySQL executeSQL] Query execution failed.");
+      }
       throw error;
     } finally {
-      // Always release the connection back to the pool
-      conn.release();
+      if (targetState.disposition === "destroy") {
+        conn.destroy();
+      } else {
+        conn.release();
+      }
     }
   }
 }

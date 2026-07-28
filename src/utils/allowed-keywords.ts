@@ -1,5 +1,5 @@
 import { ConnectorType } from "../connectors/interface.js";
-import { stripCommentsAndStrings } from "./sql-parser.js";
+import { splitSQLStatements, stripCommentsAndStrings } from "./sql-parser.js";
 
 /**
  * List of allowed keywords for SQL queries
@@ -15,6 +15,20 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
   sqlserver: ["select", "with", "explain"],
 };
+
+/**
+ * Validate every statement in a batch using the connector's dialect-aware
+ * splitter. Builtin and custom readonly tools must share this batch-level
+ * check so a leading SELECT cannot hide a later write statement.
+ */
+export function areAllStatementsReadOnly(
+  sql: string,
+  connectorType: ConnectorType
+): boolean {
+  return splitSQLStatements(sql, connectorType).every((statement) =>
+    isReadOnlySQL(statement, connectorType)
+  );
+}
 
 /**
  * Keywords that indicate data-modifying operations.

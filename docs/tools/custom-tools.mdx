@@ -230,7 +230,14 @@ Always use parameter placeholders. Never concatenate user input into SQL stateme
 
 ### Readonly Mode
 
-The `readonly` setting on `execute_sql` only affects that tool. Custom tools are controlled by their SQL statement - DBHub analyzes the statement to determine if it's read-only.
+`readonly` is configured per tool. A custom tool with `readonly = true` uses
+the same keyword pre-check, connector-side enforcement, and stable error
+mapping as `execute_sql`. In particular, a custom tool backed by standard
+MySQL Community Server 5.7, 8.x, and 9.x uses the same target-connection `sql_mode`
+check and dangerous-function guardrail; it does not have a separate or weaker
+SQL classifier. The fixed runtime validation matrix covers MySQL 5.7.44,
+8.0.36, 8.4.10, and 9.7.1; other minor versions are not claimed as identically
+validated environments.
 
 ```toml
 # Configure execute_sql as read-only
@@ -239,17 +246,23 @@ name = "execute_sql"
 source = "prod_pg"
 readonly = true
 
-# Custom tools are unaffected by readonly setting
+# Configure readonly independently for this custom tool
 [[tools]]
 name = "get_user_by_id"
 source = "prod_pg"
 description = "Get user details"
 statement = "SELECT * FROM users WHERE id = $1"
+readonly = true
 [[tools.parameters]]
 name = "user_id"
 type = "integer"
 description = "User ID"
 ```
+
+For the exact standard-MySQL function list, supported `sql_mode` values, and
+flavor boundary, see [Execute SQL: Read-Only Mode](/tools/execute-sql#read-only-mode).
+The application guardrail remains defense in depth; use a least-privilege,
+read-only database account.
 
 ### Max Rows Enforcement
 

@@ -36,19 +36,16 @@ const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   sqlite: [], // no network/auth layer
 };
 
-function unreachableMessage(sourceId: string): string {
-  return `Source '${sourceId}' is unreachable. ` +
-    `Verify the database is running and reachable (host, port, network), then retry.`;
+function unreachableMessage(): string {
+  return "The database source is unreachable. Verify the database is running and reachable (host, port, network), then retry.";
 }
 
-function authMessage(sourceId: string): string {
-  return `Authentication failed for source '${sourceId}'. ` +
-    `Verify the credentials/access for this source are valid, then retry.`;
+function authMessage(): string {
+  return "Authentication failed for the database source. Verify the credentials/access are valid, then retry.";
 }
 
-function tunnelMessage(sourceId: string): string {
-  return `SSH tunnel for source '${sourceId}' failed to establish. ` +
-    `Verify SSH host/credentials and bastion reachability, then retry.`;
+function tunnelMessage(): string {
+  return "The SSH tunnel for the database source failed to establish. Verify SSH credentials and bastion reachability, then retry.";
 }
 
 /**
@@ -60,7 +57,7 @@ function tunnelMessage(sourceId: string): string {
 export function classifyConnectionError(
   error: unknown,
   connectorType: ConnectorType,
-  sourceId: string
+  _sourceId: string
 ): { code: ConnectionErrorCode; message: string } | null {
   if (!error || typeof error !== "object") {
     return null;
@@ -69,12 +66,12 @@ export function classifyConnectionError(
 
   // Tunnel marker wins over the underlying network code.
   if (err[TUNNEL_ERROR_MARKER] === true) {
-    return { code: "TUNNEL_FAILED", message: tunnelMessage(sourceId) };
+    return { code: "TUNNEL_FAILED", message: tunnelMessage() };
   }
 
   const code = err.code;
   if (typeof code === "string" && NETWORK_CODES.has(code)) {
-    return { code: "SOURCE_UNREACHABLE", message: unreachableMessage(sourceId) };
+    return { code: "SOURCE_UNREACHABLE", message: unreachableMessage() };
   }
 
   const authCodes = AUTH_CODES[connectorType];
@@ -83,7 +80,7 @@ export function classifyConnectionError(
     (typeof code === "string" && authCodes.includes(code)) ||
     (typeof errno === "number" && authCodes.includes(errno))
   ) {
-    return { code: "AUTH_FAILED", message: authMessage(sourceId) };
+    return { code: "AUTH_FAILED", message: authMessage() };
   }
 
   return null;

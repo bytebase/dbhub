@@ -117,7 +117,7 @@ npx @bytebase/dbhub@latest --readonly --dsn "postgres://user:pass@localhost:5432
 ```
 </CodeGroup>
 
-In read-only mode, DBHub enforces read-only access in two layers:
+In read-only mode, DBHub enforces read-only access in layers:
 
 **1. Keyword classifier.** Each statement is checked against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) after stripping comments and strings:
 
@@ -133,14 +133,42 @@ In read-only mode, DBHub enforces read-only access in two layers:
 - **SQLite** — runs with `PRAGMA query_only = ON`
 - **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`
 
+**3. Standard MySQL function guardrail.** On standard MySQL Community Server
+5.7, 8.x, and 9.x, DBHub also reads `@@SESSION.sql_mode` from the same target connection
+before every `readonly = true` execution and rejects function calls that can
+consume resources or create side effects:
+
+- `SLEEP`, `BENCHMARK`
+- `GET_LOCK`, `RELEASE_LOCK`, `RELEASE_ALL_LOCKS`
+- `LOAD_FILE`
+- commonly deployed command-execution UDF names `SYS_EXEC` and `SYS_EVAL`
+
+The check is token based: strings, ordinary comments, column names, aliases,
+and prefixed names such as `my_sleep` are not treated as calls. MySQL
+`/*! ... */` executable comments are scanned, while MariaDB-only `/*M! ... */`
+comments are ordinary comments on this MySQL path. Backtick-quoted calls and
+dangerous function names supplied through mysql2 `??` identifier placeholders
+are covered. `NO_BACKSLASH_ESCAPES` and `ANSI_QUOTES` currently fail closed
+because they change quote semantics; `IGNORE_SPACE` is supported.
+
+<Note>
+This function guardrail is intentionally limited to connections identified as
+standard MySQL Community Server 5.7, 8.x, and 9.x with `readonly = true`. TiDB, unknown
+MySQL-protocol implementations, writable tools, and the separate MariaDB
+connector retain their existing behavior and do not receive this guarantee.
+The fixed connector validation matrix covers MySQL 5.7.44, 8.0.36, 8.4.10,
+and 9.7.1; stdio end-to-end validation covers 8.0.36 and 9.7.1. Other minor
+versions are not claimed as identically validated environments.
+</Note>
+
 <Note>
 Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.
 </Note>
 
 <Warning>
-Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction. On MySQL/MariaDB, DDL performs an implicit commit and is stopped only by the keyword classifier.
+Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction. On MySQL/MariaDB, DDL performs an implicit commit and is stopped only by the keyword classifier. The standard-MySQL function list above is a focused defense-in-depth rule, not a general SQL firewall or a catalog of every possible UDF.
 
-For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
+For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. For MySQL, that account should not have `FILE`, UDF-management, or cross-account connection-management privileges. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
 </Warning>
 
 ## Row Limiting

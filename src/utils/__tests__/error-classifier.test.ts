@@ -6,7 +6,10 @@ describe("classifyConnectionError", () => {
     for (const code of ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "EHOSTUNREACH", "ENETUNREACH", "ECONNRESET"]) {
       const result = classifyConnectionError({ code }, "postgres", "staging");
       expect(result?.code).toBe("SOURCE_UNREACHABLE");
-      expect(result?.message).toContain("staging");
+      expect(result?.message).toBe(
+        "The database source is unreachable. Verify the database is running and reachable (host, port, network), then retry."
+      );
+      expect(result?.message).not.toContain("staging");
     }
   });
 
@@ -16,7 +19,16 @@ describe("classifyConnectionError", () => {
   });
 
   it("classifies mysql/mariadb auth errors via code or errno", () => {
-    expect(classifyConnectionError({ code: "ER_ACCESS_DENIED_ERROR" }, "mysql", "m")?.code).toBe("AUTH_FAILED");
+    const mysqlAuth = classifyConnectionError(
+      { code: "ER_ACCESS_DENIED_ERROR" },
+      "mysql",
+      "m"
+    );
+    expect(mysqlAuth).toEqual({
+      code: "AUTH_FAILED",
+      message:
+        "Authentication failed for the database source. Verify the credentials/access are valid, then retry.",
+    });
     expect(classifyConnectionError({ errno: 1045 }, "mariadb", "m")?.code).toBe("AUTH_FAILED");
     // 1698 = ER_ACCESS_DENIED_NO_PASSWORD_ERROR
     expect(classifyConnectionError({ errno: 1698 }, "mysql", "m")?.code).toBe("AUTH_FAILED");
@@ -30,7 +42,11 @@ describe("classifyConnectionError", () => {
   it("classifies marked SSH tunnel errors as TUNNEL_FAILED, ahead of network code", () => {
     const err: any = { code: "ECONNREFUSED" };
     err[TUNNEL_ERROR_MARKER] = true;
-    expect(classifyConnectionError(err, "postgres", "viaBastion")?.code).toBe("TUNNEL_FAILED");
+    expect(classifyConnectionError(err, "postgres", "viaBastion")).toEqual({
+      code: "TUNNEL_FAILED",
+      message:
+        "The SSH tunnel for the database source failed to establish. Verify SSH credentials and bastion reachability, then retry.",
+    });
   });
 
   it("returns null for unrecognized errors and non-objects", () => {

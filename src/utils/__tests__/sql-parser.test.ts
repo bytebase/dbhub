@@ -67,9 +67,9 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "mariadb")).toContain("DROP TABLE users");
     });
 
-    it("should preserve MariaDB M-bang executable comments for MySQL dialect", () => {
-      const sql = "/*M! DELETE FROM users */";
-      expect(stripCommentsAndStrings(sql, "mysql")).toContain("DELETE FROM users");
+    it("should strip MariaDB M-bang comments for standard MySQL dialect", () => {
+      const sql = "/*M! DELETE FROM users */ SELECT 1";
+      expect(stripCommentsAndStrings(sql, "mysql")).toBe("  SELECT 1");
     });
 
     it("should still strip regular comments for MySQL dialect", () => {
@@ -408,6 +408,14 @@ describe("splitSQLStatements", () => {
       const sql = "SELECT 'it''s; complicated'";
       expect(splitSQLStatements(sql)).toEqual(["SELECT 'it''s; complicated'"]);
     });
+
+    it("should handle MySQL backslash-escaped quotes with semicolons", () => {
+      const sql = "SELECT 'it\\'s; complicated'; SELECT 2";
+      expect(splitSQLStatements(sql, "mysql")).toEqual([
+        "SELECT 'it\\'s; complicated'",
+        "SELECT 2",
+      ]);
+    });
   });
 
   describe("semicolons inside double-quoted identifiers", () => {
@@ -474,6 +482,11 @@ describe("splitSQLStatements", () => {
     it("should handle escaped backticks with semicolons", () => {
       const sql = "SELECT * FROM `tab``le; name`; SELECT 1";
       expect(splitSQLStatements(sql, "mysql")).toEqual(["SELECT * FROM `tab``le; name`", "SELECT 1"]);
+    });
+
+    it("should not treat a backslash as a MySQL backtick escape", () => {
+      const sql = "SELECT `name\\`; SELECT 1";
+      expect(splitSQLStatements(sql, "mysql")).toEqual(["SELECT `name\\`", "SELECT 1"]);
     });
 
     it("should split on semicolon inside backtick for PostgreSQL (not a backtick dialect)", () => {
@@ -613,6 +626,15 @@ describe("splitSQLStatements", () => {
       // MySQL's lexer uses my_isspace() || my_iscntrl(); DEL is a control char.
       expect(splitSQLStatements("SELECT 1 --\x7Fc;DROP TABLE t", "mysql")).toHaveLength(1);
     });
+
+    it.each(["mysql", "mariadb"] as const)(
+      "ends a line comment at bare CR for %s",
+      (dialect) => {
+        expect(
+          splitSQLStatements("SELECT 1 -- comment\r;DROP TABLE t", dialect)
+        ).toHaveLength(2);
+      }
+    );
 
     it("keeps -- as an always-comment for postgres (dialect difference)", () => {
       expect(splitSQLStatements("SELECT 1--1;DROP TABLE t", "postgres")).toHaveLength(1);

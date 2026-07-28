@@ -642,6 +642,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
     const effectiveSourceId = getEffectiveSourceId(sourceId);
     let success = true;
     let errorMessage: string | undefined;
+    let requestStoreError: string | undefined;
 
     try {
       // Ensure source is connected (handles lazy connections)
@@ -718,9 +719,13 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       });
     } catch (error) {
       success = false;
-      errorMessage = (error as Error).message;
+      const errorMessage = (error as Error).message;
       const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
-      if (classified) return classified;
+      if (classified) {
+        requestStoreError = classified.requestStoreError;
+        return classified.response;
+      }
+      requestStoreError = "SEARCH_ERROR: Database object search failed.";
       return createToolErrorResponse(
         `Error searching database objects: ${errorMessage}`,
         "SEARCH_ERROR"
@@ -736,7 +741,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
         startTime,
         extra,
         success,
-        errorMessage
+        requestStoreError ?? errorMessage
       );
     }
   };

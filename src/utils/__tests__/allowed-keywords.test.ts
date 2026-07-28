@@ -1,13 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { isReadOnlySQL } from "../allowed-keywords.js";
+import {
+  areAllStatementsReadOnly,
+  isReadOnlySQL,
+} from "../allowed-keywords.js";
 import { splitSQLStatements } from "../sql-parser.js";
-import type { ConnectorType } from "../../connectors/interface.js";
-
-// Mirrors areAllStatementsReadOnly in src/tools/execute-sql.ts: the real
-// enforcement splits a batch into statements first, then checks each one.
-function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
-  return splitSQLStatements(sql, connectorType).every(s => isReadOnlySQL(s, connectorType));
-}
 
 describe("isReadOnlySQL", () => {
   describe("basic read-only detection", () => {
@@ -384,8 +380,14 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("/*M! DELETE FROM users */", "mariadb")).toBe(false);
     });
 
-    it("should reject MariaDB M-bang executable comment on MySQL dialect", () => {
+    it("should reject a comment-only MariaDB M-bang statement on MySQL dialect", () => {
       expect(isReadOnlySQL("/*M! DROP TABLE users */", "mysql")).toBe(false);
+    });
+
+    it("should treat MariaDB M-bang as an ordinary comment on MySQL dialect", () => {
+      expect(
+        isReadOnlySQL("/*M! SELECT SLEEP(1) */ SELECT 1", "mysql")
+      ).toBe(true);
     });
   });
 
@@ -452,6 +454,15 @@ describe("isReadOnlySQL", () => {
       expect(splitSQLStatements("SELECT 1 -- a comment;DROP TABLE t", "mysql")).toHaveLength(1);
       expect(areAllStatementsReadOnly("SELECT 1 -- a comment", "mysql")).toBe(true);
     });
+
+    it.each(["mysql", "mariadb"] as const)(
+      "should end a line comment at a bare CR and reject the following DROP (%s)",
+      (dialect) => {
+        const sql = "SELECT 1 -- comment\r;DROP TABLE victim";
+        expect(splitSQLStatements(sql, dialect)).toHaveLength(2);
+        expect(areAllStatementsReadOnly(sql, dialect)).toBe(false);
+      }
+    );
 
     it("should still treat the DML-in-comment as inert for postgres (-- is always a comment)", () => {
       expect(splitSQLStatements("SELECT 1--1;DROP TABLE victim", "postgres")).toHaveLength(1);

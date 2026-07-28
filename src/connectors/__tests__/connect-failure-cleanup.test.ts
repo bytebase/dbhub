@@ -73,9 +73,13 @@ describe("connect() failure cleanup", () => {
     });
 
     const connector = new MySQLConnector();
-    await expect(connector.connect("mysql://u:p@localhost:3306/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
+    await expect(
+      connector.connect("mysql://u:p@localhost:3306/db")
+    ).rejects.toMatchObject({
+      code: "MYSQL_SAFETY_CHECK_FAILED",
+      category: "flavor_probe_failed",
+      cause: PROBE_FAILURE,
+    });
     expect(end).toHaveBeenCalledTimes(1);
   });
 
@@ -107,7 +111,7 @@ describe("connect() failure cleanup", () => {
     expect(end).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces the original error even when teardown itself fails", async () => {
+  it("preserves the original probe failure as cause when teardown also fails", async () => {
     const end = vi.fn().mockRejectedValue(new Error("pool.end exploded"));
     mysqlCreatePool.mockReturnValue({
       query: vi.fn().mockRejectedValue(PROBE_FAILURE),
@@ -115,10 +119,15 @@ describe("connect() failure cleanup", () => {
     });
 
     const connector = new MySQLConnector();
-    // The connection error is the diagnostic one; a noisy teardown must not mask it.
-    await expect(connector.connect("mysql://u:p@localhost:3306/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
+    // The public error remains static while the in-process cause retains the
+    // probe failure; a noisy teardown must not replace either contract.
+    await expect(
+      connector.connect("mysql://u:p@localhost:3306/db")
+    ).rejects.toMatchObject({
+      code: "MYSQL_SAFETY_CHECK_FAILED",
+      category: "flavor_probe_failed",
+      cause: PROBE_FAILURE,
+    });
     expect(end).toHaveBeenCalledTimes(1);
   });
 

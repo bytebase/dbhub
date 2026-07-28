@@ -42,9 +42,13 @@ function makeFakePool(version: string, wrapResults: (rows: any[]) => any) {
     query: vi.fn(async (arg: any) => {
       const sql = typeof arg === "string" ? arg : arg.sql;
       statements.push(sql);
+      if (sql === "SELECT @@SESSION.sql_mode AS sql_mode") {
+        return wrapResults([{ sql_mode: "" }]);
+      }
       return wrapResults([{ id: 1 }]);
     }),
     release: vi.fn(),
+    destroy: vi.fn(),
   };
   const pool = {
     // Connect-time flavor probe.
@@ -73,7 +77,8 @@ describe("readonly transaction strategy", () => {
       await connector.connect("mysql://user:pass@localhost:3306/db");
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements[0]).toBe("START TRANSACTION READ ONLY");
+      expect(statements[0]).toBe("SELECT @@SESSION.sql_mode AS sql_mode");
+      expect(statements[1]).toBe("START TRANSACTION READ ONLY");
       expect(statements[statements.length - 1]).toBe("COMMIT");
     });
 
@@ -111,6 +116,9 @@ describe("readonly transaction strategy", () => {
       conn.query.mockImplementation(async (arg: any) => {
         const sql = typeof arg === "string" ? arg : arg.sql;
         statements.push(sql);
+        if (sql === "SELECT @@SESSION.sql_mode AS sql_mode") {
+          return asMysql([{ sql_mode: "" }]);
+        }
         if (sql === "SELECT bad") throw failure;
         return asMysql([{ id: 1 }]);
       });
@@ -125,7 +133,8 @@ describe("readonly transaction strategy", () => {
 
       // The open transaction must be rolled back so the pooled connection is
       // returned clean, and the original error must survive.
-      expect(statements[0]).toBe("START TRANSACTION READ ONLY");
+      expect(statements[0]).toBe("SELECT @@SESSION.sql_mode AS sql_mode");
+      expect(statements[1]).toBe("START TRANSACTION READ ONLY");
       expect(statements[statements.length - 1]).toBe("ROLLBACK");
       expect(conn.release).toHaveBeenCalled();
     });
@@ -135,6 +144,9 @@ describe("readonly transaction strategy", () => {
       conn.query.mockImplementation(async (arg: any) => {
         const sql = typeof arg === "string" ? arg : arg.sql;
         statements.push(sql);
+        if (sql === "SELECT @@SESSION.sql_mode AS sql_mode") {
+          return asMysql([{ sql_mode: "" }]);
+        }
         if (sql === "START TRANSACTION READ ONLY") throw new Error("server gone");
         return asMysql([{ id: 1 }]);
       });
@@ -159,6 +171,9 @@ describe("readonly transaction strategy", () => {
       const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql);
       conn.query.mockImplementation(async (arg: any) => {
         const sql = typeof arg === "string" ? arg : arg.sql;
+        if (sql === "SELECT @@SESSION.sql_mode AS sql_mode") {
+          return asMysql([{ sql_mode: "" }]);
+        }
         if (sql === "SELECT bad") throw new Error("syntax error");
         if (sql === "ROLLBACK") throw new Error("connection lost");
         return asMysql([{ id: 1 }]);

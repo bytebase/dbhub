@@ -1,32 +1,25 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
-import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { isReadOnlySQL, allowedKeywords } from "../utils/allowed-keywords.js";
-import { ConnectorType } from "../connectors/interface.js";
+import { createToolSuccessResponse } from "../utils/response-formatter.js";
+import { areAllStatementsReadOnly } from "../utils/allowed-keywords.js";
 import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
+  createReadonlyViolationMessage,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
-import { splitSQLStatements } from "../utils/sql-parser.js";
+import {
+  createGenericExecutionErrorView,
+  createSafeToolErrorView,
+  tryCreateSafeExecutionErrorView,
+} from "../utils/safe-execution-error.js";
 
 // Schema for execute_sql tool
 export const executeSqlSchema = {
   sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
 };
-
-/**
- * Check if all SQL statements in a multi-statement query are read-only
- * @param sql The SQL string (possibly containing multiple statements)
- * @param connectorType The database type to check against
- * @returns True if all statements are read-only
- */
-function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
-  const statements = splitSQLStatements(sql, connectorType);
-  return statements.every(statement => isReadOnlySQL(statement, connectorType));
-}
 
 /**
  * Create an execute_sql tool handler for a specific source
@@ -39,7 +32,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
     const startTime = Date.now();
     const effectiveSourceId = getEffectiveSourceId(sourceId);
     let success = true;
-    let errorMessage: string | undefined;
+    let requestStoreError: string | undefined;
     let result: any;
 
     try {
@@ -57,9 +50,13 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       // Check if SQL is allowed based on readonly mode (per-tool)
       const isReadonly = toolConfig?.readonly === true;
       if (isReadonly && !areAllStatementsReadOnly(sql, connector.id)) {
-        errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
-        return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
+        const view = createSafeToolErrorView(
+          "READONLY_VIOLATION",
+          createReadonlyViolationMessage("execute_sql", effectiveSourceId, connector.id)
+        );
+        requestStoreError = view.requestStoreError;
+        return view.response;
       }
 
       // Execute the SQL (single or multiple statements) if validation passed
@@ -81,10 +78,19 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       return createToolSuccessResponse(responseData);
     } catch (error) {
       success = false;
-      errorMessage = (error as Error).message;
+      const safeExecutionView = tryCreateSafeExecutionErrorView(error);
+      if (safeExecutionView) {
+        requestStoreError = safeExecutionView.requestStoreError;
+        return safeExecutionView.response;
+      }
       const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
-      if (classified) return classified;
-      return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
+      if (classified) {
+        requestStoreError = classified.requestStoreError;
+        return classified.response;
+      }
+      const genericView = createGenericExecutionErrorView();
+      requestStoreError = genericView.requestStoreError;
+      return genericView.response;
     } finally {
       // Track the request
       trackToolRequest(
@@ -96,7 +102,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         startTime,
         extra,
         success,
-        errorMessage
+        requestStoreError
       );
     }
   };
