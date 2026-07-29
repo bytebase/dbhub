@@ -20,7 +20,6 @@ import {
   isReadOnlySQL,
   hasEscapeHatchFunction,
   sqlServerDynamicSqlPattern,
-  sqlServerPassThroughPattern,
 } from "./allowed-keywords.js";
 import { splitSQLStatements, stripCommentsAndStrings } from "./sql-parser.js";
 
@@ -58,13 +57,12 @@ const grantRevokePattern = /\b(?:grant|revoke)\b/i;
 
 function isAdminStatement(stripped: string, connectorType: ConnectorType): boolean {
   if (grantRevokePattern.test(stripped)) return true;
-  // Dialect escape hatches: T-SQL dynamic SQL / pass-through sources, and the
-  // SELECT-invocable file/lock functions of the other dialects.
+  // Call-position escape-hatch functions (SQL Server OPENQUERY & co., the
+  // MySQL/MariaDB file/lock functions, PostgreSQL filesystem reads).
   if (hasEscapeHatchFunction(stripped, connectorType)) return true;
-  return (
-    connectorType === "sqlserver" &&
-    (sqlServerDynamicSqlPattern.test(stripped) || sqlServerPassThroughPattern.test(stripped))
-  );
+  // SQL Server dynamic-SQL primitives are statement-leading forms (not
+  // call-position), so they need their own whole-word pattern.
+  return connectorType === "sqlserver" && sqlServerDynamicSqlPattern.test(stripped);
 }
 
 /**

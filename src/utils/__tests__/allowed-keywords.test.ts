@@ -468,6 +468,9 @@ describe("isReadOnlySQL", () => {
       ["postgres", "SELECT pg_read_file('/etc/passwd')"],
       ["postgres", "SELECT pg_read_binary_file('server.key')"],
       ["postgres", "SELECT pg_ls_dir('/var/lib/postgresql')"],
+      // SQL Server pass-through sources share the same call-position guard.
+      ["sqlserver", "SELECT * FROM OPENQUERY(lnk, 'SELECT 1')"],
+      ["sqlserver", "SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1')"],
     ] as const)("rejects %s escape-hatch call: %s", (dialect, sql) => {
       expect(isReadOnlySQL(sql, dialect)).toBe(false);
     });
