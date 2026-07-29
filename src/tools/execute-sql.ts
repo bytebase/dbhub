@@ -10,6 +10,7 @@ import {
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
+import { gateMutatingSql } from "./sqlguard-authorize.js";
 
 // Schema for execute_sql tool. The raw shape stays exported for consumers
 // that iterate fields (zodToParameters); the wrapped object is built once at
@@ -17,6 +18,18 @@ import {
 // converts the schema eagerly.
 export const executeSqlSchema = {
   sql: z.string().describe("SQL to execute (multiple statements separated by ;)"),
+  certificate: z
+    .string()
+    .optional()
+    .describe(
+      "Optional SQLGuard Execution Certificate JSON (required when SQLGUARD_REQUIRE=1 for mutating SQL)",
+    ),
+  signature: z
+    .string()
+    .optional()
+    .describe(
+      "Optional SQLGuard Ed25519 signature (required with certificate when SQLGUARD_REQUIRE=1)",
+    ),
 };
 
 export const executeSqlInputSchema = z.object(executeSqlSchema);
@@ -36,6 +49,12 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
     let result: any;
 
     try {
+      const { certificate, signature } = args as {
+        sql: string;
+        certificate?: string;
+        signature?: string;
+      };
+
       // Ensure source is connected (handles lazy connections)
       await ConnectorManager.ensureConnected(sourceId);
 
@@ -55,6 +74,14 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         errorMessage = `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`;
         success = false;
         return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
+      }
+
+      // Optional SQLGuard authorize-before-mutate (env SQLGUARD_REQUIRE=1)
+      const sqlguardBlock = await gateMutatingSql(sql, certificate ?? null, signature ?? null);
+      if (sqlguardBlock) {
+        errorMessage = sqlguardBlock;
+        success = false;
+        return createToolErrorResponse(errorMessage, "SQLGUARD_REQUIRE");
       }
 
       // Execute the SQL (single or multiple statements) if validation passed.
