@@ -42,6 +42,15 @@ describe("classifyStatement", () => {
     expect(classifyStatement("SELECT * FROM OPENQUERY(lnk, 'SELECT 1')", "sqlserver")).toBe("admin");
   });
 
+  it("classifies SELECT-invocable escape-hatch functions as admin (issue #377)", () => {
+    // File/lock functions that a read-only transaction does not contain.
+    expect(classifyStatement("SELECT LOAD_FILE('/etc/passwd')", "mysql")).toBe("admin");
+    expect(classifyStatement("SELECT get_lock('x', 10)", "mariadb")).toBe("admin");
+    expect(classifyStatement("SELECT pg_read_file('/etc/passwd')", "postgres")).toBe("admin");
+    // Call position only: a column of the same name stays read.
+    expect(classifyStatement("SELECT load_file FROM t", "mysql")).toBe("read");
+  });
+
   it("keeps a column named openquery read-only on SQL Server", () => {
     expect(classifyStatement("SELECT openquery FROM t", "sqlserver")).toBe("read");
   });

@@ -454,4 +454,40 @@ describe("isReadOnlySQL", () => {
       expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "postgres")).toBe(true);
     });
   });
+
+  describe("escape-hatch function bypass prevention (issue #377)", () => {
+    // Functions callable from a plain SELECT that read the server filesystem or
+    // take server-wide locks — a read-only transaction does not contain them.
+    it.each([
+      ["mysql", "SELECT LOAD_FILE('/etc/passwd')"],
+      ["mysql", "SELECT get_lock('x', 10)"],
+      ["mysql", "SELECT RELEASE_LOCK('x')"],
+      ["mysql", "SELECT RELEASE_ALL_LOCKS()"],
+      ["mariadb", "SELECT LOAD_FILE('/etc/passwd')"],
+      ["mariadb", "SELECT get_lock('x', 10)"],
+      ["postgres", "SELECT pg_read_file('/etc/passwd')"],
+      ["postgres", "SELECT pg_read_binary_file('server.key')"],
+      ["postgres", "SELECT pg_ls_dir('/var/lib/postgresql')"],
+    ] as const)("rejects %s escape-hatch call: %s", (dialect, sql) => {
+      expect(isReadOnlySQL(sql, dialect)).toBe(false);
+    });
+
+    it("rejects an escape-hatch call buried in a subquery / FROM clause", () => {
+      expect(isReadOnlySQL("SELECT * FROM (SELECT LOAD_FILE('/etc/passwd') AS x) t", "mysql")).toBe(false);
+      expect(isReadOnlySQL("WITH t AS (SELECT pg_read_file('x')) SELECT * FROM t", "postgres")).toBe(false);
+    });
+
+    it("still allows a column or alias named like an escape-hatch function (call position only)", () => {
+      expect(isReadOnlySQL("SELECT load_file FROM documents", "mysql")).toBe(true);
+      expect(isReadOnlySQL("SELECT count(*) AS get_lock FROM t", "mysql")).toBe(true);
+      expect(isReadOnlySQL("SELECT pg_read_file FROM audit", "postgres")).toBe(true);
+    });
+
+    it("does not apply another dialect's escape-hatch list", () => {
+      // pg_read_file is a Postgres function; a mysql column of that name is fine.
+      expect(isReadOnlySQL("SELECT pg_read_file FROM t", "mysql")).toBe(true);
+      // load_file is MySQL's; a postgres column of that name is fine.
+      expect(isReadOnlySQL("SELECT load_file FROM t", "postgres")).toBe(true);
+    });
+  });
 });

@@ -110,6 +110,47 @@ export const sqlServerPassThroughPattern = new RegExp(
 );
 
 /**
+ * Functions callable from a plain SELECT that reach beyond ordinary data
+ * access and are NOT contained by a read-only transaction:
+ * - MySQL/MariaDB: LOAD_FILE reads server-side files (gated by the FILE
+ *   privilege, not transaction mode); GET_LOCK / RELEASE_LOCK /
+ *   RELEASE_ALL_LOCKS take or release server-wide advisory locks (a session
+ *   side effect a read-only transaction does not prevent).
+ * - PostgreSQL: pg_read_file / pg_read_binary_file / pg_ls_dir read the
+ *   server filesystem (gated by the pg_read_server_files role;
+ *   default_transaction_read_only does not apply).
+ *
+ * Matched in call position only (trailing `(`), so a column or table named
+ * `load_file` still classifies as read-only. Like the SQL Server pass-through
+ * patterns above, this is a best-effort guardrail: least-privilege database
+ * accounts remain the security boundary. See issue #377.
+ */
+export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly string[]>> = {
+  mysql: ["load_file", "get_lock", "release_lock", "release_all_locks"],
+  mariadb: ["load_file", "get_lock", "release_lock", "release_all_locks"],
+  postgres: ["pg_read_file", "pg_read_binary_file", "pg_ls_dir"],
+};
+
+const escapeHatchFunctionPatterns: Partial<Record<ConnectorType, RegExp>> = Object.fromEntries(
+  Object.entries(escapeHatchFunctionKeywords).map(([type, keywords]) => [
+    type,
+    new RegExp(`\\b(?:${keywords.join("|")})\\s*\\(`, "i"),
+  ])
+);
+
+/**
+ * Whether (comment/string-stripped) SQL invokes one of the dialect's
+ * escape-hatch functions in call position.
+ */
+export function hasEscapeHatchFunction(
+  strippedSQL: string,
+  connectorType: ConnectorType | string
+): boolean {
+  const pattern = escapeHatchFunctionPatterns[connectorType as ConnectorType];
+  return pattern !== undefined && pattern.test(strippedSQL);
+}
+
+/**
  * Extended pattern for SQL Server: base mutating keywords plus the dynamic SQL
  * primitives above.
  */
@@ -183,6 +224,13 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
   // are rejected wherever they appear — not just under WITH, since the common
   // form is a plain `SELECT ... FROM OPENQUERY(...)`.
   if (connectorType === "sqlserver" && sqlServerPassThroughPattern.test(cleanedSQL)) {
+    return false;
+  }
+
+  // Same class of escape for the other dialects: functions callable from a
+  // plain SELECT that read the server filesystem or take server-wide locks,
+  // which a read-only transaction does not contain (issue #377).
+  if (hasEscapeHatchFunction(cleanedSQL, connectorType)) {
     return false;
   }
 
