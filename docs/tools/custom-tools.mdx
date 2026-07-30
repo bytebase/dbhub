@@ -275,7 +275,7 @@ Tools are validated when the server starts:
 
 - All required fields must be present
 - The specified source must exist
-- Tool names must be unique and cannot conflict with built-in tools (`execute_sql`, `search_objects`)
+- Tool names must be unique and cannot conflict with built-in tools (`execute_sql`, `search_objects`, `explain_sql`)
 - Parameter count must match SQL placeholders
 - Parameter types must be valid
 
@@ -327,3 +327,4 @@ Custom tools return the same response format as `execute_sql`:
 - [TOML Configuration](/config/toml) - Complete configuration reference
 - [execute_sql](/tools/execute-sql) - Direct SQL execution tool
 - [search_objects](/tools/search-objects) - Database schema exploration tool
+- [explain_sql](/tools/explain-sql) - Query execution plan tool (opt-in)

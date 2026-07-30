@@ -41,7 +41,7 @@ PostgreSQL, MySQL, SQL Server, MariaDB, and SQLite.
 
 DBHub brings powerful database capabilities to AI coding assistants:
 
-- **Local Development First**: Zero dependency, token efficient with just two MCP tools to maximize context window
+- **Local Development First**: Zero dependency, token efficient with a minimal set of MCP tools to maximize context window
 - **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite through a single interface
 - **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
 - **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
@@ -51,9 +51,10 @@ DBHub brings powerful database capabilities to AI coding assistants:
 
 ### MCP Tools
 
-DBHub provides AI assistants with direct database access through three core tools:
+DBHub provides AI assistants with direct database access through these tools:
 - **[execute_sql](/tools/execute-sql)**: Run queries with transaction support and safety controls
 - **[search_objects](/tools/search-objects)**: Explore schemas, tables, columns, indexes, and procedures
+- **[explain_sql](/tools/explain-sql)** (opt-in): Show a query's execution plan without running it
 - **[Custom Tools](/tools/custom-tools)**: Define reusable, parameterized SQL operations
 
 ### Workbench
@@ -84,6 +85,7 @@ flowchart TB
         subgraph Tools["MCP Tools"]
             ES["execute_sql"]
             SO["search_objects"]
+            EX["explain_sql (opt-in)"]
             CT["custom tools"]
         end
     end

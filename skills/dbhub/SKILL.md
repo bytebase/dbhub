@@ -1,6 +1,6 @@
 ---
 name: dbhub
-description: Guide for querying databases through DBHub MCP server. Use this skill whenever you need to explore database schemas, inspect tables, or run SQL queries via DBHub's MCP tools (search_objects, execute_sql). Activates on any database query task, schema exploration, data retrieval, or SQL execution through MCP — even if the user just says "check the database" or "find me some data." This skill ensures you follow the correct explore-first workflow instead of guessing table structures.
+description: Guide for querying databases through DBHub MCP server. Use this skill whenever you need to explore database schemas, inspect tables, or run SQL queries via DBHub's MCP tools (search_objects, execute_sql, and the opt-in explain_sql). Activates on any database query task, schema exploration, data retrieval, or SQL execution through MCP — even if the user just says "check the database" or "find me some data." This skill ensures you follow the correct explore-first workflow instead of guessing table structures.
 ---
 
 # DBHub Database Query Guide
@@ -9,14 +9,17 @@ When working with databases through DBHub's MCP server, always follow the **expl
 
 ## Available Tools
 
-DBHub provides two MCP tools:
+DBHub provides two MCP tools by default, plus an opt-in third:
 
 | Tool | Purpose |
 |------|---------|
 | `search_objects` | Explore database structure — schemas, tables, columns, indexes, procedures, functions |
 | `execute_sql` | Run SQL statements against the database |
+| `explain_sql` (opt-in) | Show a query's execution plan without running it — only present if the source's config enables it |
 
 If multiple databases are configured, DBHub registers separate tools for each source (for example, `search_objects_prod_pg`, `execute_sql_staging_mysql`). Select the desired database by calling the correspondingly named tool.
+
+If `explain_sql` is available (check the tool list), prefer it over guessing whether a query will be efficient — it's always safe to call, even against a write-enabled or read-only source, since it never executes the statement.
 
 ## The Explore-Then-Query Workflow
 
