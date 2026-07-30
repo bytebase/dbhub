@@ -2030,6 +2030,89 @@ max_rows = ${value}
     });
   });
 
+  describe('explain_sql tool configuration', () => {
+    it('should accept explain_sql with just name and source', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "explain_sql"
+source = "test_db"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'explain_sql',
+        source: 'test_db',
+      });
+    });
+
+    it('should reject explain_sql with description/statement/parameters', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "explain_sql"
+source = "test_db"
+description = "not allowed"
+statement = "SELECT 1"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow(
+        "built-in tool 'explain_sql' cannot have description, statement, or parameters fields"
+      );
+    });
+
+    it('should reject explain_sql with readonly or max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "explain_sql"
+source = "test_db"
+readonly = true
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow(
+        "tool 'explain_sql' cannot have readonly or max_rows fields"
+      );
+    });
+
+    it('should reject a custom tool named explain_sql_foo (reserved naming pattern)', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "explain_sql_foo"
+source = "test_db"
+description = "Custom tool colliding with explain_sql naming"
+statement = "SELECT 1"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      // toml-loader itself doesn't reject the naming collision (that's
+      // enforced by ToolRegistry.validateCustomTool), but it must at least
+      // parse the tool through unchanged as a non-builtin so the registry can
+      // catch it.
+      const result = loadTomlConfig();
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0].name).toBe('explain_sql_foo');
+    });
+  });
+
   describe('environment variable interpolation', () => {
     const originalEnv = { ...process.env };
 

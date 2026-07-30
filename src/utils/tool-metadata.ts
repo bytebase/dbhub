@@ -4,6 +4,7 @@ import { policyFromReadonly, isReadOnlyPolicy } from "./sql-access-policy.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
+import { explainSqlSchema } from "../tools/explain-sql.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -108,15 +109,40 @@ export function zodToParameters(schema: Record<string, z.ZodType<any>>): ToolPar
 }
 
 /**
+ * Shared per-source naming for built-in tools: single-source deployments keep
+ * the bare tool name, multi-source ones suffix with the normalized source id
+ * (see CLAUDE.md's "Tool Handlers" section). Also resolves the source's db
+ * type and the user-provided `description` prefix so callers only need to
+ * supply the tool-specific label and body text.
+ */
+function resolveBuiltinToolNaming(sourceId: string, baseName: string, titleLabel: string) {
+  const sourceIds = ConnectorManager.getAvailableSourceIds();
+  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
+  const dbType = sourceConfig.type;
+  const isSingleSource = sourceIds.length === 1;
+
+  const name = isSingleSource ? baseName : `${baseName}_${normalizeSourceId(sourceId)}`;
+  const title = isSingleSource
+    ? `${titleLabel} (${dbType})`
+    : `${titleLabel} on ${sourceId} (${dbType})`;
+  // Prepend the user-provided `description` from the source config (if set)
+  // so AI clients reading the MCP tool list see the source's purpose first.
+  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
+
+  return { dbType, isSingleSource, name, title, userDescPrefix };
+}
+
+/**
  * Get execute_sql tool metadata for a specific source
  * @param sourceId - The source ID to get tool metadata for
  * @returns Tool metadata with name, description, and Zod schema
  */
 export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const dbType = sourceConfig.type;
-  const isSingleSource = sourceIds.length === 1;
+  const { dbType, isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
+    sourceId,
+    "execute_sql",
+    "Execute SQL"
+  );
 
   // Get tool configuration from registry to extract readonly/max_rows
   const registry = getToolRegistry();
@@ -126,18 +152,6 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
     maxRows: toolConfig?.max_rows,
   };
 
-  // Determine tool name based on single vs multi-source configuration
-  const toolName = isSingleSource ? "execute_sql" : `execute_sql_${normalizeSourceId(sourceId)}`;
-
-  // Determine title (human-readable display name)
-  const title = isSingleSource
-    ? `Execute SQL (${dbType})`
-    : `Execute SQL on ${sourceId} (${dbType})`;
-
-  // Determine description with more context.
-  // Prepend the user-provided `description` from the source config (if set)
-  // so AI clients reading the MCP tool list see the source's purpose first.
-  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
   const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
   const description = isSingleSource
@@ -159,7 +173,7 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   };
 
   return {
-    name: toolName,
+    name,
     description,
     schema: executeSqlSchema,
     annotations,
@@ -172,26 +186,48 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
  * @returns Tool name, description, and annotations
  */
 export function getSearchObjectsMetadata(sourceId: string): { name: string; description: string; title: string } {
-  const sourceIds = ConnectorManager.getAvailableSourceIds();
-  const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
-  const dbType = sourceConfig.type;
-  const isSingleSource = sourceIds.length === 1;
+  const { dbType, isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
+    sourceId,
+    "search_objects",
+    "Search Database Objects"
+  );
 
-  const toolName = isSingleSource ? "search_objects" : `search_objects_${normalizeSourceId(sourceId)}`;
-  const title = isSingleSource
-    ? `Search Database Objects (${dbType})`
-    : `Search Database Objects on ${sourceId} (${dbType})`;
-  // Prepend the user-provided `description` from the source config (if set)
-  // so AI clients reading the MCP tool list see the source's purpose first.
-  const userDescPrefix = buildSourceDescriptionPrefix(sourceConfig.description);
   const description = isSingleSource
     ? `${userDescPrefix}Search and list database objects on the ${dbType} database`
     : `${userDescPrefix}Search and list database objects on the '${sourceId}' ${dbType} database`;
 
-  return {
-    name: toolName,
-    description,
+  return { name, description, title };
+}
+
+/**
+ * Get explain_sql tool metadata for a specific source
+ * @param sourceId - The source ID to get tool metadata for
+ * @returns Tool metadata with name, description, and Zod schema
+ */
+export function getExplainSqlMetadata(sourceId: string): ToolMetadata {
+  const { dbType, isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
+    sourceId,
+    "explain_sql",
+    "Explain Query Plan"
+  );
+
+  const description = isSingleSource
+    ? `${userDescPrefix}Show the execution plan for a SQL statement on the ${dbType} database without running it. Always read-only and safe, independent of the source's read/write mode.`
+    : `${userDescPrefix}Show the execution plan for a SQL statement on the '${sourceId}' ${dbType} database without running it. Always read-only and safe, independent of the source's read/write mode.`;
+
+  const annotations = {
     title,
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
+
+  return {
+    name,
+    description,
+    schema: explainSqlSchema,
+    annotations,
   };
 }
 
@@ -286,6 +322,20 @@ function buildSearchObjectsTool(sourceId: string): Tool {
 }
 
 /**
+ * Build explain_sql tool metadata for API response
+ */
+function buildExplainSqlTool(sourceId: string): Tool {
+  const explainMetadata = getExplainSqlMetadata(sourceId);
+
+  return {
+    name: explainMetadata.name,
+    description: explainMetadata.description,
+    parameters: zodToParameters(explainMetadata.schema),
+    readonly: true, // explain_sql is always readonly
+  };
+}
+
+/**
  * Build custom tool metadata for API response
  */
 function buildCustomTool(toolConfig: ToolConfig): Tool {
@@ -317,6 +367,8 @@ export function getToolsForSource(sourceId: string): Tool[] {
       return buildExecuteSqlTool(sourceId, toolConfig);
     } else if (toolConfig.name === "search_objects") {
       return buildSearchObjectsTool(sourceId);
+    } else if (toolConfig.name === "explain_sql") {
+      return buildExplainSqlTool(sourceId);
     } else {
       // Custom tool
       return buildCustomTool(toolConfig);

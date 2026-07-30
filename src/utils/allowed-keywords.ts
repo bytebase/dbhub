@@ -214,6 +214,17 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
   );
 }
 
+/**
+ * Extract the first keyword of a SQL statement, after stripping comments and
+ * string literals so a keyword hidden in a comment/string can't be mistaken
+ * for the statement's real leading token. Returns "" for empty/whitespace-only
+ * or comment-only input.
+ */
+export function getFirstKeyword(sql: string, connectorType: ConnectorType | string): string {
+  const cleaned = stripCommentsAndStrings(sql, connectorType as ConnectorType).trim();
+  return cleaned.match(/\S+/)?.[0]?.toLowerCase() ?? "";
+}
+
 function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string): boolean {
   // Empty after stripping → deny. Attacker-crafted inputs may reduce to
   // empty strings after comment/string removal to evade keyword checks.

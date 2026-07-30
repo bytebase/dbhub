@@ -4,11 +4,12 @@ title: "Overview"
 
 ## Available Tools
 
-| Tool        | Command Name  | Description                                                         |
-| ----------- | ------------- | ------------------------------------------------------------------- |
-| Execute SQL | `execute_sql` or `execute_sql_{id}` | Execute single or multiple SQL statements (separated by semicolons) |
-| Search Objects | `search_objects` or `search_objects_{id}` | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
-| Custom Tools | User-defined names | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
+| Tool        | Command Name  | Default | Description                                                         |
+| ----------- | ------------- | ------- | -------------------------------------------------------------------- |
+| Execute SQL | `execute_sql` or `execute_sql_{id}` | On | Execute single or multiple SQL statements (separated by semicolons) |
+| Search Objects | `search_objects` or `search_objects_{id}` | On | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
+| Explain SQL | `explain_sql` or `explain_sql_{id}` | Opt-in | Show the execution plan for a SQL statement without running it |
+| Custom Tools | User-defined names | Opt-in | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
 
 ## Tool Configuration
 
@@ -162,6 +163,9 @@ Special characters in source IDs (hyphens, dots, etc.) are converted to undersco
   </Card>
   <Card title="Search Objects" icon="magnifying-glass" href="/tools/search-objects">
     Search and explore database schemas, tables, and objects
+  </Card>
+  <Card title="Explain SQL" icon="diagram-project" href="/tools/explain-sql">
+    Show a query's execution plan without running it (opt-in)
   </Card>
   <Card title="Custom Tools" icon="wrench" href="/tools/custom-tools">
     Create reusable parameterized SQL operations

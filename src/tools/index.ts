@@ -1,13 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createExecuteSqlToolHandler, executeSqlInputSchema } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema } from "./search-objects.js";
+import { createExplainSqlToolHandler, explainSqlInputSchema } from "./explain-sql.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { getExecuteSqlMetadata, getSearchObjectsMetadata } from "../utils/tool-metadata.js";
+import { getExecuteSqlMetadata, getSearchObjectsMetadata, getExplainSqlMetadata } from "../utils/tool-metadata.js";
 import { classifySQL } from "../utils/sql-access-policy.js";
 import { createCustomToolHandler, getCustomToolInputSchema } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
-import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "./builtin-tools.js";
+import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, BUILTIN_TOOL_EXPLAIN_SQL } from "./builtin-tools.js";
 
 /**
  * Register all tool handlers with the MCP server
@@ -33,6 +34,8 @@ export function registerTools(server: McpServer): void {
         registerExecuteSqlTool(server, sourceId);
       } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
         registerSearchObjectsTool(server, sourceId);
+      } else if (toolConfig.name === BUILTIN_TOOL_EXPLAIN_SQL) {
+        registerExplainSqlTool(server, sourceId);
       } else {
         // Custom tool
         registerCustomTool(server, sourceId, toolConfig);
@@ -83,6 +86,25 @@ function registerSearchObjectsTool(
       },
     },
     createSearchDatabaseObjectsToolHandler(sourceId)
+  );
+}
+
+/**
+ * Register explain_sql tool for a source
+ */
+function registerExplainSqlTool(
+  server: McpServer,
+  sourceId: string
+): void {
+  const metadata = getExplainSqlMetadata(sourceId);
+  server.registerTool(
+    metadata.name,
+    {
+      description: metadata.description,
+      inputSchema: explainSqlInputSchema,
+      annotations: metadata.annotations,
+    },
+    createExplainSqlToolHandler(sourceId)
   );
 }
 

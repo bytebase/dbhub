@@ -233,6 +233,15 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "search_objects"
 # source = "local_pg"
 
+# 'explain_sql' is opt-in only (not part of the default pair above) - add it
+# explicitly to expose an EXPLAIN tool for a source. It only ever shows the
+# query plan and never executes the statement, so it's safe to enable
+# regardless of the source's own readonly setting; it takes no readonly/
+# max_rows options of its own.
+# [[tools]]
+# name = "explain_sql"
+# source = "local_pg"
+
 # ============================================================================
 # CUSTOM TOOLS (Optional)
 # ============================================================================
@@ -366,6 +375,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # Tool Options:
 #   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN (works for execute_sql and custom tools)
 #   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
+#   explain_sql        # Opt-in tool (name = "explain_sql"); no readonly/max_rows options - always safe
 #
 # Parameter Placeholders by Database:
 #   PostgreSQL:     $1, $2, $3

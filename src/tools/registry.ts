@@ -4,7 +4,7 @@
  */
 
 import type { TomlConfig, ToolConfig, ExecuteSqlToolConfig, SearchObjectsToolConfig, ParameterConfig } from "../types/config.js";
-import { BUILTIN_TOOLS } from "./builtin-tools.js";
+import { BUILTIN_TOOLS, ALL_BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { validateParameters } from "../utils/parameter-mapper.js";
 
@@ -23,7 +23,7 @@ export class ToolRegistry {
    * Check if a tool name is a built-in tool
    */
   private isBuiltinTool(toolName: string): boolean {
-    return BUILTIN_TOOLS.includes(toolName);
+    return (ALL_BUILTIN_TOOL_NAMES as readonly string[]).includes(toolName);
   }
 
   /**
@@ -116,14 +116,14 @@ export class ToolRegistry {
     }
 
     // 3. Validate tool name doesn't conflict with built-in tools
-    for (const builtinName of BUILTIN_TOOLS) {
+    for (const builtinName of ALL_BUILTIN_TOOL_NAMES) {
       if (
         toolConfig.name === builtinName ||
         toolConfig.name.startsWith(`${builtinName}_`)
       ) {
         throw new Error(
           `Tool name '${toolConfig.name}' conflicts with built-in tool naming pattern. ` +
-            `Custom tools cannot use names starting with: ${BUILTIN_TOOLS.join(", ")}`
+            `Custom tools cannot use names starting with: ${ALL_BUILTIN_TOOL_NAMES.join(", ")}`
         );
       }
     }

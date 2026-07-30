@@ -91,6 +91,14 @@ export interface SearchObjectsToolConfig {
 }
 
 /**
+ * Built-in tool configuration for explain_sql
+ */
+export interface ExplainSqlToolConfig {
+  name: "explain_sql"; // Must match BUILTIN_TOOL_EXPLAIN_SQL from builtin-tools.ts
+  source: string;
+}
+
+/**
  * Custom tool configuration
  */
 export interface CustomToolConfig {
@@ -106,7 +114,11 @@ export interface CustomToolConfig {
 /**
  * Unified tool configuration (discriminated union)
  */
-export type ToolConfig = ExecuteSqlToolConfig | SearchObjectsToolConfig | CustomToolConfig;
+export type ToolConfig =
+  | ExecuteSqlToolConfig
+  | SearchObjectsToolConfig
+  | ExplainSqlToolConfig
+  | CustomToolConfig;
 
 /**
  * Complete TOML configuration file structure

@@ -26,6 +26,7 @@
               "tools/overview",
               "tools/execute-sql",
               "tools/search-objects",
+              "tools/explain-sql",
               "tools/custom-tools"
             ]
           },

@@ -6,7 +6,7 @@ import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
-import { BUILTIN_TOOLS, BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS } from "../tools/builtin-tools.js";
+import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
@@ -180,7 +180,7 @@ function validateToolsConfig(
     }
 
     // Validate based on tool type (built-in vs custom)
-    const isBuiltin = (BUILTIN_TOOLS as readonly string[]).includes(tool.name);
+    const isBuiltin = (ALL_BUILTIN_TOOL_NAMES as readonly string[]).includes(tool.name);
     const isExecuteSql = tool.name === BUILTIN_TOOL_EXECUTE_SQL;
 
     if (isBuiltin) {

@@ -1,0 +1,60 @@
+---
+title: "explain_sql"
+---
+
+Show the execution plan for a SQL statement without running it.
+
+## Features
+
+- **Never executes**: Only ever compiles/plans the statement — safe to enable regardless of the source's `readonly` setting
+- **Per-dialect output**: Uses `EXPLAIN` on PostgreSQL, MySQL, MariaDB, and SQL Server, and `EXPLAIN QUERY PLAN` on SQLite (bare `EXPLAIN` on SQLite returns low-level bytecode, not a readable plan)
+- **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
+
+<Note>
+`explain_sql` is **opt-in**. Unlike `execute_sql` and `search_objects`, it is not enabled automatically when a source has no `[[tools]]` entries — add it explicitly (see [Enabling explain_sql](#enabling-explain-sql) below).
+</Note>
+
+## Usage
+
+Pass a single SQL statement to explain. The tool adds the `EXPLAIN` prefix itself — do not include it in the input.
+
+<CodeGroup>
+```text Input
+SELECT * FROM users WHERE status = 'active'
+```
+
+```text Sent to the database
+EXPLAIN SELECT * FROM users WHERE status = 'active'
+```
+</CodeGroup>
+
+Only a single statement is accepted (no `;`-separated batches), and the input must not itself begin with `EXPLAIN` or `ANALYZE` — both are rejected so the tool's own `EXPLAIN` prefix can never combine with a smuggled `ANALYZE` to actually execute the statement.
+
+<Tip>
+Because plain `EXPLAIN` never executes the target statement, `explain_sql` is safe to run against write statements too. `explain_sql` on `DELETE FROM users WHERE id = 1` returns the plan without deleting anything.
+</Tip>
+
+## Enabling explain_sql
+
+Add a `[[tools]]` entry with `name = "explain_sql"`. It takes no other options — no `readonly` or `max_rows` — since it's always read-only:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://user:pass@localhost:5432/mydb"
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+
+[[tools]]
+name = "search_objects"
+source = "production"
+
+[[tools]]
+name = "explain_sql"
+source = "production"
+```
+
+See [Tool Configuration](/tools/overview#tool-configuration) for how `[[tools]]` entries work across multiple sources.
