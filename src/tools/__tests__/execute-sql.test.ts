@@ -220,6 +220,84 @@ describe('execute-sql tool', () => {
     });
   });
 
+  describe('SQLGuard authorize-before-mutate (SQLGUARD_REQUIRE)', () => {
+    const prev = process.env.SQLGUARD_REQUIRE;
+
+    beforeEach(() => {
+      process.env.SQLGUARD_REQUIRE = '1';
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          status: 200,
+          text: async () => JSON.stringify({ ok: true, status: 'PASS' }),
+        }),
+      );
+    });
+
+    afterEach(() => {
+      if (prev === undefined) delete process.env.SQLGUARD_REQUIRE;
+      else process.env.SQLGUARD_REQUIRE = prev;
+      vi.unstubAllGlobals();
+    });
+
+    it('blocks mutating SQL without certificate when require is on', async () => {
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: "INSERT INTO users (name) VALUES ('x')" }, null);
+      const parsed = parseToolResponse(result);
+
+      expect(result.isError).toBe(true);
+      expect(parsed.code).toBe('SQLGUARD_REQUIRE');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it('allows SELECT when require is on (no cert needed)', async () => {
+      const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM users' }, null);
+      const parsed = parseToolResponse(result);
+
+      expect(parsed.success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalled();
+    });
+
+    it('allows mutating SQL when verify returns ok', async () => {
+      const mockResult: SQLResult = { rows: [], rowCount: 1 };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler(
+        {
+          sql: "INSERT INTO users (name) VALUES ('x')",
+          certificate: JSON.stringify({ status: 'PASS' }),
+          signature: 'sig',
+        },
+        null,
+      );
+      const parsed = parseToolResponse(result);
+
+      expect(parsed.success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalled();
+    });
+
+    it('does not treat mutating keywords inside string literals as writes', async () => {
+      const mockResult: SQLResult = { rows: [{ note: 'INSERT' }], rowCount: 1 };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler(
+        { sql: "SELECT 'INSERT INTO t' AS note FROM users" },
+        null,
+      );
+      const parsed = parseToolResponse(result);
+
+      expect(parsed.success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalled();
+    });
+  });
+
   describe('edge cases', () => {
     it.each([
       ['empty string', ''],

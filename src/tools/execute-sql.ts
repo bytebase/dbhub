@@ -77,7 +77,12 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       }
 
       // Optional SQLGuard authorize-before-mutate (env SQLGUARD_REQUIRE=1)
-      const sqlguardBlock = await gateMutatingSql(sql, certificate ?? null, signature ?? null);
+      const sqlguardBlock = await gateMutatingSql(
+        sql,
+        certificate ?? null,
+        signature ?? null,
+        connector.id,
+      );
       if (sqlguardBlock) {
         errorMessage = sqlguardBlock;
         success = false;

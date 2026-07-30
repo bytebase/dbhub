@@ -10,18 +10,20 @@
  *   SQLGUARD_AGENT       — agent/wallet id for buy hints
  */
 
-const MUTATING =
-  /\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|COPY|CALL|DO|VACUUM|REINDEX|CLUSTER|REFRESH)\b/i;
+import type { ConnectorType } from "../connectors/interface.js";
+import { isReadOnlySQL } from "../utils/allowed-keywords.js";
 
 export function requireEnabled(): boolean {
   const raw = (process.env.SQLGUARD_REQUIRE || "").trim().toLowerCase();
   return ["1", "true", "yes", "on"].includes(raw);
 }
 
-export function isMutating(sql: string): boolean {
-  let cleaned = sql.replace(/--.*?$/gm, " ");
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, " ");
-  return MUTATING.test(cleaned || "");
+/**
+ * True when SQL is not classified read-only by DBHub's dialect-aware parser
+ * (comment/string stripping, MySQL `--` rules, etc.).
+ */
+export function isMutating(sql: string, connectorType: ConnectorType | string = "postgres"): boolean {
+  return !isReadOnlySQL(sql, connectorType);
 }
 
 function baseUrl(): string {
@@ -55,7 +57,7 @@ async function postJson(
     try {
       json = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
     } catch {
-      json = { raw };
+      json = { raw: String(raw).slice(0, 200) };
     }
     if (json === null || typeof json !== "object" || Array.isArray(json)) {
       json = { value: json };
@@ -74,6 +76,19 @@ function buyHint(): string {
   );
 }
 
+/** Redact verify payloads before surfacing to tool clients/logs. */
+export function redactVerifyError(json: Record<string, unknown>): string {
+  const safe: Record<string, unknown> = {};
+  for (const key of ["ok", "verified", "status", "error", "code", "message", "reason"]) {
+    if (key in json) safe[key] = json[key];
+  }
+  if (json.certificate && typeof json.certificate === "object" && !Array.isArray(json.certificate)) {
+    const c = json.certificate as Record<string, unknown>;
+    safe.certificate_status = c.status;
+  }
+  return JSON.stringify(safe).slice(0, 400);
+}
+
 /**
  * Returns an error message string if blocked, else null.
  */
@@ -81,9 +96,10 @@ export async function gateMutatingSql(
   sql: string,
   certificate?: string | Record<string, unknown> | null,
   signature?: string | null,
+  connectorType: ConnectorType | string = "postgres",
 ): Promise<string | null> {
   if (!requireEnabled()) return null;
-  if (!isMutating(sql)) return null;
+  if (!isMutating(sql, connectorType)) return null;
 
   if (!certificate || !signature) {
     return (
@@ -107,22 +123,23 @@ export async function gateMutatingSql(
       certificate: certObj,
       signature,
     });
-    const ok = status === 200 && (json.ok === true || json.verified === true);
-    const pass =
-      ok &&
-      (String((json.certificate as Record<string, unknown>)?.status || json.status || "")
-        .toUpperCase() === "PASS" ||
-        json.status === "PASS" ||
-        json.ok === true);
 
     // Accept verify ok:true as PASS authorization
     if (status === 200 && json.ok === true) {
       return null;
     }
+
+    const pass =
+      status === 200 &&
+      (json.verified === true ||
+        String((json.certificate as Record<string, unknown>)?.status || json.status || "")
+          .toUpperCase() === "PASS" ||
+        json.status === "PASS");
+
     if (pass) return null;
 
     return (
-      `SQLGUARD_REQUIRE: verify failed (HTTP ${status}): ${JSON.stringify(json).slice(0, 400)}. ${buyHint()}`
+      `SQLGUARD_REQUIRE: verify failed (HTTP ${status}): ${redactVerifyError(json)}. ${buyHint()}`
     );
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
