@@ -3,7 +3,7 @@
  * Shared utilities for MCP tool handlers to reduce boilerplate
  */
 
-import { ConnectorType } from "../connectors/interface.js";
+import { ConnectorType, SQLResultSet } from "../connectors/interface.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { allowedKeywords } from "./allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
@@ -28,6 +28,21 @@ export interface RequestMetadata {
  */
 export function getEffectiveSourceId(sourceId?: string): string {
   return sourceId || "default";
+}
+
+/**
+ * Shapes a connector's per-statement result sets into the tool response's
+ * `statements` field. Shared by execute_sql and custom tools so their output
+ * contracts can't silently diverge (e.g. one gaining a field the other doesn't).
+ */
+export function toStatementsPayload(
+  resultSets: SQLResultSet[]
+): Array<{ sql?: string; rows: any[]; count: number }> {
+  return resultSets.map((set) => ({
+    sql: set.sql,
+    rows: set.rows,
+    count: set.rowCount,
+  }));
 }
 
 /**

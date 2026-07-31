@@ -13,6 +13,7 @@ import {
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import {
   createReadonlyViolationMessage,
+  toStatementsPayload,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
@@ -224,11 +225,7 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
       // SQL statement, but isn't restricted to be - surface every statement's
       // result rather than assuming exactly one.
       const responseData = {
-        statements: result.resultSets.map((set: { sql?: string; rows: any[]; rowCount: number }) => ({
-          sql: set.sql,
-          rows: set.rows,
-          count: set.rowCount,
-        })),
+        statements: toStatementsPayload(result.resultSets),
         source_id: toolConfig.source,
       };
 

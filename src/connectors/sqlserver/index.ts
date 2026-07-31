@@ -763,13 +763,16 @@ export class SQLServerConnector implements Connector {
       if (options.maxRows) {
         processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
       }
+      // Computed once and threaded into buildResultSets below (directly, or via
+      // executeReadOnly) rather than re-derived from SQL text on every call.
+      const isSingleStatement = splitSQLStatements(processedSQL, "sqlserver").length === 1;
 
       // Engine-level read-only enforcement: SQL Server has no
       // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
       // unconditionally ROLLBACK to prevent any modifications from persisting.
       // This is defense-in-depth behind the keyword classifier.
       if (options.readonly) {
-        return await this.executeReadOnly(processedSQL, parameters);
+        return await this.executeReadOnly(processedSQL, parameters, isSingleStatement);
       }
 
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
@@ -793,7 +796,11 @@ export class SQLServerConnector implements Connector {
       const result = await request.query(processedSQL);
 
       return {
-        resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected, processedSQL),
+        resultSets: SQLServerConnector.buildResultSets(
+          result.recordsets,
+          result.rowsAffected,
+          isSingleStatement ? processedSQL : undefined,
+        ),
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
@@ -817,16 +824,16 @@ export class SQLServerConnector implements Connector {
    * not a truly per-statement breakdown, but no read statement's rows are
    * ever merged with another's, which is what mattered for #380.
    *
-   * `sourceSql` is attributed to the single resulting set only when the
-   * batch is unambiguously one statement - for a genuine multi-statement
-   * batch there's no reliable way to say which source statement a given
-   * recordset (or the trailing writes set) came from, so `sql` is left
-   * undefined rather than guessed.
+   * `sourceSql`, when given, is attributed to the single resulting set - it
+   * must be omitted (pass `undefined`) unless the caller has already
+   * confirmed the batch is unambiguously one statement, since for a genuine
+   * multi-statement batch there's no reliable way to say which source
+   * statement a given recordset (or the trailing writes set) came from.
    */
   private static buildResultSets(
     recordsets: any,
     rowsAffected: number[] | undefined,
-    sourceSql: string,
+    sourceSql: string | undefined,
   ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
       const rows = recordset ?? [];
@@ -843,7 +850,11 @@ export class SQLServerConnector implements Connector {
       sets.push({ rows: [], rowCount: writesOnly });
     }
 
-    if (sets.length === 1 && splitSQLStatements(sourceSql, "sqlserver").length === 1) {
+    // A pure-writes batch collapses to one synthetic set above regardless of
+    // how many write statements it actually had, so sourceSql being given is
+    // not on its own proof of a single statement - the caller's
+    // isSingleStatement check (done once, from the real source text) is.
+    if (sets.length === 1 && sourceSql !== undefined) {
       sets[0].sql = sourceSql;
     }
     return sets;
@@ -946,6 +957,7 @@ export class SQLServerConnector implements Connector {
   private async executeReadOnly(
     processedSQL: string,
     parameters?: any[],
+    isSingleStatement?: boolean,
   ): Promise<SQLResult> {
     this.assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
 
@@ -987,7 +999,11 @@ export class SQLServerConnector implements Connector {
       }
     }
     return {
-      resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected, processedSQL),
+      resultSets: SQLServerConnector.buildResultSets(
+        result.recordsets,
+        result.rowsAffected,
+        isSingleStatement ? processedSQL : undefined,
+      ),
       ...(messages.length > 0 ? { messages } : {}),
     };
   }
