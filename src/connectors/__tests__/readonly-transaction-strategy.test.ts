@@ -39,12 +39,14 @@ const TIDB_VERSION = "8.0.11-TiDB-v7.5.0";
 function makeFakePool(version: string, wrapResults: (rows: any[]) => any) {
   const statements: string[] = [];
   const conn = {
+    threadId: 42,
     query: vi.fn(async (arg: any) => {
       const sql = typeof arg === "string" ? arg : arg.sql;
       statements.push(sql);
       return wrapResults([{ id: 1 }]);
     }),
     release: vi.fn(),
+    destroy: vi.fn(),
   };
   const pool = {
     // Connect-time flavor probe.
@@ -173,6 +175,47 @@ describe("readonly transaction strategy", () => {
         "syntax error"
       );
       expect(conn.release).toHaveBeenCalled();
+    });
+
+    it("kills the query and destroys the connection on a client-side timeout, skipping rollback", async () => {
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql);
+      const timeoutError = Object.assign(new Error("Query inactivity timeout"), {
+        code: "PROTOCOL_SEQUENCE_TIMEOUT",
+      });
+      conn.query.mockImplementation(async (arg: any) => {
+        const sql = typeof arg === "string" ? arg : arg.sql;
+        statements.push(sql);
+        if (sql === "SELECT SLEEP(8)") throw timeoutError;
+        return asMysql([{ id: 1 }]);
+      });
+
+      // First getConnection() returns the dedicated connection used for the
+      // query; the connector must request a second, separate connection to
+      // issue KILL QUERY, since `conn`'s own command queue is stuck.
+      const killerConn = { query: vi.fn(async () => asMysql([])), release: vi.fn() };
+      pool.getConnection = vi
+        .fn()
+        .mockResolvedValueOnce(conn)
+        .mockResolvedValueOnce(killerConn);
+      mysqlCreatePool.mockReturnValue(pool);
+
+      const connector = new MySQLConnector();
+      await connector.connect("mysql://user:pass@localhost:3306/db");
+
+      await expect(
+        connector.executeSQL("SELECT SLEEP(8)", { readonly: true })
+      ).rejects.toThrow("Query inactivity timeout");
+
+      // The connection's command queue is stuck behind the abandoned query,
+      // so attempting ROLLBACK on it would hang until the server-side
+      // statement eventually finishes.
+      expect(statements).not.toContain("ROLLBACK");
+      // The server-side statement is killed over the fresh connection...
+      expect(killerConn.query).toHaveBeenCalledWith(`KILL QUERY ${conn.threadId}`);
+      expect(killerConn.release).toHaveBeenCalled();
+      // ...and the poisoned connection is destroyed, never returned to the pool.
+      expect(conn.destroy).toHaveBeenCalled();
+      expect(conn.release).not.toHaveBeenCalled();
     });
   });
 

@@ -23,6 +23,27 @@ export interface ReadOnlyTransactionConnection {
 }
 
 /**
+ * True for mysql2's client-side query timeout (see MySQLConnector.executeSQL).
+ *
+ * mysql2 never tells the underlying Connection that the timed-out command is
+ * done — it just rejects that command's own promise. The Connection's command
+ * queue still thinks the timed-out query is in flight, so anything sent on
+ * the same connection afterwards (including this file's own ROLLBACK) queues
+ * behind it and only runs once the real, still-executing server response for
+ * the abandoned query finally arrives — i.e. it can block for as long as the
+ * runaway query keeps running, silently turning a bounded timeout into an
+ * unbounded hang. Skip the rollback for this error class; the connection is
+ * unusable and MySQLConnector destroys it instead of returning it to the pool.
+ */
+export function isClientSideTimeout(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "PROTOCOL_SEQUENCE_TIMEOUT"
+  );
+}
+
+/**
  * Run `execute` inside the read-only transaction backstop.
  *
  * When `readonly` is false the callback runs untouched, so callers can wrap
@@ -56,10 +77,13 @@ export async function withReadOnlyTransaction<T>(
     return result;
   } catch (error) {
     // Best-effort rollback so the connection returns to the pool clean.
-    try {
-      await conn.query("ROLLBACK");
-    } catch {
-      // ignore rollback failure; the original error is more useful
+    // Skipped for a client-side timeout: see isClientSideTimeout.
+    if (!isClientSideTimeout(error)) {
+      try {
+        await conn.query("ROLLBACK");
+      } catch {
+        // ignore rollback failure; the original error is more useful
+      }
     }
     throw error;
   }

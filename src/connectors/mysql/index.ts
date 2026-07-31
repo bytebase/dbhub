@@ -19,7 +19,7 @@ import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-data
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
-import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
+import { withReadOnlyTransaction, isClientSideTimeout } from "../../utils/readonly-transaction.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { isTiDBVersion } from "../../utils/server-flavor.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
@@ -662,6 +662,11 @@ export class MySQLConnector implements Connector {
     // Get a dedicated connection from the pool to ensure session consistency
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
+    // Captured up front: once a timeout fires, mysql2's own connection.threadId
+    // getter still works, but reading it after the fact races the impending
+    // conn.destroy() below.
+    const threadId = conn.threadId;
+    let isConnectionPoisoned = false;
     try {
       // Engine-level read-only backstop (shared with MariaDB); see
       // withReadOnlyTransaction for the semantics and the TiDB caveat.
@@ -706,9 +711,49 @@ export class MySQLConnector implements Connector {
           return { rows, rowCount };
         }
       );
+    } catch (error) {
+      if (isClientSideTimeout(error)) {
+        // mysql2's `timeout` option only aborts client-side: the statement
+        // keeps running on the server and this connection's command queue
+        // still thinks that statement is in flight (see isClientSideTimeout).
+        // Best-effort kill the server-side statement over a fresh connection
+        // so the timeout actually frees whatever the query was holding.
+        isConnectionPoisoned = true;
+        await this.killQuery(threadId);
+      }
+      throw error;
     } finally {
-      // Always release the connection back to the pool
-      conn.release();
+      if (isConnectionPoisoned) {
+        // The command queue on this connection is stuck behind the timed-out
+        // statement's still-pending server response; returning it to the pool
+        // would silently block whichever caller draws it next. Per mysql2's
+        // own documented contract, a timed-out connection must be destroyed,
+        // not reused.
+        conn.destroy();
+      } else {
+        conn.release();
+      }
+    }
+  }
+
+  /**
+   * Best-effort server-side kill for a query abandoned by mysql2's client-side
+   * timeout. Uses a separate connection: the original connection's command
+   * queue is stuck behind the abandoned statement (see isClientSideTimeout)
+   * and cannot itself be used to send KILL QUERY.
+   */
+  private async killQuery(threadId: number): Promise<void> {
+    if (!this.pool) return;
+    let killer;
+    try {
+      killer = await this.pool.getConnection();
+      await killer.query(`KILL QUERY ${threadId}`);
+    } catch {
+      // Unconfirmed cancellation: the statement may still be running on the
+      // server. Nothing more to do from here — the caller already sees the
+      // timeout error.
+    } finally {
+      if (killer) killer.release();
     }
   }
 }
