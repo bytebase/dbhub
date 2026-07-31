@@ -58,7 +58,7 @@ On MySQL, MariaDB, and SQL Server, some metrics need a privilege the connected u
     "connections": { "...": "..." },
     "buffer_cache": { "...": "..." },
     "notes": [
-      "Connected user lacks the PROCESS privilege: connection counts and active-query duration reflect only this diagnostic session, and idle-in-transaction detection is unavailable."
+      "Connected user lacks the PROCESS privilege: PROCESSLIST visibility is restricted to the connecting user's own sessions, and this diagnostic session is excluded from the count, so connection counts and active-query duration may under-report (down to 0). Idle-in-transaction detection is unavailable."
     ]
   }
 }
@@ -66,7 +66,7 @@ On MySQL, MariaDB, and SQL Server, some metrics need a privilege the connected u
 
 | Engine | Privilege required | Scope |
 | --- | --- | --- |
-| MySQL / MariaDB | `PROCESS` | Idle-in-transaction detection only; connection/buffer-cache counts are still returned (narrowed to the caller's own session without it) |
+| MySQL / MariaDB | `PROCESS` | Idle-in-transaction detection only; connection/buffer-cache counts are still returned, but without it, connection visibility is restricted to the caller's own sessions (and the diagnostic session itself is excluded), so counts may under-report down to 0 |
 | SQL Server | `VIEW SERVER STATE` (`VIEW DATABASE STATE` on Azure SQL Database) | Both connection pool and buffer cache sections |
 | PostgreSQL | None | All metrics are available to any connected user |
 

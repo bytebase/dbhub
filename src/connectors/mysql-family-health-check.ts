@@ -54,7 +54,7 @@ export async function getMySQLFamilyHealthCheck(query: QueryRows): Promise<Healt
     longestIdleInTransactionSeconds = toNullableNumber(trxOutcome.rows[0].longest_idle_in_transaction_seconds);
   } else {
     notes.push(
-      "Connected user lacks the PROCESS privilege: connection counts and active-query duration reflect only this diagnostic session, and idle-in-transaction detection is unavailable."
+      "Connected user lacks the PROCESS privilege: PROCESSLIST visibility is restricted to the connecting user's own sessions, and this diagnostic session is excluded from the count, so connection counts and active-query duration may under-report (down to 0). Idle-in-transaction detection is unavailable."
     );
   }
 

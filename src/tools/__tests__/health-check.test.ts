@@ -1,17 +1,17 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createHealthCheckToolHandler } from '../health-check.js';
-import { ConnectorManager } from '../../connectors/manager.js';
-import type { Connector, ConnectorType, HealthCheckResult } from '../../connectors/interface.js';
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { createHealthCheckToolHandler } from "../health-check.js";
+import { ConnectorManager } from "../../connectors/manager.js";
+import type { Connector, ConnectorType, HealthCheckResult } from "../../connectors/interface.js";
 
-vi.mock('../../connectors/manager.js');
+vi.mock("../../connectors/manager.js");
 
 const createMockConnector = (
-  id: ConnectorType = 'postgres',
-  sourceId: string = 'default',
+  id: ConnectorType = "postgres",
+  sourceId: string = "default",
   withHealthCheck = true
 ): Connector => ({
   id,
-  name: 'Mock Connector',
+  name: "Mock Connector",
   getId: () => sourceId,
   dsnParser: {} as any,
   connect: vi.fn(),
@@ -30,15 +30,15 @@ const createMockConnector = (
 
 const parseToolResponse = (response: any) => JSON.parse(response.content[0].text);
 
-describe('health-check tool', () => {
+describe("health-check tool", () => {
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('returns connections and buffer_cache in snake_case', async () => {
-    const mockConnector = createMockConnector('postgres', 'test_source');
+  it("returns connections and buffer_cache in snake_case", async () => {
+    const mockConnector = createMockConnector("postgres", "test_source");
     mockGetCurrentConnector.mockReturnValue(mockConnector);
     const health: HealthCheckResult = {
       connections: {
@@ -59,13 +59,13 @@ describe('health-check tool', () => {
     };
     vi.mocked(mockConnector.getHealthCheck!).mockResolvedValue(health);
 
-    const handler = createHealthCheckToolHandler('test_source');
+    const handler = createHealthCheckToolHandler("test_source");
     const result = await handler({}, null);
     const parsed = parseToolResponse(result);
 
     expect(parsed.success).toBe(true);
     expect(parsed.data).toEqual({
-      source_id: 'test_source',
+      source_id: "test_source",
       connections: {
         total: 10,
         active: 2,
@@ -84,30 +84,30 @@ describe('health-check tool', () => {
     });
   });
 
-  it('returns UNSUPPORTED when the connector has no getHealthCheck implementation', async () => {
-    const mockConnector = createMockConnector('sqlite', 'test_source', false);
+  it("returns UNSUPPORTED when the connector has no getHealthCheck implementation", async () => {
+    const mockConnector = createMockConnector("sqlite", "test_source", false);
     mockGetCurrentConnector.mockReturnValue(mockConnector);
 
-    const handler = createHealthCheckToolHandler('test_source');
+    const handler = createHealthCheckToolHandler("test_source");
     const result = await handler({}, null);
 
     expect(result.isError).toBe(true);
     const parsed = parseToolResponse(result);
-    expect(parsed.code).toBe('UNSUPPORTED');
+    expect(parsed.code).toBe("UNSUPPORTED");
   });
 
-  it('returns EXECUTION_ERROR when the connector throws', async () => {
-    const mockConnector = createMockConnector('postgres', 'test_source');
+  it("returns EXECUTION_ERROR when the connector throws", async () => {
+    const mockConnector = createMockConnector("postgres", "test_source");
     mockGetCurrentConnector.mockReturnValue(mockConnector);
-    vi.mocked(mockConnector.getHealthCheck!).mockRejectedValue(new Error('boom'));
+    vi.mocked(mockConnector.getHealthCheck!).mockRejectedValue(new Error("boom"));
 
-    const handler = createHealthCheckToolHandler('test_source');
+    const handler = createHealthCheckToolHandler("test_source");
     const result = await handler({}, null);
 
     expect(result.isError).toBe(true);
     const parsed = parseToolResponse(result);
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toBe('boom');
-    expect(parsed.code).toBe('EXECUTION_ERROR');
+    expect(parsed.error).toBe("boom");
+    expect(parsed.code).toBe("EXECUTION_ERROR");
   });
 });
