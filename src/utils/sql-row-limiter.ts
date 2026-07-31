@@ -1,4 +1,4 @@
-import { stripCommentsAndStrings } from "./sql-parser.js";
+import { stripCommentsAndStrings, blankCommentsAndStrings } from "./sql-parser.js";
 
 /**
  * Shared utility for applying row limits to SELECT queries only using database-native LIMIT clauses
@@ -89,35 +89,87 @@ export class SQLRowLimiter {
   }
 
   /**
+   * Scan blanked (comment/string-free, length-preserving) SQL for parenthesis
+   * depth, invoking onMatch for every regex hit at depth 0 (i.e. not nested
+   * inside a subquery, function call, or window OVER clause).
+   */
+  private static scanTopLevel(
+    blankedSQL: string,
+    regex: RegExp,
+    onMatch: (match: RegExpExecArray) => void
+  ): void {
+    let depth = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(blankedSQL)) !== null) {
+      const token = m[0];
+      if (token === "(") { depth++; }
+      else if (token === ")") { depth--; }
+      else if (depth === 0) { onMatch(m); }
+    }
+  }
+
+  /**
    * Check if a SQL statement combines multiple SELECTs with a set operator
-   * (UNION [ALL], INTERSECT, EXCEPT). Strips comments and string literals
-   * first to avoid false positives.
+   * (UNION [ALL], INTERSECT, EXCEPT) at the top level — i.e. not nested
+   * inside a subquery already wrapped in parentheses. Strips comments and
+   * string literals first to avoid false positives.
    */
   static hasSetOperator(sql: string): boolean {
-    const cleanedSQL = stripCommentsAndStrings(sql);
-    return /\b(union|intersect|except)\b/i.test(cleanedSQL);
+    const blankedSQL = blankCommentsAndStrings(sql, "sqlserver");
+    let found = false;
+    this.scanTopLevel(blankedSQL, /\(|\)|\bunion\b|\bintersect\b|\bexcept\b/gi, () => {
+      found = true;
+    });
+    return found;
+  }
+
+  /**
+   * Find the start index of a top-level trailing ORDER BY clause (not one
+   * nested inside a subquery or a window function's OVER (...) clause).
+   * Returns -1 if none exists. Operates on the original (non-blanked) SQL
+   * length, since blankCommentsAndStrings preserves length/position.
+   */
+  private static findTopLevelOrderByIndex(sql: string): number {
+    const blankedSQL = blankCommentsAndStrings(sql, "sqlserver");
+    let lastIndex = -1;
+    this.scanTopLevel(blankedSQL, /\(|\)|\border\s+by\b/gi, (m) => {
+      lastIndex = m.index;
+    });
+    return lastIndex;
   }
 
   /**
    * Add or modify TOP clause in a SQL statement (SQL Server)
    */
   static applyTopToQuery(sql: string, maxRows: number): string {
-    const existingTop = this.extractTopValue(sql);
+    if (this.hasSetOperator(sql)) {
+      // TOP applied anywhere inside the statement (e.g. on the first SELECT,
+      // or on one branch) only caps that branch's rows, not the combined
+      // UNION/INTERSECT/EXCEPT output, so wrap the whole statement and cap
+      // the outer result set instead, regardless of any TOP already present
+      // on an individual branch.
+      const trimmed = sql.trim();
+      const hasSemicolon = trimmed.endsWith(';');
+      const sqlWithoutSemicolon = hasSemicolon ? trimmed.slice(0, -1) : trimmed;
 
+      // A top-level ORDER BY must move outside the derived table: T-SQL
+      // disallows ORDER BY inside a subquery unless that subquery itself has
+      // TOP/OFFSET/FOR XML, so leaving it inside would break the query.
+      const orderByIndex = this.findTopLevelOrderByIndex(sqlWithoutSemicolon);
+      if (orderByIndex !== -1) {
+        const innerSql = sqlWithoutSemicolon.slice(0, orderByIndex).trimEnd();
+        const orderByClause = sqlWithoutSemicolon.slice(orderByIndex).trim();
+        return `SELECT TOP ${maxRows} * FROM (${innerSql}\n) AS subq ${orderByClause}${hasSemicolon ? ';' : ''}`;
+      }
+
+      return `SELECT TOP ${maxRows} * FROM (${sqlWithoutSemicolon}\n) AS subq${hasSemicolon ? ';' : ''}`;
+    }
+
+    const existingTop = this.extractTopValue(sql);
     if (existingTop !== null) {
       // Use the minimum of existing top and maxRows
       const effectiveTop = Math.min(existingTop, maxRows);
       return sql.replace(/\bselect\s+top\s+\d+/i, `SELECT TOP ${effectiveTop}`);
-    }
-
-    if (this.hasSetOperator(sql)) {
-      // TOP injected into just the first SELECT only caps that branch's rows,
-      // not the combined UNION/INTERSECT/EXCEPT output, so wrap the whole
-      // statement and cap the outer result set instead.
-      const trimmed = sql.trim();
-      const hasSemicolon = trimmed.endsWith(';');
-      const sqlWithoutSemicolon = hasSemicolon ? trimmed.slice(0, -1) : trimmed;
-      return `SELECT TOP ${maxRows} * FROM (${sqlWithoutSemicolon}\n) AS subq${hasSemicolon ? ';' : ''}`;
     }
 
     // Add TOP clause after SELECT

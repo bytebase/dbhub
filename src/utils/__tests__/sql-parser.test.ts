@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripCommentsAndStrings, splitSQLStatements } from "../sql-parser.js";
+import { stripCommentsAndStrings, splitSQLStatements, blankCommentsAndStrings } from "../sql-parser.js";
 
 describe("stripCommentsAndStrings", () => {
   describe("single-line comments (--)", () => {
@@ -619,4 +619,36 @@ describe("splitSQLStatements", () => {
     });
   });
 
+});
+
+describe("blankCommentsAndStrings", () => {
+  it("preserves the input length, unlike stripCommentsAndStrings", () => {
+    const sql = "SELECT * FROM users -- a much longer comment than one space";
+    const result = blankCommentsAndStrings(sql);
+    expect(result).toHaveLength(sql.length);
+    expect(result).toBe("SELECT * FROM users                                        ");
+  });
+
+  it("blanks single-line comments, multi-line comments, and string literals in place", () => {
+    const sql = "SELECT 'it''s a test' /* note */ FROM users -- trailing";
+    const result = blankCommentsAndStrings(sql);
+    expect(result).toHaveLength(sql.length);
+    expect(result).toBe("SELECT                           FROM users            ");
+  });
+
+  it("blanks SQL Server bracket-quoted identifiers when given the sqlserver dialect", () => {
+    const sql = "SELECT [order] FROM [dbo].[users]";
+    const result = blankCommentsAndStrings(sql, "sqlserver");
+    expect(result).toHaveLength(sql.length);
+    expect(result).toBe("SELECT         FROM      .       ");
+  });
+
+  it("leaves parentheses and keywords outside strings/comments untouched, so depth-scanning stays accurate", () => {
+    const sql = "SELECT id FROM a UNION ALL SELECT id FROM b -- 'fake union' inside a comment";
+    const result = blankCommentsAndStrings(sql);
+    expect(result.slice(0, "SELECT id FROM a UNION ALL SELECT id FROM b".length)).toBe(
+      "SELECT id FROM a UNION ALL SELECT id FROM b"
+    );
+    expect(result).not.toContain("fake union");
+  });
 });

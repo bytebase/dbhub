@@ -231,6 +231,32 @@ export function stripCommentsAndStrings(sql: string, dialect?: ConnectorType): s
 }
 
 /**
+ * Like stripCommentsAndStrings, but blanks each comment/string/quoted-block
+ * character-for-character instead of collapsing it to a single space, so the
+ * result is the same length as the input and indices line up with the
+ * original string. Callers that need to slice the original SQL at a position
+ * found via regex/scanning on the cleaned text (rather than just testing for
+ * a match) should use this instead.
+ */
+export function blankCommentsAndStrings(sql: string, dialect?: ConnectorType): string {
+  const scanToken = getScanner(dialect);
+  let result = "";
+  let i = 0;
+
+  while (i < sql.length) {
+    const token = scanToken(sql, i);
+    if (token.type === TokenType.Plain) {
+      result += sql[i];
+    } else {
+      result += " ".repeat(token.end - i);
+    }
+    i = token.end;
+  }
+
+  return result;
+}
+
+/**
  * Split SQL into individual statements, handling semicolons inside quoted contexts.
  * When no dialect is specified, only ANSI SQL syntax is recognized.
  */
