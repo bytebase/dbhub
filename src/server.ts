@@ -166,9 +166,9 @@ See documentation for more details on configuring database connections.
 
     // Bearer token auth for the HTTP transport (issue #66). Configuring a
     // token is itself the opt-in — an empty list (the default) leaves
-    // today's unauthenticated behavior unchanged.
-    const authTokensResult = transportData.type === "http" ? resolveAuthTokens() : { tokens: [], source: "default" };
-    const authTokens = authTokensResult.tokens;
+    // today's unauthenticated behavior unchanged. Only meaningful for http,
+    // but resolving it is cheap enough not to gate on transport type.
+    const { tokens: authTokens, source: authTokenSource } = resolveAuthTokens();
 
     // Print ASCII art banner with version and slogan
     // Collect active modes
@@ -240,13 +240,18 @@ See documentation for more details on configuring database connections.
         next();
       });
 
+      // Health check endpoint. Registered before the auth middleware below so
+      // it never requires a token — uptime monitors don't have one — without
+      // the auth middleware needing to know about specific unauthenticated
+      // routes; it responds directly and never calls next().
+      app.get("/healthz", (req, res) => {
+        res.status(200).send("OK");
+      });
+
       // Bearer token auth (issue #66): rejects requests missing a valid
       // `Authorization: Bearer <token>` header when --auth-token/DBHUB_AUTH_TOKEN
-      // is configured; a no-op when it isn't. /healthz is exempt so uptime
-      // monitors don't need the token.
+      // is configured; a no-op when it isn't.
       app.use((req, res, next) => {
-        if (req.path === '/healthz') return next();
-
         const result = validateAuthToken(req.headers.authorization, authTokens);
         if (!result.ok) {
           res.header('WWW-Authenticate', 'Bearer');
@@ -258,11 +263,6 @@ See documentation for more details on configuring database connections.
       // Serve static frontend files
       const frontendPath = path.join(__dirname, "public");
       app.use(express.static(frontendPath));
-
-      // Health check endpoint
-      app.get("/healthz", (req, res) => {
-        res.status(200).send("OK");
-      });
 
       // Data sources API endpoints
       app.get("/api/sources", listSources);
@@ -325,7 +325,7 @@ See documentation for more details on configuring database connections.
 
         // Surface whether bearer token auth is enforced (issue #66).
         if (authTokens.length > 0) {
-          console.error(`Auth: bearer token required (${authTokens.length} token(s) configured via ${authTokensResult.source})`);
+          console.error(`Auth: bearer token required (${authTokens.length} token(s) configured via ${authTokenSource})`);
         } else {
           console.error('Auth: disabled (set --auth-token or DBHUB_AUTH_TOKEN to require a bearer token)');
         }
