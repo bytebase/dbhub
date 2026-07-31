@@ -530,7 +530,7 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
 ### name
 
 <ParamField path="name" type="string" required>
-  **Required.** Tool name. Built-in tools are `execute_sql`, `search_objects`, and the opt-in `explain_sql` (see [explain_sql](/tools/explain-sql)); any other name defines a [custom tool](/tools/custom-tools).
+  **Required.** Tool name. Built-in tools are `execute_sql`, `search_objects`, and the opt-in `explain_sql` (see [explain_sql](/tools/explain-sql)) and `health_check` (see [health_check](/tools/health-check)); any other name defines a [custom tool](/tools/custom-tools).
 
   ```toml
   [[tools]]

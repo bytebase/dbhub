@@ -32,7 +32,8 @@ src/
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
 │   ├── search-objects.ts  # Unified search/list with progressive disclosure
-│   └── explain-sql.ts   # Opt-in EXPLAIN plan tool (never executes the target statement)
+│   ├── explain-sql.ts   # Opt-in EXPLAIN plan tool (never executes the target statement)
+│   └── health-check.ts  # Opt-in connection pool + buffer cache metrics tool (Postgres/MySQL/MariaDB/SQL Server)
 ├── utils/               # Shared utilities
 │   ├── dsn-obfuscator.ts# DSN security
 │   ├── response-formatter.ts # Output formatting

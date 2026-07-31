@@ -257,6 +257,22 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(comment).toBe('Users aged 25 or older');
     });
 
+    it('should report connection pool state and buffer cache hit ratio via getHealthCheck', async () => {
+      const health = await postgresTest.connector.getHealthCheck!();
+
+      expect(health.connections).toBeDefined();
+      expect(health.connections!.total).toBeGreaterThanOrEqual(1);
+      expect(health.connections!.maxConnections).toBeGreaterThan(0);
+      expect(health.connections!.idleInTransaction).toBeGreaterThanOrEqual(0);
+
+      expect(health.bufferCache).toBeDefined();
+      expect(health.bufferCache!.blocksHit + health.bufferCache!.blocksRead).toBeGreaterThan(0);
+      if (health.bufferCache!.hitRatioPct !== null) {
+        expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
+        expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
+      }
+    });
+
     it('should handle PostgreSQL returning clause', async () => {
       const result = await postgresTest.connector.executeSQL(
         "INSERT INTO users (name, email, age) VALUES ('Returning Test', 'returning@example.com', 40) RETURNING id, name",

@@ -2113,6 +2113,89 @@ statement = "SELECT 1"
     });
   });
 
+  describe('health_check tool configuration', () => {
+    it('should accept health_check with just name and source', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "health_check"
+source = "test_db"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0]).toMatchObject({
+        name: 'health_check',
+        source: 'test_db',
+      });
+    });
+
+    it('should reject health_check with description/statement/parameters', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "health_check"
+source = "test_db"
+description = "not allowed"
+statement = "SELECT 1"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow(
+        "built-in tool 'health_check' cannot have description, statement, or parameters fields"
+      );
+    });
+
+    it('should reject health_check with readonly or max_rows', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "health_check"
+source = "test_db"
+readonly = true
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow(
+        "tool 'health_check' cannot have readonly or max_rows fields"
+      );
+    });
+
+    it('should reject a custom tool named health_check_foo (reserved naming pattern)', () => {
+      const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+
+[[tools]]
+name = "health_check_foo"
+source = "test_db"
+description = "Custom tool colliding with health_check naming"
+statement = "SELECT 1"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      // toml-loader itself doesn't reject the naming collision (that's
+      // enforced by ToolRegistry.validateCustomTool), but it must at least
+      // parse the tool through unchanged as a non-builtin so the registry can
+      // catch it.
+      const result = loadTomlConfig();
+      expect(result?.tools).toHaveLength(1);
+      expect(result?.tools![0].name).toBe('health_check_foo');
+    });
+  });
+
   describe('environment variable interpolation', () => {
     const originalEnv = { ...process.env };
 

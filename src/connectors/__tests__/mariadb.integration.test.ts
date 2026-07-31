@@ -196,6 +196,26 @@ describe('MariaDB Connector Integration Tests', () => {
       expect(await mariadbTest.connector.getDefaultSchema!()).toBe('testdb');
     });
 
+    it('should report connection pool state and buffer cache hit ratio via getHealthCheck', async () => {
+      const health = await mariadbTest.connector.getHealthCheck!();
+
+      expect(health.connections).toBeDefined();
+      // Without the PROCESS privilege, PROCESSLIST visibility can be
+      // restricted to the querying connection itself (excluded here via
+      // `ID <> CONNECTION_ID()`), so total may legitimately be 0.
+      expect(health.connections!.total).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.maxConnections).toBeGreaterThan(0);
+      expect(health.connections!.idleInTransaction).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idleInTransactionAborted).toBeUndefined();
+
+      expect(health.bufferCache).toBeDefined();
+      expect(health.bufferCache!.blocksHit + health.bufferCache!.blocksRead).toBeGreaterThan(0);
+      if (health.bufferCache!.hitRatioPct !== null) {
+        expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
+        expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
+      }
+    });
+
     it('should execute multiple statements with native support', async () => {
       // First insert the test data
       await mariadbTest.connector.executeSQL(`

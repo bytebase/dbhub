@@ -55,6 +55,7 @@ DBHub provides AI assistants with direct database access through these tools:
 - **[execute_sql](/tools/execute-sql)**: Run queries with transaction support and safety controls
 - **[search_objects](/tools/search-objects)**: Explore schemas, tables, columns, indexes, and procedures
 - **[explain_sql](/tools/explain-sql)** (opt-in): Show a query's execution plan without running it
+- **[health_check](/tools/health-check)** (opt-in): Report connection pool state and buffer cache hit ratio
 - **[Custom Tools](/tools/custom-tools)**: Define reusable, parameterized SQL operations
 
 ### Workbench
@@ -86,6 +87,7 @@ flowchart TB
             ES["execute_sql"]
             SO["search_objects"]
             EX["explain_sql (opt-in)"]
+            HC["health_check (opt-in)"]
             CT["custom tools"]
         end
     end

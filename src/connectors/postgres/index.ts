@@ -14,7 +14,9 @@ import {
   StoredProcedure,
   ExecuteOptions,
   ConnectorConfig,
+  HealthCheckResult,
 } from "../interface.js";
+import { toNullableNumber } from "../health-check-utils.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -468,6 +470,68 @@ export class PostgresConnector implements Connector {
         return result.rows[0].table_comment || null;
       }
       return null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getHealthCheck(): Promise<HealthCheckResult> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+
+    const client = await this.pool.connect();
+    try {
+      const [connectionsResult, maxConnectionsResult, bufferCacheResult] = await Promise.all([
+        client.query(`
+          SELECT
+            count(*) AS total,
+            count(*) FILTER (WHERE state = 'active') AS active,
+            count(*) FILTER (WHERE state = 'idle') AS idle,
+            count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_transaction,
+            count(*) FILTER (WHERE state = 'idle in transaction (aborted)') AS idle_in_transaction_aborted,
+            max(EXTRACT(EPOCH FROM (now() - state_change)))
+              FILTER (WHERE state = 'idle in transaction') AS longest_idle_in_transaction_seconds,
+            max(EXTRACT(EPOCH FROM (now() - query_start)))
+              FILTER (WHERE state = 'active') AS longest_active_query_seconds
+          FROM pg_stat_activity
+          WHERE pid <> pg_backend_pid()
+        `),
+        client.query(`SHOW max_connections`),
+        client.query(
+          `
+          SELECT
+            blks_hit,
+            blks_read,
+            CASE WHEN (blks_hit + blks_read) = 0 THEN NULL
+                 ELSE round(100.0 * blks_hit / (blks_hit + blks_read), 2)
+            END AS hit_ratio_pct
+          FROM pg_stat_database
+          WHERE datname = current_database()
+        `
+        ),
+      ]);
+
+      const conn = connectionsResult.rows[0];
+      const cache = bufferCacheResult.rows[0];
+
+      return {
+        connections: {
+          total: Number(conn.total),
+          active: Number(conn.active),
+          idle: Number(conn.idle),
+          idleInTransaction: Number(conn.idle_in_transaction),
+          idleInTransactionAborted: Number(conn.idle_in_transaction_aborted),
+          maxConnections: Number(maxConnectionsResult.rows[0].max_connections),
+          longestIdleInTransactionSeconds: toNullableNumber(conn.longest_idle_in_transaction_seconds),
+          longestActiveQuerySeconds: toNullableNumber(conn.longest_active_query_seconds),
+        },
+        bufferCache: {
+          hitRatioPct: toNullableNumber(cache.hit_ratio_pct),
+          blocksHit: Number(cache.blks_hit),
+          blocksRead: Number(cache.blks_read),
+        },
+      };
     } finally {
       client.release();
     }

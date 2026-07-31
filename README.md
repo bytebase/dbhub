@@ -49,6 +49,7 @@ DBHub implements MCP tools for database operations:
 - **[execute_sql](https://dbhub.ai/tools/execute-sql)**: Execute SQL queries with transaction support and safety controls
 - **[search_objects](https://dbhub.ai/tools/search-objects)**: Search and explore database schemas, tables, columns, indexes, and procedures with progressive disclosure
 - **[explain_sql](https://dbhub.ai/tools/explain-sql)** (opt-in): Show a query's execution plan without running it
+- **[health_check](https://dbhub.ai/tools/health-check)** (opt-in, PostgreSQL/MySQL/MariaDB/SQL Server for now): Report connection pool state and buffer cache hit ratio
 - **[Custom Tools](https://dbhub.ai/tools/custom-tools)**: Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file
 
 ## Workbench

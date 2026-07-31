@@ -2,13 +2,24 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { createExecuteSqlToolHandler, executeSqlInputSchema } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema } from "./search-objects.js";
 import { createExplainSqlToolHandler, explainSqlInputSchema } from "./explain-sql.js";
+import { createHealthCheckToolHandler, healthCheckInputSchema } from "./health-check.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { getExecuteSqlMetadata, getSearchObjectsMetadata, getExplainSqlMetadata } from "../utils/tool-metadata.js";
+import {
+  getExecuteSqlMetadata,
+  getSearchObjectsMetadata,
+  getExplainSqlMetadata,
+  getHealthCheckMetadata,
+} from "../utils/tool-metadata.js";
 import { classifySQL } from "../utils/sql-access-policy.js";
 import { createCustomToolHandler, getCustomToolInputSchema } from "./custom-tool-handler.js";
 import type { ToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
-import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, BUILTIN_TOOL_EXPLAIN_SQL } from "./builtin-tools.js";
+import {
+  BUILTIN_TOOL_EXECUTE_SQL,
+  BUILTIN_TOOL_SEARCH_OBJECTS,
+  BUILTIN_TOOL_EXPLAIN_SQL,
+  BUILTIN_TOOL_HEALTH_CHECK,
+} from "./builtin-tools.js";
 
 /**
  * Register all tool handlers with the MCP server
@@ -36,6 +47,8 @@ export function registerTools(server: McpServer): void {
         registerSearchObjectsTool(server, sourceId);
       } else if (toolConfig.name === BUILTIN_TOOL_EXPLAIN_SQL) {
         registerExplainSqlTool(server, sourceId);
+      } else if (toolConfig.name === BUILTIN_TOOL_HEALTH_CHECK) {
+        registerHealthCheckTool(server, sourceId);
       } else {
         // Custom tool
         registerCustomTool(server, sourceId, toolConfig);
@@ -105,6 +118,25 @@ function registerExplainSqlTool(
       annotations: metadata.annotations,
     },
     createExplainSqlToolHandler(sourceId)
+  );
+}
+
+/**
+ * Register health_check tool for a source
+ */
+function registerHealthCheckTool(
+  server: McpServer,
+  sourceId: string
+): void {
+  const metadata = getHealthCheckMetadata(sourceId);
+  server.registerTool(
+    metadata.name,
+    {
+      description: metadata.description,
+      inputSchema: healthCheckInputSchema,
+      annotations: metadata.annotations,
+    },
+    createHealthCheckToolHandler(sourceId)
   );
 }
 

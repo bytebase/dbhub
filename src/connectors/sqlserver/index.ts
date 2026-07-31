@@ -11,7 +11,9 @@ import {
   StoredProcedure,
   ExecuteOptions,
   ConnectorConfig,
+  HealthCheckResult,
 } from "../interface.js";
+import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
 import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -503,6 +505,98 @@ export class SQLServerConnector implements Connector {
     } catch (error) {
       return null;
     }
+  }
+
+  async getHealthCheck(): Promise<HealthCheckResult> {
+    if (!this.connection) {
+      throw new Error("Not connected to SQL Server database");
+    }
+
+    const notes: string[] = [];
+    const result: HealthCheckResult = {};
+
+    // sys.dm_exec_sessions/sys.dm_exec_requests require the VIEW SERVER STATE
+    // permission (VIEW DATABASE STATE on Azure SQL Database) to see anything
+    // beyond the querying session itself, and can outright deny access
+    // depending on edition/permissions. Degrade instead of failing the whole
+    // health check.
+    try {
+      const [connResult, maxConnResult] = await Promise.all([
+        this.connection.request().query(`
+          SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN r.session_id IS NOT NULL THEN 1 ELSE 0 END) AS active,
+            SUM(CASE WHEN r.session_id IS NULL THEN 1 ELSE 0 END) AS idle,
+            SUM(CASE WHEN r.session_id IS NULL AND t.session_id IS NOT NULL THEN 1 ELSE 0 END) AS idle_in_transaction,
+            MAX(CASE WHEN r.session_id IS NULL AND t.session_id IS NOT NULL
+                  THEN DATEDIFF(SECOND, s.last_request_end_time, SYSDATETIME()) ELSE NULL END) AS longest_idle_in_transaction_seconds,
+            MAX(CASE WHEN r.session_id IS NOT NULL
+                  THEN DATEDIFF(SECOND, r.start_time, SYSDATETIME()) ELSE NULL END) AS longest_active_query_seconds
+          FROM sys.dm_exec_sessions s
+          LEFT JOIN sys.dm_exec_requests r ON r.session_id = s.session_id
+          LEFT JOIN (SELECT DISTINCT session_id FROM sys.dm_tran_session_transactions) t ON t.session_id = s.session_id
+          WHERE s.is_user_process = 1 AND s.session_id <> @@SPID
+        `),
+        this.connection.request().query(`
+          SELECT CAST(value_in_use AS INT) AS max_connections
+          FROM sys.configurations
+          WHERE name = 'user connections'
+        `),
+      ]);
+      const conn = connResult.recordset[0];
+      // 0 means "auto-configured, no fixed limit" rather than an actual cap.
+      const maxConnections =
+        maxConnResult.recordset.length > 0 && maxConnResult.recordset[0].max_connections > 0
+          ? maxConnResult.recordset[0].max_connections
+          : null;
+
+      result.connections = {
+        total: conn.total ?? 0,
+        active: conn.active ?? 0,
+        idle: conn.idle ?? 0,
+        idleInTransaction: conn.idle_in_transaction ?? 0,
+        // SQL Server has no equivalent of Postgres's "idle in transaction
+        // (aborted)" state - a failed statement doesn't leave the session's
+        // transaction in a distinct aborted-but-open state the way Postgres does.
+        maxConnections,
+        longestIdleInTransactionSeconds: toNullableNumber(conn.longest_idle_in_transaction_seconds),
+        longestActiveQuerySeconds: toNullableNumber(conn.longest_active_query_seconds),
+      };
+    } catch {
+      notes.push(
+        "Connection pool metrics unavailable: connecting user lacks the VIEW SERVER STATE permission (VIEW DATABASE STATE on Azure SQL Database)."
+      );
+    }
+
+    try {
+      const bufferResult = await this.connection.request().query(`
+        SELECT counter_name, CAST(cntr_value AS BIGINT) AS cntr_value
+        FROM sys.dm_os_performance_counters
+        WHERE object_name LIKE '%Buffer Manager%'
+          AND counter_name IN ('Page lookups/sec', 'Page reads/sec')
+      `);
+      const counters = Object.fromEntries(
+        bufferResult.recordset.map((row: any) => [row.counter_name.trim(), Number(row.cntr_value)])
+      );
+      const pageLookups = counters["Page lookups/sec"] ?? 0;
+      const pageReads = counters["Page reads/sec"] ?? 0;
+
+      result.bufferCache = {
+        hitRatioPct: computeHitRatioPct(pageLookups, pageReads),
+        blocksHit: pageLookups - pageReads,
+        blocksRead: pageReads,
+      };
+    } catch {
+      notes.push(
+        "Buffer cache metrics unavailable: connecting user lacks the VIEW SERVER STATE permission (VIEW DATABASE STATE on Azure SQL Database)."
+      );
+    }
+
+    if (notes.length > 0) {
+      result.notes = notes;
+    }
+
+    return result;
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {

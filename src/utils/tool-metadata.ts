@@ -5,6 +5,7 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { normalizeSourceId } from "./normalize-id.js";
 import { executeSqlSchema } from "../tools/execute-sql.js";
 import { explainSqlSchema } from "../tools/explain-sql.js";
+import { healthCheckSchema } from "../tools/health-check.js";
 import { getToolRegistry } from "../tools/registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
@@ -227,6 +228,38 @@ export function getExplainSqlMetadata(sourceId: string): ToolMetadata {
     name,
     description,
     schema: explainSqlSchema,
+    annotations,
+  };
+}
+
+/**
+ * Get health_check tool metadata for a specific source
+ * @param sourceId - The source ID to get tool metadata for
+ * @returns Tool metadata with name, description, and Zod schema
+ */
+export function getHealthCheckMetadata(sourceId: string): ToolMetadata {
+  const { dbType, isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
+    sourceId,
+    "health_check",
+    "Health Check"
+  );
+
+  const description = isSingleSource
+    ? `${userDescPrefix}Report operational health metrics (connection pool state, buffer cache hit ratio) for the ${dbType} database. Read-only, independent of the source's read/write mode.`
+    : `${userDescPrefix}Report operational health metrics (connection pool state, buffer cache hit ratio) for the '${sourceId}' ${dbType} database. Read-only, independent of the source's read/write mode.`;
+
+  const annotations = {
+    title,
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: false, // Metrics change from call to call, unlike explain_sql's plan output
+    openWorldHint: false,
+  };
+
+  return {
+    name,
+    description,
+    schema: healthCheckSchema,
     annotations,
   };
 }

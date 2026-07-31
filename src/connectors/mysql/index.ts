@@ -10,7 +10,9 @@ import {
   StoredProcedure,
   ExecuteOptions,
   ConnectorConfig,
+  HealthCheckResult,
 } from "../interface.js";
+import { getMySQLFamilyHealthCheck } from "../mysql-family-health-check.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
@@ -456,6 +458,17 @@ export class MySQLConnector implements Connector {
     } catch (error) {
       return null;
     }
+  }
+
+  async getHealthCheck(): Promise<HealthCheckResult> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+    const pool = this.pool;
+    return getMySQLFamilyHealthCheck(async (sql) => {
+      const [rows] = (await pool.query(sql)) as [any[], any];
+      return rows;
+    });
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {

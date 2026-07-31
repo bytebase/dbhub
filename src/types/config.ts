@@ -99,6 +99,14 @@ export interface ExplainSqlToolConfig {
 }
 
 /**
+ * Built-in tool configuration for health_check
+ */
+export interface HealthCheckToolConfig {
+  name: "health_check"; // Must match BUILTIN_TOOL_HEALTH_CHECK from builtin-tools.ts
+  source: string;
+}
+
+/**
  * Custom tool configuration
  */
 export interface CustomToolConfig {
@@ -118,6 +126,7 @@ export type ToolConfig =
   | ExecuteSqlToolConfig
   | SearchObjectsToolConfig
   | ExplainSqlToolConfig
+  | HealthCheckToolConfig
   | CustomToolConfig;
 
 /**

@@ -9,6 +9,7 @@ title: "Overview"
 | Execute SQL | `execute_sql` or `execute_sql_{id}` | On | Execute single or multiple SQL statements (separated by semicolons) |
 | Search Objects | `search_objects` or `search_objects_{id}` | On | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
 | Explain SQL | `explain_sql` or `explain_sql_{id}` | Opt-in | Show the execution plan for a SQL statement without running it |
+| Health Check | `health_check` or `health_check_{id}` | Opt-in | Report connection pool state and buffer cache hit ratio (PostgreSQL, MySQL, MariaDB, SQL Server) |
 | Custom Tools | User-defined names | Opt-in | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
 
 ## Tool Configuration
@@ -166,6 +167,9 @@ Special characters in source IDs (hyphens, dots, etc.) are converted to undersco
   </Card>
   <Card title="Explain SQL" icon="diagram-project" href="/tools/explain-sql">
     Show a query's execution plan without running it (opt-in)
+  </Card>
+  <Card title="Health Check" icon="heart-pulse" href="/tools/health-check">
+    Report connection pool state and buffer cache hit ratio (opt-in)
   </Card>
   <Card title="Custom Tools" icon="wrench" href="/tools/custom-tools">
     Create reusable parameterized SQL operations

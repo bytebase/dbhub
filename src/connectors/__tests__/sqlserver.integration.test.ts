@@ -212,6 +212,25 @@ describe('SQL Server Connector Integration Tests', () => {
   });
 
   describe('SQL Server-specific Features', () => {
+    it('should report connection pool state and buffer cache hit ratio via getHealthCheck', async () => {
+      const health = await sqlServerTest.connector.getHealthCheck!();
+
+      // The sa test user has VIEW SERVER STATE, so both sections should be
+      // populated rather than degraded to a `notes` entry.
+      expect(health.notes).toBeUndefined();
+
+      expect(health.connections).toBeDefined();
+      expect(health.connections!.total).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idleInTransaction).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idleInTransactionAborted).toBeUndefined();
+
+      expect(health.bufferCache).toBeDefined();
+      if (health.bufferCache!.hitRatioPct !== null) {
+        expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
+        expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
+      }
+    });
+
     it('should return an execution plan for EXPLAIN <query> (SHOWPLAN_XML)', async () => {
       const result = await sqlServerTest.connector.executeSQL(
         'EXPLAIN SELECT * FROM users WHERE age > 30',

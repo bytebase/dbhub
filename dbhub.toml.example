@@ -242,6 +242,20 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "explain_sql"
 # source = "local_pg"
 
+# 'health_check' is opt-in only, like explain_sql. It reports operational
+# metrics (connection pool state, buffer cache hit ratio) for the source.
+# Currently implemented for PostgreSQL, MySQL, MariaDB, and SQL Server;
+# enabling it on other database types returns an "unsupported" error rather
+# than partial data. On MySQL/MariaDB, idle-in-transaction detection
+# additionally requires the PROCESS privilege; on SQL Server, both metrics
+# require VIEW SERVER STATE (VIEW DATABASE STATE on Azure SQL Database).
+# Without the right grant, the tool still returns what it can and adds a
+# `notes` entry explaining the reduced visibility instead of failing
+# outright. Always read-only, no readonly/max_rows options of its own.
+# [[tools]]
+# name = "health_check"
+# source = "local_pg"
+
 # ============================================================================
 # CUSTOM TOOLS (Optional)
 # ============================================================================
@@ -376,6 +390,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN (works for execute_sql and custom tools)
 #   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
 #   explain_sql        # Opt-in tool (name = "explain_sql"); no readonly/max_rows options - always safe
+#   health_check       # Opt-in tool (name = "health_check"); PostgreSQL/MySQL/MariaDB/SQL Server for now, always safe
 #
 # Parameter Placeholders by Database:
 #   PostgreSQL:     $1, $2, $3

@@ -1,0 +1,96 @@
+---
+title: "health_check"
+---
+
+Report operational health metrics for a database source: connection pool state and buffer cache hit ratio.
+
+## Features
+
+- **Connection pool state**: Total/active/idle session counts, idle-in-transaction sessions, the configured connection ceiling, and how long the longest-running query or idle-in-transaction session has been open
+- **Buffer cache hit ratio**: Percentage of reads served from cache vs disk, useful for spotting an undersized cache before it becomes a production incident
+- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, and SQL Server. SQLite has no connection pool or cache-hit concept to report, so `health_check` returns an `UNSUPPORTED` error there
+- **Graceful degradation**: On MySQL/MariaDB/SQL Server, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
+- **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
+
+<Note>
+`health_check` is **opt-in**. Unlike `execute_sql` and `search_objects`, it is not enabled automatically when a source has no `[[tools]]` entries — add it explicitly (see [Enabling health_check](#enabling-health-check) below).
+</Note>
+
+## Usage
+
+Call the tool with no arguments — metrics are always for the source the tool instance is bound to.
+
+```json Example output (PostgreSQL)
+{
+  "success": true,
+  "data": {
+    "source_id": "production",
+    "connections": {
+      "total": 12,
+      "active": 2,
+      "idle": 9,
+      "idle_in_transaction": 1,
+      "idle_in_transaction_aborted": 0,
+      "max_connections": 100,
+      "longest_idle_in_transaction_seconds": 42.1,
+      "longest_active_query_seconds": 0.03
+    },
+    "buffer_cache": {
+      "hit_ratio_pct": 99.12,
+      "blocks_hit": 8452193,
+      "blocks_read": 74301
+    }
+  }
+}
+```
+
+`idle_in_transaction_aborted` is Postgres-specific (a failed statement inside a transaction leaves it open-but-aborted until `ROLLBACK`) and is omitted on engines with no equivalent concept.
+
+### Reduced-privilege output
+
+On MySQL, MariaDB, and SQL Server, some metrics need a privilege the connected user might not have — the tool still returns what it can and explains the gap instead of erroring:
+
+```json Example output (MySQL, without PROCESS privilege)
+{
+  "success": true,
+  "data": {
+    "source_id": "production",
+    "connections": { "...": "..." },
+    "buffer_cache": { "...": "..." },
+    "notes": [
+      "Connected user lacks the PROCESS privilege: connection counts and active-query duration reflect only this diagnostic session, and idle-in-transaction detection is unavailable."
+    ]
+  }
+}
+```
+
+| Engine | Privilege required | Scope |
+| --- | --- | --- |
+| MySQL / MariaDB | `PROCESS` | Idle-in-transaction detection only; connection/buffer-cache counts are still returned (narrowed to the caller's own session without it) |
+| SQL Server | `VIEW SERVER STATE` (`VIEW DATABASE STATE` on Azure SQL Database) | Both connection pool and buffer cache sections |
+| PostgreSQL | None | All metrics are available to any connected user |
+
+## Enabling health_check
+
+Add a `[[tools]]` entry with `name = "health_check"`. It takes no other options — no `readonly` or `max_rows` — since it's always read-only:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://user:pass@localhost:5432/mydb"
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+
+[[tools]]
+name = "search_objects"
+source = "production"
+
+[[tools]]
+name = "health_check"
+source = "production"
+```
+
+See [Tool Configuration](/tools/overview#tool-configuration) for how `[[tools]]` entries work across multiple sources.

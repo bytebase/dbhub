@@ -59,6 +59,41 @@ export interface StoredProcedure {
  * Options for SQL execution
  * This interface allows passing execution-specific options to connectors
  */
+/**
+ * Connection/session pool state, as seen by the database itself (not the
+ * driver-side pool DBHub holds).
+ */
+export interface HealthCheckConnections {
+  /** Total sessions excluding this diagnostic connection itself */
+  total: number;
+  active: number;
+  idle: number;
+  idleInTransaction: number;
+  /** Sessions in Postgres's "idle in transaction (aborted)" state; omitted on engines with no equivalent concept */
+  idleInTransactionAborted?: number;
+  /** Configured connection ceiling, when the engine exposes one */
+  maxConnections: number | null;
+  /** Longest-running idle-in-transaction session, in seconds; null if none */
+  longestIdleInTransactionSeconds: number | null;
+  /** Longest-running active query, in seconds; null if none */
+  longestActiveQuerySeconds: number | null;
+}
+
+/** Buffer/page cache hit ratio for the connected database */
+export interface HealthCheckBufferCache {
+  /** Percentage of reads served from cache, 0-100; null if no reads recorded yet */
+  hitRatioPct: number | null;
+  blocksHit: number;
+  blocksRead: number;
+}
+
+export interface HealthCheckResult {
+  connections?: HealthCheckConnections;
+  bufferCache?: HealthCheckBufferCache;
+  /** Caveats about reduced visibility (e.g. a metric degraded because the connected user lacks a privilege) */
+  notes?: string[];
+}
+
 export interface ExecuteOptions {
   /** Maximum number of rows to return (applied via database-native LIMIT) */
   maxRows?: number;
@@ -265,6 +300,14 @@ export interface Connector {
 
   /** Execute a SQL query with execution options and optional parameters */
   executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult>;
+
+  /**
+   * Get operational health metrics (connection pool state, buffer cache hit
+   * ratio). Optional — connectors that don't implement it yet are treated as
+   * unsupported by the health_check tool, which returns an explicit error
+   * rather than a partial/fabricated result.
+   */
+  getHealthCheck?(): Promise<HealthCheckResult>;
 }
 
 /**
