@@ -792,13 +792,40 @@ export class SQLServerConnector implements Connector {
       const result = await request.query(processedSQL);
 
       return {
-        rows: result.recordset || [],
-        rowCount: result.rowsAffected[0] || 0,
+        rows: SQLServerConnector.flattenRecordsets(result.recordsets),
+        rowCount: SQLServerConnector.sumRowsAffected(result.rowsAffected),
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * node-mssql only pushes a `recordsets` entry for statements that produce
+   * columns (SELECT); INSERT/UPDATE/DELETE statements in the same batch
+   * contribute to `rowsAffected` only. Concatenating every entry — rather
+   * than reading `recordset` (singular, first result set only) — is what
+   * makes multi-statement batches return every SELECT's rows, matching the
+   * MySQL/MariaDB connectors' behavior.
+   */
+  private static flattenRecordsets(recordsets: any): any[] {
+    if (!recordsets) {
+      return [];
+    }
+    return recordsets.flatMap((recordset: any) => recordset || []);
+  }
+
+  /**
+   * `rowsAffected` has one entry per statement in the batch (SELECT included,
+   * via @@ROWCOUNT). Summing it mirrors `extractAffectedRows` for
+   * MySQL/MariaDB: the total reflects every statement, not just the first.
+   */
+  private static sumRowsAffected(rowsAffected: number[] | undefined): number {
+    if (!rowsAffected) {
+      return 0;
+    }
+    return rowsAffected.reduce((total, count) => total + (count || 0), 0);
   }
 
   /**
@@ -939,8 +966,8 @@ export class SQLServerConnector implements Connector {
       }
     }
     return {
-      rows: result.recordset || [],
-      rowCount: result.rowsAffected[0] || 0,
+      rows: SQLServerConnector.flattenRecordsets(result.recordsets),
+      rowCount: SQLServerConnector.sumRowsAffected(result.rowsAffected),
       ...(messages.length > 0 ? { messages } : {}),
     };
   }

@@ -817,6 +817,40 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(selectResult.rows[0].name).toBe('MaxRows Test');
     });
 
+    it('should return every result set from a multi-statement SELECT batch', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 AS a; SELECT 2 AS b;',
+        {}
+      );
+
+      expect(result.rows).toEqual([{ a: 1 }, { b: 2 }]);
+      expect(result.rowCount).toBe(2);
+    });
+
+    it('should sum rowCount across a mixed write/read multi-statement batch', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        `
+        INSERT INTO users (name, email, age) VALUES ('Batch User', 'batch@sqlserver.com', 40);
+        SELECT name, email FROM users WHERE email = 'batch@sqlserver.com';
+        `,
+        {}
+      );
+
+      // 1 row affected by the INSERT + 1 row returned by the SELECT
+      expect(result.rowCount).toBe(2);
+      expect(result.rows).toEqual([{ name: 'Batch User', email: 'batch@sqlserver.com' }]);
+    });
+
+    it('should return every result set from a multi-statement SELECT batch in readonly mode', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 AS a; SELECT 2 AS b;',
+        { readonly: true }
+      );
+
+      expect(result.rows).toEqual([{ a: 1 }, { b: 2 }]);
+      expect(result.rowCount).toBe(2);
+    });
+
     it('should handle maxRows with complex queries', async () => {
       // Test maxRows with JOIN queries
       const result = await sqlServerTest.connector.executeSQL(`
