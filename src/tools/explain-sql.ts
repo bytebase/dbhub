@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { splitSQLStatements } from "../utils/sql-parser.js";
+import { splitSQLStatements, stripCommentsAndStrings } from "../utils/sql-parser.js";
 import { getFirstKeyword } from "../utils/allowed-keywords.js";
 import type { ConnectorType } from "../connectors/interface.js";
 import {
   getEffectiveSourceId,
+  resolveTrackedToolName,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
@@ -53,12 +54,27 @@ function validateExplainInput(sql: string, connectorType: ConnectorType): string
     return "explain_sql does not support ANALYZE (it must never execute the statement)";
   }
 
+  // PostgreSQL's EXPLAIN accepts a parenthesized option list immediately
+  // after EXPLAIN (e.g. EXPLAIN (ANALYZE, VERBOSE) SELECT ...). Input
+  // starting with such a "(...)" block combines with our EXPLAIN prefix into
+  // a form that actually executes the statement, bypassing the bare-ANALYZE
+  // check above (whose \S+ matching never isolates "analyze" as its own
+  // token when it's glued to parens/commas).
+  const cleaned = stripCommentsAndStrings(statements[0], connectorType).trim();
+  const leadingOptions = cleaned.match(/^\(([\s\S]*?)\)/)?.[1];
+  if (leadingOptions && /\banalyze\b/i.test(leadingOptions)) {
+    return "explain_sql does not support ANALYZE (it must never execute the statement)";
+  }
+
   return null;
 }
 
 /**
  * Create an explain_sql tool handler for a specific source
- * @param sourceId - The source ID this handler is bound to (undefined for single-source mode)
+ * @param sourceId - The source ID this handler is bound to. Registration
+ * (see tools/index.ts) always passes a concrete id ("default" or an actual
+ * source id) - undefined is only meaningful for direct/test invocation,
+ * where it's treated the same as "default" via getEffectiveSourceId.
  * @returns A handler function bound to the specified source
  */
 export function createExplainSqlToolHandler(sourceId?: string) {
@@ -108,7 +124,7 @@ export function createExplainSqlToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "explain_sql" : `explain_sql_${effectiveSourceId}`,
+          toolName: resolveTrackedToolName(sourceId, "explain_sql"),
           sql,
         },
         startTime,

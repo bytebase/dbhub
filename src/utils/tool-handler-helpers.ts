@@ -10,6 +10,7 @@ import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "./client-identifier.js";
 import { classifyConnectionError } from "./error-classifier.js";
 import { createToolErrorResponse } from "./response-formatter.js";
+import { normalizeSourceId } from "./normalize-id.js";
 
 /**
  * Request metadata for tracking
@@ -27,6 +28,24 @@ export interface RequestMetadata {
  */
 export function getEffectiveSourceId(sourceId?: string): string {
   return sourceId || "default";
+}
+
+/**
+ * Resolve the tool name a handler was actually registered under, for request
+ * tracking. Mirrors resolveBuiltinToolNaming in tool-metadata.ts: single-source
+ * deployments keep the bare tool name (no suffix, regardless of the source's
+ * own id), while multi-source ones suffix with the *normalized* source id.
+ * Do not substitute a plain `sourceId === "default"` check here - that only
+ * happens to match in the no-`--id` single-source case, and silently
+ * diverges from the registered name for `--id`-configured single sources or
+ * multi-source ids containing characters normalizeSourceId rewrites.
+ */
+export function resolveTrackedToolName(sourceId: string | undefined, baseName: string): string {
+  const isSingleSource = ConnectorManager.getAvailableSourceIds().length === 1;
+  if (isSingleSource) {
+    return baseName;
+  }
+  return `${baseName}_${normalizeSourceId(getEffectiveSourceId(sourceId))}`;
 }
 
 /**

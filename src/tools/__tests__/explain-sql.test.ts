@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExplainSqlToolHandler } from '../explain-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
+import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
 
 vi.mock('../../connectors/manager.js');
@@ -27,6 +28,12 @@ const parseToolResponse = (response: any) => JSON.parse(response.content[0].text
 
 describe('explain-sql tool', () => {
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+
+  beforeEach(() => {
+    // Single-source by default, so resolveTrackedToolName resolves to the
+    // bare tool name; multi-source naming is covered separately below.
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['test_source']);
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -90,6 +97,34 @@ describe('explain-sql tool', () => {
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
+    it.each([
+      '(ANALYZE) DELETE FROM users',
+      '(ANALYZE, VERBOSE) DELETE FROM users',
+      '(VERBOSE,ANALYZE)DELETE FROM users',
+      '-- comment\n(ANALYZE) DELETE FROM users',
+    ])('rejects a leading parenthesized option list containing ANALYZE: %s', async (sql) => {
+      const handler = createExplainSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it('allows a leading parenthesized option list that does not contain ANALYZE', async () => {
+      const mockResult: SQLResult = { rows: [{ plan: 'x' }], rowCount: 1 };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExplainSqlToolHandler('test_source');
+      const result = await handler({ sql: '(FORMAT JSON) SELECT * FROM users' }, null);
+
+      expect(parseToolResponse(result).success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
+        'EXPLAIN (FORMAT JSON) SELECT * FROM users',
+        { readonly: true }
+      );
+    });
+
     it('allows explaining a write statement (plain EXPLAIN never executes it)', async () => {
       const mockResult: SQLResult = { rows: [{ plan: 'x' }], rowCount: 1 };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
@@ -102,6 +137,34 @@ describe('explain-sql tool', () => {
         'EXPLAIN DELETE FROM users WHERE id = 1',
         { readonly: true }
       );
+    });
+  });
+
+  describe('request tracking', () => {
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
+      const mockConnector = createMockConnector('postgres', 'prod');
+      mockGetCurrentConnector.mockReturnValue(mockConnector);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [], rowCount: 0 });
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      const handler = createExplainSqlToolHandler('prod');
+      await handler({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql' }));
+    });
+
+    it('tracks the normalized, suffixed tool name for a multi-source id with special characters', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
+      const mockConnector = createMockConnector('postgres', 'prod-pg');
+      mockGetCurrentConnector.mockReturnValue(mockConnector);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [], rowCount: 0 });
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      const handler = createExplainSqlToolHandler('prod-pg');
+      await handler({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql_prod_pg' }));
     });
   });
 
