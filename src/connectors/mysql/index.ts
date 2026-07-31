@@ -766,7 +766,13 @@ export class MySQLConnector implements Connector {
       // original one, so it must be destroyed rather than reused.
       killerPoisoned = isClientSideTimeout(error);
     } finally {
-      if (killer) killerPoisoned ? killer.destroy() : killer.release();
+      if (killer) {
+        if (killerPoisoned) {
+          killer.destroy();
+        } else {
+          killer.release();
+        }
+      }
     }
   }
 }
