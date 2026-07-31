@@ -192,7 +192,11 @@ describe("readonly transaction strategy", () => {
       // First getConnection() returns the dedicated connection used for the
       // query; the connector must request a second, separate connection to
       // issue KILL QUERY, since `conn`'s own command queue is stuck.
-      const killerConn = { query: vi.fn(async () => asMysql([])), release: vi.fn() };
+      const killerConn = {
+        query: vi.fn(async () => asMysql([])),
+        release: vi.fn(),
+        destroy: vi.fn(),
+      };
       pool.getConnection = vi
         .fn()
         .mockResolvedValueOnce(conn)
@@ -210,9 +214,13 @@ describe("readonly transaction strategy", () => {
       // so attempting ROLLBACK on it would hang until the server-side
       // statement eventually finishes.
       expect(statements).not.toContain("ROLLBACK");
-      // The server-side statement is killed over the fresh connection...
-      expect(killerConn.query).toHaveBeenCalledWith(`KILL QUERY ${conn.threadId}`);
+      // The server-side statement is killed over the fresh connection, bounded
+      // by its own short timeout independent of the user's query_timeout...
+      expect(killerConn.query).toHaveBeenCalledWith(
+        expect.objectContaining({ sql: `KILL QUERY ${conn.threadId}` })
+      );
       expect(killerConn.release).toHaveBeenCalled();
+      expect(killerConn.destroy).not.toHaveBeenCalled();
       // ...and the poisoned connection is destroyed, never returned to the pool.
       expect(conn.destroy).toHaveBeenCalled();
       expect(conn.release).not.toHaveBeenCalled();

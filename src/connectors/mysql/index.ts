@@ -154,6 +154,10 @@ export class MySQLConnector implements Connector {
   name = "MySQL";
   dsnParser = new MySQLDSNParser();
 
+  // Bounds the KILL QUERY cleanup call issued after a client-side query
+  // timeout; see killQuery.
+  private static readonly KILL_QUERY_TIMEOUT_MS = 5000;
+
   private pool: mysql.Pool | null = null;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
@@ -741,19 +745,28 @@ export class MySQLConnector implements Connector {
    * timeout. Uses a separate connection: the original connection's command
    * queue is stuck behind the abandoned statement (see isClientSideTimeout)
    * and cannot itself be used to send KILL QUERY.
+   *
+   * Bounded by its own short timeout, independent of the user's (possibly
+   * long or unset) query_timeout — KILL QUERY is metadata-only and should
+   * return almost immediately on a healthy server, so cleanup must not stall
+   * indefinitely if it doesn't.
    */
   private async killQuery(threadId: number): Promise<void> {
     if (!this.pool) return;
     let killer;
+    let killerPoisoned = false;
     try {
       killer = await this.pool.getConnection();
-      await killer.query(`KILL QUERY ${threadId}`);
-    } catch {
+      await killer.query({ sql: `KILL QUERY ${threadId}`, timeout: MySQLConnector.KILL_QUERY_TIMEOUT_MS });
+    } catch (error) {
       // Unconfirmed cancellation: the statement may still be running on the
       // server. Nothing more to do from here — the caller already sees the
-      // timeout error.
+      // timeout error. If the kill itself timed out client-side, this
+      // connection is subject to the same stuck-queue hazard as the
+      // original one, so it must be destroyed rather than reused.
+      killerPoisoned = isClientSideTimeout(error);
     } finally {
-      if (killer) killer.release();
+      if (killer) killerPoisoned ? killer.destroy() : killer.release();
     }
   }
 }
