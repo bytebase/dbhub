@@ -30,7 +30,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --transport
 
 <ParamField path="--transport" type="string" env="TRANSPORT" default="stdio">
-  Transport protocol for [MCP communication](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports).
+  Transport protocol for [MCP communication](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports). Env: `TRANSPORT`.
 
   **Options:**
   - `stdio` - For desktop tools (Claude Desktop, Claude Code, Cursor). Pure MCP-over-stdio with no HTTP server.
@@ -59,7 +59,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --port
 
 <ParamField path="--port" type="number" env="PORT" default="8080">
-  HTTP server port. Only used when `--transport=http`. Ignored for stdio transport.
+  HTTP server port. Only used when `--transport=http`. Ignored for stdio transport. Env: `PORT`.
 
   ```bash
   npx @bytebase/dbhub@latest --transport http --port 3000 --dsn "..."
@@ -69,7 +69,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --host
 
 <ParamField path="--host" type="string" env="DBHUB_HOST" default="0.0.0.0">
-  HTTP bind address. Only used when `--transport=http`. Ignored for stdio transport.
+  HTTP bind address. Only used when `--transport=http`. Ignored for stdio transport. Env: `DBHUB_HOST`.
 
   ```bash
   # Restrict to loopback (recommended for production)
@@ -94,7 +94,7 @@ This page covers command-line flags and environment variables. For TOML configur
   `Host` (and `Origin`) headers. This is DBHub's **DNS-rebinding protection**:
   requests whose `Host` is not on the list are rejected with `403`, so a
   malicious web page cannot rebind a hostname to your DBHub instance and drive
-  its MCP tools from the victim's browser. Only used when `--transport=http`.
+  its MCP tools from the victim's browser. Only used when `--transport=http`. Env: `DBHUB_ALLOWED_HOSTS`.
 
   The list always includes loopback (`localhost`, `127.0.0.1`, `[::1]`). When
   bound to a wildcard address (the default `0.0.0.0` / `::`), this machine's own
@@ -130,7 +130,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --auth-token
 
 <ParamField path="--auth-token" type="string" env="DBHUB_AUTH_TOKEN">
-  Comma-separated list of bearer tokens required on every HTTP request. Only used when `--transport=http`. Unset by default — auth is off unless you configure this.
+  Comma-separated list of bearer tokens required on every HTTP request. Only used when `--transport=http`. Unset by default — auth is off unless you configure this. Env: `DBHUB_AUTH_TOKEN`.
 
   Clients must send a matching token as `Authorization: Bearer <token>`; requests without one get `401 Unauthorized` with a `WWW-Authenticate: Bearer` header. `/healthz` is exempt so uptime monitors don't need a token.
 
@@ -161,7 +161,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --dsn
 
 <ParamField path="--dsn" type="string" env="DSN">
-  Database connection string (Data Source Name). Format: `database_type://username:password@host:port/database_name?options`
+  Database connection string (Data Source Name). Format: `database_type://username:password@host:port/database_name?options`. Env: `DSN` (see the resolution order at the top of this page).
 
   <Tabs>
     <Tab title="PostgreSQL">
@@ -289,7 +289,7 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --id
 
 <ParamField path="--id" type="string" env="ID">
-  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor).
+  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor). Env: `ID`.
 
   Tools will be named `execute_sql_{id}` for each instance.
 
