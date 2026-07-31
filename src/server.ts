@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 
 import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
-import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveSourceConfigs, isDemoMode } from "./config/env.js";
+import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveAuthTokens, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
 import { listSources, getSource } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
@@ -17,6 +17,7 @@ import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-ta
 import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
 import { validateOrigin, buildAllowedHosts, getSelfHosts, ALLOW_ANY_HOST } from "./utils/cross-origin.js";
+import { validateAuthToken } from "./utils/auth-token.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -163,6 +164,12 @@ See documentation for more details on configuring database connections.
         ? buildAllowedHosts(resolveAllowedHosts().hosts, host ?? undefined, getSelfHosts())
         : new Set<string>();
 
+    // Bearer token auth for the HTTP transport (issue #66). Configuring a
+    // token is itself the opt-in — an empty list (the default) leaves
+    // today's unauthenticated behavior unchanged.
+    const authTokensResult = transportData.type === "http" ? resolveAuthTokens() : { tokens: [], source: "default" };
+    const authTokens = authTokensResult.tokens;
+
     // Print ASCII art banner with version and slogan
     // Collect active modes
     const activeModes: string[] = [];
@@ -224,11 +231,26 @@ See documentation for more details on configuring database connections.
         // mirroring them for exactly this reason.)
         res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
         res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name');
+        res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name');
         res.header('Access-Control-Allow-Credentials', 'true');
 
         if (req.method === 'OPTIONS') {
           return res.sendStatus(200);
+        }
+        next();
+      });
+
+      // Bearer token auth (issue #66): rejects requests missing a valid
+      // `Authorization: Bearer <token>` header when --auth-token/DBHUB_AUTH_TOKEN
+      // is configured; a no-op when it isn't. /healthz is exempt so uptime
+      // monitors don't need the token.
+      app.use((req, res, next) => {
+        if (req.path === '/healthz') return next();
+
+        const result = validateAuthToken(req.headers.authorization, authTokens);
+        if (!result.ok) {
+          res.header('WWW-Authenticate', 'Bearer');
+          return res.status(result.status).json({ error: 'Unauthorized', message: result.message });
         }
         next();
       });
@@ -299,6 +321,13 @@ See documentation for more details on configuring database connections.
           console.error('Allowed hosts: * (DNS-rebinding protection DISABLED — ensure DBHub is fronted by your own auth/proxy)');
         } else {
           console.error(`Allowed hosts: ${[...allowedHosts].join(', ')} (set --allowed-hosts to serve other hostnames)`);
+        }
+
+        // Surface whether bearer token auth is enforced (issue #66).
+        if (authTokens.length > 0) {
+          console.error(`Auth: bearer token required (${authTokens.length} token(s) configured via ${authTokensResult.source})`);
+        } else {
+          console.error('Auth: disabled (set --auth-token or DBHUB_AUTH_TOKEN to require a bearer token)');
         }
 
         // In development mode, suggest using the Vite dev server for hot reloading.

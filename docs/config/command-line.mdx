@@ -83,7 +83,7 @@ This page covers command-line flags and environment variables. For TOML configur
   ```
 
   <Warning>
-  The default `0.0.0.0` exposes DBHub on every network interface. For production, set `--host 127.0.0.1` and place DBHub behind a reverse proxy (nginx/Caddy) or restrict with a firewall — DBHub does not authenticate HTTP clients.
+  The default `0.0.0.0` exposes DBHub on every network interface. For production, set `--host 127.0.0.1` and place DBHub behind a reverse proxy (nginx/Caddy) or restrict with a firewall, or configure `--auth-token` (see below) to require a bearer token on every request.
   </Warning>
 </ParamField>
 
@@ -124,6 +124,36 @@ This page covers command-line flags and environment variables. For TOML configur
   <Warning>
   `--allowed-hosts "*"` turns off DNS-rebinding protection. Use it only when
   DBHub sits behind your own authentication and/or proxy.
+  </Warning>
+</ParamField>
+
+### --auth-token
+
+<ParamField path="--auth-token" type="string" env="DBHUB_AUTH_TOKEN">
+  Comma-separated list of bearer tokens required on every HTTP request. Only used when `--transport=http`. Unset by default — auth is off unless you configure this.
+
+  Clients must send a matching token as `Authorization: Bearer <token>`; requests without one get `401 Unauthorized` with a `WWW-Authenticate: Bearer` header. `/healthz` is exempt so uptime monitors don't need a token.
+
+  ```bash
+  # Single token
+  npx @bytebase/dbhub@latest --transport http --auth-token "s3cr3t-token" --dsn "..."
+
+  # Multiple tokens (rotate without downtime, or issue one per client)
+  npx @bytebase/dbhub@latest --transport http --auth-token "token-for-ci,token-for-agent" --dsn "..."
+  ```
+
+  Client request:
+
+  ```bash
+  curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/mcp
+  ```
+
+  <Note>
+  Configuring a token *is* the opt-in — there's no separate "require auth" flag to remember. A comma-separated list lets you rotate a leaked or expiring token by adding the new one, redeploying, and then removing the old one, and lets you hand different tokens to different clients so one can be revoked without affecting the others.
+  </Note>
+
+  <Warning>
+  This is a flat shared-secret check, not OAuth — it answers "does this request have the secret," not "who is this user" (no per-user scopes or audit trail). If you need real identity-based authorization, front DBHub with your own OAuth-aware proxy or IdP-integrated gateway instead.
   </Warning>
 </ParamField>
 
@@ -357,6 +387,8 @@ npx @bytebase/dbhub@latest --dsn "..." \
 | `--transport` | `TRANSPORT` | string | Transport mode: stdio or http (default: `stdio`) |
 | `--port` | `PORT` | number | HTTP server port (http transport only, default: `8080`) |
 | `--host` | `DBHUB_HOST` | string | HTTP bind address (http transport only, default: `0.0.0.0`) |
+| `--allowed-hosts` | `DBHUB_ALLOWED_HOSTS` | string | Extra hostnames accepted in Host/Origin headers (http transport only, default: loopback + this machine) |
+| `--auth-token` | `DBHUB_AUTH_TOKEN` | string | Comma-separated bearer token(s) required on requests (http transport only, default: auth disabled) |
 | `--demo` | - | boolean | Use sample employee database |
 | `--id` | `ID` | string | Instance identifier for tool names |
 | `--config` | - | string | Path to TOML config file (default: `./dbhub.toml`) |
