@@ -813,7 +813,7 @@ export class SQLServerConnector implements Connector {
     if (!recordsets) {
       return [];
     }
-    return recordsets.flatMap((recordset: any) => recordset || []);
+    return recordsets.flatMap((recordset: any) => recordset ?? []);
   }
 
   /**
@@ -825,7 +825,7 @@ export class SQLServerConnector implements Connector {
     if (!rowsAffected) {
       return 0;
     }
-    return rowsAffected.reduce((total, count) => total + (count || 0), 0);
+    return rowsAffected.reduce((total, count) => total + (count ?? 0), 0);
   }
 
   /**
