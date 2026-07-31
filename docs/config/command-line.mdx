@@ -142,10 +142,11 @@ This page covers command-line flags and environment variables. For TOML configur
   npx @bytebase/dbhub@latest --transport http --auth-token "token-for-ci,token-for-agent" --dsn "..."
   ```
 
-  Client request:
+  Client request (`/api/sources` is a plain `GET`; the MCP endpoint itself
+  requires a JSON-RPC POST body, so it's not a copy-pasteable example):
 
   ```bash
-  curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/mcp
+  curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
   ```
 
   <Note>

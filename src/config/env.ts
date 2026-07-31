@@ -483,15 +483,28 @@ export function resolveAuthTokens(): { tokens: string[]; source: string } {
 
   const cliValue = requireFlagValue("auth-token", args, "secret1,secret2");
   if (cliValue !== undefined) {
-    return { tokens: splitHostList(cliValue), source: "command line argument" };
+    return { tokens: splitTokenList(cliValue), source: "command line argument" };
   }
 
   const envValue = process.env.DBHUB_AUTH_TOKEN?.trim();
   if (envValue) {
-    return { tokens: splitHostList(envValue), source: "environment variable" };
+    return { tokens: splitTokenList(envValue), source: "environment variable" };
   }
 
   return { tokens: [], source: "default" };
+}
+
+/**
+ * Split a comma-separated token list, trimming and dropping empty entries.
+ * Deliberately separate from `splitHostList()` even though the bodies match
+ * today: hostnames may later gain normalization (lowercasing, port-stripping)
+ * that must never apply to tokens, which are compared byte-for-byte.
+ */
+function splitTokenList(value: string): string[] {
+  return value
+    .split(",")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
 }
 
 /**
