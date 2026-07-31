@@ -89,19 +89,39 @@ export class SQLRowLimiter {
   }
 
   /**
+   * Check if a SQL statement combines multiple SELECTs with a set operator
+   * (UNION [ALL], INTERSECT, EXCEPT). Strips comments and string literals
+   * first to avoid false positives.
+   */
+  static hasSetOperator(sql: string): boolean {
+    const cleanedSQL = stripCommentsAndStrings(sql);
+    return /\b(union|intersect|except)\b/i.test(cleanedSQL);
+  }
+
+  /**
    * Add or modify TOP clause in a SQL statement (SQL Server)
    */
   static applyTopToQuery(sql: string, maxRows: number): string {
     const existingTop = this.extractTopValue(sql);
-    
+
     if (existingTop !== null) {
       // Use the minimum of existing top and maxRows
       const effectiveTop = Math.min(existingTop, maxRows);
       return sql.replace(/\bselect\s+top\s+\d+/i, `SELECT TOP ${effectiveTop}`);
-    } else {
-      // Add TOP clause after SELECT
-      return sql.replace(/\bselect\s+/i, `SELECT TOP ${maxRows} `);
     }
+
+    if (this.hasSetOperator(sql)) {
+      // TOP injected into just the first SELECT only caps that branch's rows,
+      // not the combined UNION/INTERSECT/EXCEPT output, so wrap the whole
+      // statement and cap the outer result set instead.
+      const trimmed = sql.trim();
+      const hasSemicolon = trimmed.endsWith(';');
+      const sqlWithoutSemicolon = hasSemicolon ? trimmed.slice(0, -1) : trimmed;
+      return `SELECT TOP ${maxRows} * FROM (${sqlWithoutSemicolon}\n) AS subq${hasSemicolon ? ';' : ''}`;
+    }
+
+    // Add TOP clause after SELECT
+    return sql.replace(/\bselect\s+/i, `SELECT TOP ${maxRows} `);
   }
 
   /**

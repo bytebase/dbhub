@@ -154,4 +154,56 @@ describe("SQLRowLimiter", () => {
       expect(result).toBe("SELECT * FROM (SELECT * FROM users LIMIT ? -- cap\n) AS subq LIMIT 100");
     });
   });
+
+  describe("applyMaxRowsForSQLServer", () => {
+    it("should not modify SQL when maxRows is undefined", () => {
+      const sql = "SELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, undefined)).toBe(sql);
+    });
+
+    it("should add TOP when none exists", () => {
+      const sql = "SELECT * FROM users";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100);
+      expect(result).toBe("SELECT TOP 100 * FROM users");
+    });
+
+    it("should use minimum of existing TOP and maxRows", () => {
+      const sql = "SELECT TOP 50 * FROM users";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100);
+      expect(result).toBe("SELECT TOP 50 * FROM users");
+    });
+
+    it("should wrap UNION ALL queries so TOP caps the combined result set (issue #387)", () => {
+      const sql =
+        "SELECT 1 AS dbhub_row_cap_probe\nUNION ALL SELECT 2\nUNION ALL SELECT 3\nUNION ALL SELECT 4";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 3);
+      expect(result).toBe(
+        "SELECT TOP 3 * FROM (SELECT 1 AS dbhub_row_cap_probe\nUNION ALL SELECT 2\nUNION ALL SELECT 3\nUNION ALL SELECT 4\n) AS subq"
+      );
+    });
+
+    it("should wrap UNION queries (without ALL) so TOP caps the combined result set", () => {
+      const sql = "SELECT id FROM a UNION SELECT id FROM b";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 5);
+      expect(result).toBe("SELECT TOP 5 * FROM (SELECT id FROM a UNION SELECT id FROM b\n) AS subq");
+    });
+
+    it("should wrap INTERSECT/EXCEPT queries so TOP caps the combined result set", () => {
+      const sql = "SELECT id FROM a EXCEPT SELECT id FROM b";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 5);
+      expect(result).toBe("SELECT TOP 5 * FROM (SELECT id FROM a EXCEPT SELECT id FROM b\n) AS subq");
+    });
+
+    it("should preserve trailing semicolon when wrapping a set-operator query", () => {
+      const sql = "SELECT id FROM a UNION ALL SELECT id FROM b;";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 5);
+      expect(result).toBe("SELECT TOP 5 * FROM (SELECT id FROM a UNION ALL SELECT id FROM b\n) AS subq;");
+    });
+
+    it("should not treat 'union' inside a string literal as a set operator", () => {
+      const sql = "SELECT 'union all' AS msg FROM users";
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100);
+      expect(result).toBe("SELECT TOP 100 'union all' AS msg FROM users");
+    });
+  });
 });
