@@ -255,8 +255,16 @@ describe('SQLite Connector Integration Tests', () => {
       // Two writes then one read, matching both source order and SQLite's
       // writes-then-reads execution order here.
       expect(result.resultSets).toHaveLength(3);
-      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
-      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[0]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30)",
+        rows: [],
+        rowCount: 1,
+      });
+      expect(result.resultSets[1]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35)",
+        rows: [],
+        rowCount: 1,
+      });
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(Number(result.resultSets[2].rows[0].total)).toBe(2);
     });
@@ -400,8 +408,16 @@ describe('SQLite Connector Integration Tests', () => {
       // not the source order [INSERT, SELECT, INSERT]. Both inserts have
       // already run by the time the SELECT executes.
       expect(result.resultSets).toHaveLength(3);
-      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
-      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[0]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 1', 'multi1@test.com', 30)",
+        rows: [],
+        rowCount: 1,
+      });
+      expect(result.resultSets[1]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35)",
+        rows: [],
+        rowCount: 1,
+      });
       // Should return only 1 row from the SELECT statement
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(result.resultSets[2].rows[0].name).toBe('Multi Test 1');

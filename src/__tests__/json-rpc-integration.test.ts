@@ -208,13 +208,13 @@ describe('JSON RPC Integration Tests', () => {
       
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data).toHaveProperty('resultSets');
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0]).toHaveProperty('rows');
-      expect(content.data.resultSets[0]).toHaveProperty('count');
-      expect(content.data.resultSets[0].rows).toHaveLength(2);
-      expect(content.data.resultSets[0].rows[0].name).toBe('John Doe');
-      expect(content.data.resultSets[0].rows[1].name).toBe('Bob Johnson');
+      expect(content.data).toHaveProperty('statements');
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0]).toHaveProperty('rows');
+      expect(content.data.statements[0]).toHaveProperty('count');
+      expect(content.data.statements[0].rows).toHaveLength(2);
+      expect(content.data.statements[0].rows[0].name).toBe('John Doe');
+      expect(content.data.statements[0].rows[1].name).toBe('Bob Johnson');
     });
 
     it('should execute a JOIN query successfully', async () => {
@@ -231,10 +231,10 @@ describe('JSON RPC Integration Tests', () => {
       expect(response).toHaveProperty('result');
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0].rows).toHaveLength(2);
-      expect(content.data.resultSets[0].rows[0].total).toBe(149.50);
-      expect(content.data.resultSets[0].rows[1].total).toBe(99.99);
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0].rows).toHaveLength(2);
+      expect(content.data.statements[0].rows[0].total).toBe(149.50);
+      expect(content.data.statements[0].rows[1].total).toBe(99.99);
     });
 
     it('should execute aggregate queries successfully', async () => {
@@ -252,12 +252,12 @@ describe('JSON RPC Integration Tests', () => {
       expect(response).toHaveProperty('result');
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0].rows).toHaveLength(1);
-      expect(content.data.resultSets[0].rows[0].user_count).toBe(3);
-      expect(content.data.resultSets[0].rows[0].avg_age).toBe(30);
-      expect(content.data.resultSets[0].rows[0].min_age).toBe(25);
-      expect(content.data.resultSets[0].rows[0].max_age).toBe(35);
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0].rows).toHaveLength(1);
+      expect(content.data.statements[0].rows[0].user_count).toBe(3);
+      expect(content.data.statements[0].rows[0].avg_age).toBe(30);
+      expect(content.data.statements[0].rows[0].min_age).toBe(25);
+      expect(content.data.statements[0].rows[0].max_age).toBe(35);
     });
 
     it('should handle multiple statements in a single call', async () => {
@@ -272,12 +272,16 @@ describe('JSON RPC Integration Tests', () => {
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
       // SQLite runs all write statements before read statements, so the
-      // INSERT's resultSet comes first even though it's first in source
-      // order too here; the SELECT's resultSet follows.
-      expect(content.data.resultSets).toHaveLength(2);
-      expect(content.data.resultSets[0]).toEqual({ rows: [], count: 1 });
-      expect(content.data.resultSets[1].rows).toHaveLength(1);
-      expect(content.data.resultSets[1].rows[0].total_users).toBe(4);
+      // INSERT's entry comes first even though it's first in source order
+      // too here; the SELECT's entry follows.
+      expect(content.data.statements).toHaveLength(2);
+      expect(content.data.statements[0]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Test User', 'test@example.com', 28)",
+        rows: [],
+        count: 1,
+      });
+      expect(content.data.statements[1].rows).toHaveLength(1);
+      expect(content.data.statements[1].rows[0].total_users).toBe(4);
     });
 
     it('should handle SQLite-specific functions', async () => {
@@ -294,11 +298,11 @@ describe('JSON RPC Integration Tests', () => {
       expect(response).toHaveProperty('result');
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0].rows).toHaveLength(1);
-      expect(content.data.resultSets[0].rows[0].version).toBeDefined();
-      expect(content.data.resultSets[0].rows[0].uppercase).toBe('HELLO WORLD');
-      expect(content.data.resultSets[0].rows[0].str_length).toBe(11);
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0].rows).toHaveLength(1);
+      expect(content.data.statements[0].rows[0].version).toBeDefined();
+      expect(content.data.statements[0].rows[0].uppercase).toBe('HELLO WORLD');
+      expect(content.data.statements[0].rows[0].str_length).toBe(11);
     });
 
     it('should return error for invalid SQL', async () => {
@@ -321,9 +325,9 @@ describe('JSON RPC Integration Tests', () => {
       expect(response).toHaveProperty('result');
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0].rows).toHaveLength(0);
-      expect(content.data.resultSets[0].count).toBe(0);
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0].rows).toHaveLength(0);
+      expect(content.data.statements[0].count).toBe(0);
     });
 
     it('should work with SQLite transactions', async () => {
@@ -341,8 +345,8 @@ describe('JSON RPC Integration Tests', () => {
       expect(content.success).toBe(true);
       // SQLite runs all write statements (BEGIN TRANSACTION, INSERT, COMMIT)
       // before the read statement (SELECT), so the SELECT's resultSet is last.
-      expect(content.data.resultSets).toHaveLength(4);
-      const selectSet = content.data.resultSets[content.data.resultSets.length - 1];
+      expect(content.data.statements).toHaveLength(4);
+      const selectSet = content.data.statements[content.data.statements.length - 1];
       expect(selectSet.rows).toHaveLength(1);
       expect(selectSet.rows[0].name).toBe('Transaction User');
       expect(selectSet.rows[0].age).toBe(40);
@@ -356,10 +360,10 @@ describe('JSON RPC Integration Tests', () => {
       expect(response).toHaveProperty('result');
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
-      expect(content.data.resultSets).toHaveLength(1);
-      expect(content.data.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(content.data.resultSets[0].rows.some((row: any) => row.name === 'id')).toBe(true);
-      expect(content.data.resultSets[0].rows.some((row: any) => row.name === 'name')).toBe(true);
+      expect(content.data.statements).toHaveLength(1);
+      expect(content.data.statements[0].rows.length).toBeGreaterThan(0);
+      expect(content.data.statements[0].rows.some((row: any) => row.name === 'id')).toBe(true);
+      expect(content.data.statements[0].rows.some((row: any) => row.name === 'name')).toBe(true);
     });
   });
 

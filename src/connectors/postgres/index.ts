@@ -693,7 +693,9 @@ export class PostgresConnector implements Connector {
               : await client.query(processedStatement);
             await client.query('COMMIT');
             return {
-              resultSets: [{ rows: result.rows, rowCount: result.rowCount ?? result.rows.length }],
+              resultSets: [
+                { sql: statements[0], rows: result.rows, rowCount: result.rowCount ?? result.rows.length },
+              ],
             };
           } catch (error) {
             // Best-effort rollback so a failed ROLLBACK (e.g. dropped connection)
@@ -716,7 +718,9 @@ export class PostgresConnector implements Connector {
         }
         // Explicitly return rows and rowCount to ensure rowCount is preserved
         return {
-          resultSets: [{ rows: result.rows, rowCount: result.rowCount ?? result.rows.length }],
+          resultSets: [
+            { sql: statements[0], rows: result.rows, rowCount: result.rowCount ?? result.rows.length },
+          ],
         };
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -741,6 +745,7 @@ export class PostgresConnector implements Connector {
 
             const result = await client.query(processedStatement);
             resultSets.push({
+              sql: statement,
               rows: result.rows ?? [],
               rowCount: result.rowCount ?? result.rows?.length ?? 0,
             });

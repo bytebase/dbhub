@@ -26,6 +26,14 @@ export interface DatabaseMessage {
 
 /** The rows and affected-row count produced by one statement in a batch. */
 export interface SQLResultSet {
+  /**
+   * The source text of the statement that produced this result set, when the
+   * connector can attribute it unambiguously. Omitted for SQL Server batches
+   * with more than one statement, where node-mssql's recordsets/rowsAffected
+   * arrays aren't index-aligned per statement (see sqlserver's
+   * `buildResultSets`) - attributing SQL there would be a guess.
+   */
+  sql?: string;
   rows: any[];
   rowCount: number;
 }

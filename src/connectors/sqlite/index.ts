@@ -498,10 +498,10 @@ export class SQLiteConnector implements Connector {
           // Pass parameters if provided
           if (parameters && parameters.length > 0) {
             const rows = this.prepare(processedStatement).all(...parameters);
-            return { resultSets: [{ rows, rowCount: rows.length }] };
+            return { resultSets: [{ sql: statements[0], rows, rowCount: rows.length }] };
           } else {
             const rows = this.prepare(processedStatement).all();
-            return { resultSets: [{ rows, rowCount: rows.length }] };
+            return { resultSets: [{ sql: statements[0], rows, rowCount: rows.length }] };
           }
         } else {
           // Use run() for statements that don't return data
@@ -513,7 +513,9 @@ export class SQLiteConnector implements Connector {
           }
           // node:sqlite returns `changes` as BigInt when BigInt reads are
           // enabled; normalize to a number to match the SQLResult contract.
-          return { resultSets: [{ rows: [], rowCount: Number(result.changes) }] };
+          return {
+            resultSets: [{ sql: statements[0], rows: [], rowCount: Number(result.changes) }],
+          };
         }
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -557,18 +559,18 @@ export class SQLiteConnector implements Connector {
             this.db.exec("PRAGMA query_only = ON");
           }
           const result = this.prepare(statement).run();
-          resultSets.push({ rows: [], rowCount: Number(result.changes) });
+          resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
         }
 
         // Execute read statements individually to collect results
-        for (let statement of readStatements) {
+        for (const statement of readStatements) {
           if (options.readonly) {
             this.db.exec("PRAGMA query_only = ON");
           }
           // Apply maxRows limit to SELECT queries if specified
-          statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
-          const rows = this.prepare(statement).all();
-          resultSets.push({ rows, rowCount: rows.length });
+          const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
+          const rows = this.prepare(processedStatement).all();
+          resultSets.push({ sql: statement, rows, rowCount: rows.length });
         }
 
         return { resultSets };

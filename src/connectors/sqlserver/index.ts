@@ -19,7 +19,7 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import {
   sqlServerDynamicSqlKeywords,
   sqlServerDynamicSqlPattern,
@@ -793,7 +793,7 @@ export class SQLServerConnector implements Connector {
       const result = await request.query(processedSQL);
 
       return {
-        resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected),
+        resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected, processedSQL),
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
@@ -816,8 +816,18 @@ export class SQLServerConnector implements Connector {
    * one result set per select plus one trailing "writes" set for the rest -
    * not a truly per-statement breakdown, but no read statement's rows are
    * ever merged with another's, which is what mattered for #380.
+   *
+   * `sourceSql` is attributed to the single resulting set only when the
+   * batch is unambiguously one statement - for a genuine multi-statement
+   * batch there's no reliable way to say which source statement a given
+   * recordset (or the trailing writes set) came from, so `sql` is left
+   * undefined rather than guessed.
    */
-  private static buildResultSets(recordsets: any, rowsAffected: number[] | undefined): SQLResultSet[] {
+  private static buildResultSets(
+    recordsets: any,
+    rowsAffected: number[] | undefined,
+    sourceSql: string,
+  ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
       const rows = recordset ?? [];
       return { rows, rowCount: rows.length };
@@ -828,10 +838,13 @@ export class SQLServerConnector implements Connector {
     const writesOnly = totalAffected - accountedFor;
 
     if (sets.length === 0) {
-      return [{ rows: [], rowCount: totalAffected }];
-    }
-    if (writesOnly > 0) {
+      sets.push({ rows: [], rowCount: totalAffected });
+    } else if (writesOnly > 0) {
       sets.push({ rows: [], rowCount: writesOnly });
+    }
+
+    if (sets.length === 1 && splitSQLStatements(sourceSql, "sqlserver").length === 1) {
+      sets[0].sql = sourceSql;
     }
     return sets;
   }
@@ -974,7 +987,7 @@ export class SQLServerConnector implements Connector {
       }
     }
     return {
-      resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected),
+      resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected, processedSQL),
       ...(messages.length > 0 ? { messages } : {}),
     };
   }

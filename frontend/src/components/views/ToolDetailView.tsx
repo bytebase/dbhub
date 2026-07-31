@@ -209,31 +209,39 @@ export default function ToolDetailView() {
     const startTime = performance.now();
 
     try {
-      let queryResult: QueryResult;
+      let queryResults: QueryResult[];
       let sqlToExecute: string;
 
       if (toolType === 'execute_sql') {
         // Get selected SQL from editor (returns selection if any, otherwise full content)
         sqlToExecute = sqlEditorRef.current?.getSelectedSql() ?? sql;
-        queryResult = await executeTool(toolName, { sql: sqlToExecute });
+        queryResults = await executeTool(toolName, { sql: sqlToExecute });
       } else {
         sqlToExecute = getSqlPreview();
-        queryResult = await executeTool(toolName, params);
+        queryResults = await executeTool(toolName, params);
       }
 
       const endTime = performance.now();
       const duration = endTime - startTime;
+      const timestamp = new Date();
+      const isBatch = queryResults.length > 1;
 
-      const newTab: ResultTab = {
+      // One tab per statement, so a multi-statement batch's results don't get
+      // collapsed into a single tab - only the first tab's time reflects the
+      // whole batch's duration, since the others didn't wait separately.
+      const newTabs: ResultTab[] = queryResults.map((result, index) => ({
         id: crypto.randomUUID(),
-        timestamp: new Date(),
-        result: queryResult,
+        // Offset timestamps so tabs from the same run sort stably and get distinct ids/keys.
+        timestamp: new Date(timestamp.getTime() + index),
+        result,
         error: null,
-        executedSql: sqlToExecute,
-        executionTimeMs: duration,
-      };
-      setResultTabs(prev => [newTab, ...prev]);
-      setActiveTabId(newTab.id);
+        executedSql: result.sql ?? sqlToExecute,
+        executionTimeMs: index === 0 ? duration : 0,
+        statementIndex: isBatch ? index + 1 : undefined,
+        statementTotal: isBatch ? queryResults.length : undefined,
+      }));
+      setResultTabs(prev => [...newTabs, ...prev]);
+      setActiveTabId(newTabs[0].id);
     } catch (err) {
       const errorTab: ResultTab = {
         id: crypto.randomUUID(),

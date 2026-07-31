@@ -222,8 +222,16 @@ describe('PostgreSQL Connector Integration Tests', () => {
       `, {});
 
       expect(result.resultSets).toHaveLength(3);
-      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
-      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[0]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30)",
+        rows: [],
+        rowCount: 1,
+      });
+      expect(result.resultSets[1]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35)",
+        rows: [],
+        rowCount: 1,
+      });
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(result.resultSets[2].rows[0].total).toBe('2');
     });
@@ -477,11 +485,19 @@ describe('PostgreSQL Connector Integration Tests', () => {
 
       // One resultSet per statement, in source order: INSERT, SELECT, INSERT.
       expect(result.resultSets).toHaveLength(3);
-      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[0]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 1', 'multi1@test.com', 30)",
+        rows: [],
+        rowCount: 1,
+      });
       // Should return only 1 row from the SELECT statement
       expect(result.resultSets[1].rows).toHaveLength(1);
       expect(result.resultSets[1].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[2]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[2]).toEqual({
+        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35)",
+        rows: [],
+        rowCount: 1,
+      });
     });
 
     it('should handle maxRows with PostgreSQL window functions', async () => {

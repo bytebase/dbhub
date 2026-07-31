@@ -50,17 +50,21 @@ function isMultiStatementResult(results: any): boolean {
  * Builds one `SQLResultSet` per statement from raw multi-statement driver
  * results, preserving statement order. A `SELECT` becomes `{rows, rowCount:
  * rows.length}`; an INSERT/UPDATE/DELETE metadata object becomes `{rows: [],
- * rowCount: affectedRows}`.
+ * rowCount: affectedRows}`. `statementTexts`, when its length matches the
+ * driver's result count, attributes each set to the statement that produced
+ * it - both drivers return one entry per statement in source order, so a
+ * length match means the pairing is exact, not a guess.
  */
-function buildResultSetsFromMultiStatement(results: any[]): SQLResultSet[] {
-  return results.map((result) => {
+function buildResultSetsFromMultiStatement(results: any[], statementTexts?: string[]): SQLResultSet[] {
+  const sql = statementTexts?.length === results.length ? statementTexts : undefined;
+  return results.map((result, index) => {
     if (Array.isArray(result)) {
-      return { rows: result, rowCount: result.length };
+      return { sql: sql?.[index], rows: result, rowCount: result.length };
     }
     if (isMetadataObject(result)) {
-      return { rows: [], rowCount: result.affectedRows || 0 };
+      return { sql: sql?.[index], rows: [], rowCount: result.affectedRows || 0 };
     }
-    return { rows: [], rowCount: 0 };
+    return { sql: sql?.[index], rows: [], rowCount: 0 };
   });
 }
 
@@ -72,21 +76,25 @@ function buildResultSetsFromMultiStatement(results: any[]): SQLResultSet[] {
  * drivers, which have similar but slightly different result formats.
  *
  * @param results - Raw results from the database driver
+ * @param statementTexts - The original, source-order statement texts, used
+ * to attribute each result set to the statement that produced it
  * @returns One `SQLResultSet` per statement, in execution order
  */
-export function parseQueryResultSets(results: any): SQLResultSet[] {
+export function parseQueryResultSets(results: any, statementTexts?: string[]): SQLResultSet[] {
+  const singleStatementSql = statementTexts?.length === 1 ? statementTexts[0] : undefined;
+
   // Non-array results (e.g. a single INSERT/UPDATE/DELETE without RETURNING)
   if (isMetadataObject(results)) {
-    return [{ rows: [], rowCount: results.affectedRows || 0 }];
+    return [{ sql: singleStatementSql, rows: [], rowCount: results.affectedRows || 0 }];
   }
   if (!Array.isArray(results)) {
-    return [{ rows: [], rowCount: 0 }];
+    return [{ sql: singleStatementSql, rows: [], rowCount: 0 }];
   }
 
   if (isMultiStatementResult(results)) {
-    return buildResultSetsFromMultiStatement(results);
+    return buildResultSetsFromMultiStatement(results, statementTexts);
   }
 
   // Single statement result - results is the rows array directly
-  return [{ rows: results, rowCount: results.length }];
+  return [{ sql: singleStatementSql, rows: results, rowCount: results.length }];
 }

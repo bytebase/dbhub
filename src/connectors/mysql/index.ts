@@ -679,12 +679,11 @@ export class MySQLConnector implements Connector {
         options.readonly,
         this.supportsReadOnlyTransaction,
         async () => {
-          // Apply maxRows limit to SELECT queries if specified
+          // Split up front so the original statement text is available for
+          // attribution below, whether or not maxRows needs to rewrite it.
+          const statements = splitSQLStatements(sql, "mysql");
           let processedSQL = sql;
           if (options.maxRows) {
-            // Handle multi-statement SQL by processing each statement individually
-            const statements = splitSQLStatements(sql, "mysql");
-
             const processedStatements = statements.map(statement =>
               SQLRowLimiter.applyMaxRows(statement, options.maxRows)
             );
@@ -709,7 +708,7 @@ export class MySQLConnector implements Connector {
           const [firstResult] = results;
 
           // Parse results using shared utility that handles both single and multi-statement queries
-          const resultSets = parseQueryResultSets(firstResult);
+          const resultSets = parseQueryResultSets(firstResult, statements);
 
           return { resultSets };
         }
