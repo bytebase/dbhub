@@ -36,8 +36,6 @@ function constantTimeEqual(a: string, b: string): boolean {
  * registration, PKCE). That machinery solves multi-tenant identity
  * federation; DBHub's actual gap is coarser — "is this request from someone
  * who has the secret," not "who is this user and what scopes do they have."
- * mcp-remote, Sentry MCP's self-hosted fallback, and the community
- * crystaldba/postgres-mcp nginx template all converge on the same shape.
  */
 export function validateAuthToken(
   authorizationHeader: string | undefined,
