@@ -53,7 +53,7 @@ describe('execute-sql tool', () => {
 
   describe('basic execution', () => {
     it('should execute SELECT and return rows', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1, name: 'test' }], rowCount: 1 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ id: 1, name: 'test' }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');
@@ -61,13 +61,17 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
-      expect(parsedResult.data.rows).toEqual([{ id: 1, name: 'test' }]);
-      expect(parsedResult.data.count).toBe(1);
+      expect(parsedResult.data.resultSets).toEqual([{ rows: [{ id: 1, name: 'test' }], count: 1 }]);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith('SELECT * FROM users', { readonly: false, maxRows: undefined });
     });
 
     it('should pass multi-statement SQL directly to connector', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
+      const mockResult: SQLResult = {
+        resultSets: [
+          { rows: [{ id: 1 }], rowCount: 1 },
+          { rows: [{ id: 2 }], rowCount: 1 },
+        ],
+      };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const sql = 'SELECT * FROM users; SELECT * FROM roles;';
@@ -76,6 +80,10 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
 
       expect(parsedResult.success).toBe(true);
+      expect(parsedResult.data.resultSets).toEqual([
+        { rows: [{ id: 1 }], count: 1 },
+        { rows: [{ id: 2 }], count: 1 },
+      ]);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: false, maxRows: undefined });
     });
 
@@ -165,7 +173,7 @@ describe('execute-sql tool', () => {
     });
 
     it('should allow SELECT statements', async () => {
-      const mockResult: SQLResult = { rows: [{ id: 1 }], rowCount: 1 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ id: 1 }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');
@@ -225,7 +233,7 @@ describe('execute-sql tool', () => {
       ['empty string', ''],
       ['only semicolons and whitespace', '   ;  ;  ; '],
     ])('should handle %s', async (_, sql) => {
-      const mockResult: SQLResult = { rows: [], rowCount: 0 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [], rowCount: 0 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExecuteSqlToolHandler('test_source');

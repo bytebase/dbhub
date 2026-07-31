@@ -59,8 +59,8 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
         
         // Check SSL status - should be disabled (false)
         const result = await sslDisabledConnector.executeSQL('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()', {});
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].ssl).toBe(false);
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].ssl).toBe(false);
         
         await sslDisabledConnector.disconnect();
       });
@@ -79,8 +79,8 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
           
           // If connection succeeds, check SSL status - should be enabled (true)
           const result = await sslRequiredConnector.executeSQL('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()', {});
-          expect(result.rows).toHaveLength(1);
-          expect(result.rows[0].ssl).toBe(true);
+          expect(result.resultSets[0].rows).toHaveLength(1);
+          expect(result.resultSets[0].rows[0].ssl).toBe(true);
           
           await sslRequiredConnector.disconnect();
         } catch (error) {
@@ -220,9 +220,12 @@ describe('PostgreSQL Connector Integration Tests', () => {
         INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35);
         SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%';
       `, {});
-      
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].total).toBe('2');
+
+      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[2].rows).toHaveLength(1);
+      expect(result.resultSets[2].rows[0].total).toBe('2');
     });
 
     it('should handle PostgreSQL-specific data types', async () => {
@@ -246,10 +249,10 @@ describe('PostgreSQL Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].json_data).toBeDefined();
-      expect(result.rows[0].uuid_val).toBeDefined();
-      expect(result.rows[0].array_val).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].json_data).toBeDefined();
+      expect(result.resultSets[0].rows[0].uuid_val).toBeDefined();
+      expect(result.resultSets[0].rows[0].array_val).toBeDefined();
     });
 
     it('should return comment for views via getTableComment', async () => {
@@ -279,9 +282,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].id).toBeDefined();
-      expect(result.rows[0].name).toBe('Returning Test');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].id).toBeDefined();
+      expect(result.resultSets[0].rows[0].name).toBe('Returning Test');
     });
 
     it('should work with PostgreSQL-specific functions', async () => {
@@ -294,12 +297,12 @@ describe('PostgreSQL Connector Integration Tests', () => {
           gen_random_uuid() as random_uuid
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].postgres_version).toContain('PostgreSQL');
-      expect(result.rows[0].current_db).toBe('testdb');
-      expect(result.rows[0].current_user).toBeDefined();
-      expect(result.rows[0].current_time).toBeDefined();
-      expect(result.rows[0].random_uuid).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].postgres_version).toContain('PostgreSQL');
+      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
+      expect(result.resultSets[0].rows[0].current_user).toBeDefined();
+      expect(result.resultSets[0].rows[0].current_time).toBeDefined();
+      expect(result.resultSets[0].rows[0].random_uuid).toBeDefined();
     });
 
     it('should handle PostgreSQL transactions correctly', async () => {
@@ -318,7 +321,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'trans@example.com'",
         {}
       );
-      expect(result.rows[0].count).toBe('0');
+      expect(result.resultSets[0].rows[0].count).toBe('0');
     });
 
     it('should handle PostgreSQL window functions', async () => {
@@ -333,9 +336,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
         ORDER BY age DESC
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('age_rank');
-      expect(result.rows[0]).toHaveProperty('avg_age');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
     });
 
     it('should handle PostgreSQL arrays and JSON operations', async () => {
@@ -361,9 +364,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
         WHERE data @> '{"tags": ["admin"]}'
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].name).toBe('John');
-      expect(result.rows[0].theme).toBe('dark');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].name).toBe('John');
+      expect(result.resultSets[0].rows[0].theme).toBe('dark');
     });
 
     it('should respect maxRows limit for SELECT queries', async () => {
@@ -373,9 +376,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should respect existing LIMIT clause when lower than maxRows', async () => {
@@ -385,8 +388,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
         { maxRows: 3 }
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
     });
 
     it('should use maxRows when existing LIMIT is higher', async () => {
@@ -396,9 +399,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should not affect non-SELECT queries', async () => {
@@ -408,15 +411,15 @@ describe('PostgreSQL Connector Integration Tests', () => {
         { maxRows: 1 }
       );
       
-      expect(insertResult.rows).toHaveLength(0); // INSERTs don't return rows by default
+      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs don't return rows by default
       
       // Verify the insert worked
       const selectResult = await postgresTest.connector.executeSQL(
         "SELECT * FROM users WHERE email = 'maxrows@example.com'",
         {}
       );
-      expect(selectResult.rows).toHaveLength(1);
-      expect(selectResult.rows[0].name).toBe('MaxRows Test');
+      expect(selectResult.resultSets[0].rows).toHaveLength(1);
+      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
     });
 
     it('should handle maxRows with RETURNING clause', async () => {
@@ -427,11 +430,11 @@ describe('PostgreSQL Connector Integration Tests', () => {
       );
       
       // INSERT...RETURNING returns all inserted rows regardless of maxRows setting
-      expect(insertResult.rows).toHaveLength(2);
-      expect(insertResult.rows[0]).toHaveProperty('id');
-      expect(insertResult.rows[0]).toHaveProperty('name');
-      expect(insertResult.rows[1]).toHaveProperty('id');
-      expect(insertResult.rows[1]).toHaveProperty('name');
+      expect(insertResult.resultSets[0].rows).toHaveLength(2);
+      expect(insertResult.resultSets[0].rows[0]).toHaveProperty('id');
+      expect(insertResult.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(insertResult.resultSets[0].rows[1]).toHaveProperty('id');
+      expect(insertResult.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should handle maxRows with complex queries', async () => {
@@ -443,10 +446,10 @@ describe('PostgreSQL Connector Integration Tests', () => {
         ORDER BY o.total DESC
       `, { maxRows: 2 });
       
-      expect(result.rows.length).toBeLessThanOrEqual(2);
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('total');
+      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
     it('should not apply maxRows to CTE queries (WITH clause)', async () => {
@@ -459,9 +462,9 @@ describe('PostgreSQL Connector Integration Tests', () => {
       `, { maxRows: 2 });
       
       // Should return all rows since WITH queries are not limited anymore
-      expect(result.rows.length).toBeGreaterThan(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('age');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age');
     });
 
     it('should handle maxRows in multi-statement execution with transactions', async () => {
@@ -471,10 +474,14 @@ describe('PostgreSQL Connector Integration Tests', () => {
         SELECT name FROM users WHERE email LIKE '%@test.com' ORDER BY name;
         INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35);
       `, { maxRows: 1 });
-      
+
+      // One resultSet per statement, in source order: INSERT, SELECT, INSERT.
+      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
       // Should return only 1 row from the SELECT statement
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0]).toHaveProperty('name');
+      expect(result.resultSets[1].rows).toHaveLength(1);
+      expect(result.resultSets[1].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[2]).toEqual({ rows: [], rowCount: 1 });
     });
 
     it('should handle maxRows with PostgreSQL window functions', async () => {
@@ -490,10 +497,10 @@ describe('PostgreSQL Connector Integration Tests', () => {
         ORDER BY age DESC
       `, { maxRows: 2 });
       
-      expect(result.rows.length).toBeLessThanOrEqual(2);
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('age_rank');
-      expect(result.rows[0]).toHaveProperty('avg_age');
+      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
     });
 
     it('should ignore maxRows when not specified', async () => {
@@ -504,7 +511,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
       );
 
       // Should return at least the original 3 users plus any added in previous tests
-      expect(result.rows.length).toBeGreaterThanOrEqual(3);
+      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
     });
 
   });
@@ -523,8 +530,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].default_transaction_read_only).toBe('on');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].default_transaction_read_only).toBe('on');
       } finally {
         await readonlyConnector.disconnect();
       }
@@ -542,8 +549,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].name).toBe('John Doe');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].name).toBe('John Doe');
       } finally {
         await readonlyConnector.disconnect();
       }
@@ -597,7 +604,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
           'SHOW default_transaction_read_only',
           {}
         );
-        expect(showResult.rows[0].default_transaction_read_only).toBe('off');
+        expect(showResult.resultSets[0].rows[0].default_transaction_read_only).toBe('off');
 
         // Should be able to write data
         const insertResult = await normalConnector.executeSQL(
@@ -605,8 +612,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(insertResult.rows).toHaveLength(1);
-        expect(insertResult.rows[0].id).toBeDefined();
+        expect(insertResult.resultSets[0].rows).toHaveLength(1);
+        expect(insertResult.resultSets[0].rows[0].id).toBeDefined();
       } finally {
         await normalConnector.disconnect();
       }
@@ -667,7 +674,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
           "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com') RETURNING id",
           {}
         );
-        expect(insert.rows).toHaveLength(1);
+        expect(insert.resultSets[0].rows).toHaveLength(1);
 
         await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
       } finally {
@@ -687,7 +694,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
 
         // Session search_path should be set
         const result = await connector.executeSQL('SHOW search_path', {});
-        expect(result.rows[0].search_path).toContain('test_schema');
+        expect(result.resultSets[0].rows[0].search_path).toContain('test_schema');
 
         // Discovery defaults to test_schema (first in search_path)
         const tables = await connector.getTables();
@@ -700,7 +707,7 @@ describe('PostgreSQL Connector Integration Tests', () => {
 
         // SQL resolves unqualified names via search_path
         const sqlResult = await connector.executeSQL('SELECT * FROM products', {});
-        expect(sqlResult.rows.length).toBeGreaterThan(0);
+        expect(sqlResult.resultSets[0].rows.length).toBeGreaterThan(0);
       } finally {
         await connector.disconnect();
       }
@@ -721,8 +728,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
 
         // SQL resolves unqualified names via quoted search_path
         const result = await connector.executeSQL('SELECT * FROM items', {});
-        expect(result.rows.length).toBeGreaterThan(0);
-        expect(result.rows[0]).toHaveProperty('label');
+        expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+        expect(result.resultSets[0].rows[0]).toHaveProperty('label');
       } finally {
         await connector.disconnect();
       }

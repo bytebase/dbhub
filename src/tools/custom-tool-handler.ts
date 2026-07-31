@@ -220,10 +220,14 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
         paramValues
       );
 
-      // 8. Build response data
+      // 8. Build response data. A custom tool's statement is usually one
+      // SQL statement, but isn't restricted to be - surface every result
+      // set produced rather than assuming exactly one.
       const responseData = {
-        rows: result.rows,
-        count: result.rowCount,
+        resultSets: result.resultSets.map((set: { rows: any[]; rowCount: number }) => ({
+          rows: set.rows,
+          count: set.rowCount,
+        })),
         source_id: toolConfig.source,
       };
 

@@ -17,7 +17,7 @@ import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { parseQueryResults, extractAffectedRows } from "../../utils/multi-statement-result-parser.js";
+import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
@@ -675,10 +675,9 @@ export class MariaDBConnector implements Connector {
           }
 
           // Parse results using shared utility that handles both single and multi-statement queries
-          const rows = parseQueryResults(results);
-          const rowCount = extractAffectedRows(results);
+          const resultSets = parseQueryResultSets(results);
 
-          return { rows, rowCount };
+          return { resultSets };
         }
       );
     } finally {

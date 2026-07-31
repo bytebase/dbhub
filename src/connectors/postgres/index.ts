@@ -9,6 +9,7 @@ import {
   ConnectorRegistry,
   DSNParser,
   SQLResult,
+  SQLResultSet,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -691,7 +692,9 @@ export class PostgresConnector implements Connector {
               ? await client.query(processedStatement, parameters)
               : await client.query(processedStatement);
             await client.query('COMMIT');
-            return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+            return {
+              resultSets: [{ rows: result.rows, rowCount: result.rowCount ?? result.rows.length }],
+            };
           } catch (error) {
             // Best-effort rollback so a failed ROLLBACK (e.g. dropped connection)
             // can't mask the original query error.
@@ -712,16 +715,20 @@ export class PostgresConnector implements Connector {
           result = await client.query(processedStatement);
         }
         // Explicitly return rows and rowCount to ensure rowCount is preserved
-        return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+        return {
+          resultSets: [{ rows: result.rows, rowCount: result.rowCount ?? result.rows.length }],
+        };
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
         if (parameters && parameters.length > 0) {
           throw new Error("Parameters are not supported for multi-statement queries in PostgreSQL");
         }
 
-        // Execute all in same session for transaction consistency
-        let allRows: any[] = [];
-        let totalRowCount = 0;
+        // Execute all in same session for transaction consistency, keeping
+        // each statement's rows/rowCount as its own result set rather than
+        // merging them into one - a caller needs to tell "SELECT 1 AS a" and
+        // "SELECT 2 AS b" apart, not just see their rows concatenated.
+        const resultSets: SQLResultSet[] = [];
 
         // Execute within a transaction to ensure session consistency.
         // In read-only mode, open it READ ONLY so the engine rejects any write the
@@ -733,14 +740,10 @@ export class PostgresConnector implements Connector {
             const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
 
             const result = await client.query(processedStatement);
-            // Collect rows from SELECT/WITH/EXPLAIN statements
-            if (result.rows && result.rows.length > 0) {
-              allRows.push(...result.rows);
-            }
-            // Accumulate rowCount for INSERT/UPDATE/DELETE statements
-            if (result.rowCount) {
-              totalRowCount += result.rowCount;
-            }
+            resultSets.push({
+              rows: result.rows ?? [],
+              rowCount: result.rowCount ?? result.rows?.length ?? 0,
+            });
           }
           await client.query('COMMIT');
         } catch (error) {
@@ -754,7 +757,7 @@ export class PostgresConnector implements Connector {
           throw error;
         }
 
-        return { rows: allRows, rowCount: totalRowCount };
+        return { resultSets };
       }
     } finally {
       client.release();

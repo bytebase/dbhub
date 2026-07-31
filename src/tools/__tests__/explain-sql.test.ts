@@ -49,7 +49,7 @@ describe('explain-sql tool', () => {
     ] satisfies [ConnectorType, string][])('builds "%s" as expected for %s', async (dialect, expected) => {
       const mockConnector = createMockConnector(dialect, 'test_source');
       mockGetCurrentConnector.mockReturnValue(mockConnector);
-      const mockResult: SQLResult = { rows: [{ plan: 'x' }], rowCount: 1 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExplainSqlToolHandler('test_source');
@@ -112,7 +112,7 @@ describe('explain-sql tool', () => {
     });
 
     it('allows a leading parenthesized option list that does not contain ANALYZE', async () => {
-      const mockResult: SQLResult = { rows: [{ plan: 'x' }], rowCount: 1 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExplainSqlToolHandler('test_source');
@@ -126,7 +126,7 @@ describe('explain-sql tool', () => {
     });
 
     it('allows explaining a write statement (plain EXPLAIN never executes it)', async () => {
-      const mockResult: SQLResult = { rows: [{ plan: 'x' }], rowCount: 1 };
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
 
       const handler = createExplainSqlToolHandler('test_source');
@@ -145,7 +145,7 @@ describe('explain-sql tool', () => {
       vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
       const mockConnector = createMockConnector('postgres', 'prod');
       mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [], rowCount: 0 });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
       const addSpy = vi.spyOn(requestStore, 'add');
 
       const handler = createExplainSqlToolHandler('prod');
@@ -158,7 +158,7 @@ describe('explain-sql tool', () => {
       vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
       const mockConnector = createMockConnector('postgres', 'prod-pg');
       mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [], rowCount: 0 });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
       const addSpy = vi.spyOn(requestStore, 'add');
 
       const handler = createExplainSqlToolHandler('prod-pg');

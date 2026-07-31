@@ -65,10 +65,14 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       };
       result = await connector.executeSQL(sql, executeOptions);
 
-      // Build response data
+      // Build response data. Every statement in the batch gets its own
+      // result set - a single SELECT (the common case) is resultSets of
+      // length 1, rather than rows from different statements being merged.
       const responseData = {
-        rows: result.rows,
-        count: result.rowCount,
+        resultSets: result.resultSets.map((set: { rows: any[]; rowCount: number }) => ({
+          rows: set.rows,
+          count: set.rowCount,
+        })),
         source_id: effectiveSourceId,
         ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
       };

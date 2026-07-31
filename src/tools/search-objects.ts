@@ -115,8 +115,9 @@ async function getTableRowCount(
     // invariant that holds by inspection rather than by argument.
     const result = await connector.executeSQL(countQuery, { maxRows: 1, readonly: true });
 
-    if (result.rows && result.rows.length > 0) {
-      return Number(result.rows[0].count || result.rows[0].COUNT || 0);
+    const rows = result.resultSets[0]?.rows;
+    if (rows && rows.length > 0) {
+      return Number(rows[0].count || rows[0].COUNT || 0);
     }
   } catch (error) {
     // If we can't get row count, return null (not critical)

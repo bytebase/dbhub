@@ -24,9 +24,19 @@ export interface DatabaseMessage {
   line?: number;
 }
 
-export interface SQLResult {
+/** The rows and affected-row count produced by one statement in a batch. */
+export interface SQLResultSet {
   rows: any[];
   rowCount: number;
+}
+
+export interface SQLResult {
+  /**
+   * One entry per statement in the batch, in execution order. A single
+   * `SELECT` (the common case) is `resultSets` of length 1 - callers that
+   * only care about that should read `resultSets[0]`.
+   */
+  resultSets: SQLResultSet[];
   /** Informational messages from the database (e.g. SQL Server STATISTICS TIME/IO, PRINT output) */
   messages?: DatabaseMessage[];
 }

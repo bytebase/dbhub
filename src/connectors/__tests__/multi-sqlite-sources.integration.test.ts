@@ -83,16 +83,16 @@ describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
     // Query database_a
     const connectorA = manager.getConnector('database_a');
     const resultA = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA.rows[0].count)).toBe(2);
+    expect(Number(resultA.resultSets[0].rows[0].count)).toBe(2);
 
     // Query database_b
     const connectorB = manager.getConnector('database_b');
     const resultB = await connectorB.executeSQL('SELECT COUNT(*) as count FROM products', {});
-    expect(Number(resultB.rows[0].count)).toBe(3);
+    expect(Number(resultB.resultSets[0].rows[0].count)).toBe(3);
 
     // Query database_a again to ensure it's still connected to the correct database
     const resultA2 = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA2.rows[0].count)).toBe(2);
+    expect(Number(resultA2.resultSets[0].rows[0].count)).toBe(2);
 
     // Verify that database_a doesn't have the products table
     await expect(
@@ -112,16 +112,16 @@ describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
     // Insert into database_a
     await connectorA.executeSQL("INSERT INTO employees (name) VALUES ('Charlie')", {});
     const resultA = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA.rows[0].count)).toBe(3);
+    expect(Number(resultA.resultSets[0].rows[0].count)).toBe(3);
 
     // Insert into database_b
     await connectorB.executeSQL("INSERT INTO products (title) VALUES ('Thingamajig')", {});
     const resultB = await connectorB.executeSQL('SELECT COUNT(*) as count FROM products', {});
-    expect(Number(resultB.rows[0].count)).toBe(4);
+    expect(Number(resultB.resultSets[0].rows[0].count)).toBe(4);
 
     // Verify database_a still has 3 employees
     const resultA2 = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA2.rows[0].count)).toBe(3);
+    expect(Number(resultA2.resultSets[0].rows[0].count)).toBe(3);
   });
 
   it('should throw error for non-existent source ID', () => {

@@ -15,6 +15,7 @@ import {
   ConnectorRegistry,
   DSNParser,
   SQLResult,
+  SQLResultSet,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -497,10 +498,10 @@ export class SQLiteConnector implements Connector {
           // Pass parameters if provided
           if (parameters && parameters.length > 0) {
             const rows = this.prepare(processedStatement).all(...parameters);
-            return { rows, rowCount: rows.length };
+            return { resultSets: [{ rows, rowCount: rows.length }] };
           } else {
             const rows = this.prepare(processedStatement).all();
-            return { rows, rowCount: rows.length };
+            return { resultSets: [{ rows, rowCount: rows.length }] };
           }
         } else {
           // Use run() for statements that don't return data
@@ -512,7 +513,7 @@ export class SQLiteConnector implements Connector {
           }
           // node:sqlite returns `changes` as BigInt when BigInt reads are
           // enabled; normalize to a number to match the SQLResult contract.
-          return { rows: [], rowCount: Number(result.changes) };
+          return { resultSets: [{ rows: [], rowCount: Number(result.changes) }] };
         }
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
@@ -543,8 +544,11 @@ export class SQLiteConnector implements Connector {
           }
         }
 
-        // Execute write statements individually to track changes
-        let totalChanges = 0;
+        // Execute write statements individually to track changes. Each
+        // statement becomes its own result set, in the order actually run -
+        // note that's writes-then-reads (see readStatements/writeStatements
+        // split above), not necessarily the original source order.
+        const resultSets: SQLResultSet[] = [];
         for (const statement of writeStatements) {
           // Re-assert the read-only backstop before each statement so an earlier
           // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
@@ -553,23 +557,21 @@ export class SQLiteConnector implements Connector {
             this.db.exec("PRAGMA query_only = ON");
           }
           const result = this.prepare(statement).run();
-          totalChanges += Number(result.changes);
+          resultSets.push({ rows: [], rowCount: Number(result.changes) });
         }
 
         // Execute read statements individually to collect results
-        let allRows: any[] = [];
         for (let statement of readStatements) {
           if (options.readonly) {
             this.db.exec("PRAGMA query_only = ON");
           }
           // Apply maxRows limit to SELECT queries if specified
           statement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
-          const result = this.prepare(statement).all();
-          allRows.push(...result);
+          const rows = this.prepare(statement).all();
+          resultSets.push({ rows, rowCount: rows.length });
         }
 
-        // rowCount is total changes for writes, plus rows returned for reads
-        return { rows: allRows, rowCount: totalChanges + allRows.length };
+        return { resultSets };
       }
     } finally {
       // Restore the connection to writable so non-read-only tools on the same

@@ -161,8 +161,8 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
     describe('SQL Execution', () => {
       it('should execute simple SELECT query', async () => {
         const result = await this.connector.executeSQL('SELECT COUNT(*) as count FROM users', {});
-        expect(result.rows).toHaveLength(1);
-        expect(Number(result.rows[0].count)).toBeGreaterThanOrEqual(3);
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(Number(result.resultSets[0].rows[0].count)).toBeGreaterThanOrEqual(3);
       });
 
       it('should execute INSERT and SELECT', async () => {
@@ -170,13 +170,13 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
           "INSERT INTO users (name, email, age) VALUES ('Test User', 'test@example.com', 25)", {}
         );
         expect(insertResult).toBeDefined();
-        
+
         const selectResult = await this.connector.executeSQL(
           "SELECT * FROM users WHERE email = 'test@example.com'", {}
         );
-        expect(selectResult.rows).toHaveLength(1);
-        expect(selectResult.rows[0].name).toBe('Test User');
-        expect(Number(selectResult.rows[0].age)).toBe(25);
+        expect(selectResult.resultSets[0].rows).toHaveLength(1);
+        expect(selectResult.resultSets[0].rows[0].name).toBe('Test User');
+        expect(Number(selectResult.resultSets[0].rows[0].age)).toBe(25);
       });
 
       it('should handle complex queries with joins', async () => {
@@ -189,9 +189,9 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
           ORDER BY order_count DESC
         `, {});
         
-        expect(result.rows.length).toBeGreaterThan(0);
-        expect(result.rows[0]).toHaveProperty('name');
-        expect(result.rows[0]).toHaveProperty('order_count');
+        expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+        expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+        expect(result.resultSets[0].rows[0]).toHaveProperty('order_count');
       });
     });
   }

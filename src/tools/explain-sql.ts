@@ -106,9 +106,11 @@ export function createExplainSqlToolHandler(sourceId?: string) {
       const explainStatement = buildExplainStatement(connector.id, sql);
       result = await connector.executeSQL(explainStatement, { readonly: true });
 
+      // explain_sql only ever accepts a single statement (validateExplainInput
+      // above rejects anything else), so exactly one result set comes back.
       const responseData = {
-        rows: result.rows,
-        count: result.rowCount,
+        rows: result.resultSets[0].rows,
+        count: result.resultSets[0].rowCount,
         source_id: effectiveSourceId,
         ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
       };

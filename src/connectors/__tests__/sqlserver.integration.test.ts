@@ -204,8 +204,8 @@ describe('SQL Server Connector Integration Tests', () => {
           END as encryption_status
       `, {});
       
-      expect(encryptionResult.rows[0].encryption_status).toBe('Unencrypted');
-      expect(encryptionResult.rows[0].protocol_type).not.toMatch(/TLS|SSL/i);
+      expect(encryptionResult.resultSets[0].rows[0].encryption_status).toBe('Unencrypted');
+      expect(encryptionResult.resultSets[0].rows[0].protocol_type).not.toMatch(/TLS|SSL/i);
       
       await connector.disconnect();
     });
@@ -237,8 +237,8 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toHaveLength(1);
-      const planXml = result.rows[0].plan as string;
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      const planXml = result.resultSets[0].rows[0].plan as string;
       expect(typeof planXml).toBe('string');
       // SHOWPLAN_XML output is a ShowPlanXML document referencing the query.
       expect(planXml).toContain('ShowPlanXML');
@@ -250,7 +250,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
         {}
       );
-      expect(Number(before.rows[0].count)).toBe(0);
+      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
 
       // SHOWPLAN_XML compiles without executing, so this INSERT must not run.
       await sqlServerTest.connector.executeSQL(
@@ -262,7 +262,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
         {}
       );
-      expect(Number(after.rows[0].count)).toBe(0);
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
     });
 
     it('should translate EXPLAIN even when preceded by a comment', async () => {
@@ -270,8 +270,8 @@ describe('SQL Server Connector Integration Tests', () => {
         '/* inspect plan */ EXPLAIN SELECT * FROM users',
         {}
       );
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].plan as string).toContain('ShowPlanXML');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].plan as string).toContain('ShowPlanXML');
     });
 
     it('should reject SET SHOWPLAN smuggled into an EXPLAIN query', async () => {
@@ -291,7 +291,7 @@ describe('SQL Server Connector Integration Tests', () => {
         'SELECT COUNT(*) as count FROM users',
         {}
       );
-      expect(Number(after.rows[0].count)).toBe(Number(before.rows[0].count));
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(Number(before.resultSets[0].rows[0].count));
     });
 
     it('should reject an empty EXPLAIN', async () => {
@@ -312,8 +312,8 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toHaveLength(1);
-      const planXml = result.rows[0].plan as string;
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      const planXml = result.resultSets[0].rows[0].plan as string;
       expect(typeof planXml).toBe('string');
       expect(planXml).toContain('ShowPlanXML');
       expect(planXml).toContain('users');
@@ -328,7 +328,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
         {}
       );
-      expect(Number(before.rows[0].count)).toBe(0);
+      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
 
       // Unlike EXPLAIN, EXPLAIN ANALYZE really runs the statement.
       await sqlServerTest.connector.executeSQL(
@@ -340,7 +340,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
         {}
       );
-      expect(Number(after.rows[0].count)).toBe(1);
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(1);
     });
 
     it('should roll back writes under EXPLAIN ANALYZE in readonly mode', async () => {
@@ -348,21 +348,21 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
         {}
       );
-      expect(Number(before.rows[0].count)).toBe(0);
+      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
 
       const result = await sqlServerTest.connector.executeSQL(
         "EXPLAIN ANALYZE INSERT INTO users (name, email, age) VALUES ('RO', 'explain-analyze-ro@example.com', 42)",
         { readonly: true }
       );
       // The plan still comes back...
-      expect(result.rows[0].plan as string).toContain('ShowPlanXML');
+      expect(result.resultSets[0].rows[0].plan as string).toContain('ShowPlanXML');
 
       // ...but the write must not persist.
       const after = await sqlServerTest.connector.executeSQL(
         "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
         {}
       );
-      expect(Number(after.rows[0].count)).toBe(0);
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
     });
 
     it('should translate EXPLAIN ANALYZE even when preceded by a comment', async () => {
@@ -370,8 +370,8 @@ describe('SQL Server Connector Integration Tests', () => {
         '/* real numbers please */ EXPLAIN ANALYZE SELECT * FROM users',
         {}
       );
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
     });
 
     it('should reject SET STATISTICS smuggled into an EXPLAIN ANALYZE query', async () => {
@@ -394,7 +394,7 @@ describe('SQL Server Connector Integration Tests', () => {
         'EXPLAIN (ANALYZE) SELECT name FROM users WHERE age > 30',
         {}
       );
-      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
     });
 
     it('should treat EXPLAIN (ANALYZE false) as a plain estimated EXPLAIN', async () => {
@@ -404,7 +404,7 @@ describe('SQL Server Connector Integration Tests', () => {
         'EXPLAIN (ANALYZE false) SELECT name FROM users WHERE age > 30',
         {}
       );
-      const plan = result.rows[0].plan as string;
+      const plan = result.resultSets[0].rows[0].plan as string;
       expect(plan).toContain('ShowPlanXML');
       expect(plan).not.toContain('RunTimeInformation');
     });
@@ -419,7 +419,7 @@ describe('SQL Server Connector Integration Tests', () => {
         'EXPLAIN ANALYZE false SELECT name FROM users WHERE age > 30',
       ]) {
         const result = await sqlServerTest.connector.executeSQL(sql, {});
-        const plan = result.rows[0].plan as string;
+        const plan = result.resultSets[0].rows[0].plan as string;
         expect(plan, sql).toContain('ShowPlanXML');
         expect(plan, sql).not.toContain('RunTimeInformation');
       }
@@ -430,7 +430,7 @@ describe('SQL Server Connector Integration Tests', () => {
         'EXPLAIN (ANALYZE = true) SELECT name FROM users WHERE age > 30',
         {}
       );
-      expect(result.rows[0].plan as string).toContain('RunTimeInformation');
+      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
     });
 
     it('should block pass-through data sources under readonly EXPLAIN ANALYZE', async () => {
@@ -453,7 +453,7 @@ describe('SQL Server Connector Integration Tests', () => {
         [2]
       );
 
-      const plan = result.rows[0].plan as string;
+      const plan = result.resultSets[0].rows[0].plan as string;
       expect(plan).toContain('RunTimeInformation');
       // Two of the three rows pass the filter, so the value reached the server
       // rather than merely being declared.
@@ -470,7 +470,7 @@ describe('SQL Server Connector Integration Tests', () => {
         [30]
       );
 
-      const plan = result.rows[0].plan as string;
+      const plan = result.resultSets[0].rows[0].plan as string;
       expect(plan).toContain('ShowPlanXML');
       expect(plan).not.toContain('RunTimeInformation');
     });
@@ -482,7 +482,7 @@ describe('SQL Server Connector Integration Tests', () => {
         [1]
       );
 
-      const plan = result.rows[0].plan as string;
+      const plan = result.resultSets[0].rows[0].plan as string;
       expect(plan).toContain('RunTimeInformation');
       expect(plan).toMatch(/ActualRows="1"/);
     });
@@ -500,7 +500,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
         {}
       );
-      expect(Number(before.rows[0].count)).toBe(0);
+      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
 
       await sqlServerTest.connector.executeSQL(
         "EXPLAIN (ANALYZE off) INSERT INTO users (name, email, age) VALUES ('Off', 'analyze-off@example.com', 7)",
@@ -511,7 +511,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
         {}
       );
-      expect(Number(after.rows[0].count)).toBe(0);
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
     });
 
     it('should reject PostgreSQL-only EXPLAIN options with a clear message', async () => {
@@ -557,10 +557,10 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0].id).toBe(1);
-      expect(result.rows[1].id).toBe(2);
-      expect(result.rows[0].name).toBe('Test 1');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0].id).toBe(1);
+      expect(result.resultSets[0].rows[1].id).toBe(2);
+      expect(result.resultSets[0].rows[0].name).toBe('Test 1');
     });
 
     it('should handle SQL Server-specific data types', async () => {
@@ -585,10 +585,10 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].unicode_text).toBe('Unicode Text 测试');
-      expect(result.rows[0].unique_id).toBeDefined();
-      expect(result.rows[0].xml_data).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].unicode_text).toBe('Unicode Text 测试');
+      expect(result.resultSets[0].rows[0].unique_id).toBeDefined();
+      expect(result.resultSets[0].rows[0].xml_data).toBeDefined();
     });
 
     it('should work with SQL Server-specific functions', async () => {
@@ -601,12 +601,12 @@ describe('SQL Server Connector Integration Tests', () => {
           NEWID() as new_guid
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].sql_version).toContain('Microsoft SQL Server');
-      expect(result.rows[0].current_db).toBeDefined();
-      expect(result.rows[0].current_user_name).toBeDefined();
-      expect(result.rows[0].current_datetime).toBeDefined();
-      expect(result.rows[0].new_guid).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].sql_version).toContain('Microsoft SQL Server');
+      expect(result.resultSets[0].rows[0].current_db).toBeDefined();
+      expect(result.resultSets[0].rows[0].current_user_name).toBeDefined();
+      expect(result.resultSets[0].rows[0].current_datetime).toBeDefined();
+      expect(result.resultSets[0].rows[0].new_guid).toBeDefined();
     });
 
     it('should handle SQL Server transactions correctly', async () => {
@@ -622,7 +622,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'",
         {}
       );
-      expect(Number(result.rows[0].count)).toBe(2);
+      expect(Number(result.resultSets[0].rows[0].count)).toBe(2);
     });
 
     it('should handle SQL Server rollback correctly', async () => {
@@ -631,7 +631,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
         {}
       );
-      const beforeCount = Number(beforeResult.rows[0].count);
+      const beforeCount = Number(beforeResult.resultSets[0].rows[0].count);
       
       // Test rollback
       await sqlServerTest.connector.executeSQL(`
@@ -644,7 +644,7 @@ describe('SQL Server Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
         {}
       );
-      const afterCount = Number(afterResult.rows[0].count);
+      const afterCount = Number(afterResult.resultSets[0].rows[0].count);
       
       expect(afterCount).toBe(beforeCount);
     });
@@ -656,9 +656,9 @@ describe('SQL Server Connector Integration Tests', () => {
         VALUES ('Output Test', 'output@example.com', 40)
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].id).toBeDefined();
-      expect(result.rows[0].name).toBe('Output Test');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].id).toBeDefined();
+      expect(result.resultSets[0].rows[0].name).toBe('Output Test');
     });
 
     it('should handle SQL Server window functions', async () => {
@@ -673,9 +673,9 @@ describe('SQL Server Connector Integration Tests', () => {
         ORDER BY age DESC
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('age_rank');
-      expect(result.rows[0]).toHaveProperty('avg_age');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
     });
 
     it('should handle SQL Server CTEs (Common Table Expressions)', async () => {
@@ -694,10 +694,10 @@ describe('SQL Server Connector Integration Tests', () => {
         ORDER BY total_spent DESC
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('order_count');
-      expect(result.rows[0]).toHaveProperty('total_spent');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('order_count');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('total_spent');
     });
 
     it('should handle SQL Server JSON functions (SQL Server 2016+)', async () => {
@@ -723,10 +723,10 @@ describe('SQL Server Connector Integration Tests', () => {
         WHERE JSON_VALUE(data, '$.name') = 'John'
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].name).toBe('John');
-      expect(result.rows[0].theme).toBe('dark');
-      expect(result.rows[0].tags).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].name).toBe('John');
+      expect(result.resultSets[0].rows[0].theme).toBe('dark');
+      expect(result.resultSets[0].rows[0].tags).toBeDefined();
     });
 
     it('should handle SQL Server MERGE statement', async () => {
@@ -757,9 +757,9 @@ describe('SQL Server Connector Integration Tests', () => {
         OUTPUT $action, INSERTED.name;
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
       // Should have both UPDATE and INSERT actions
-      const actions = result.rows.map(row => row.$action);
+      const actions = result.resultSets[0].rows.map(row => row.$action);
       expect(actions).toContain('UPDATE');
       expect(actions).toContain('INSERT');
     });
@@ -771,9 +771,9 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should respect existing TOP clause when lower than maxRows', async () => {
@@ -783,8 +783,8 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 3 }
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
     });
 
     it('should use maxRows when existing TOP is higher', async () => {
@@ -794,9 +794,9 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should not affect non-SELECT queries', async () => {
@@ -806,15 +806,15 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 1 }
       );
       
-      expect(insertResult.rows).toHaveLength(0); // INSERTs without OUTPUT don't return rows by default
+      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs without OUTPUT don't return rows by default
       
       // Verify the insert worked
       const selectResult = await sqlServerTest.connector.executeSQL(
         "SELECT * FROM users WHERE email = 'maxrows@sqlserver.com'",
         {}
       );
-      expect(selectResult.rows).toHaveLength(1);
-      expect(selectResult.rows[0].name).toBe('MaxRows Test');
+      expect(selectResult.resultSets[0].rows).toHaveLength(1);
+      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
     });
 
     it('should return every result set from a multi-statement SELECT batch', async () => {
@@ -823,8 +823,11 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toEqual([{ a: 1 }, { b: 2 }]);
-      expect(result.rowCount).toBe(2);
+      // One resultSet per SELECT recordset, in order - not flattened together.
+      expect(result.resultSets).toEqual([
+        { rows: [{ a: 1 }], rowCount: 1 },
+        { rows: [{ b: 2 }], rowCount: 1 },
+      ]);
     });
 
     it('should sum rowCount across a mixed write/read multi-statement batch', async () => {
@@ -836,9 +839,13 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      // 1 row affected by the INSERT + 1 row returned by the SELECT
-      expect(result.rowCount).toBe(2);
-      expect(result.rows).toEqual([{ name: 'Batch User', email: 'batch@sqlserver.com' }]);
+      // One resultSet for the SELECT's recordset, plus a trailing write-only
+      // resultSet for the INSERT (rowsAffected sums to 2: 1 insert + 1
+      // select-rowcount; leftover after accounting for the select's row is 1).
+      expect(result.resultSets).toEqual([
+        { rows: [{ name: 'Batch User', email: 'batch@sqlserver.com' }], rowCount: 1 },
+        { rows: [], rowCount: 1 },
+      ]);
     });
 
     it('should return every result set from a multi-statement SELECT batch in readonly mode', async () => {
@@ -847,8 +854,10 @@ describe('SQL Server Connector Integration Tests', () => {
         { readonly: true }
       );
 
-      expect(result.rows).toEqual([{ a: 1 }, { b: 2 }]);
-      expect(result.rowCount).toBe(2);
+      expect(result.resultSets).toEqual([
+        { rows: [{ a: 1 }], rowCount: 1 },
+        { rows: [{ b: 2 }], rowCount: 1 },
+      ]);
     });
 
     it('should handle maxRows with complex queries', async () => {
@@ -860,10 +869,10 @@ describe('SQL Server Connector Integration Tests', () => {
         ORDER BY o.total DESC
       `, { maxRows: 2 });
       
-      expect(result.rows.length).toBeLessThanOrEqual(2);
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('total');
+      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
     it('should handle maxRows with window functions', async () => {
@@ -878,10 +887,10 @@ describe('SQL Server Connector Integration Tests', () => {
         ORDER BY age DESC
       `, { maxRows: 2 });
       
-      expect(result.rows.length).toBeLessThanOrEqual(2);
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('age_rank');
+      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
     });
 
     it('should capture PRINT output in messages', async () => {
@@ -890,8 +899,8 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].value).toBe(1);
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].value).toBe(1);
       expect(result.messages).toBeDefined();
       expect(result.messages!.length).toBeGreaterThan(0);
       expect(result.messages!.some(msg => msg.text === 'hello from sql server')).toBe(true);
@@ -903,7 +912,7 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toHaveLength(1);
+      expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.messages).toBeDefined();
       expect(result.messages!.length).toBeGreaterThan(0);
       // STATISTICS TIME emits messages containing "CPU time" and "elapsed time"
@@ -919,7 +928,7 @@ describe('SQL Server Connector Integration Tests', () => {
         {}
       );
 
-      expect(result.rows).toHaveLength(1);
+      expect(result.resultSets[0].rows).toHaveLength(1);
       // messages should be undefined (not present) when no info messages were emitted
       expect(result.messages).toBeUndefined();
     });
@@ -932,7 +941,7 @@ describe('SQL Server Connector Integration Tests', () => {
       );
       
       // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.rows.length).toBeGreaterThanOrEqual(3);
+      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
     });
   });
 });

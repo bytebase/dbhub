@@ -5,6 +5,7 @@ import {
   ConnectorRegistry,
   DSNParser,
   SQLResult,
+  SQLResultSet,
   DatabaseMessage,
   TableColumn,
   TableIndex,
@@ -792,8 +793,7 @@ export class SQLServerConnector implements Connector {
       const result = await request.query(processedSQL);
 
       return {
-        rows: SQLServerConnector.flattenRecordsets(result.recordsets),
-        rowCount: SQLServerConnector.sumRowsAffected(result.rowsAffected),
+        resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected),
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
@@ -802,30 +802,38 @@ export class SQLServerConnector implements Connector {
   }
 
   /**
+   * Builds one result set per SELECT-producing statement in the batch, plus
+   * (if any) a trailing result set summarizing the write-only statements.
+   *
    * node-mssql only pushes a `recordsets` entry for statements that produce
    * columns (SELECT); INSERT/UPDATE/DELETE statements in the same batch
-   * contribute to `rowsAffected` only. Concatenating every entry — rather
-   * than reading `recordset` (singular, first result set only) — is what
-   * makes multi-statement batches return every SELECT's rows, matching the
-   * MySQL/MariaDB connectors' behavior.
+   * contribute to `rowsAffected` only, with no way to recover which
+   * `rowsAffected` entry belongs to which statement from the driver's final
+   * arrays (`recordsets`/`rowsAffected` aren't index-aligned - see the
+   * tedious `doneHandler`, which always pushes to `rowsAffected` but only
+   * conditionally to `recordsets`). So a batch of pure writes collapses to a
+   * single summed result set, and a batch mixing writes with selects gets
+   * one result set per select plus one trailing "writes" set for the rest -
+   * not a truly per-statement breakdown, but no read statement's rows are
+   * ever merged with another's, which is what mattered for #380.
    */
-  private static flattenRecordsets(recordsets: any): any[] {
-    if (!recordsets) {
-      return [];
-    }
-    return recordsets.flatMap((recordset: any) => recordset ?? []);
-  }
+  private static buildResultSets(recordsets: any, rowsAffected: number[] | undefined): SQLResultSet[] {
+    const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
+      const rows = recordset ?? [];
+      return { rows, rowCount: rows.length };
+    });
 
-  /**
-   * `rowsAffected` has one entry per statement in the batch (SELECT included,
-   * via @@ROWCOUNT). Summing it mirrors `extractAffectedRows` for
-   * MySQL/MariaDB: the total reflects every statement, not just the first.
-   */
-  private static sumRowsAffected(rowsAffected: number[] | undefined): number {
-    if (!rowsAffected) {
-      return 0;
+    const totalAffected = (rowsAffected ?? []).reduce((total, count) => total + (count ?? 0), 0);
+    const accountedFor = sets.reduce((total, set) => total + set.rowCount, 0);
+    const writesOnly = totalAffected - accountedFor;
+
+    if (sets.length === 0) {
+      return [{ rows: [], rowCount: totalAffected }];
     }
-    return rowsAffected.reduce((total, count) => total + (count ?? 0), 0);
+    if (writesOnly > 0) {
+      sets.push({ rows: [], rowCount: writesOnly });
+    }
+    return sets;
   }
 
   /**
@@ -966,8 +974,7 @@ export class SQLServerConnector implements Connector {
       }
     }
     return {
-      rows: SQLServerConnector.flattenRecordsets(result.recordsets),
-      rowCount: SQLServerConnector.sumRowsAffected(result.rowsAffected),
+      resultSets: SQLServerConnector.buildResultSets(result.recordsets, result.rowsAffected),
       ...(messages.length > 0 ? { messages } : {}),
     };
   }
@@ -1041,8 +1048,12 @@ export class SQLServerConnector implements Connector {
       const planRow = planResult.recordset?.[0];
       const planXml = planRow ? Object.values(planRow)[0] : null;
       return {
-        rows: planXml != null ? [{ plan: planXml }] : [],
-        rowCount: planXml != null ? 1 : 0,
+        resultSets: [
+          {
+            rows: planXml != null ? [{ plan: planXml }] : [],
+            rowCount: planXml != null ? 1 : 0,
+          },
+        ],
       };
     } catch (error) {
       throw new Error(`Failed to explain query: ${(error as Error).message}`);
@@ -1204,8 +1215,12 @@ export class SQLServerConnector implements Connector {
 
       const planXml = SQLServerConnector.extractPlanXml(planResult);
       return {
-        rows: planXml != null ? [{ plan: planXml }] : [],
-        rowCount: planXml != null ? 1 : 0,
+        resultSets: [
+          {
+            rows: planXml != null ? [{ plan: planXml }] : [],
+            rowCount: planXml != null ? 1 : 0,
+          },
+        ],
       };
     } catch (error) {
       // Named apart from the plain EXPLAIN path: this one ran the statement, so

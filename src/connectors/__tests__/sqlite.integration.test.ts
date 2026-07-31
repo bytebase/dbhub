@@ -130,11 +130,11 @@ describe('SQLite Connector Integration Tests', () => {
         'SELECT * FROM types_test ORDER BY id DESC LIMIT 1', {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].text_val).toBe('test string');
-      expect(result.rows[0].int_val).toBe(BigInt(42));
-      expect(result.rows[0].real_val).toBe(3.14159);
-      expect(result.rows[0].null_val).toBeNull();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].text_val).toBe('test string');
+      expect(result.resultSets[0].rows[0].int_val).toBe(BigInt(42));
+      expect(result.resultSets[0].rows[0].real_val).toBe(3.14159);
+      expect(result.resultSets[0].rows[0].null_val).toBeNull();
     });
 
     it('should work with SQLite-specific functions', async () => {
@@ -147,12 +147,12 @@ describe('SQLite Connector Integration Tests', () => {
           length('test string') as string_length
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].sqlite_version).toBeDefined();
-      expect(result.rows[0].current_time).toBeDefined();
-      expect(result.rows[0].random_hex).toBeDefined();
-      expect(result.rows[0].uppercase_text).toBe('HELLO WORLD');
-      expect(result.rows[0].string_length).toBe(BigInt(11));
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].sqlite_version).toBeDefined();
+      expect(result.resultSets[0].rows[0].current_time).toBeDefined();
+      expect(result.resultSets[0].rows[0].random_hex).toBeDefined();
+      expect(result.resultSets[0].rows[0].uppercase_text).toBe('HELLO WORLD');
+      expect(result.resultSets[0].rows[0].string_length).toBe(BigInt(11));
     });
 
     it('should handle SQLite transactions correctly', async () => {
@@ -167,7 +167,7 @@ describe('SQLite Connector Integration Tests', () => {
       const successResult = await sqliteTest.connector.executeSQL(
         "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'", {}
       );
-      expect(Number(successResult.rows[0].count)).toBe(2);
+      expect(Number(successResult.resultSets[0].rows[0].count)).toBe(2);
 
       // Test manual rollback
       await sqliteTest.connector.executeSQL(`
@@ -180,7 +180,7 @@ describe('SQLite Connector Integration Tests', () => {
       const rollbackResult = await sqliteTest.connector.executeSQL(
         "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'", {}
       );
-      expect(Number(rollbackResult.rows[0].count)).toBe(2);
+      expect(Number(rollbackResult.resultSets[0].rows[0].count)).toBe(2);
     });
 
     it('should handle SQLite pragma statements', async () => {
@@ -188,10 +188,10 @@ describe('SQLite Connector Integration Tests', () => {
         PRAGMA table_info(users);
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows.some(row => row.name === 'id')).toBe(true);
-      expect(result.rows.some(row => row.name === 'name')).toBe(true);
-      expect(result.rows.some(row => row.name === 'email')).toBe(true);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows.some(row => row.name === 'id')).toBe(true);
+      expect(result.resultSets[0].rows.some(row => row.name === 'name')).toBe(true);
+      expect(result.resultSets[0].rows.some(row => row.name === 'email')).toBe(true);
     });
 
     it('should support SQLite window functions', async () => {
@@ -206,9 +206,9 @@ describe('SQLite Connector Integration Tests', () => {
         ORDER BY age DESC
       `, {});
       
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('age_rank');
-      expect(result.rows[0]).toHaveProperty('avg_age');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
     });
 
     it('should handle SQLite JSON functions (if available)', async () => {
@@ -236,9 +236,9 @@ describe('SQLite Connector Integration Tests', () => {
           WHERE json_extract(data, '$.age') > 27
         `, {});
         
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].name).toBe('John');
-        expect(Number(result.rows[0].age)).toBe(30);
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].name).toBe('John');
+        expect(Number(result.resultSets[0].rows[0].age)).toBe(30);
       } catch (error) {
         // JSON functions not available in this SQLite version, skip this test
         console.log('JSON functions not available in this SQLite version, skipping JSON test');
@@ -251,9 +251,14 @@ describe('SQLite Connector Integration Tests', () => {
         INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35);
         SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%';
       `, {});
-      
-      expect(result.rows).toHaveLength(1);
-      expect(Number(result.rows[0].total)).toBe(2);
+
+      // Two writes then one read, matching both source order and SQLite's
+      // writes-then-reads execution order here.
+      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[2].rows).toHaveLength(1);
+      expect(Number(result.resultSets[2].rows[0].total)).toBe(2);
     });
 
     it('should handle SQLite foreign key constraints', async () => {
@@ -270,7 +275,7 @@ describe('SQLite Connector Integration Tests', () => {
       const result = await sqliteTest.connector.executeSQL(
         'SELECT COUNT(*) as count FROM orders WHERE total = 200.00', {}
       );
-      expect(Number(result.rows[0].count)).toBe(1);
+      expect(Number(result.resultSets[0].rows[0].count)).toBe(1);
     });
 
     it('should work with SQLite virtual tables (FTS)', async () => {
@@ -291,8 +296,8 @@ describe('SQLite Connector Integration Tests', () => {
           SELECT title FROM docs_fts WHERE docs_fts MATCH 'content' ORDER BY title
         `, {});
         
-        expect(result.rows.length).toBeGreaterThan(0);
-        expect(result.rows.some(row => row.title.includes('Document'))).toBe(true);
+        expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+        expect(result.resultSets[0].rows.some(row => row.title.includes('Document'))).toBe(true);
       } catch (error) {
         // FTS not available in this SQLite build, skip this test
         console.log('FTS extension not available in this SQLite build, skipping FTS test');
@@ -306,9 +311,9 @@ describe('SQLite Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result1.rows).toHaveLength(2);
-      expect(result1.rows[0].name).toBe('John Doe');
-      expect(result1.rows[1].name).toBe('Jane Smith');
+      expect(result1.resultSets[0].rows).toHaveLength(2);
+      expect(result1.resultSets[0].rows[0].name).toBe('John Doe');
+      expect(result1.resultSets[0].rows[1].name).toBe('Jane Smith');
     });
 
     it('should respect existing LIMIT clause when lower than maxRows', async () => {
@@ -318,8 +323,8 @@ describe('SQLite Connector Integration Tests', () => {
         { maxRows: 3 }
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].name).toBe('John Doe');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].name).toBe('John Doe');
     });
 
     it('should use maxRows when existing LIMIT is higher', async () => {
@@ -329,9 +334,9 @@ describe('SQLite Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0].name).toBe('John Doe');
-      expect(result.rows[1].name).toBe('Jane Smith');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0].name).toBe('John Doe');
+      expect(result.resultSets[0].rows[1].name).toBe('Jane Smith');
     });
 
     it('should not affect non-SELECT queries', async () => {
@@ -341,15 +346,15 @@ describe('SQLite Connector Integration Tests', () => {
         { maxRows: 1 }
       );
       
-      expect(insertResult.rows).toHaveLength(0); // INSERTs don't return rows
+      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs don't return rows
       
       // Verify the insert worked
       const selectResult = await sqliteTest.connector.executeSQL(
         "SELECT * FROM users WHERE email = 'maxrows@example.com'",
         {}
       );
-      expect(selectResult.rows).toHaveLength(1);
-      expect(selectResult.rows[0].name).toBe('MaxRows Test');
+      expect(selectResult.resultSets[0].rows).toHaveLength(1);
+      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
     });
 
     it('should handle maxRows with complex queries', async () => {
@@ -361,9 +366,9 @@ describe('SQLite Connector Integration Tests', () => {
         ORDER BY o.total DESC
       `, { maxRows: 2 });
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('total');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
     it('should not apply maxRows to CTE queries (WITH clause)', async () => {
@@ -376,9 +381,9 @@ describe('SQLite Connector Integration Tests', () => {
       `, { maxRows: 2 });
       
       // Should return all rows since WITH queries are not limited anymore
-      expect(result.rows.length).toBeGreaterThan(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('age');
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age');
     });
 
     it('should handle maxRows in multi-statement execution', async () => {
@@ -388,10 +393,18 @@ describe('SQLite Connector Integration Tests', () => {
         SELECT name FROM users WHERE email LIKE '%@test.com' ORDER BY name;
         INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35);
       `, { maxRows: 1 });
-      
+
+      // SQLite's connector executes all write statements first, then all
+      // read statements, regardless of source order - so resultSets order
+      // here is [INSERT 'Multi Test 1', INSERT 'Multi Test 2', SELECT],
+      // not the source order [INSERT, SELECT, INSERT]. Both inserts have
+      // already run by the time the SELECT executes.
+      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets[0]).toEqual({ rows: [], rowCount: 1 });
+      expect(result.resultSets[1]).toEqual({ rows: [], rowCount: 1 });
       // Should return only 1 row from the SELECT statement
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].name).toBe('Multi Test 1');
+      expect(result.resultSets[2].rows).toHaveLength(1);
+      expect(result.resultSets[2].rows[0].name).toBe('Multi Test 1');
     });
 
     it('should ignore maxRows when not specified', async () => {
@@ -402,7 +415,7 @@ describe('SQLite Connector Integration Tests', () => {
       );
 
       // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.rows.length).toBeGreaterThanOrEqual(3);
+      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
     });
   });
 
@@ -424,7 +437,7 @@ describe('SQLite Connector Integration Tests', () => {
         // Verify we can execute queries
         await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
         const result = await connector.executeSQL('SELECT * FROM test', {});
-        expect(result.rows).toEqual([]);
+        expect(result.resultSets[0].rows).toEqual([]);
 
         await connector.disconnect();
       } finally {
@@ -459,7 +472,7 @@ describe('SQLite Connector Integration Tests', () => {
         // Verify we can execute queries
         await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
         const result = await connector.executeSQL('SELECT * FROM test', {});
-        expect(result.rows).toEqual([]);
+        expect(result.resultSets[0].rows).toEqual([]);
 
         await connector.disconnect();
       } finally {
@@ -485,7 +498,7 @@ describe('SQLite Connector Integration Tests', () => {
       // Verify we can execute queries
       await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
       const result = await connector.executeSQL('SELECT * FROM test', {});
-      expect(result.rows).toEqual([]);
+      expect(result.resultSets[0].rows).toEqual([]);
 
       await connector.disconnect();
     });
@@ -524,7 +537,7 @@ describe('SQLite Connector Integration Tests', () => {
       try {
         // Should be able to read from the main tables
         const result = await readonlyConnector.executeSQL('SELECT * FROM users LIMIT 1', {});
-        expect(result.rows).toHaveLength(1);
+        expect(result.resultSets[0].rows).toHaveLength(1);
 
         // Should NOT be able to write data (SDK-level enforcement)
         await expect(
@@ -547,8 +560,8 @@ describe('SQLite Connector Integration Tests', () => {
       await connector.executeSQL('INSERT INTO test VALUES (1)', {});
 
       const result = await connector.executeSQL('SELECT * FROM test', {});
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].id).toBe(BigInt(1));
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].id).toBe(BigInt(1));
 
       await connector.disconnect();
     });
@@ -596,7 +609,7 @@ describe('SQLite Connector Integration Tests', () => {
         "INSERT INTO users (name, email) VALUES ('rw', 'rw@test.com')",
         {}
       );
-      expect(insert.rowCount).toBe(1);
+      expect(insert.resultSets[0].rowCount).toBe(1);
 
       // Cleanup
       await sqliteTest.connector.executeSQL("DELETE FROM users WHERE email = 'rw@test.com'", {});
@@ -604,10 +617,10 @@ describe('SQLite Connector Integration Tests', () => {
 
     it('should allow read-only PRAGMA and SELECT when options.readonly is set', async () => {
       const select = await sqliteTest.connector.executeSQL('SELECT 1 AS one', { readonly: true });
-      expect(Number(select.rows[0].one)).toBe(1);
+      expect(Number(select.resultSets[0].rows[0].one)).toBe(1);
 
       const pragma = await sqliteTest.connector.executeSQL('PRAGMA table_info(users)', { readonly: true });
-      expect(pragma.rows.length).toBeGreaterThan(0);
+      expect(pragma.resultSets[0].rows.length).toBeGreaterThan(0);
     });
 
     it('should not let an in-batch query_only toggle disable the backstop', async () => {
@@ -624,7 +637,7 @@ describe('SQLite Connector Integration Tests', () => {
         "SELECT COUNT(*) AS c FROM users WHERE email = 'bypass@test.com'",
         {}
       );
-      expect(Number(check.rows[0].c)).toBe(0);
+      expect(Number(check.resultSets[0].rows[0].c)).toBe(0);
     });
   });
 });

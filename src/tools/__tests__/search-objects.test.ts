@@ -193,7 +193,7 @@ describe('search_database_objects tool', () => {
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 100 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 100 }], rowCount: 1 }] });
 
       const handler = createSearchDatabaseObjectsToolHandler();
       const result = await handler(
@@ -230,7 +230,7 @@ describe('search_database_objects tool', () => {
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
       vi.mocked(mockConnector.getTableIndexes).mockResolvedValue(mockIndexes);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 50 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 50 }], rowCount: 1 }] });
 
       const handler = createSearchDatabaseObjectsToolHandler();
       const result = await handler(
@@ -270,7 +270,7 @@ describe('search_database_objects tool', () => {
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 10 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 10 }], rowCount: 1 }] });
       mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
 
       const handler = createSearchDatabaseObjectsToolHandler();
@@ -293,7 +293,7 @@ describe('search_database_objects tool', () => {
       ];
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 10 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 10 }], rowCount: 1 }] });
       mockConnector.getTableComment = vi.fn().mockResolvedValue(null);
 
       const handler = createSearchDatabaseObjectsToolHandler();
@@ -321,7 +321,7 @@ describe('search_database_objects tool', () => {
 
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue(mockColumns);
       vi.mocked(mockConnector.getTableIndexes).mockResolvedValue(mockIndexes);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 50 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 50 }], rowCount: 1 }] });
       mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
 
       const handler = createSearchDatabaseObjectsToolHandler();
@@ -385,7 +385,7 @@ describe('search_database_objects tool', () => {
     it('should fall back to executeSQL with COUNT(*) when connector lacks getTableRowCount', async () => {
       // Default mock connector does not have getTableRowCount
       delete (mockConnector as any).getTableRowCount;
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ rows: [{ count: 99 }] });
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [{ count: 99 }], rowCount: 1 }] });
 
       const handler = createSearchDatabaseObjectsToolHandler();
       const result = await handler(

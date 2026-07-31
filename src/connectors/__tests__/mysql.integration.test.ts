@@ -55,9 +55,9 @@ class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
         
         // Check SSL status - cipher should be empty when SSL is disabled
         const result = await sslDisabledConnector.executeSQL("SHOW SESSION STATUS LIKE 'Ssl_cipher'", {});
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].Variable_name).toBe('Ssl_cipher');
-        expect(result.rows[0].Value).toBe('');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].Variable_name).toBe('Ssl_cipher');
+        expect(result.resultSets[0].rows[0].Value).toBe('');
         
         await sslDisabledConnector.disconnect();
       });
@@ -76,10 +76,10 @@ class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
           
           // If connection succeeds, check SSL status - cipher should be non-empty when SSL is enabled
           const result = await sslRequiredConnector.executeSQL("SHOW SESSION STATUS LIKE 'Ssl_cipher'", {});
-          expect(result.rows).toHaveLength(1);
-          expect(result.rows[0].Variable_name).toBe('Ssl_cipher');
-          expect(result.rows[0].Value).not.toBe('');
-          expect(result.rows[0].Value).toBeTruthy();
+          expect(result.resultSets[0].rows).toHaveLength(1);
+          expect(result.resultSets[0].rows[0].Variable_name).toBe('Ssl_cipher');
+          expect(result.resultSets[0].rows[0].Value).not.toBe('');
+          expect(result.resultSets[0].rows[0].Value).toBeTruthy();
           
           await sslRequiredConnector.disconnect();
         } catch (error) {
@@ -223,8 +223,8 @@ describe('MySQL Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(Number(result.rows[0].total)).toBe(2);
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(Number(result.resultSets[0].rows[0].total)).toBe(2);
     });
 
     it('should handle MySQL-specific data types', async () => {
@@ -247,9 +247,9 @@ describe('MySQL Connector Integration Tests', () => {
         {}
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].enum_val).toBe('large');
-      expect(result.rows[0].json_data).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].enum_val).toBe('large');
+      expect(result.resultSets[0].rows[0].json_data).toBeDefined();
     });
 
     it('should handle MySQL auto-increment properly', async () => {
@@ -260,8 +260,11 @@ describe('MySQL Connector Integration Tests', () => {
       );
 
       expect(result).toBeDefined();
-      expect(result.rows).toHaveLength(1);
-      expect(Number(result.rows[0].last_id)).toBeGreaterThan(0);
+      // One resultSet per statement, in source order: INSERT then SELECT.
+      expect(result.resultSets).toHaveLength(2);
+      expect(result.resultSets[0].rows).toHaveLength(0);
+      expect(result.resultSets[1].rows).toHaveLength(1);
+      expect(Number(result.resultSets[1].rows[0].last_id)).toBeGreaterThan(0);
     });
 
     it('should work with MySQL-specific functions', async () => {
@@ -273,11 +276,11 @@ describe('MySQL Connector Integration Tests', () => {
           NOW() as timestamp_val
       `, {});
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0].mysql_version).toBeDefined();
-      expect(result.rows[0].current_db).toBe('testdb');
-      expect(result.rows[0].current_user_info).toBeDefined();
-      expect(result.rows[0].timestamp_val).toBeDefined();
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].mysql_version).toBeDefined();
+      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
+      expect(result.resultSets[0].rows[0].current_user_info).toBeDefined();
+      expect(result.resultSets[0].rows[0].timestamp_val).toBeDefined();
     });
 
     it('should handle MySQL transactions correctly', async () => {
@@ -293,7 +296,7 @@ describe('MySQL Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'",
         {}
       );
-      expect(Number(result.rows[0].count)).toBe(2);
+      expect(Number(result.resultSets[0].rows[0].count)).toBe(2);
     });
 
     it('should handle MySQL rollback correctly', async () => {
@@ -302,7 +305,7 @@ describe('MySQL Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
         {}
       );
-      const beforeCount = Number(beforeResult.rows[0].count);
+      const beforeCount = Number(beforeResult.resultSets[0].rows[0].count);
       
       // Test rollback
       await mysqlTest.connector.executeSQL(`
@@ -315,7 +318,7 @@ describe('MySQL Connector Integration Tests', () => {
         "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
         {}
       );
-      const afterCount = Number(afterResult.rows[0].count);
+      const afterCount = Number(afterResult.resultSets[0].rows[0].count);
       
       expect(afterCount).toBe(beforeCount);
     });
@@ -327,9 +330,9 @@ describe('MySQL Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should respect existing LIMIT clause when lower than maxRows', async () => {
@@ -339,8 +342,8 @@ describe('MySQL Connector Integration Tests', () => {
         { maxRows: 3 }
       );
       
-      expect(result.rows).toHaveLength(1);
-      expect(result.rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
     });
 
     it('should use maxRows when existing LIMIT is higher', async () => {
@@ -350,9 +353,9 @@ describe('MySQL Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
-      expect(result.rows).toHaveLength(2);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
     });
 
     it('should not affect non-SELECT queries', async () => {
@@ -362,15 +365,15 @@ describe('MySQL Connector Integration Tests', () => {
         { maxRows: 1 }
       );
       
-      expect(insertResult.rows).toHaveLength(0); // INSERTs don't return rows by default
+      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs don't return rows by default
       
       // Verify the insert worked
       const selectResult = await mysqlTest.connector.executeSQL(
         "SELECT * FROM users WHERE email = 'maxrows@mysql.com'",
         {}
       );
-      expect(selectResult.rows).toHaveLength(1);
-      expect(selectResult.rows[0].name).toBe('MaxRows Test');
+      expect(selectResult.resultSets[0].rows).toHaveLength(1);
+      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
     });
 
     it('should handle maxRows with complex queries', async () => {
@@ -382,10 +385,10 @@ describe('MySQL Connector Integration Tests', () => {
         ORDER BY o.total DESC
       `, { maxRows: 2 });
       
-      expect(result.rows.length).toBeLessThanOrEqual(2);
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0]).toHaveProperty('total');
+      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
+      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
     it('should not apply maxRows to CTE queries (WITH clause)', async () => {
@@ -399,9 +402,9 @@ describe('MySQL Connector Integration Tests', () => {
         `, { maxRows: 2 });
         
         // Should return all rows since WITH queries are not limited
-        expect(result.rows.length).toBeGreaterThan(2);
-        expect(result.rows[0]).toHaveProperty('name');
-        expect(result.rows[0]).toHaveProperty('age');
+        expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
+        expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+        expect(result.resultSets[0].rows[0]).toHaveProperty('age');
       } catch (error) {
         // Some MySQL versions might not support CTE, that's okay
         console.log('CTE not supported in this MySQL version, skipping test');
@@ -414,13 +417,18 @@ describe('MySQL Connector Integration Tests', () => {
         SELECT name FROM users WHERE age > 20 ORDER BY name LIMIT 10;
         SELECT name FROM users WHERE age > 25 ORDER BY name LIMIT 10;
       `, { maxRows: 1 });
-      
-      // Should return only 1 row from each SELECT statement (due to maxRows limit)
-      // MySQL multi-statement may return more complex results, so we check that maxRows was applied
-      expect(result.rows.length).toBeGreaterThan(0);
-      expect(result.rows.length).toBeLessThanOrEqual(2); // At most 1 from each SELECT
-      if (result.rows.length > 0) {
-        expect(result.rows[0]).toHaveProperty('name');
+
+      // One resultSet per statement, in source order. Each SELECT is capped
+      // at maxRows independently, so each set has at most 1 row.
+      expect(result.resultSets).toHaveLength(2);
+      const totalRows = result.resultSets.reduce((sum, set) => sum + set.rows.length, 0);
+      expect(totalRows).toBeGreaterThan(0);
+      expect(totalRows).toBeLessThanOrEqual(2);
+      for (const set of result.resultSets) {
+        expect(set.rows.length).toBeLessThanOrEqual(1);
+        if (set.rows.length > 0) {
+          expect(set.rows[0]).toHaveProperty('name');
+        }
       }
     });
 
@@ -432,7 +440,7 @@ describe('MySQL Connector Integration Tests', () => {
       );
 
       // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.rows.length).toBeGreaterThanOrEqual(3);
+      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
     });
   });
 
@@ -452,8 +460,8 @@ describe('MySQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        const iso = new Date(result.rows[0].dt as string | Date).toISOString();
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        const iso = new Date(result.resultSets[0].rows[0].dt as string | Date).toISOString();
         expect(iso).toBe('2025-09-28T17:31:23.000Z');
       } finally {
         await connector.disconnect();
@@ -472,8 +480,8 @@ describe('MySQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        const iso = new Date(result.rows[0].dt as string | Date).toISOString();
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        const iso = new Date(result.resultSets[0].rows[0].dt as string | Date).toISOString();
         expect(iso).toBe('2025-09-29T02:31:23.000Z');
       } finally {
         await connector.disconnect();
@@ -497,8 +505,8 @@ describe('MySQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].collation).toBe('utf8mb4_general_ci');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_general_ci');
       } finally {
         await connector.disconnect();
       }
@@ -516,8 +524,8 @@ describe('MySQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].collation).toBe('utf8mb4_0900_ai_ci');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_0900_ai_ci');
       } finally {
         await connector.disconnect();
       }
@@ -536,9 +544,9 @@ describe('MySQL Connector Integration Tests', () => {
           {}
         );
 
-        expect(result.rows).toHaveLength(1);
-        expect(result.rows[0].charset).toBe('utf8mb4');
-        expect(result.rows[0].collation).toBe('utf8mb4_0900_ai_ci');
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        expect(result.resultSets[0].rows[0].charset).toBe('utf8mb4');
+        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_0900_ai_ci');
       } finally {
         await connector.disconnect();
       }
@@ -566,7 +574,7 @@ describe('MySQL Connector Integration Tests', () => {
           "SELECT COUNT(*) AS c FROM users WHERE name='hacked'",
           {}
         );
-        expect(Number(check.rows[0].c)).toBe(0);
+        expect(Number(check.resultSets[0].rows[0].c)).toBe(0);
       } finally {
         await connector.disconnect();
       }
@@ -588,7 +596,7 @@ describe('MySQL Connector Integration Tests', () => {
           "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com')",
           {}
         );
-        expect(insert.rowCount).toBe(1);
+        expect(insert.resultSets[0].rowCount).toBe(1);
         await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
       } finally {
         await connector.disconnect();
