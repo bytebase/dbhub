@@ -1,0 +1,168 @@
+---
+title: "Authentication"
+description: "Secure your DBHub HTTP server with bearer token authentication"
+---
+
+When running DBHub with HTTP transport, anybody who can reach the server URL can access your database. To protect it, configure **bearer token authentication** with `--auth-token`.
+
+## How It Works
+
+DBHub checks every HTTP request for a valid `Authorization: Bearer <token>` header. Requests without a valid token are rejected with `401 Unauthorized` and a `WWW-Authenticate: Bearer` header.
+
+The `/healthz` endpoint is exempt from authentication so uptime monitors and load balancer probes don't need a token.
+
+<Note>
+Configuring a token **is** the opt-in — there is no separate "--require-auth" flag to remember. Auth is disabled by default; set `--auth-token` or `DBHUB_AUTH_TOKEN` and it turns on.
+</Note>
+
+## Setting the Token
+
+### CLI Flag
+
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 \
+  --auth-token "s3cr3t-token" \
+  --dsn "postgres://user:***@localhost:5432/dbname"
+```
+
+### Environment Variable
+
+```bash
+export DBHUB_AUTH_TOKEN="s3cr3t-token"
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "..."
+```
+
+### .env File
+
+```bash
+# .env
+DBHUB_AUTH_TOKEN="s3cr3t-token"
+```
+
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "..."
+```
+
+### Docker
+
+```bash
+docker run --rm --init \
+  --name dbhub \
+  --publish 8080:8080 \
+  -e DBHUB_AUTH_TOKEN="s3cr3t-token" \
+  bytebase/dbhub \
+  --transport http --port 8080 \
+  --dsn "postgres://user:***@localhost:5432/dbname"
+```
+
+## Client Configuration
+
+### curl
+
+```bash
+curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
+```
+
+### MCP Client (Claude Code, etc.)
+
+Configure the `Authorization` header in your MCP client's HTTP configuration:
+
+```json .mcp.json
+{
+  "mcpServers": {
+    "dbhub": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer s3cr3t-token"
+      }
+    }
+  }
+}
+```
+
+### Claude Code CLI
+
+```bash
+claude mcp add --transport http dbhub http://localhost:8080/mcp
+```
+
+Then add the `Authorization` header in your Claude Code settings or `.mcp.json`.
+
+## Multiple Tokens
+
+`--auth-token` accepts a comma-separated list. This enables two common scenarios:
+
+### Zero-Downtime Rotation
+
+1. Add the new token alongside the old one:
+   ```bash
+   --auth-token "old-token,new-token"
+   ```
+2. Redeploy DBHub.
+3. Update all clients to use `new-token`.
+4. Remove `old-token` from the list and redeploy again.
+
+### Per-Client Tokens
+
+Issue different tokens to different clients so one can be revoked without affecting the others:
+
+```bash
+--auth-token "token-for-ci,token-for-agent,token-for-workbench"
+```
+
+## Security Considerations
+
+### Constant-Time Comparison
+
+DBHub uses Node.js `timingSafeEqual` to compare tokens, preventing timing side-channel attacks that could leak the token character by character.
+
+### Shared Secret, Not OAuth
+
+This is a flat shared-secret check, not OAuth 2.1. It answers "does this request have the secret," not "who is this user" — there are no per-user scopes, rate limits, or audit trails.
+
+<Warning>
+If you need real identity-based authorization (per-user access control, audit logging, integration with your IdP), front DBHub with your own OAuth-aware proxy or IdP-integrated gateway instead of relying on the built-in token check.
+</Warning>
+
+### Defense in Depth
+
+- Always use HTTPS in production (put DBHub behind a reverse proxy like nginx or Caddy that terminates TLS).
+- The token is sent in the `Authorization` header on every request — without HTTPS, it's visible in plaintext on the network.
+- Use a strong, random token (at least 32 characters). `openssl rand -base64 32` is a good way to generate one.
+
+## Verify It's Working
+
+When DBHub starts with a token configured, it logs:
+
+```
+Auth: bearer token required (2 token(s) configured via command line argument)
+```
+
+Without a token:
+
+```
+Auth: disabled (set --auth-token or DBHUB_AUTH_TOKEN to require a bearer token)
+```
+
+Test that a request without a token is rejected:
+
+```bash
+curl -i http://localhost:8080/api/sources
+# Expected: 401 Unauthorized
+```
+
+Test that a request with a valid token succeeds:
+
+```bash
+curl -i -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
+# Expected: 200 OK
+```
+
+## Reference
+
+| Flag | Env | Default | Description |
+|------|-----|---------|-------------|
+| `--auth-token` | `DBHUB_AUTH_TOKEN` | (disabled) | Comma-separated bearer token(s) |
+
+See [Command-Line Options](/config/command-line) for all flags.

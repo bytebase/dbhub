@@ -96,33 +96,13 @@ Disable the check entirely (only when fronted by your own authentication):
 
 ### Bearer Token Authentication
 
-Require a bearer token on every request (except `/healthz`):
+Require a bearer token on every request (except `/healthz`). See the [Authentication guide](/config/auth-token) for complete setup, rotation, and client configuration.
 
 ```bash
 npx @bytebase/dbhub@latest --transport http --port 8080 \
   --auth-token "s3cr3t-token" \
   --dsn "postgres://user:***@localhost:5432/dbname"
 ```
-
-Multiple tokens for rotation or per-client tokens:
-
-```bash
---auth-token "token-for-ci,token-for-agent"
-```
-
-Clients send the token as:
-
-```bash
-curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
-```
-
-<Note>
-Configuring a token is the opt-in — there is no separate "require auth" flag. A comma-separated list lets you rotate tokens without downtime or hand different tokens to different clients for independent revocation.
-</Note>
-
-<Warning>
-This is a flat shared-secret check, not OAuth. For real identity-based authorization, front DBHub with your own OAuth-aware proxy or IdP-integrated gateway.
-</Warning>
 
 ### CORS
 
