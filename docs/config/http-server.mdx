@@ -1,0 +1,268 @@
+---
+title: "HTTP Server"
+description: "Run DBHub as an HTTP MCP server — endpoints, security, and production deployment"
+---
+
+DBHub supports two transport modes. This page covers the **HTTP transport** — running DBHub as a standalone HTTP server that serves the MCP endpoint, a web-based Workbench, and REST APIs.
+
+For the stdio transport (the default), see the [Installation](/installation) guide.
+
+## When to use HTTP
+
+| Scenario | Transport |
+|----------|-----------|
+| Local desktop app (Claude Desktop, VS Code, Cursor) | stdio |
+| Shared team server, remote access | **http** |
+| Web clients (Dify, LibreChat, custom web UIs) | **http** |
+| Multi-process / load-balanced deployment | **http** |
+| Workbench (browser-based tool execution) | **http** |
+
+## Quick Start
+
+```bash
+# Start with a single database
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:***@localhost:5432/dbname"
+
+# Demo mode (no database needed)
+npx @bytebase/dbhub@latest --transport http --port 8080 --demo
+```
+
+The server prints startup information:
+
+```
+Workbench at http://localhost:8080/
+MCP server endpoint at http://localhost:8080/mcp
+```
+
+## Endpoints
+
+| Path | Method | Description |
+|------|--------|-------------|
+| `/` | GET | Workbench (SPA) |
+| `/mcp` | POST | MCP protocol endpoint |
+| `/healthz` | GET | Health check (always returns `200 OK`) |
+| `/api/sources` | GET | List configured database sources |
+| `/api/sources/:sourceId` | GET | Get a specific source's details |
+| `/api/requests` | GET | Recent tool execution traces |
+
+### MCP Endpoint (`/mcp`)
+
+The single `/mcp` POST endpoint serves both MCP protocol eras:
+
+- **2026-07-28** (native): stateless by design — a fresh server instance per request, no `Mcp-Session-Id`. Clients send `Mcp-Method` / `Mcp-Name` headers on every request, enabling a fronting gateway or WAF to route and rate-limit `execute_sql` separately from `search_objects` without parsing JSON bodies.
+- **2025-era** (legacy fallback): served through the default `legacy: 'stateless'` fallback on the same endpoint.
+
+<Tip>
+The `tools/list` response includes cache hints (5-minute TTL, `private` scope) for 2026-07-28 clients. After a TOML config hot-reload adds or removes tools, clients may serve a stale tool list for up to 5 minutes.
+</Tip>
+
+### Health Check (`/healthz`)
+
+Returns `200 OK` without any authentication. Uptime monitors and load balancer probes can use this endpoint without a token.
+
+### API Endpoints (`/api/*`)
+
+REST endpoints for source management and request tracing. Used by the Workbench frontend. See [Workbench](/workbench/overview).
+
+## Security
+
+### DNS-Rebinding Protection
+
+By default, the HTTP transport only accepts requests whose `Host` header is a loopback address (`localhost`, `127.0.0.1`, `[::1]`). When bound to `0.0.0.0` (the default), this machine's own hostname and external IP addresses are also allowed automatically.
+
+To serve DBHub behind a reverse proxy or public DNS name, add the hostname with `--allowed-hosts`:
+
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 \
+  --allowed-hosts "dbhub.example.com" \
+  --dsn "postgres://user:***@localhost:5432/dbname"
+```
+
+Multiple hostnames:
+
+```bash
+--allowed-hosts "dbhub.example.com,db.internal.corp"
+```
+
+Disable the check entirely (only when fronted by your own authentication):
+
+```bash
+--allowed-hosts "*"
+```
+
+<Warning>
+`--allowed-hosts "*"` turns off DNS-rebinding protection. Use it only when DBHub sits behind your own authentication and/or proxy.
+</Warning>
+
+### Bearer Token Authentication
+
+Require a bearer token on every request (except `/healthz`):
+
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 \
+  --auth-token "s3cr3t-token" \
+  --dsn "postgres://user:***@localhost:5432/dbname"
+```
+
+Multiple tokens for rotation or per-client tokens:
+
+```bash
+--auth-token "token-for-ci,token-for-agent"
+```
+
+Clients send the token as:
+
+```bash
+curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
+```
+
+<Note>
+Configuring a token is the opt-in — there is no separate "require auth" flag. A comma-separated list lets you rotate tokens without downtime or hand different tokens to different clients for independent revocation.
+</Note>
+
+<Warning>
+This is a flat shared-secret check, not OAuth. For real identity-based authorization, front DBHub with your own OAuth-aware proxy or IdP-integrated gateway.
+</Warning>
+
+### CORS
+
+The HTTP transport reflects validated origins in `Access-Control-Allow-Origin` headers and supports preflight (`OPTIONS`). The allowed headers include `Mcp-Method`, `Mcp-Name`, `Mcp-Session-Id`, `MCP-Protocol-Version`, `Authorization`, and `Content-Type`.
+
+## Production Deployment
+
+### Bind to Loopback + Reverse Proxy
+
+For production, bind to `127.0.0.1` and front DBHub with a reverse proxy (nginx, Caddy, or your cloud provider's load balancer):
+
+```bash
+npx @bytebase/dbhub@latest --transport http --host 127.0.0.1 --port 8080 --dsn "..."
+```
+
+### Docker
+
+```bash
+docker run --rm --init \
+  --name dbhub \
+  --publish 8080:8080 \
+  bytebase/dbhub \
+  --transport http \
+  --port 8080 \
+  --dsn "postgres://user:***@localhost:5432/dbname?sslmode=disable"
+```
+
+<Warning>
+When connecting to databases on your host machine from Docker, use `host.docker.internal` instead of `localhost`.
+</Warning>
+
+### Docker Compose
+
+```yaml docker-compose.yml
+services:
+  dbhub:
+    image: bytebase/dbhub:latest
+    container_name: dbhub
+    ports:
+      - "8080:8080"
+    command:
+      - --transport
+      - http
+      - --port
+      - "8080"
+      - --dsn
+      - "postgres://user:***@database:5432/dbname"
+    depends_on:
+      - database
+
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
+```
+
+### Multi-Database with TOML
+
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 --config ./dbhub.toml
+```
+
+See [TOML Configuration](/config/toml) for the complete reference.
+
+### Multi-Instance
+
+Run multiple DBHub instances on different ports, each with a different database:
+
+```bash
+# Instance 1: production
+npx @bytebase/dbhub@latest --transport http --port 8080 --id prod --dsn "postgres://..."
+
+# Instance 2: staging
+npx @bytebase/dbhub@latest --transport http --port 8081 --id staging --dsn "postgres://..."
+```
+
+## Client Configuration
+
+When DBHub runs with HTTP transport, configure your MCP client to connect via HTTP instead of stdio:
+
+### Claude Code
+
+```bash
+claude mcp add --transport http dbhub http://localhost:8080/mcp
+```
+
+### Project .mcp.json
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+### Cursor
+
+Edit `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+### VS Code
+
+Create `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "dbhub": {
+      "type": "http",
+      "url": "http://localhost:8080/mcp"
+    }
+  }
+}
+```
+
+## Command-Line Reference
+
+| Flag | Env | Default | Description |
+|------|-----|---------|-------------|
+| `--transport http` | `TRANSPORT` | `stdio` | Enable HTTP transport |
+| `--port` | `PORT` | `8080` | HTTP server port |
+| `--host` | `DBHUB_HOST` | `0.0.0.0` | HTTP bind address |
+| `--allowed-hosts` | `DBHUB_ALLOWED_HOSTS` | loopback + self | Extra hostnames for DNS-rebinding protection |
+| `--auth-token` | `DBHUB_AUTH_TOKEN` | (disabled) | Comma-separated bearer tokens |
+| `--demo` | — | `false` | Use bundled sample employee database |
+| `--config` | — | — | Path to TOML config file |
+| `--dsn` | `DSN` | — | Database connection string |
+
+See [Command-Line Options](/config/command-line) for all available flags including SSH tunnel configuration.
