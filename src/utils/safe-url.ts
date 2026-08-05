@@ -82,8 +82,20 @@ export class SafeURL implements ISafeURL {
         });
       }
 
-      // Extract authentication
-      const atIndex: number = urlString.indexOf('@');
+      // Extract authentication.
+      //
+      // The separator is the LAST '@' of the authority, not the first: '@' is a
+      // legal password character, and passwords carrying one are common. Taking
+      // the first '@' would cut the password short and fold its tail into the
+      // hostname, which surfaces as a DNS failure rather than as a bad password.
+      //
+      // The search is bounded by the start of the path, because the path is
+      // still attached at this point and may legitimately contain '@' (a
+      // database named "a@b", say) — an unbounded lastIndexOf would then treat
+      // that one as the separator.
+      const pathStart: number = urlString.indexOf('/');
+      const authorityEnd: number = pathStart === -1 ? urlString.length : pathStart;
+      const atIndex: number = urlString.lastIndexOf('@', authorityEnd - 1);
       if (atIndex !== -1) {
         const auth: string = urlString.substring(0, atIndex);
         urlString = urlString.substring(atIndex + 1);

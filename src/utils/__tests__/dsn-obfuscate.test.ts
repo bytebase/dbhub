@@ -67,6 +67,17 @@ describe('DSN Obfuscation Utilities', () => {
       const result = obfuscateDSNPassword(dsn);
       expect(result).toBe('postgres://user:****@localhost:5432?sslmode=require');
     });
+
+    it('should obfuscate the whole password when it contains an @', () => {
+      // Splitting the authority on the first '@' masks only the part before it
+      // and leaves the rest in the string, so the tail of the password reaches
+      // whatever reads this line — DBHub prints it per source at startup.
+      const dsn = 'postgres://user:pa@ss@localhost:5432/db';
+      const result = obfuscateDSNPassword(dsn);
+
+      expect(result).toBe('postgres://user:*****@localhost:5432/db');
+      expect(result).not.toContain('ss@');
+    });
   });
 
   describe('obfuscateSSHConfig', () => {

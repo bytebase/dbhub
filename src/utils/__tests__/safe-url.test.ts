@@ -104,4 +104,61 @@ describe('SafeURL', () => {
   it('should throw an error for URLs without a protocol', () => {
     expect(() => new SafeURL('localhost:5432/dbname')).toThrow('Invalid URL format: missing protocol');
   });
+
+  describe("'@' inside the password", () => {
+    it('splits on the last @ of the authority, not the first', () => {
+      // Splitting on the first '@' yields password 'pa' and hostname
+      // 'ss@localhost', so the failure surfaces as a DNS lookup error rather
+      // than as a bad password — a confusing way to learn it was truncated.
+      const url = new SafeURL('sqlserver://user:pa@ss@localhost/dbname');
+
+      expect(url.username).toBe('user');
+      expect(url.password).toBe('pa@ss');
+      expect(url.hostname).toBe('localhost');
+      expect(url.pathname).toBe('/dbname');
+    });
+
+    it('handles a password containing several @ characters', () => {
+      const url = new SafeURL('sqlserver://user:a@b@c@host/db');
+
+      expect(url.username).toBe('user');
+      expect(url.password).toBe('a@b@c');
+      expect(url.hostname).toBe('host');
+    });
+
+    it('does not treat an @ in the path as the separator', () => {
+      // The path is still attached when the authority is split, so an unbounded
+      // lastIndexOf would pick the '@' in the database name instead.
+      const url = new SafeURL('sqlserver://user:pass@localhost/we@ird');
+
+      expect(url.username).toBe('user');
+      expect(url.password).toBe('pass');
+      expect(url.hostname).toBe('localhost');
+      expect(url.pathname).toBe('/we@ird');
+    });
+
+    it('keeps working when only the path contains an @', () => {
+      const url = new SafeURL('sqlserver://localhost/we@ird');
+
+      expect(url.username).toBe('');
+      expect(url.password).toBe('');
+      expect(url.hostname).toBe('localhost');
+      expect(url.pathname).toBe('/we@ird');
+    });
+
+    it('still accepts a percent-encoded @', () => {
+      const url = new SafeURL('sqlserver://user:pa%40ss@localhost/dbname');
+
+      expect(url.password).toBe('pa@ss');
+      expect(url.hostname).toBe('localhost');
+    });
+
+    it('keeps the port when the password carries an @', () => {
+      const url = new SafeURL('sqlserver://user:pa@ss@localhost:1433/dbname');
+
+      expect(url.password).toBe('pa@ss');
+      expect(url.hostname).toBe('localhost');
+      expect(url.port).toBe('1433');
+    });
+  });
 });
