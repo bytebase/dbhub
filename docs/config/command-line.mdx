@@ -1,5 +1,6 @@
 ---
 title: "Command-Line Options"
+description: "Complete reference for all DBHub CLI flags, environment variables, and DSN formats"
 ---
 
 DBHub connects to your database in one of two ways:
@@ -289,20 +290,27 @@ This page covers command-line flags and environment variables. For TOML configur
 ### --id
 
 <ParamField path="--id" type="string" env="ID">
-  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor). Env: `ID`.
+  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., connecting to different databases from Cursor or Claude Code). Env: `ID`.
 
-  Tools will be named `execute_sql_{id}` for each instance.
+  Tool names will be suffixed with the id: `execute_sql_{id}`, `search_objects_{id}`.
 
   ```bash
-  npx @bytebase/dbhub@latest --id prod --dsn "postgres://user:pass@prod-host:5432/db"
-  npx @bytebase/dbhub@latest --id staging --dsn "postgres://user:pass@staging-host:5432/db"
+  # Instance 1: production
+  npx @bytebase/dbhub@latest --id prod --dsn "postgres://user:***@prod-host:5432/db"
+
+  # Instance 2: staging
+  npx @bytebase/dbhub@latest --id staging --dsn "postgres://user:***@staging-host:5432/db"
   ```
 
-  Result: `execute_sql_prod` and `execute_sql_staging` tools
+  Result: `execute_sql_prod` and `execute_sql_staging` tools.
 
   <Warning>
-  Cannot be used with `--config` (TOML configuration). TOML config defines source IDs directly in the configuration file. Use command-line DSN configuration instead if you need the `--id` flag.
+  Cannot be used with `--config` (TOML configuration). TOML config defines source IDs directly in the configuration file (`[[sources]]` with `id` fields). Use command-line DSN configuration instead if you need the `--id` flag.
   </Warning>
+
+  <Tip>
+  **Multi-instance scenario:** Run two DBHub processes on different ports, each with a different `--id`, then configure your MCP client to connect to both. This gives you separate tool names for each database without needing a TOML file.
+  </Tip>
 </ParamField>
 
 ### --demo

@@ -1,5 +1,6 @@
 ---
 title: "explain_sql"
+description: "Show a query's execution plan without executing it (opt-in)"
 ---
 
 Show the execution plan for a SQL statement without running it.
@@ -58,3 +59,11 @@ source = "production"
 ```
 
 See [Tool Configuration](/tools/overview#tool-configuration) for how `[[tools]]` entries work across multiple sources.
+
+## See Also
+
+- [execute_sql](/tools/execute-sql) — SQL execution with safety controls
+- [search_objects](/tools/search-objects) — Schema and object exploration
+- [Custom Tools](/tools/custom-tools) — Parameterized SQL operations
+- [TOML Configuration](/config/toml) — Tool configuration reference
+- [HTTP Server](/config/http-server) — Running DBHub with HTTP transport

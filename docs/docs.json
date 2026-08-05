@@ -37,7 +37,7 @@
           },
           {
             "group": "Configuration",
-            "pages": ["config/command-line", "config/http-server", "config/auth-token", "config/toml", "config/debug"]
+            "pages": ["config/command-line", "config/http-server", "config/auth-token", "config/ssh-tunnel", "config/api-reference", "config/toml", "config/debug"]
           }
         ]
       },

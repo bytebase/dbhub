@@ -1,0 +1,136 @@
+---
+title: "SSH Tunnel"
+description: "Connect to databases through bastion hosts and private networks with SSH tunneling"
+---
+
+When your database is behind a firewall or on a private network, you can reach it through an SSH bastion host (jump box). DBHub supports password auth, key-based auth, multi-hop ProxyJump, and `~/.ssh/config` alias resolution.
+
+## Quick Start
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://user:***@localhost:5432/mydb" \
+  --ssh-host bastion.example.com --ssh-user ubuntu --ssh-key ~/.ssh/id_rsa
+```
+
+DBHub connects to `bastion.example.com` via SSH, then forwards the database connection through the tunnel.
+
+## Authentication Methods
+
+### Password
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu --ssh-password "my-password"
+```
+
+### SSH Key
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu --ssh-key ~/.ssh/id_rsa
+```
+
+If the key is encrypted:
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu \
+  --ssh-key ~/.ssh/id_rsa --ssh-passphrase "my-passphrase"
+```
+
+### Base64-Encoded Key
+
+Useful in containerized or cloud environments where you can't mount a key file:
+
+```bash
+export SSH_KEY=$(base64 < ~/.ssh/id_rsa)
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu
+```
+
+<Tip>
+DBHub auto-detects the format of `--ssh-key` / `SSH_KEY`: it first tries to read the value as a file path, and if that fails, decodes it as base64.
+</Tip>
+
+## ProxyJump (Multi-Hop)
+
+For networks that require multiple hops to reach the target database:
+
+### Single Hop
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host target.internal --ssh-proxy-jump bastion.example.com
+```
+
+### Multi-Hop Chain
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." \
+  --ssh-host target.internal --ssh-proxy-jump "bastion1.com,admin@bastion2:2222"
+```
+
+Each hop in the chain is comma-separated. The format per hop is `[user@]host[:port]`.
+
+## SSH Config Alias
+
+If you have an entry in `~/.ssh/config`, just pass the alias:
+
+```bash
+npx @bytebase/dbhub@latest --dsn "postgres://..." --ssh-host mybastion
+```
+
+DBHub automatically resolves the `HostName`, `User`, `IdentityFile`, and `ProxyJump` from your SSH config. Explicit flags always override values from the config file.
+
+<Note>
+`ProxyJump` hops that are themselves `~/.ssh/config` aliases are resolved recursively — each hop uses its own `HostName`/`User`/`Port`/`IdentityFile` (and its own nested `ProxyJump`). Cyclic `ProxyJump` chains are rejected with an error.
+</Note>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `SSH_HOST` | SSH server hostname |
+| `SSH_PORT` | SSH server port (default: `22`) |
+| `SSH_USER` | SSH username |
+| `SSH_PASSWORD` | SSH password |
+| `SSH_KEY` | Path to SSH private key, or base64-encoded key |
+| `SSH_PASSPHRASE` | Passphrase for encrypted SSH key |
+| `SSH_PROXY_JUMP` | ProxyJump hosts for multi-hop SSH |
+
+## TOML Configuration
+
+For multi-database setups, SSH tunnels can be configured per-source in `dbhub.toml`:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://readonly_user:***@private-db.internal:5432/mydb"
+
+[sources.ssh]
+host = "bastion.example.com"
+user = "ubuntu"
+port = 22
+```
+
+See [TOML Configuration](/config/toml) for the complete reference.
+
+## Limitations
+
+- **ProxyCommand** is not supported (requires shell execution). Use ProxyJump instead.
+- **Integrated security / Kerberos / GSSAPI** is not supported. Use password or key-based authentication.
+- Path expansion for `~/` is supported in file paths.
+
+## Reference
+
+| Flag | Env | Type | Description |
+|------|-----|------|-------------|
+| `--ssh-host` | `SSH_HOST` | string | SSH server hostname or alias from `~/.ssh/config` |
+| `--ssh-port` | `SSH_PORT` | number | SSH server port (default: `22`) |
+| `--ssh-user` | `SSH_USER` | string | SSH username |
+| `--ssh-password` | `SSH_PASSWORD` | string | SSH password |
+| `--ssh-key` | `SSH_KEY` | string | Path to SSH private key, or base64-encoded key |
+| `--ssh-passphrase` | `SSH_PASSPHRASE` | string | Passphrase for encrypted SSH key |
+| `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts. Format: `[user@]host[:port]` (comma-separated for chains) |
+
+See [Command-Line Options](/config/command-line) for all flags.

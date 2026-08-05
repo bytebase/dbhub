@@ -1,5 +1,6 @@
 ---
 title: "health_check"
+description: "Monitor connection pool state and buffer cache hit ratio (opt-in)"
 ---
 
 Report operational health metrics for a database source: connection pool state and buffer cache hit ratio.
@@ -94,3 +95,11 @@ source = "production"
 ```
 
 See [Tool Configuration](/tools/overview#tool-configuration) for how `[[tools]]` entries work across multiple sources.
+
+## See Also
+
+- [execute_sql](/tools/execute-sql) — SQL execution with safety controls
+- [search_objects](/tools/search-objects) — Schema and object exploration
+- [Custom Tools](/tools/custom-tools) — Parameterized SQL operations
+- [TOML Configuration](/config/toml) — Tool configuration reference
+- [HTTP Server](/config/http-server) — Running DBHub with HTTP transport

@@ -1,0 +1,177 @@
+---
+title: "API Reference"
+description: "REST API endpoints for querying data sources and request traces"
+---
+
+DBHub exposes REST API endpoints for integrating with external tools and the Workbench frontend. These are only available when running with HTTP transport.
+
+## List Sources
+
+```http
+GET /api/sources
+```
+
+Returns all configured database sources.
+
+**Example response:**
+
+```json
+[
+  {
+    "id": "local_pg",
+    "type": "postgres",
+    "description": "Production PostgreSQL",
+    "host": "localhost",
+    "port": 5432,
+    "database": "mydb",
+    "user": "myuser",
+    "tools": [
+      { "name": "execute_sql", "readonly": true },
+      { "name": "search_objects", "readonly": true }
+    ]
+  }
+]
+```
+
+Sensitive fields (passwords, SSH keys) are excluded from the response.
+
+**Response fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Source identifier |
+| `type` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `sqlite` |
+| `description` | string? | Optional description from TOML config |
+| `host` | string? | Database hostname |
+| `port` | number? | Database port |
+| `database` | string? | Database name or SQLite file path |
+| `user` | string? | Database username |
+| `ssh_tunnel` | object? | SSH tunnel configuration (if enabled) |
+| `tools` | array | Available MCP tools for this source |
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 500 | Internal server error |
+
+---
+
+## Get Source
+
+```http
+GET /api/sources/:sourceId
+```
+
+Returns a single source by ID.
+
+**Example response:**
+
+```json
+{
+  "id": "local_pg",
+  "type": "postgres",
+  "host": "localhost",
+  "port": 5432,
+  "database": "mydb",
+  "user": "myuser",
+  "tools": [
+    { "name": "execute_sql", "readonly": true },
+    { "name": "search_objects", "readonly": true }
+  ]
+}
+```
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 404 | Source not found |
+| 500 | Internal server error |
+
+---
+
+## List Requests
+
+```http
+GET /api/requests?source_id=prod_pg
+```
+
+Returns recent tool execution traces. The `source_id` query parameter is optional — omit it to get requests from all sources.
+
+**Example response:**
+
+```json
+{
+  "requests": [
+    {
+      "id": "req_abc123",
+      "source_id": "local_pg",
+      "tool": "execute_sql",
+      "sql": "SELECT * FROM users LIMIT 5",
+      "started_at": "2026-08-03T12:00:00Z",
+      "duration_ms": 12,
+      "row_count": 5,
+      "status": "success"
+    }
+  ],
+  "total": 1
+}
+```
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source_id` | string? | Filter by source ID |
+
+**Response fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `requests` | array | Tool execution traces |
+| `total` | number | Total number of requests returned |
+
+**Errors:**
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 500 | Internal server error |
+
+<Note>
+Request traces are stored in memory and reset on server restart. The latest 100 requests per source are retained.
+</Note>
+
+## Health Check
+
+```http
+GET /healthz
+```
+
+Returns `200 OK` without any authentication. Uptime monitors and load balancer probes can use this endpoint without a token.
+
+**Example:**
+
+```bash
+curl http://localhost:8080/healthz
+# OK
+```
+
+## Authentication
+
+All API endpoints (except `/healthz`) require a bearer token if `--auth-token` is configured:
+
+```bash
+curl -H "Authorization: Bearer s3cr3t-token" http://localhost:8080/api/sources
+```
+
+See [Authentication](/config/auth-token) for complete setup.
+
+## See Also
+
+- [HTTP Server](/config/http-server) — Server configuration and endpoints
+- [Authentication](/config/auth-token) — Bearer token setup
+- [Workbench](/workbench/overview) — Browser-based interface

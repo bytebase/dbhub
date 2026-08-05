@@ -1,5 +1,6 @@
 ---
 title: "TOML Configuration"
+description: "Configure multiple database connections, per-source settings, SSH tunnels, and custom tools with TOML"
 ---
 
 TOML configuration is the recommended way to configure DBHub for multi-database setups and advanced configurations. It provides more flexibility than command-line options or environment variables.
@@ -28,23 +29,26 @@ TOML configuration enables:
 
 When using TOML configuration, DBHub automatically watches `dbhub.toml` for changes and reloads database connections without requiring a server restart.
 
-**How it works:**
+### How It Works
 
-1. DBHub detects file changes and waits 500ms (debounce) to handle editors that write in multiple steps
-2. The new configuration is parsed and validated — if invalid, existing connections are preserved
-3. All database connections are disconnected and reconnected with the new configuration
-4. If reconnection fails, DBHub automatically rolls back to the previous working configuration
+DBHub polls the TOML file for changes using `fs.watchFile`. When a change is detected:
 
-```
-# Edit dbhub.toml while DBHub is running — changes apply automatically
-# No server restart needed
-```
+1. The file is re-parsed and validated.
+2. Database connections for **added** or **modified** sources are (re)connected.
+3. **Removed** sources are disconnected and their tools are unregistered.
+4. Custom tools and tool settings are updated.
 
-<Note>
-**STDIO transport limitation:** In STDIO mode (the default for Claude Desktop, Cursor, etc.), hot reload updates the underlying database connections and tool settings, but clients won't see newly added or removed tools until a full server restart. This is because STDIO clients discover tools once at startup.
+### STDIO Limitation
 
-HTTP transport (`--transport http`) creates a fresh server per request, so all changes — including added/removed tools — take effect immediately.
-</Note>
+When running with STDIO transport (the default for Claude Desktop, Cursor, etc.), hot reload updates the underlying database connections and tool settings, but **clients won't see newly added or removed tools until a full server restart**. This is because STDIO clients discover tools once at startup.
+
+On HTTP transport, each request creates a fresh server instance, so tool changes apply immediately. 2026-07-28 clients may serve a cached tool list for up to 5 minutes (see [HTTP Server](/config/http-server)).
+
+### Troubleshooting
+
+- **File format errors**: If the TOML file contains a syntax error after a change, the reload is **skipped** and the previous configuration remains active. Check stderr for parse error messages.
+- **Connection failures**: If a source's database connection fails after a reload, that source is logged as an error and skipped. Other sources continue working normally.
+- **No reload on new file**: The watcher only activates after the initial load. If the TOML file doesn't exist at startup, `--config` must be explicitly provided.
 
 ## Environment Variable Interpolation
 

@@ -1,16 +1,28 @@
 ---
 title: "execute_sql"
+description: "Execute SQL queries with transaction support, read-only mode, and row limiting"
 ---
 
 Execute SQL queries and statements on your database with support for transactions, multiple statements, and safety controls.
 
 ## Features
 
-- **Single statements**: Execute a single SQL query or command
-- **Multiple statements**: Separate multiple statements with semicolons (`;`)
-- **Transactions**: Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution
-- **Read-only mode**: Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode
-- **Row limiting**: Configure `--max-rows` to limit SELECT query results
+| Feature | Description |
+|---------|-------------|
+| Single statements | Execute a single SQL query or command |
+| Multiple statements | Separate multiple statements with semicolons (`;`) |
+| Transactions | Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution |
+| Read-only mode | Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode |
+| Row limiting | Configure `--max-rows` to limit SELECT query results |
+
+## Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `sql` | string | ✅ | — | The SQL statement to execute |
+| `source_id` | string | ❌ | first source | Database source identifier for multi-database setups |
+| `transaction` | boolean | ❌ | `false` | Enable transaction mode for atomic execution |
+| `max_rows` | integer | ❌ | `--max-rows` setting | Override the row limit for this query |
 
 ## Single Query
 
