@@ -10,7 +10,7 @@ Execute SQL queries and statements on your database with support for transaction
 - **Multiple statements**: Separate multiple statements with semicolons (`;`)
 - **Transactions**: Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution
 - **Read-only mode**: Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode
-- **Row limiting**: Configure `--max-rows` to limit SELECT query results
+- **Row limiting**: Configure `max_rows` per tool via TOML `[[tools]]` to limit SELECT query results
 
 ## Single Query
 
