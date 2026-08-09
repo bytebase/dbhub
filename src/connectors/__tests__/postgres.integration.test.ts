@@ -738,6 +738,125 @@ describe('PostgreSQL Connector Integration Tests', () => {
     });
   });
 
+  describe('Query cancellation (options.signal)', () => {
+    // A cancelled MCP tool call must stop the query on the *server*. Without
+    // that, aborting only stops us waiting for the answer while the backend
+    // keeps burning IO to produce a result nobody will read.
+    const PROBE = 'dbhub_cancel_probe';
+
+    /** Backends the server currently reports as running the probe query. */
+    const runningProbes = async (observer: PostgresConnector): Promise<number> => {
+      const result = await observer.executeSQL(
+        `SELECT count(*)::int AS n FROM pg_stat_activity
+         WHERE state = 'active'
+           AND query LIKE '%${PROBE}%'
+           AND query NOT LIKE '%pg_stat_activity%'`,
+        {}
+      );
+      return result.resultSets[0].rows[0].n;
+    };
+
+    const waitFor = async (predicate: () => Promise<boolean>, timeoutMs: number) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (await predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return false;
+    };
+
+    it.each([
+      ['plain execution', {} as const],
+      ['inside a READ ONLY transaction', { readonly: true } as const],
+    ])('kills the running backend when the request is aborted (%s)', async (_label, options) => {
+      const connector = new PostgresConnector();
+      const observer = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+        await observer.connect(postgresTest.connectionString);
+
+        const controller = new AbortController();
+        const query = connector.executeSQL(`SELECT pg_sleep(30), '${PROBE}'`, {
+          ...options,
+          signal: controller.signal,
+        });
+        // Capture the rejection now so polling below can't trip an unhandled one.
+        const settled = query.then(
+          () => null,
+          (error) => error as NodeJS.ErrnoException
+        );
+
+        expect(await waitFor(async () => (await runningProbes(observer)) === 1, 10000)).toBe(true);
+
+        controller.abort();
+
+        const error = await settled;
+        expect(error).toBeInstanceOf(Error);
+        // 57014 = query_canceled: the server stopped it, we didn't just walk away.
+        expect((error as any).code).toBe('57014');
+
+        expect(await waitFor(async () => (await runningProbes(observer)) === 0, 10000)).toBe(true);
+      } finally {
+        await connector.disconnect();
+        await observer.disconnect();
+      }
+    }, 60000);
+
+    it('leaves the connector usable after a cancellation', async () => {
+      // The cancelled connection is destroyed rather than returned to the pool:
+      // a CancelRequest races the statement it targets, so it can land on the
+      // cleanup ROLLBACK instead and strand the session in an aborted
+      // transaction that the next borrower would inherit.
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+
+        const controller = new AbortController();
+        const cancelled = connector
+          .executeSQL(`SELECT pg_sleep(30), '${PROBE}'`, {
+            readonly: true,
+            signal: controller.signal,
+          })
+          .catch(() => 'rejected');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        controller.abort();
+        expect(await cancelled).toBe('rejected');
+
+        const after = await connector.executeSQL('SELECT 1 AS ok', { readonly: true });
+        expect(after.resultSets[0].rows[0].ok).toBe(1);
+      } finally {
+        await connector.disconnect();
+      }
+    }, 60000);
+
+    it('does not run the query at all when the signal is already aborted', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+
+        const controller = new AbortController();
+        controller.abort();
+
+        await expect(
+          connector.executeSQL('SELECT 1', { signal: controller.signal })
+        ).rejects.toThrow();
+      } finally {
+        await connector.disconnect();
+      }
+    }, 30000);
+
+    it('runs normally when no signal is supplied', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString);
+        const result = await connector.executeSQL('SELECT 1 AS ok', {});
+        expect(result.resultSets[0].rows[0].ok).toBe(1);
+      } finally {
+        await connector.disconnect();
+      }
+    }, 30000);
+  });
+
   describe('Search Path Configuration Tests', () => {
     it('should use first schema in search_path as default for discovery', async () => {
       const connector = new PostgresConnector();

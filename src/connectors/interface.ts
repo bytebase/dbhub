@@ -121,6 +121,14 @@ export interface ExecuteOptions {
    * Note: SDK-level readonly enforcement is set via ConnectorConfig.readonly
    */
   readonly?: boolean;
+  /**
+   * Cancellation signal for the request this execution serves — the MCP
+   * request's own AbortSignal, so a tool call the client cancels stops the
+   * query on the *database* instead of leaving it running while nobody waits
+   * for the result. Honoured by the PostgreSQL connector; a connector that
+   * ignores it runs the query to completion as before.
+   */
+  signal?: AbortSignal;
 }
 
 /**

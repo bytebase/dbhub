@@ -155,6 +155,10 @@ export class PostgresConnector implements Connector {
 
   private pool: pg.Pool | null = null;
 
+  // Kept so cancelBackend can open its own connection to the same server
+  // without borrowing from the pool
+  private poolConfig: pg.PoolConfig | null = null;
+
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
 
@@ -193,6 +197,7 @@ export class PostgresConnector implements Connector {
         }
       }
 
+      this.poolConfig = poolConfig;
       this.pool = new Pool(poolConfig);
 
       // Test the connection
@@ -206,6 +211,7 @@ export class PostgresConnector implements Connector {
         this.pool = null;
         await closeQuietly(() => pool.end());
       }
+      this.poolConfig = null;
       console.error("Failed to connect to PostgreSQL database:", err);
       throw err;
     }
@@ -216,6 +222,7 @@ export class PostgresConnector implements Connector {
       await this.pool.end();
       this.pool = null;
     }
+    this.poolConfig = null;
   }
 
   async getSchemas(): Promise<string[]> {
@@ -668,13 +675,46 @@ export class PostgresConnector implements Connector {
   }
 
 
+  /**
+   * How long to give the out-of-band cancellation before abandoning it.
+   * Connecting and asking the server to signal a backend is metadata-only work
+   * that a healthy server answers in milliseconds; the bound exists only so
+   * cleanup cannot outlive the query it is cleaning up after, independently of
+   * the user's (possibly long, possibly unset) query timeout.
+   */
+  private static readonly CANCEL_TIMEOUT_MS = 5000;
+
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
     }
 
+    const signal = options.signal;
+    // Nothing to run for a caller that is already gone - and no reason to take
+    // a connection from the pool to find that out.
+    signal?.throwIfAborted();
+
     const client = await this.pool.connect();
+    // Captured up front: after the cancellation lands, reading this off the
+    // client races its teardown.
+    const backendPid = backendPidOf(client);
+    let wasCancelled = false;
+    const onAbort = () => {
+      wasCancelled = true;
+      // Fire-and-forget: an abort listener cannot be awaited, and the
+      // cancellation reaches the caller through the in-flight query rejecting
+      // with 57014 (query_canceled), not through this call. cancelBackend
+      // never rejects.
+      void this.cancelBackend(backendPid);
+    };
+
     try {
+      // Re-checked now that we hold a connection: an AbortSignal dispatches
+      // "abort" exactly once, so one that fired while we waited for the pool
+      // would never reach a listener registered afterwards.
+      signal?.throwIfAborted();
+      signal?.addEventListener("abort", onAbort, { once: true });
+
       // Check if this is a multi-statement query
       const statements = splitSQLStatements(sql, "postgres");
 
@@ -765,9 +805,70 @@ export class PostgresConnector implements Connector {
         return { resultSets };
       }
     } finally {
-      client.release();
+      // Removed explicitly rather than left to `once`: a signal outlives a
+      // single executeSQL call, so listeners would otherwise pile up pointing
+      // at connections that have already gone back to the pool.
+      signal?.removeEventListener("abort", onAbort);
+      // release(true) destroys the connection instead of returning it to the
+      // pool. After a cancellation the session's state is not trustworthy: the
+      // CancelRequest races the statement it targets, so it can instead land
+      // on the ROLLBACK issued during cleanup and leave the session sitting in
+      // an aborted transaction that the next borrower would inherit. Same
+      // reasoning as the MySQL connector's isConnectionPoisoned handling.
+      client.release(wasCancelled);
     }
   }
+
+  /**
+   * Best-effort server-side cancellation of whatever `backendPid` is running,
+   * for when the MCP client aborts the tool call.
+   *
+   * PostgreSQL cancellation is out-of-band by design: the request has to arrive
+   * on a *different* connection, because the one running the query is blocked
+   * waiting for its result. This opens a dedicated short-lived connection
+   * rather than borrowing from the pool - a pool saturated with the very
+   * long-running queries being cancelled has nothing left to lend, which is
+   * exactly the situation this runs in. That mirrors what `pg`'s own
+   * Client.cancel does at the protocol level; that entry point is not reusable
+   * here because it needs the internal Query object, which the promise-based
+   * query API never exposes.
+   *
+   * Cancellation is advisory: the backend acts on it only at an interrupt
+   * point, and a statement that has already finished ignores it. A resolved
+   * call is therefore not a guarantee that anything stopped.
+   */
+  private async cancelBackend(backendPid: number | null): Promise<void> {
+    if (backendPid === null || !this.poolConfig) {
+      return;
+    }
+    const cancelClient = new pg.Client({
+      ...this.poolConfig,
+      connectionTimeoutMillis: PostgresConnector.CANCEL_TIMEOUT_MS,
+      query_timeout: PostgresConnector.CANCEL_TIMEOUT_MS,
+    });
+    try {
+      await cancelClient.connect();
+      await cancelClient.query("SELECT pg_cancel_backend($1)", [backendPid]);
+    } catch (error) {
+      // Unconfirmed cancellation: the statement may still be running. There is
+      // nothing further to do from here - the caller already sees the abort -
+      // but it must be visible, since it means a query outlived its request.
+      console.error(`Failed to cancel PostgreSQL backend ${backendPid}:`, error);
+    } finally {
+      await closeQuietly(() => cancelClient.end());
+    }
+  }
+}
+
+/**
+ * The server-side PID of the backend serving this connection. `pg` fills it in
+ * from the BackendKeyData message at connection time, but does not declare it
+ * on its published types, hence the narrow cast. Null when it is unavailable,
+ * which leaves the connection simply uncancellable rather than erroring.
+ */
+function backendPidOf(client: pg.PoolClient): number | null {
+  const processID = (client as unknown as { processID?: number | null }).processID;
+  return typeof processID === "number" ? processID : null;
 }
 
 // Create and register the connector

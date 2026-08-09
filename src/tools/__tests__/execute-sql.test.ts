@@ -164,6 +164,36 @@ describe('execute-sql tool', () => {
     });
   });
 
+  describe('cancellation', () => {
+    // The connector needs the request's AbortSignal to stop the query on the
+    // database. Without it a cancelled tool call only stops us waiting for the
+    // answer, and the query runs to completion server-side.
+    it('forwards the request AbortSignal to the connector', async () => {
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [] });
+      const controller = new AbortController();
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      await handler({ sql: 'SELECT 1' }, { signal: controller.signal });
+
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
+        'SELECT 1',
+        expect.objectContaining({ signal: controller.signal })
+      );
+    });
+
+    it('passes an undefined signal when the caller provides no extra', async () => {
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [] });
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      await handler({ sql: 'SELECT 1' }, null);
+
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
+        'SELECT 1',
+        expect.objectContaining({ signal: undefined })
+      );
+    });
+  });
+
   describe('read-only mode enforcement', () => {
     // Statement-classification coverage (write keywords, comment stripping,
     // dialect-specific bypasses, ...) is pinned in
