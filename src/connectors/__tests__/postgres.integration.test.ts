@@ -460,19 +460,58 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
-    it('should not apply maxRows to CTE queries (WITH clause)', async () => {
-      // Test that maxRows is not applied to CTE queries (WITH clause)
+    it('should apply maxRows to CTE queries (WITH clause)', async () => {
+      // A CTE is the ordinary shape of an analytical query, so leaving it
+      // uncapped left max_rows silently inert for most real queries.
       const result = await postgresTest.connector.executeSQL(`
         WITH user_summary AS (
           SELECT name, age FROM users WHERE age IS NOT NULL
         )
         SELECT * FROM user_summary ORDER BY age
       `, { maxRows: 2 });
-      
-      // Should return all rows since WITH queries are not limited anymore
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       expect(result.resultSets[0].rows[0]).toHaveProperty('age');
+    });
+
+    it('should apply maxRows to a query introduced by a comment', async () => {
+      const result = await postgresTest.connector.executeSQL(
+        '-- dbhub attribution tag\nSELECT name FROM users ORDER BY name',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+    });
+
+    it('should cap the statement itself rather than tightening a CTE\'s own LIMIT', async () => {
+      // The inner LIMIT caps only the CTE; the statement can still return more
+      // rows than that, so it needs a cap of its own.
+      const result = await postgresTest.connector.executeSQL(`
+        WITH first_three AS (
+          SELECT name FROM users ORDER BY name LIMIT 3
+        )
+        SELECT * FROM first_three
+      `, { maxRows: 2 });
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+    });
+
+    it('should not apply maxRows to a data-modifying CTE', async () => {
+      const result = await postgresTest.connector.executeSQL(`
+        WITH inserted AS (
+          INSERT INTO users (name, email, age)
+          VALUES ('dm1', 'dm1@dm.com', 41), ('dm2', 'dm2@dm.com', 42), ('dm3', 'dm3@dm.com', 43)
+          RETURNING id, name
+        )
+        SELECT * FROM inserted
+      `, { maxRows: 2 });
+
+      // A LIMIT here would cap the rows handed back while all three rows were
+      // still written - a cap that isn't one.
+      expect(result.resultSets[0].rows).toHaveLength(3);
+
+      await postgresTest.connector.executeSQL("DELETE FROM users WHERE email LIKE '%@dm.com'", {});
     });
 
     it('should handle maxRows in multi-statement execution with transactions', async () => {

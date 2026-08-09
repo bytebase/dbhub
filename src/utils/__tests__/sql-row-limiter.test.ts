@@ -155,7 +155,168 @@ describe("SQLRowLimiter", () => {
     });
   });
 
+  describe("applyMaxRows - leading comments", () => {
+    // A query introduced by a comment (an attribution tag, say) is still a
+    // SELECT. Classifying on the raw text made `max_rows` silently inert for
+    // every one of them.
+    it("caps a query introduced by a -- line comment", () => {
+      const sql = "-- dbhub agent query\nSELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "-- dbhub agent query\nSELECT * FROM users\nLIMIT 100"
+      );
+    });
+
+    it("caps a query introduced by a block comment", () => {
+      const sql = "/* tag: report */ SELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "/* tag: report */ SELECT * FROM users\nLIMIT 100"
+      );
+    });
+
+    it("caps a query introduced by several mixed leading comments", () => {
+      const sql = "-- one\n/* two */\n-- three\nSELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "-- one\n/* two */\n-- three\nSELECT * FROM users\nLIMIT 100"
+      );
+    });
+
+    it("leaves the caller's comment text untouched", () => {
+      // The comment is load-bearing for query attribution, so only the
+      // classification sees the stripped form - the SQL sent to the server
+      // keeps it verbatim.
+      const sql = "/* app=dbhub; user='bob' */\nSELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toContain("/* app=dbhub; user='bob' */");
+    });
+
+    it("still leaves a non-SELECT hidden behind a comment alone", () => {
+      const sql = "-- looks harmless\nUPDATE users SET active = true";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(sql);
+    });
+  });
+
+  describe("applyMaxRows - CTEs", () => {
+    it("caps a WITH ... SELECT query", () => {
+      const sql = "WITH recent AS (SELECT * FROM orders) SELECT * FROM recent";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "WITH recent AS (SELECT * FROM orders) SELECT * FROM recent\nLIMIT 100"
+      );
+    });
+
+    it("appends its own LIMIT instead of tightening a CTE's inner LIMIT", () => {
+      // The CTE's LIMIT caps only the CTE; the statement can still return far
+      // more rows than that (here via the join), so it needs a cap of its own.
+      const sql =
+        "WITH recent AS (SELECT * FROM orders LIMIT 5) SELECT * FROM recent JOIN big ON true";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "WITH recent AS (SELECT * FROM orders LIMIT 5) SELECT * FROM recent JOIN big ON true\nLIMIT 100"
+      );
+    });
+
+    it("tightens the statement's own LIMIT on a CTE query", () => {
+      const sql = "WITH recent AS (SELECT * FROM orders LIMIT 5) SELECT * FROM recent LIMIT 500";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "WITH recent AS (SELECT * FROM orders LIMIT 5) SELECT * FROM recent LIMIT 100"
+      );
+    });
+
+    it("wraps a CTE query whose own LIMIT is parameterized", () => {
+      const sql = "WITH recent AS (SELECT * FROM orders) SELECT * FROM recent LIMIT $1";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "SELECT * FROM (WITH recent AS (SELECT * FROM orders) SELECT * FROM recent LIMIT $1\n) AS subq LIMIT 100"
+      );
+    });
+
+    it.each([
+      ["DELETE", "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"],
+      ["INSERT", "WITH i AS (INSERT INTO t SELECT * FROM s RETURNING *) SELECT * FROM i"],
+      ["UPDATE", "WITH u AS (UPDATE t SET a = 1 RETURNING *) SELECT * FROM u"],
+    ])("does not cap a data-modifying CTE (%s)", (_label, sql) => {
+      // A LIMIT here would cap the rows handed back while the write still runs
+      // in full - a cap that isn't one.
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(sql);
+    });
+  });
+
+  describe("applyMaxRows - set operations and nesting", () => {
+    it("caps a parenthesised set operation", () => {
+      const sql = "(SELECT id FROM a) UNION (SELECT id FROM b)";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "(SELECT id FROM a) UNION (SELECT id FROM b)\nLIMIT 100"
+      );
+    });
+
+    it("keeps appending a trailing LIMIT to a bare UNION ALL, which binds to the whole set operation", () => {
+      const sql = "SELECT id FROM a UNION ALL SELECT id FROM b";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "SELECT id FROM a UNION ALL SELECT id FROM b\nLIMIT 100"
+      );
+    });
+
+    it("appends its own LIMIT instead of tightening a subquery's LIMIT", () => {
+      const sql = "SELECT * FROM (SELECT * FROM t LIMIT 5) s";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(
+        "SELECT * FROM (SELECT * FROM t LIMIT 5) s\nLIMIT 100"
+      );
+    });
+  });
+
+  describe("clause detection ignores nested clauses", () => {
+    it("does not report a subquery's LIMIT as the statement's own", () => {
+      const sql = "SELECT * FROM (SELECT * FROM t LIMIT 5) s";
+      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+      expect(SQLRowLimiter.extractLimitValue(sql)).toBe(null);
+    });
+
+    it("does not report a CTE's parameterized LIMIT as the statement's own", () => {
+      const sql = "WITH x AS (SELECT * FROM t LIMIT $1) SELECT * FROM x";
+      expect(SQLRowLimiter.hasParameterizedLimit(sql)).toBe(false);
+    });
+
+    it("does not report a CTE's TOP as the statement's own", () => {
+      const sql = "WITH x AS (SELECT TOP 5 id FROM t) SELECT * FROM x";
+      expect(SQLRowLimiter.hasTopClause(sql)).toBe(false);
+      expect(SQLRowLimiter.extractTopValue(sql)).toBe(null);
+    });
+  });
+
   describe("applyMaxRowsForSQLServer", () => {
+    it("caps a query introduced by a leading comment", () => {
+      const sql = "-- tag\nSELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "-- tag\nSELECT TOP 100 * FROM users"
+      );
+    });
+
+    it("puts TOP on the statement's own SELECT, not on the CTE's", () => {
+      const sql = "WITH x AS (SELECT id FROM t) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH x AS (SELECT id FROM t) SELECT TOP 100 * FROM x"
+      );
+    });
+
+    it("leaves a CTE's own TOP alone and caps the final SELECT", () => {
+      const sql = "WITH x AS (SELECT TOP 5 id FROM t) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH x AS (SELECT TOP 5 id FROM t) SELECT TOP 100 * FROM x"
+      );
+    });
+
+    it("keeps a leading CTE outside the wrapped subquery for a set operation", () => {
+      // T-SQL has no `SELECT ... FROM (WITH ...) AS subq` form, but a CTE
+      // declared before the SELECT is in scope inside the derived table.
+      const sql = "WITH x AS (SELECT id FROM t) SELECT id FROM x UNION ALL SELECT id FROM y";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH x AS (SELECT id FROM t) SELECT TOP 100 * FROM (SELECT id FROM x UNION ALL SELECT id FROM y\n) AS subq"
+      );
+    });
+
+    it("does not cap a data-modifying CTE", () => {
+      const sql = "WITH d AS (DELETE FROM t OUTPUT deleted.*) SELECT * FROM d";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(sql);
+    });
+  });
+
+  describe("applyMaxRowsForSQLServer - pre-existing behaviour", () => {
     it("should not modify SQL when maxRows is undefined", () => {
       const sql = "SELECT * FROM users";
       expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, undefined)).toBe(sql);
