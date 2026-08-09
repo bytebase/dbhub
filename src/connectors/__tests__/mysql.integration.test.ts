@@ -391,8 +391,9 @@ describe('MySQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
-    it('should not apply maxRows to CTE queries (WITH clause)', async () => {
-      // Test that maxRows is not applied to CTE queries (WITH clause)
+    it('should apply maxRows to CTE queries (WITH clause)', async () => {
+      // A CTE is the ordinary shape of an analytical query, so leaving it
+      // uncapped left max_rows silently inert for most real queries.
       try {
         const result = await mysqlTest.connector.executeSQL(`
           WITH user_summary AS (
@@ -400,9 +401,8 @@ describe('MySQL Connector Integration Tests', () => {
           )
           SELECT * FROM user_summary ORDER BY age
         `, { maxRows: 2 });
-        
-        // Should return all rows since WITH queries are not limited
-        expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
+
+        expect(result.resultSets[0].rows).toHaveLength(2);
         expect(result.resultSets[0].rows[0]).toHaveProperty('name');
         expect(result.resultSets[0].rows[0]).toHaveProperty('age');
       } catch (error) {
