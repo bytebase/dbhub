@@ -173,11 +173,28 @@ describe('execute-sql tool', () => {
       const controller = new AbortController();
 
       const handler = createExecuteSqlToolHandler('test_source');
-      await handler({ sql: 'SELECT 1' }, { signal: controller.signal });
+      // The shape the SDK actually hands a tool handler: `{ sessionId, mcpReq, http }`.
+      await handler({ sql: 'SELECT 1' }, { sessionId: 's', mcpReq: { signal: controller.signal } });
 
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(
         'SELECT 1',
         expect.objectContaining({ signal: controller.signal })
+      );
+    });
+
+    // Regression guard: reading `extra.signal` instead of `extra.mcpReq.signal` type-checks and
+    // passes a hand-rolled `{ signal }` fixture, while silently never cancelling anything in
+    // production — the signal is simply always undefined.
+    it('does not read a signal off the handler extra itself', async () => {
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [] });
+      const controller = new AbortController();
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      await handler({ sql: 'SELECT 1' }, { signal: controller.signal });
+
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
+        'SELECT 1',
+        expect.objectContaining({ signal: undefined })
       );
     });
 

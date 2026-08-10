@@ -63,10 +63,12 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       const executeOptions = {
         readonly: isReadOnlyPolicy(policy),
         maxRows: toolConfig?.max_rows,
-        // The MCP request's cancellation signal. Without it a cancelled tool
-        // call only stops us waiting for the answer: the query keeps running
-        // on the database, still burning the IO nobody is going to read.
-        signal: extra?.signal as AbortSignal | undefined,
+        // The MCP request's cancellation signal, which the SDK hangs off the
+        // request context (`extra.mcpReq`) rather than the handler extra
+        // itself. Without it a cancelled tool call only stops us waiting for
+        // the answer: the query keeps running on the database, still burning
+        // the IO nobody is going to read.
+        signal: extra?.mcpReq?.signal as AbortSignal | undefined,
       };
       result = await connector.executeSQL(sql, executeOptions);
 
