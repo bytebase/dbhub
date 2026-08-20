@@ -175,6 +175,7 @@ describe("ConnectorManager IAM DSN rewrite", () => {
       user: "dbuser@example.com",
       aws_iam_auth: true,
       aws_region: "eu-west-1",
+      aws_profile: "ngqa",
       dsn: "mysql://dbuser%40example.com:ignored@mydb.abc123.eu-west-1.rds.amazonaws.com:3306/mydb?connectTimeout=5000&sslmode=disable",
     };
 
@@ -185,6 +186,7 @@ describe("ConnectorManager IAM DSN rewrite", () => {
       port: 3306,
       username: "dbuser@example.com",
       region: "eu-west-1",
+      profile: "ngqa",
     });
     expect(dsn).toContain("mysql://dbuser%40example.com:token%20with%20spaces%2F%2B%3F%3D@");
     expect(dsn).toContain("connectTimeout=5000");

@@ -558,6 +558,7 @@ export class ConnectorManager {
       port,
       username,
       region: source.aws_region,
+      profile: source.aws_profile,
     });
 
     const queryParams = new Map(parsed.searchParams);

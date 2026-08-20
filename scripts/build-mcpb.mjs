@@ -29,7 +29,11 @@ const bundleDir = join(root, "dist-mcpb", "bundle");
 // auth packages: AWS IAM / Azure AD auth requires local cloud credential
 // setup that does not fit the bundle's zero-setup, read-only use case, and
 // they would triple the bundle size. Repackage with them added if needed.
-const CLOUD_AUTH_PACKAGES = new Set(["@aws-sdk/rds-signer", "@azure/identity"]);
+const CLOUD_AUTH_PACKAGES = new Set([
+  "@aws-sdk/credential-providers",
+  "@aws-sdk/rds-signer",
+  "@azure/identity",
+]);
 const drivers = Object.keys(rootPkg.optionalDependencies ?? {}).filter(
   (pkg) => !CLOUD_AUTH_PACKAGES.has(pkg)
 );
