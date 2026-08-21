@@ -158,6 +158,7 @@ max_rows = 1000
 - Only applied to SELECT statements, not INSERT/UPDATE/DELETE
 - If your query already has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
 - Can be configured per-tool in [TOML configuration](/config/toml)
+- When the cap actually cuts off rows, the statement's result carries `"truncated": true` alongside `count`, so a capped result is distinguishable from a table that genuinely has exactly `max_rows` rows (detection is exact — DBHub fetches one probe row past the cap; the flag is omitted for complete results). Run `COUNT(*)` to get the true total when you see it.
 
 ## Selective Tool Exposure
 

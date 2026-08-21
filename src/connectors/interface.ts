@@ -36,6 +36,16 @@ export interface SQLResultSet {
   sql?: string;
   rows: any[];
   rowCount: number;
+  /**
+   * True when a configured max_rows cap cut off this result set: the query
+   * had more rows than the cap allows, and `rows`/`rowCount` reflect only the
+   * first max_rows of them. Omitted (never false) when the result is
+   * complete, so consumers can distinguish a capped result from a table that
+   * genuinely has exactly max_rows rows. Detection uses a probe row (the cap
+   * is applied as LIMIT/TOP max_rows + 1, see SQLRowLimiter.flagTruncation),
+   * so the flag is exact, not a heuristic.
+   */
+  truncated?: boolean;
 }
 
 export interface SQLResult {

@@ -37,11 +37,15 @@ export function getEffectiveSourceId(sourceId?: string): string {
  */
 export function toStatementsPayload(
   resultSets: SQLResultSet[]
-): Array<{ sql?: string; rows: any[]; count: number }> {
+): Array<{ sql?: string; rows: any[]; count: number; truncated?: boolean }> {
   return resultSets.map((set) => ({
     sql: set.sql,
     rows: set.rows,
     count: set.rowCount,
+    // Only present when a max_rows cap actually cut off rows, so consumers
+    // can tell a capped result from a table with exactly max_rows rows
+    // (and complete results don't pay the extra tokens).
+    ...(set.truncated ? { truncated: true } : {}),
   }));
 }
 

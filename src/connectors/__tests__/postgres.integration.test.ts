@@ -387,6 +387,8 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       expect(result.resultSets[0].rows[1]).toHaveProperty('name');
+      // The cap provably cut off rows (users has more than 2)
+      expect(result.resultSets[0].truncated).toBe(true);
     });
 
     it('should respect existing LIMIT clause when lower than maxRows', async () => {
@@ -395,9 +397,11 @@ describe('PostgreSQL Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id LIMIT 1',
         { maxRows: 3 }
       );
-      
+
       expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      // The user's own LIMIT fired, not the cap — no truncation flag
+      expect(result.resultSets[0].truncated).toBeUndefined();
     });
 
     it('should use maxRows when existing LIMIT is higher', async () => {
@@ -406,10 +410,11 @@ describe('PostgreSQL Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id LIMIT 10',
         { maxRows: 2 }
       );
-      
+
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       expect(result.resultSets[0].rows[1]).toHaveProperty('name');
+      expect(result.resultSets[0].truncated).toBe(true);
     });
 
     it('should not affect non-SELECT queries', async () => {

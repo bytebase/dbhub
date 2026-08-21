@@ -250,4 +250,155 @@ describe("SQLRowLimiter", () => {
       expect(result).toBe("SELECT TOP 5 * FROM (SELECT id FROM a UNION ALL SELECT id FROM b) AS t");
     });
   });
+
+  describe("applyMaxRowsWithTruncationProbe", () => {
+    it("should not modify SQL or probe when maxRows is undefined", () => {
+      const sql = "SELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, undefined)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should not modify or probe non-SELECT queries", () => {
+      const sql = "UPDATE users SET active = true";
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should add a probe LIMIT of maxRows + 1 when no LIMIT exists", () => {
+      const result = SQLRowLimiter.applyMaxRowsWithTruncationProbe("SELECT * FROM users", 100);
+      expect(result).toEqual({ sql: "SELECT * FROM users\nLIMIT 101", probeApplied: true });
+    });
+
+    it("should not probe when the query's own LIMIT is below the cap", () => {
+      const sql = "SELECT * FROM users LIMIT 50";
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should not probe when the query's own LIMIT equals the cap", () => {
+      // The user asked for exactly maxRows rows — that's their limit firing,
+      // not the cap, so no probe and never a truncated flag.
+      const sql = "SELECT * FROM users LIMIT 100";
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should probe with maxRows + 1 when the query's LIMIT exceeds the cap", () => {
+      const result = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+        "SELECT * FROM users LIMIT 200",
+        100
+      );
+      expect(result).toEqual({ sql: "SELECT * FROM users LIMIT 101", probeApplied: true });
+    });
+
+    it("should probe by wrapping a parameterized LIMIT in a subquery", () => {
+      const result = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+        "SELECT * FROM users LIMIT $1",
+        100
+      );
+      expect(result).toEqual({
+        sql: "SELECT * FROM (SELECT * FROM users LIMIT $1\n) AS subq LIMIT 101",
+        probeApplied: true,
+      });
+    });
+  });
+
+  describe("applyMaxRowsForSQLServerWithTruncationProbe", () => {
+    it("should not modify SQL or probe when maxRows is undefined", () => {
+      const sql = "SELECT * FROM users";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, undefined)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should not modify or probe non-SELECT queries", () => {
+      const sql = "UPDATE users SET active = 1";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should add a probe TOP of maxRows + 1 when no TOP exists", () => {
+      const result = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+        "SELECT * FROM users",
+        100
+      );
+      expect(result).toEqual({ sql: "SELECT TOP 101 * FROM users", probeApplied: true });
+    });
+
+    it("should not probe when the query's own TOP is within the cap", () => {
+      const sql = "SELECT TOP 50 * FROM users";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should probe with maxRows + 1 when the query's TOP exceeds the cap", () => {
+      const result = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+        "SELECT TOP 200 * FROM users",
+        100
+      );
+      expect(result).toEqual({ sql: "SELECT TOP 101 * FROM users", probeApplied: true });
+    });
+
+    it("should probe a set-operator query even when a branch has its own TOP", () => {
+      // A branch-level TOP caps only that branch, so the whole statement is
+      // wrapped and the probe applies to the combined output.
+      const result = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+        "SELECT TOP 2 id FROM a UNION ALL SELECT id FROM b",
+        5
+      );
+      expect(result).toEqual({
+        sql: "SELECT TOP 6 * FROM (SELECT TOP 2 id FROM a UNION ALL SELECT id FROM b\n) AS subq",
+        probeApplied: true,
+      });
+    });
+  });
+
+  describe("flagTruncation", () => {
+    it("should drop the probe row, clamp the count, and set truncated", () => {
+      const resultSet = {
+        sql: "SELECT * FROM users",
+        rows: [{ id: 1 }, { id: 2 }, { id: 3 }],
+        rowCount: 3,
+      };
+      SQLRowLimiter.flagTruncation(resultSet, 2, true);
+      expect(resultSet).toEqual({
+        sql: "SELECT * FROM users",
+        rows: [{ id: 1 }, { id: 2 }],
+        rowCount: 2,
+        truncated: true,
+      });
+    });
+
+    it("should leave a complete result untouched (no truncated key)", () => {
+      const resultSet = { rows: [{ id: 1 }, { id: 2 }], rowCount: 2 };
+      SQLRowLimiter.flagTruncation(resultSet, 2, true);
+      expect(resultSet).toEqual({ rows: [{ id: 1 }, { id: 2 }], rowCount: 2 });
+      expect("truncated" in resultSet).toBe(false);
+    });
+
+    it("should do nothing when the probe was not applied", () => {
+      const resultSet = { rows: [{ id: 1 }, { id: 2 }, { id: 3 }], rowCount: 3 };
+      SQLRowLimiter.flagTruncation(resultSet, 2, false);
+      expect(resultSet).toEqual({ rows: [{ id: 1 }, { id: 2 }, { id: 3 }], rowCount: 3 });
+    });
+
+    it("should do nothing when maxRows is undefined", () => {
+      const resultSet = { rows: [{ id: 1 }, { id: 2 }, { id: 3 }], rowCount: 3 };
+      SQLRowLimiter.flagTruncation(resultSet, undefined, true);
+      expect(resultSet).toEqual({ rows: [{ id: 1 }, { id: 2 }, { id: 3 }], rowCount: 3 });
+    });
+  });
 });

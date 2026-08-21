@@ -679,8 +679,11 @@ export class PostgresConnector implements Connector {
       const statements = splitSQLStatements(sql, "postgres");
 
       if (statements.length === 1) {
-        // Single statement - apply maxRows if applicable
-        const processedStatement = SQLRowLimiter.applyMaxRows(statements[0], options.maxRows);
+        // Single statement - apply maxRows (with a truncation probe row) if applicable
+        const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+          statements[0],
+          options.maxRows
+        );
 
         // Engine-level read-only enforcement: when the tool is read-only, run the
         // statement inside a READ ONLY transaction so the database itself rejects any
@@ -692,11 +695,13 @@ export class PostgresConnector implements Connector {
               ? await client.query(processedStatement, parameters)
               : await client.query(processedStatement);
             await client.query('COMMIT');
-            return {
-              resultSets: [
-                { sql: statements[0], rows: result.rows, rowCount: result.rowCount ?? result.rows.length },
-              ],
+            const resultSet: SQLResultSet = {
+              sql: statements[0],
+              rows: result.rows,
+              rowCount: result.rowCount ?? result.rows.length,
             };
+            SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+            return { resultSets: [resultSet] };
           } catch (error) {
             // Best-effort rollback so a failed ROLLBACK (e.g. dropped connection)
             // can't mask the original query error.
@@ -717,11 +722,13 @@ export class PostgresConnector implements Connector {
           result = await client.query(processedStatement);
         }
         // Explicitly return rows and rowCount to ensure rowCount is preserved
-        return {
-          resultSets: [
-            { sql: statements[0], rows: result.rows, rowCount: result.rowCount ?? result.rows.length },
-          ],
+        const resultSet: SQLResultSet = {
+          sql: statements[0],
+          rows: result.rows,
+          rowCount: result.rowCount ?? result.rows.length,
         };
+        SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+        return { resultSets: [resultSet] };
       } else {
         // Multiple statements - parameters not supported for multi-statement queries
         if (parameters && parameters.length > 0) {
@@ -740,15 +747,20 @@ export class PostgresConnector implements Connector {
         await client.query(options.readonly ? 'BEGIN READ ONLY' : 'BEGIN');
         try {
           for (let statement of statements) {
-            // Apply maxRows limit to SELECT queries if specified
-            const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
+            // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
+            const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+              statement,
+              options.maxRows
+            );
 
             const result = await client.query(processedStatement);
-            resultSets.push({
+            const resultSet: SQLResultSet = {
               sql: statement,
               rows: result.rows ?? [],
               rowCount: result.rowCount ?? result.rows?.length ?? 0,
-            });
+            };
+            SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+            resultSets.push(resultSet);
           }
           await client.query('COMMIT');
         } catch (error) {

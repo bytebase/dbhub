@@ -341,10 +341,71 @@ describe('SQLite Connector Integration Tests', () => {
         'SELECT * FROM users ORDER BY id LIMIT 10',
         { maxRows: 2 }
       );
-      
+
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0].name).toBe('John Doe');
       expect(result.resultSets[0].rows[1].name).toBe('Jane Smith');
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should flag truncated when maxRows cuts off rows', async () => {
+      // users has 3+ rows; the cap of 2 provably cuts rows off
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT * FROM users ORDER BY id',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].rowCount).toBe(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+      // The echoed SQL is the original statement, not the probe rewrite
+      expect(result.resultSets[0].sql).toBe('SELECT * FROM users ORDER BY id');
+    });
+
+    it('should not flag truncated when the result has exactly maxRows rows', async () => {
+      // Exactly 2 rows exist and the cap is 2 — indistinguishable by count
+      // alone, but the probe row proves the result is complete
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT 1 AS n UNION ALL SELECT 2',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    it('should not flag truncated when the result has fewer rows than maxRows', async () => {
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT 1 AS n',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    it("should not flag truncated when the user's own lower LIMIT fires", async () => {
+      // The user asked for 1 row; the cap of 3 never fired
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT * FROM users ORDER BY id LIMIT 1',
+        { maxRows: 3 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    it('should flag truncated per statement in multi-statement execution', async () => {
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3; SELECT 1 AS m',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets).toHaveLength(2);
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+      expect(result.resultSets[1].rows).toHaveLength(1);
+      expect(result.resultSets[1].truncated).toBeUndefined();
     });
 
     it('should not affect non-SELECT queries', async () => {
