@@ -1,3 +1,0 @@
-# Resolve configured AWS profiles without credential fallback
-
-DBHub will support an optional per-source `aws_profile` only when `aws_iam_auth = true`. When configured, DBHub resolves credentials strictly from that named shared-config profile and fails if it is unavailable rather than falling through to environment, container, or instance credentials; when omitted, the existing default credential chain remains unchanged, and `aws_region` remains required. This trades an additional direct optional AWS credential-provider dependency for deterministic account and role selection and prevents a source from connecting under an unintended identity.
