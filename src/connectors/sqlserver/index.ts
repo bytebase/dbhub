@@ -758,10 +758,16 @@ export class SQLServerConnector implements Connector {
     }
 
     try {
-      // Apply maxRows limit to SELECT queries if specified
+      // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
       let processedSQL = sqlQuery;
+      let probeApplied = false;
       if (options.maxRows) {
-        processedSQL = SQLRowLimiter.applyMaxRowsForSQLServer(sqlQuery, options.maxRows);
+        const rewrite = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+          sqlQuery,
+          options.maxRows
+        );
+        processedSQL = rewrite.sql;
+        probeApplied = rewrite.probeApplied;
       }
       // Computed once and threaded into buildResultSets below (directly, or via
       // executeReadOnly) rather than re-derived from SQL text on every call.
@@ -772,7 +778,13 @@ export class SQLServerConnector implements Connector {
       // unconditionally ROLLBACK to prevent any modifications from persisting.
       // This is defense-in-depth behind the keyword classifier.
       if (options.readonly) {
-        return await this.executeReadOnly(processedSQL, parameters, isSingleStatement);
+        return await this.executeReadOnly(
+          processedSQL,
+          parameters,
+          isSingleStatement ? sqlQuery : undefined,
+          options.maxRows,
+          probeApplied
+        );
       }
 
       // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
@@ -795,12 +807,18 @@ export class SQLServerConnector implements Connector {
 
       const result = await request.query(processedSQL);
 
+      const resultSets = SQLServerConnector.buildResultSets(
+        result.recordsets,
+        result.rowsAffected,
+        isSingleStatement ? sqlQuery : undefined,
+      );
+      // The TOP probe rewrite applies to the batch's leading SELECT, whose
+      // rows land in the first result set.
+      if (resultSets.length > 0) {
+        SQLRowLimiter.flagTruncation(resultSets[0], options.maxRows, probeApplied);
+      }
       return {
-        resultSets: SQLServerConnector.buildResultSets(
-          result.recordsets,
-          result.rowsAffected,
-          isSingleStatement ? processedSQL : undefined,
-        ),
+        resultSets,
         ...(messages.length > 0 ? { messages } : {}),
       };
     } catch (error) {
@@ -956,8 +974,12 @@ export class SQLServerConnector implements Connector {
    */
   private async executeReadOnly(
     processedSQL: string,
-    parameters?: any[],
-    isSingleStatement?: boolean,
+    parameters: any[] | undefined,
+    // Original (pre-rewrite) statement text for attribution; undefined for
+    // multi-statement batches, where attribution would be a guess.
+    sourceSql: string | undefined,
+    maxRows: number | undefined,
+    probeApplied: boolean,
   ): Promise<SQLResult> {
     this.assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
 
@@ -998,12 +1020,18 @@ export class SQLServerConnector implements Connector {
         }
       }
     }
+    const resultSets = SQLServerConnector.buildResultSets(
+      result.recordsets,
+      result.rowsAffected,
+      sourceSql,
+    );
+    // The TOP probe rewrite applies to the batch's leading SELECT, whose rows
+    // land in the first result set.
+    if (resultSets.length > 0) {
+      SQLRowLimiter.flagTruncation(resultSets[0], maxRows, probeApplied);
+    }
     return {
-      resultSets: SQLServerConnector.buildResultSets(
-        result.recordsets,
-        result.rowsAffected,
-        isSingleStatement ? processedSQL : undefined,
-      ),
+      resultSets,
       ...(messages.length > 0 ? { messages } : {}),
     };
   }

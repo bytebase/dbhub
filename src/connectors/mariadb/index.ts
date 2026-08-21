@@ -653,12 +653,15 @@ export class MariaDBConnector implements Connector {
           // attribution below, whether or not maxRows needs to rewrite it.
           const statements = splitSQLStatements(sql, "mariadb");
           let processedSQL = sql;
+          // Per-statement truncation-probe flags, index-aligned with `statements`
+          let probes: boolean[] = [];
           if (options.maxRows) {
-            const processedStatements = statements.map(statement =>
-              SQLRowLimiter.applyMaxRows(statement, options.maxRows)
+            const rewrites = statements.map(statement =>
+              SQLRowLimiter.applyMaxRowsWithTruncationProbe(statement, options.maxRows)
             );
+            probes = rewrites.map(rewrite => rewrite.probeApplied);
 
-            processedSQL = processedStatements.join('; ');
+            processedSQL = rewrites.map(rewrite => rewrite.sql).join('; ');
             if (sql.trim().endsWith(';')) {
               processedSQL += ';';
             }
@@ -675,6 +678,15 @@ export class MariaDBConnector implements Connector {
 
           // Parse results using shared utility that handles both single and multi-statement queries
           const resultSets = parseQueryResultSets(results, statements);
+
+          // Result sets are per statement in source order, so a length match
+          // means the pairing with the probe flags is exact (same reasoning as
+          // the sql attribution inside parseQueryResultSets).
+          if (resultSets.length === probes.length) {
+            resultSets.forEach((set, index) =>
+              SQLRowLimiter.flagTruncation(set, options.maxRows, probes[index])
+            );
+          }
 
           return { resultSets };
         }

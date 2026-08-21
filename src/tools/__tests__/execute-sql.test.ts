@@ -91,6 +91,38 @@ describe('execute-sql tool', () => {
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(sql, { readonly: false, maxRows: undefined });
     });
 
+    it('should surface truncated: true when a result set was capped by max_rows', async () => {
+      const mockResult: SQLResult = {
+        resultSets: [
+          { sql: 'SELECT * FROM users', rows: [{ id: 1 }, { id: 2 }], rowCount: 2, truncated: true },
+        ],
+      };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM users' }, null);
+      const parsedResult = parseToolResponse(result);
+
+      expect(parsedResult.success).toBe(true);
+      expect(parsedResult.data.statements).toEqual([
+        { sql: 'SELECT * FROM users', rows: [{ id: 1 }, { id: 2 }], count: 2, truncated: true },
+      ]);
+    });
+
+    it('should omit the truncated key entirely for complete results', async () => {
+      const mockResult: SQLResult = {
+        resultSets: [{ sql: 'SELECT * FROM users', rows: [{ id: 1 }], rowCount: 1 }],
+      };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExecuteSqlToolHandler('test_source');
+      const result = await handler({ sql: 'SELECT * FROM users' }, null);
+      const parsedResult = parseToolResponse(result);
+
+      expect(parsedResult.success).toBe(true);
+      expect('truncated' in parsedResult.data.statements[0]).toBe(false);
+    });
+
     it('should handle execution errors', async () => {
       vi.mocked(mockConnector.executeSQL).mockRejectedValue(new Error('Database error'));
 

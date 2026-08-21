@@ -154,7 +154,9 @@ export function getExecuteSqlMetadata(sourceId: string): ToolMetadata {
   };
 
   const readonlyNote = executeOptions.readonly ? " [READ-ONLY MODE]" : "";
-  const maxRowsNote = executeOptions.maxRows ? ` (limited to ${executeOptions.maxRows} rows)` : "";
+  const maxRowsNote = executeOptions.maxRows
+    ? ` (limited to ${executeOptions.maxRows} rows; capped results carry "truncated": true)`
+    : "";
   const description = isSingleSource
     ? `${userDescPrefix}Execute SQL queries on the ${dbType} database${readonlyNote}${maxRowsNote}`
     : `${userDescPrefix}Execute SQL queries on the '${sourceId}' ${dbType} database${readonlyNote}${maxRowsNote}`;

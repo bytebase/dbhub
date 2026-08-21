@@ -489,20 +489,27 @@ export class SQLiteConnector implements Connector {
                                  trimmedStatement.includes('index_list') ||
                                  trimmedStatement.includes('foreign_key_list')));
 
-        // Apply maxRows limit to SELECT queries if specified (not PRAGMA/ANALYZE)
+        // Apply maxRows limit (with a truncation probe row) to SELECT queries
+        // if specified (not PRAGMA/ANALYZE)
+        let probeApplied = false;
         if (options.maxRows) {
-          processedStatement = SQLRowLimiter.applyMaxRows(processedStatement, options.maxRows);
+          const rewrite = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+            processedStatement,
+            options.maxRows
+          );
+          processedStatement = rewrite.sql;
+          probeApplied = rewrite.probeApplied;
         }
 
         if (isReadStatement) {
           // Pass parameters if provided
-          if (parameters && parameters.length > 0) {
-            const rows = this.prepare(processedStatement).all(...parameters);
-            return { resultSets: [{ sql: statements[0], rows, rowCount: rows.length }] };
-          } else {
-            const rows = this.prepare(processedStatement).all();
-            return { resultSets: [{ sql: statements[0], rows, rowCount: rows.length }] };
-          }
+          const rows =
+            parameters && parameters.length > 0
+              ? this.prepare(processedStatement).all(...parameters)
+              : this.prepare(processedStatement).all();
+          const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount: rows.length };
+          SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+          return { resultSets: [resultSet] };
         } else {
           // Use run() for statements that don't return data
           let result;
@@ -567,10 +574,15 @@ export class SQLiteConnector implements Connector {
           if (options.readonly) {
             this.db.exec("PRAGMA query_only = ON");
           }
-          // Apply maxRows limit to SELECT queries if specified
-          const processedStatement = SQLRowLimiter.applyMaxRows(statement, options.maxRows);
+          // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
+          const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+            statement,
+            options.maxRows
+          );
           const rows = this.prepare(processedStatement).all();
-          resultSets.push({ sql: statement, rows, rowCount: rows.length });
+          const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
+          SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+          resultSets.push(resultSet);
         }
 
         return { resultSets };

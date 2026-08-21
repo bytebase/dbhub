@@ -1,4 +1,19 @@
 import { stripCommentsAndStrings, blankCommentsAndStrings } from "./sql-parser.js";
+import type { SQLResultSet } from "../connectors/interface.js";
+
+/**
+ * Result of a maxRows rewrite that supports truncation detection.
+ *
+ * When `probeApplied` is true, the rewritten SQL requests `maxRows + 1` rows
+ * (a probe row): if the database returns more than `maxRows` rows, the query
+ * provably had more rows than the cap allows. The caller must pass the
+ * executed result through `SQLRowLimiter.flagTruncation()` to drop the probe
+ * row and mark the result set as truncated.
+ */
+export interface MaxRowsRewrite {
+  sql: string;
+  probeApplied: boolean;
+}
 
 /**
  * Shared utility for applying row limits to SELECT queries only using database-native LIMIT clauses
@@ -228,5 +243,70 @@ export class SQLRowLimiter {
       return sql;
     }
     return this.applyTopToQuery(sql, maxRows);
+  }
+
+  /**
+   * Like applyMaxRows, but requests one probe row (maxRows + 1) whenever the
+   * cap is the binding constraint, so callers can detect truncation exactly
+   * instead of guessing from `rowCount === maxRows` (which a table with
+   * exactly maxRows rows also produces).
+   *
+   * `probeApplied` is false when the cap cannot fire: no maxRows, not a
+   * SELECT, or the query's own literal LIMIT is already within the cap (the
+   * user asked for fewer rows than the cap — that is their limit, not
+   * truncation).
+   */
+  static applyMaxRowsWithTruncationProbe(sql: string, maxRows: number | undefined): MaxRowsRewrite {
+    if (!maxRows || !this.isSelectQuery(sql)) {
+      return { sql, probeApplied: false };
+    }
+    if (!this.hasParameterizedLimit(sql)) {
+      const existingLimit = this.extractLimitValue(sql);
+      if (existingLimit !== null && existingLimit <= maxRows) {
+        return { sql, probeApplied: false };
+      }
+    }
+    return { sql: this.applyMaxRows(sql, maxRows + 1), probeApplied: true };
+  }
+
+  /**
+   * SQL Server variant of applyMaxRowsWithTruncationProbe, using TOP syntax.
+   * A set-operator statement is always wrapped (any TOP on an individual
+   * branch caps only that branch, not the combined output), so the probe
+   * applies there regardless of branch-level TOPs.
+   */
+  static applyMaxRowsForSQLServerWithTruncationProbe(
+    sql: string,
+    maxRows: number | undefined
+  ): MaxRowsRewrite {
+    if (!maxRows || !this.isSelectQuery(sql)) {
+      return { sql, probeApplied: false };
+    }
+    if (!this.hasSetOperator(sql)) {
+      const existingTop = this.extractTopValue(sql);
+      if (existingTop !== null && existingTop <= maxRows) {
+        return { sql, probeApplied: false };
+      }
+    }
+    return { sql: this.applyMaxRowsForSQLServer(sql, maxRows + 1), probeApplied: true };
+  }
+
+  /**
+   * Post-process a result set produced by a truncation-probe rewrite: when
+   * the probe row came back (more than maxRows rows), drop it, clamp the
+   * count to maxRows, and mark the set truncated so consumers can tell a
+   * capped result from a complete one.
+   */
+  static flagTruncation(
+    resultSet: SQLResultSet,
+    maxRows: number | undefined,
+    probeApplied: boolean
+  ): void {
+    if (!probeApplied || !maxRows || resultSet.rows.length <= maxRows) {
+      return;
+    }
+    resultSet.rows = resultSet.rows.slice(0, maxRows);
+    resultSet.rowCount = maxRows;
+    resultSet.truncated = true;
   }
 }
