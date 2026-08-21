@@ -428,6 +428,24 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  if (source.aws_profile !== undefined) {
+    if (
+      typeof source.aws_profile !== "string" ||
+      source.aws_profile.trim().length === 0
+    ) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid aws_profile. ` +
+          `Must be a non-empty string.`
+      );
+    }
+    if (source.aws_iam_auth !== true) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' aws_profile requires ` +
+          `aws_iam_auth = true.`
+      );
+    }
+  }
+
   if (source.aws_iam_auth === true) {
     const validIamTypes = ["postgres", "mysql", "mariadb"];
     if (!source.type || !validIamTypes.includes(source.type)) {

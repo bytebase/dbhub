@@ -35,6 +35,7 @@ export interface ConnectionParams {
   password?: string;
   aws_iam_auth?: boolean; // Enable AWS IAM auth token generation for RDS
   aws_region?: string; // AWS region required when aws_iam_auth is enabled
+  aws_profile?: string; // Named AWS shared-config profile for RDS IAM auth
   instanceName?: string; // SQL Server named instance support
   sslmode?: "disable" | "require" | "verify-ca" | "verify-full"; // SSL mode for network databases (not applicable to SQLite, verify-* only applicable for PostgreSQL)
   sslrootcert?: string; // CA certificate path (requires verify-ca or verify-full)

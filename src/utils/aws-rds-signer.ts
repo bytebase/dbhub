@@ -5,12 +5,13 @@ export interface RdsAuthTokenParams {
   port: number;
   username: string;
   region: string;
+  profile?: string;
 }
 
 /**
  * Generate an AWS RDS IAM auth token for database authentication.
- * The AWS SDK uses the default credential provider chain
- * (AWS CLI profile, env vars, instance role, etc.).
+ * Uses the named shared-config profile when provided; otherwise the AWS SDK
+ * uses its default credential provider chain.
  */
 export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<string> {
   let Signer: typeof import("@aws-sdk/rds-signer")["Signer"];
@@ -25,12 +26,19 @@ export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<
     throw error;
   }
 
-  const signer = new Signer({
+  const signerConfig: ConstructorParameters<typeof Signer>[0] = {
     hostname: params.hostname,
     port: params.port,
     username: params.username,
     region: params.region,
-  });
+  };
+
+  if (params.profile) {
+    const { fromIni } = await import("@aws-sdk/credential-providers");
+    signerConfig.credentials = fromIni({ profile: params.profile });
+  }
+
+  const signer = new Signer(signerConfig);
 
   return signer.getAuthToken();
 }

@@ -54,6 +54,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # user = "dbuser@example.com"
 # aws_iam_auth = true
 # aws_region = "eu-west-1"
+# aws_profile = "my-profile"  # Optional: named AWS profile; requires aws_iam_auth = true
 # sslmode = "require"
 
 # PostgreSQL with certificate verification (e.g., AWS RDS)
@@ -129,6 +130,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # user = "dbuser@example.com"
 # aws_iam_auth = true
 # aws_region = "eu-west-1"
+# aws_profile = "my-profile"  # Optional: named AWS profile; requires aws_iam_auth = true
 # sslmode = "require"
 
 # ============================================================================
@@ -149,6 +151,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # user = "dbuser@example.com"
 # aws_iam_auth = true
 # aws_region = "eu-west-1"
+# aws_profile = "my-profile"  # Optional: named AWS profile; requires aws_iam_auth = true
 # sslmode = "require"
 
 # ============================================================================
@@ -355,6 +358,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   collation = "utf8mb4_0900_ai_ci"  # MySQL/MariaDB only: connection collation
 #   aws_iam_auth = true         # Optional: enable AWS RDS IAM auth (postgres/mysql/mariadb)
 #   aws_region = "eu-west-1"    # Required when aws_iam_auth = true
+#   aws_profile = "my-profile"  # Optional: named AWS profile; requires aws_iam_auth = true
 #
 # DSN Formats:
 #   PostgreSQL:  postgres://user:pass@host:5432/database?sslmode=require

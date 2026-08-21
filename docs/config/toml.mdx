@@ -232,6 +232,38 @@ Sources define database connections. Each source represents a database that DBHu
   </Note>
 </ParamField>
 
+### AWS RDS IAM authentication
+
+<ParamField path="aws_iam_auth" type="boolean" default="false">
+  Generate short-lived AWS RDS IAM authentication tokens instead of using a
+  configured password. This is supported for PostgreSQL, MySQL, and MariaDB
+  sources and requires `aws_region`.
+
+  Set `aws_profile` to use a named AWS shared-config profile for a source. An
+  explicitly configured profile is resolved strictly: if it is missing or
+  cannot provide credentials, the connection fails instead of falling back to
+  another AWS identity. When `aws_profile` is omitted, the AWS SDK default
+  credential chain is used.
+
+  ```toml
+  [[sources]]
+  id = "production"
+  type = "postgres"
+  host = "mydb.example.us-east-1.rds.amazonaws.com"
+  port = 5432
+  database = "myapp"
+  user = "iam_db_user"
+  aws_iam_auth = true
+  aws_region = "us-east-1"
+  aws_profile = "production-readonly"
+  sslmode = "require"
+  ```
+
+  <Note>
+  `aws_profile` is optional, but may only be set when `aws_iam_auth = true`.
+  </Note>
+</ParamField>
+
 ### connection_timeout
 
 <ParamField path="connection_timeout" type="number">
@@ -785,6 +817,9 @@ default = 10
 | `id` | string | ✅ | Unique source identifier |
 | `description` | string | ❌ | Human-readable description of the data source |
 | `dsn` | string | ✅ | Database connection string |
+| `aws_iam_auth` | boolean | ❌ | Generate AWS RDS IAM authentication tokens (default: `false`) |
+| `aws_region` | string | ❌ | AWS region (required when `aws_iam_auth` is enabled) |
+| `aws_profile` | string | ❌ | Named AWS shared-config profile (requires `aws_iam_auth`) |
 | `lazy` | boolean | ❌ | Defer connection until first query (default: `false`) |
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
 | `query_timeout` | number | ❌ | Query timeout (seconds) |

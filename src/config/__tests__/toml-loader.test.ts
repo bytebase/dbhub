@@ -925,6 +925,58 @@ domain = "MYDOMAIN"
     });
 
     describe('AWS IAM auth validation', () => {
+      it('should reject aws_profile when AWS IAM auth is not enabled', () => {
+        const tomlContent = `
+[[sources]]
+id = "postgres_profile_without_iam"
+type = "postgres"
+host = "localhost"
+database = "mydb"
+user = "dbuser"
+password = "secret"
+aws_profile = "development"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow(
+          'aws_profile requires aws_iam_auth = true'
+        );
+      });
+
+      it('should reject a non-string aws_profile', () => {
+        const tomlContent = `
+[[sources]]
+id = "postgres_invalid_profile"
+type = "postgres"
+host = "mydb.example.com"
+database = "mydb"
+user = "dbuser"
+aws_iam_auth = true
+aws_region = "us-east-1"
+aws_profile = 42
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid aws_profile');
+      });
+
+      it('should reject a blank aws_profile', () => {
+        const tomlContent = `
+[[sources]]
+id = "postgres_blank_profile"
+type = "postgres"
+host = "mydb.example.com"
+database = "mydb"
+user = "dbuser"
+aws_iam_auth = true
+aws_region = "us-east-1"
+aws_profile = "   "
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid aws_profile');
+      });
+
       it('should accept aws_iam_auth for MySQL without password', () => {
         const tomlContent = `
 [[sources]]
@@ -935,6 +987,7 @@ database = "mydb"
 user = "dbuser@example.com"
 aws_iam_auth = true
 aws_region = "eu-west-1"
+aws_profile = "development"
 `;
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
@@ -949,6 +1002,7 @@ aws_region = "eu-west-1"
           user: 'dbuser@example.com',
           aws_iam_auth: true,
           aws_region: 'eu-west-1',
+          aws_profile: 'development',
         });
         expect(result?.sources[0].password).toBeUndefined();
       });
