@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
+import { SQLiteConnector } from '../../connectors/sqlite/index.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -95,6 +96,60 @@ dsn = "sqlite:///path/to/database.db"
       expect(result?.sources[0].host).toBeUndefined();
       expect(result?.sources[0].port).toBeUndefined();
       expect(result?.sources[0].user).toBeUndefined();
+    });
+
+    it('should resolve a relative sqlite database against the config file directory', () => {
+      // Config lives in a subdirectory while the process runs from tempDir, so
+      // resolving against the config file and resolving against process.cwd()
+      // produce different answers and the test can tell them apart.
+      const confDir = path.join(tempDir, 'conf');
+      fs.mkdirSync(path.join(confDir, 'data'), { recursive: true });
+      const configPath = path.join(confDir, 'dbhub.toml');
+      fs.writeFileSync(
+        configPath,
+        `
+[[sources]]
+id = "rel"
+type = "sqlite"
+database = "data/app.db"
+`
+      );
+      process.argv = ['node', 'test', '--config', configPath];
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].database).toBe(
+        path.join(confDir, 'data', 'app.db').replace(/\\/g, '/')
+      );
+    });
+
+    it('should leave an absolute sqlite database path unchanged', () => {
+      const absolute = path.join(tempDir, 'elsewhere', 'app.db').replace(/\\/g, '/');
+      const tomlContent = `
+[[sources]]
+id = "abs"
+type = "sqlite"
+database = "${absolute}"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].database).toBe(absolute);
+    });
+
+    it('should pass the :memory: sentinel through untouched', () => {
+      const tomlContent = `
+[[sources]]
+id = "mem"
+type = "sqlite"
+database = ":memory:"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].database).toBe(':memory:');
     });
 
     it('should reject identity fields that conflict with the DSN', () => {
@@ -267,8 +322,12 @@ database = "~/databases/test.db"
 
       const result = loadTomlConfig();
 
+      // Separators are normalised to forward slashes. On Windows path.join
+      // yields backslashes, and `sqlite:///C:\Users\...` does not match the
+      // drive-letter branch of SQLiteDSNParser, so the expanded path came back
+      // out as `/C:\Users\...` and could never be opened.
       expect(result?.sources[0].database).toBe(
-        path.join(os.homedir(), 'databases', 'test.db')
+        path.join(os.homedir(), 'databases', 'test.db').replace(/\\/g, '/')
       );
     });
 
@@ -1675,7 +1734,34 @@ collation = "utf8mb4_0900_ai_ci"
 
       const dsn = buildDSNFromSource(source);
 
-      expect(dsn).toBe('sqlite:////path/to/database.db');
+      expect(dsn).toBe('sqlite:///path/to/database.db');
+    });
+
+    // The DSN is only an intermediate encoding; what matters is the path the
+    // connector ends up opening. Asserting the DSN string on its own let an
+    // encoding that rewrote absolute paths into relative ones pass unnoticed.
+    describe('SQLite path round-trip through SQLiteDSNParser', () => {
+      const roundTrip = async (database: string): Promise<string> => {
+        const dsn = buildDSNFromSource({ id: 'test', type: 'sqlite', database });
+        const { dbPath } = await new SQLiteConnector().dsnParser.parse(dsn);
+        return dbPath;
+      };
+
+      it('preserves a POSIX absolute path', async () => {
+        await expect(roundTrip('/var/lib/app/data.db')).resolves.toBe('/var/lib/app/data.db');
+      });
+
+      it('preserves a Windows drive-letter path', async () => {
+        await expect(roundTrip('C:/Data/app/data.db')).resolves.toBe('C:/Data/app/data.db');
+      });
+
+      it('preserves a path containing spaces', async () => {
+        await expect(roundTrip('/var/lib/my app/data.db')).resolves.toBe('/var/lib/my app/data.db');
+      });
+
+      it('preserves the :memory: sentinel', async () => {
+        await expect(roundTrip(':memory:')).resolves.toBe(':memory:');
+      });
     });
 
     it('should encode special characters in credentials', () => {
@@ -1876,7 +1962,7 @@ database = "~/databases/local.db"
         type: 'sqlite',
       });
       expect(result?.sources[2].database).toBe(
-        path.join(os.homedir(), 'databases', 'local.db')
+        path.join(os.homedir(), 'databases', 'local.db').replace(/\\/g, '/')
       );
     });
 

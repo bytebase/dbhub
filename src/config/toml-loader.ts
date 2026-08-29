@@ -706,6 +706,55 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 }
 
 /**
+ * Resolve a SQLite source's `database` field to a concrete absolute path.
+ *
+ * A relative path is resolved against the directory holding the config file
+ * rather than process.cwd(), so a config names the same database no matter
+ * where the server was launched from.
+ *
+ * Separators are normalised to forward slashes: path.resolve yields backslashes
+ * on Windows, and the drive-letter branch of SQLiteDSNParser only matches
+ * `C:/...`, so a backslash path would survive the DSN round-trip with a spurious
+ * leading slash.
+ *
+ * `:memory:` is a sentinel rather than a path and is passed through untouched.
+ */
+function resolveSqliteDatabasePath(database: string, configPath: string): string {
+  if (database === ":memory:") {
+    return database;
+  }
+
+  const expanded = expandHomeDir(database);
+  const absolute = path.isAbsolute(expanded)
+    ? expanded
+    : path.resolve(path.dirname(configPath), expanded);
+
+  return absolute.replace(/\\/g, "/");
+}
+
+/**
+ * Encode a SQLite database path as a DSN that SQLiteDSNParser decodes back to
+ * the same path.
+ *
+ * The parser reads the path positionally, so the slash count is load-bearing.
+ * `sqlite://` followed by a leading-slash path yields pathname `/<path>`, which
+ * the parser returns unchanged for POSIX paths and de-prefixes for `C:/` drive
+ * letters. Prefixing three slashes unconditionally instead turns
+ * `/var/lib/x.db` into `sqlite:////var/lib/x.db`, whose pathname starts with
+ * `//` and loses its leading slash on the way back out — silently converting an
+ * absolute path into a relative one.
+ *
+ * `database` is expected to already be resolved (see resolveSqliteDatabasePath).
+ */
+function buildSqliteDSN(database: string): string {
+  if (database === ":memory:") {
+    return "sqlite:///:memory:";
+  }
+
+  return `sqlite://${database.startsWith("/") ? database : `/${database}`}`;
+}
+
+/**
  * Process source configurations (expand paths, populate fields from DSN)
  */
 function processSourceConfigs(
@@ -725,9 +774,9 @@ function processSourceConfigs(
       processed.sslrootcert = expandHomeDir(processed.sslrootcert);
     }
 
-    // Expand ~ in SQLite database path (if relative)
+    // Expand ~ and resolve a relative SQLite database path
     if (processed.type === "sqlite" && processed.database) {
-      processed.database = expandHomeDir(processed.database);
+      processed.database = resolveSqliteDatabasePath(processed.database, configPath);
     }
 
     // Expand ~ in DSN for SQLite
@@ -917,7 +966,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
         `Source '${source.id}': 'database' field is required for SQLite`
       );
     }
-    return `sqlite:///${source.database}`;
+    return buildSqliteDSN(source.database);
   }
 
   // For other databases, require host, user, database
