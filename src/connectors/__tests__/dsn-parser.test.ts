@@ -99,6 +99,18 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
   });
 });
 
+describe('DSN Parser - PostgreSQL query timeout', () => {
+  it('configures a server-side statement timeout before the client fallback', async () => {
+    const parser = new PostgresConnector().dsnParser;
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db', {
+      queryTimeoutSeconds: 30,
+    });
+
+    expect(config.statement_timeout).toBe(30_000);
+    expect(config.query_timeout).toBe(35_000);
+  });
+});
+
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {
     const connector = new MySQLConnector();

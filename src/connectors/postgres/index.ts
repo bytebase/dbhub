@@ -26,6 +26,8 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
+const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
+
 /**
  * PostgreSQL DSN Parser
  * Handles DSN strings like: postgres://user:password@localhost:5432/dbname?sslmode=disable
@@ -113,10 +115,14 @@ class PostgresDSNParser implements DSNParser {
         poolConfig.connectionTimeoutMillis = connectionTimeoutSeconds * 1000;
       }
 
-      // Apply query timeout if specified (client-side timeout)
+      // Apply the configured limit on the server so a timed-out statement does
+      // not keep running after DBHub stops waiting for it. Retain the client-side
+      // timeout as a fallback, with enough grace for PostgreSQL's cancellation
+      // response to arrive first.
       if (queryTimeoutSeconds !== undefined) {
-        // pg library expects query_timeout in milliseconds
-        poolConfig.query_timeout = queryTimeoutSeconds * 1000;
+        const queryTimeoutMs = queryTimeoutSeconds * 1000;
+        poolConfig.statement_timeout = queryTimeoutMs;
+        poolConfig.query_timeout = queryTimeoutMs + POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS;
       }
 
       return poolConfig;

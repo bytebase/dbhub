@@ -214,6 +214,65 @@ describe('PostgreSQL Connector Integration Tests', () => {
   postgresTest.createErrorHandlingTests();
   postgresTest.createSSLTests();
   describe('PostgreSQL-specific Features', () => {
+    it('should cancel a timed-out query on the PostgreSQL server', async () => {
+      const timedConnector = new PostgresConnector();
+      const observer = new PostgresConnector();
+      const probe = 'dbhub_query_timeout_probe';
+
+      const runningProbeCount = async (): Promise<number> => {
+        const result = await observer.executeSQL(
+          `SELECT count(*)::int AS count
+           FROM pg_stat_activity
+           WHERE state = 'active'
+             AND query LIKE '%${probe}%'
+             AND query NOT LIKE '%pg_stat_activity%'`,
+          {}
+        );
+        return result.resultSets[0].rows[0].count;
+      };
+
+      const waitFor = async (
+        predicate: () => Promise<boolean>,
+        timeoutMs: number
+      ): Promise<boolean> => {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (await predicate()) return true;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return false;
+      };
+
+      try {
+        await timedConnector.connect(postgresTest.connectionString, undefined, {
+          queryTimeoutSeconds: 1,
+        });
+        await observer.connect(postgresTest.connectionString);
+
+        const query = timedConnector.executeSQL(
+          `SELECT pg_sleep(10), '${probe}'`,
+          { readonly: true }
+        );
+        const settled = query.then(
+          () => null,
+          (error) => error as NodeJS.ErrnoException
+        );
+
+        expect(await waitFor(async () => (await runningProbeCount()) === 1, 5_000)).toBe(true);
+
+        const error = await settled;
+        expect(error).toBeInstanceOf(Error);
+        expect(error?.code).toBe('57014');
+        expect(await waitFor(async () => (await runningProbeCount()) === 0, 2_000)).toBe(true);
+
+        const after = await timedConnector.executeSQL('SELECT 1 AS ok', { readonly: true });
+        expect(after.resultSets[0].rows[0].ok).toBe(1);
+      } finally {
+        await timedConnector.disconnect();
+        await observer.disconnect();
+      }
+    }, 20_000);
+
     it('should execute multiple statements with transaction support', async () => {
       const result = await postgresTest.connector.executeSQL(`
         INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30);
