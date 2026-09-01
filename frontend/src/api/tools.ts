@@ -1,4 +1,5 @@
 import { ApiError } from './errors';
+import { generateId } from '../lib/utils';
 
 export interface QueryResult {
   /** Source text of the statement that produced this result, when known. */
@@ -62,7 +63,7 @@ export async function executeTool(
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
-      id: crypto.randomUUID(),
+      id: generateId(),
       method: 'tools/call',
       params: {
         name: toolName,

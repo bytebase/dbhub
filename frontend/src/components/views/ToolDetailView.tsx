@@ -3,6 +3,7 @@ import { useParams, Navigate, useSearchParams } from 'react-router-dom';
 import { fetchSource } from '../../api/sources';
 import { executeTool, type QueryResult } from '../../api/tools';
 import { ApiError } from '../../api/errors';
+import { generateId } from '../../lib/utils';
 import type { Tool } from '../../types/datasource';
 import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab, type SqlEditorHandle } from '../tool';
 import LockIcon from '../icons/LockIcon';
@@ -230,7 +231,7 @@ export default function ToolDetailView() {
       // collapsed into a single tab - only the first tab's time reflects the
       // whole batch's duration, since the others didn't wait separately.
       const newTabs: ResultTab[] = queryResults.map((result, index) => ({
-        id: crypto.randomUUID(),
+        id: generateId(),
         // Offset timestamps so tabs from the same run sort stably and get distinct ids/keys.
         timestamp: new Date(timestamp.getTime() + index),
         result,
@@ -244,7 +245,7 @@ export default function ToolDetailView() {
       setActiveTabId(newTabs[0].id);
     } catch (err) {
       const errorTab: ResultTab = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         timestamp: new Date(),
         result: null,
         error: err instanceof Error ? err.message : 'Query failed',
