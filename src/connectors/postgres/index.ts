@@ -24,6 +24,7 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
+import { postgresTypeParsers } from "./type-parsers.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
@@ -181,6 +182,10 @@ export class PostgresConnector implements Connector {
 
     try {
       const poolConfig = await this.dsnParser.parse(dsn, config);
+
+      // Return date/timestamp values as the server's verbatim text so they are
+      // not shifted by the host's local timezone (see type-parsers.ts).
+      poolConfig.types = postgresTypeParsers;
 
       // SDK-level readonly enforcement: Set default_transaction_read_only for the entire connection
       if (config?.readonly) {

@@ -322,6 +322,25 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0].array_val).toBeDefined();
     });
 
+    it('should return date/timestamp values verbatim, not shifted by the host timezone', async () => {
+      // Regression test for https://github.com/bytebase/dbhub/issues/416
+      const result = await postgresTest.connector.executeSQL(
+        `SELECT
+           '2026-01-01 12:00:00.123456'::timestamp AS naive,
+           '2026-01-01 12:00:00+00'::timestamptz AS aware,
+           '2026-01-01'::date AS day,
+           ARRAY['2026-01-01 12:00:00'::timestamp] AS naive_arr`,
+        {}
+      );
+
+      const row = result.resultSets[0].rows[0];
+      expect(row.naive).toBe('2026-01-01 12:00:00.123456');
+      expect(row.day).toBe('2026-01-01');
+      expect(typeof row.aware).toBe('string');
+      expect(row.aware).toMatch(/^2026-01-01 /);
+      expect(row.naive_arr).toBe('{"2026-01-01 12:00:00"}');
+    });
+
     it('should return comment for views via getTableComment', async () => {
       const comment = await postgresTest.connector.getTableComment!('active_users');
       expect(comment).toBe('Users aged 25 or older');
