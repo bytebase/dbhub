@@ -173,6 +173,21 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
     `, {});
     await connector.executeSQL(`COMMENT ON VIEW active_users IS 'Users aged 25 or older'`, {});
 
+    // Create a foreign table (for foreign table discovery tests, #418). A
+    // handler-less FDW is enough: the catalog entries exist and can be
+    // enumerated/described, the table just can't be scanned.
+    await connector.executeSQL('CREATE FOREIGN DATA WRAPPER dummy_fdw', {});
+    await connector.executeSQL('CREATE SERVER IF NOT EXISTS dummy_server FOREIGN DATA WRAPPER dummy_fdw', {});
+    await connector.executeSQL(`
+      CREATE FOREIGN TABLE IF NOT EXISTS remote_users (
+        id INTEGER,
+        name VARCHAR(100),
+        email VARCHAR(100),
+        age INTEGER
+      ) SERVER dummy_server
+    `, {});
+    await connector.executeSQL(`COMMENT ON FOREIGN TABLE remote_users IS 'Users on a remote server'`, {});
+
     // Create test stored procedures using SQL language to avoid dollar quoting
     await connector.executeSQL(`
       CREATE OR REPLACE FUNCTION get_user_count()
@@ -344,6 +359,28 @@ describe('PostgreSQL Connector Integration Tests', () => {
     it('should return comment for views via getTableComment', async () => {
       const comment = await postgresTest.connector.getTableComment!('active_users');
       expect(comment).toBe('Users aged 25 or older');
+    });
+
+    it('should list foreign tables as tables, not views', async () => {
+      const tables = await postgresTest.connector.getTables();
+      expect(tables).toContain('remote_users');
+
+      const views = await postgresTest.connector.getViews();
+      expect(views).not.toContain('remote_users');
+
+      expect(await postgresTest.connector.tableExists('remote_users')).toBe(true);
+    });
+
+    it('should describe foreign tables like regular tables', async () => {
+      const columns = await postgresTest.connector.getTableSchema('remote_users');
+      expect(columns.map((c) => c.column_name)).toEqual(['id', 'name', 'email', 'age']);
+
+      const comment = await postgresTest.connector.getTableComment!('remote_users');
+      expect(comment).toBe('Users on a remote server');
+
+      // Foreign tables cannot have indexes; this must return empty rather than throw.
+      const indexes = await postgresTest.connector.getTableIndexes('remote_users');
+      expect(indexes).toEqual([]);
     });
 
     it('should report connection pool state and buffer cache hit ratio via getHealthCheck', async () => {

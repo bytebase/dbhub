@@ -259,12 +259,15 @@ export class PostgresConnector implements Connector {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
 
+      // 'FOREIGN' covers foreign tables (postgres_fdw, file_fdw, ...). They are
+      // queryable like base tables and information_schema.columns already
+      // describes them, so they must be discoverable here too (#418).
       const result = await client.query(
         `
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = $1
-        AND table_type = 'BASE TABLE'
+        AND table_type IN ('BASE TABLE', 'FOREIGN')
         ORDER BY table_name
       `,
         [schemaToUse]
@@ -358,7 +361,7 @@ export class PostgresConnector implements Connector {
           AND i.oid = ix.indexrelid
           AND a.attrelid = t.oid
           AND a.attnum = ANY(ix.indkey)
-          AND t.relkind = 'r'
+          AND t.relkind IN ('r','p')
           AND t.relname = $1
           AND ns.oid = t.relnamespace
           AND ns.nspname = $2

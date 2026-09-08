@@ -104,7 +104,7 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
       it('should list views without overlapping tables', async () => {
         // Verifies getViews() is wired and its query executes against the real
-        // database. getTables() (BASE TABLE only) and getViews() must be disjoint.
+        // database. getTables() (tables, never views) and getViews() must be disjoint.
         const tables = await this.connector.getTables();
         const views = await this.connector.getViews();
         expect(Array.isArray(views)).toBe(true);
