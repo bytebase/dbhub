@@ -497,10 +497,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
-  // Validate SSH host key verification mode if provided (MITM defense; CWE-295).
+  // Validate and normalize the SSH host key verification mode if provided
+  // (MITM defense; CWE-295). Normalizing here (rather than discarding the parse)
+  // makes the load boundary the single place synonyms like yes/no are resolved,
+  // so downstream code reads a canonical mode.
   if (source.ssh_host_key_check !== undefined) {
     try {
-      parseHostKeyCheckMode(String(source.ssh_host_key_check));
+      source.ssh_host_key_check = parseHostKeyCheckMode(String(source.ssh_host_key_check));
     } catch {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid ssh_host_key_check ` +

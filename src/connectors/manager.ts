@@ -9,28 +9,11 @@ import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
-import { parseHostKeyCheckMode } from "../utils/ssh-host-key.js";
-import { homedir } from "os";
-import path from "path";
+import { normalizeKnownHostsFiles } from "../utils/ssh-host-key.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
 const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000; // refresh before 15-minute token expiry
-
-/**
- * Normalize the `ssh_known_hosts` source field (a path, a list of paths, or a
- * whitespace/comma-separated string) into an array of absolute paths with `~/`
- * expanded. Returns undefined when unset so callers can fall back to defaults.
- */
-function normalizeKnownHostsFiles(value: string | string[] | undefined): string[] | undefined {
-  if (value === undefined) return undefined;
-  const raw = Array.isArray(value) ? value : value.split(/[\s,]+/);
-  const files = raw
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
-    .map((p) => (p.startsWith("~/") ? path.join(homedir(), p.substring(2)) : p));
-  return files.length > 0 ? files : undefined;
-}
 
 /**
  * Manages database connectors and provides a unified interface to work with them
@@ -195,9 +178,9 @@ export class ConnectorManager {
 
       // Host key verification (MITM defense; CWE-295). Explicit TOML fields win
       // over anything resolved from ~/.ssh/config; the tunnel defaults to strict.
-      const hostKeyCheck = source.ssh_host_key_check
-        ? parseHostKeyCheckMode(source.ssh_host_key_check)
-        : resolvedSSHConfig?.hostKeyCheck;
+      // The mode is already normalized at the load boundary (toml-loader / env),
+      // so it is read straight through here.
+      const hostKeyCheck = source.ssh_host_key_check ?? resolvedSSHConfig?.hostKeyCheck;
       const knownHostsFiles = normalizeKnownHostsFiles(source.ssh_known_hosts) ?? resolvedSSHConfig?.knownHostsFiles;
 
       const sshConfig: SSHTunnelConfig = {

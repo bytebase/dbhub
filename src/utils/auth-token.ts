@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { constantTimeEqual } from "./constant-time.js";
 
 /**
  * Result of validating an HTTP request's `Authorization` header against the
@@ -9,19 +9,6 @@ export type AuthTokenValidation =
   | { ok: false; status: 401; message: string };
 
 const BEARER_PREFIX = "Bearer ";
-
-/**
- * Constant-time string equality. `timingSafeEqual` throws on unequal-length
- * buffers, so unequal lengths are rejected up front — this leaks only the
- * length of the configured token, not which bytes matched, which is the same
- * trade-off `timingSafeEqual` itself makes.
- */
-function constantTimeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
-}
 
 /**
  * Bearer token auth for the HTTP transport (issue #66): "anyone with the

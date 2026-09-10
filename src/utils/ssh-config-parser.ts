@@ -3,6 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import SSHConfig from 'ssh-config';
 import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
+import { parseHostKeyCheckMode } from './ssh-host-key.js';
 
 type SSHConfigLookupResult = Omit<SSHTunnelConfig, 'username'> & {
   username?: string;
@@ -196,14 +197,21 @@ export function parseSSHConfig(
     }
 
     // StrictHostKeyChecking → host key verification mode (MITM defense; CWE-295).
-    // OpenSSH values: yes|no|accept-new|ask|off. "ask" can't prompt in a
-    // non-interactive server, so it maps to the safe "strict".
+    // Reuse the canonical parser (yes→strict, no→off, accept-new/off) so the
+    // synonym table lives in one place. "ask" can't prompt in a non-interactive
+    // server, so it maps to the safe "strict"; an unrecognized value is ignored
+    // (lenient config parsing) rather than failing the whole lookup.
     if (hostConfig.StrictHostKeyChecking) {
       const value = String(hostConfig.StrictHostKeyChecking).trim().toLowerCase();
-      if (value === 'yes') sshConfig.hostKeyCheck = 'strict';
-      else if (value === 'no' || value === 'off') sshConfig.hostKeyCheck = 'off';
-      else if (value === 'accept-new') sshConfig.hostKeyCheck = 'accept-new';
-      else if (value === 'ask') sshConfig.hostKeyCheck = 'strict';
+      if (value === 'ask') {
+        sshConfig.hostKeyCheck = 'strict';
+      } else {
+        try {
+          sshConfig.hostKeyCheck = parseHostKeyCheckMode(value);
+        } catch {
+          // Unknown StrictHostKeyChecking value — leave unset, tunnel default applies.
+        }
+      }
     }
 
     // UserKnownHostsFile → known_hosts file(s). May list several space-separated

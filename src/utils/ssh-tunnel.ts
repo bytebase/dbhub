@@ -260,9 +260,7 @@ export class SSHTunnel {
         client.destroy();
         // A rejected host key surfaces as a generic ssh2 handshake error; prefer
         // the specific verification reason we captured so operators can act on it.
-        const detail = rejectionReason
-          ? `${rejectionReason}`
-          : `${err.message}`;
+        const detail = rejectionReason ?? err.message;
         reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${detail}`));
       };
 

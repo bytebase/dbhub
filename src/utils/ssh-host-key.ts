@@ -2,6 +2,7 @@ import { createHash, createHmac } from "crypto";
 import { readFileSync, appendFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import path from "path";
+import { constantTimeEqual } from "./constant-time.js";
 
 /**
  * SSH host key verification for the SSH tunnel (GHSA / CWE-295).
@@ -71,6 +72,24 @@ export function getDefaultKnownHostsFiles(): string[] {
 }
 
 /**
+ * Normalize a `known_hosts` configuration value (a single path, a list of
+ * paths, or a whitespace/comma-separated string) into absolute paths with `~/`
+ * expanded to the home directory. Returns undefined when unset or empty so
+ * callers fall back to {@link getDefaultKnownHostsFiles}.
+ */
+export function normalizeKnownHostsFiles(
+  value: string | string[] | undefined
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  const raw = Array.isArray(value) ? value : value.split(/[\s,]+/);
+  const files = raw
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+    .map((p) => (p.startsWith("~/") ? path.join(homedir(), p.substring(2)) : p));
+  return files.length > 0 ? files : undefined;
+}
+
+/**
  * Compute the OpenSSH-style SHA256 fingerprint of a raw host-key blob (the
  * base64-decoded key that ssh2 hands the verifier). Format:
  * `SHA256:<base64(sha256(key)) without padding>`.
@@ -134,13 +153,11 @@ export function parseKnownHosts(contents: string): KnownHostsEntry[] {
  */
 function hostTokens(host: string, port: number): string[] {
   const lower = host.toLowerCase();
-  const tokens = new Set<string>();
-  if (port === 22) {
-    tokens.add(lower);
-  }
-  // Always also accept the bracketed form; some tools write `[host]:22`.
-  tokens.add(`[${lower}]:${port}`);
-  return [...tokens];
+  // Always accept the bracketed form; some tools write `[host]:22`. For the
+  // default port also accept the bare host, which is how OpenSSH stores it.
+  const tokens = [`[${lower}]:${port}`];
+  if (port === 22) tokens.push(lower);
+  return tokens;
 }
 
 /** Match a hashed known_hosts host pattern (`|1|<b64 salt>|<b64 hash>`). */
@@ -156,7 +173,7 @@ function matchesHashedHost(pattern: string, candidate: string): boolean {
     .update(candidate)
     .digest("base64")
     .replace(/=+$/, "");
-  return timingSafeStringEqual(actual, expected);
+  return constantTimeEqual(actual, expected);
 }
 
 /**
@@ -191,16 +208,6 @@ function hostFieldMatches(hostField: string, host: string, port: number): boolea
   return matched;
 }
 
-/** Constant-time-ish string comparison to avoid leaking match position. */
-function timingSafeStringEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
 export type HostKeyLookup =
   | { status: "match" }
   | { status: "revoked" }
@@ -230,7 +237,7 @@ export function lookupHostKey(
   for (const entry of entries) {
     if (!hostFieldMatches(entry.hostField, host, port)) continue;
     hostSeen = true;
-    const keyEqual = timingSafeStringEqual(entry.keyBase64, normalizedKey);
+    const keyEqual = constantTimeEqual(entry.keyBase64, normalizedKey);
     if (entry.marker === "@revoked") {
       if (keyEqual) return { status: "revoked" };
       continue;
@@ -334,7 +341,7 @@ export function decideHostKey(
   if (options.pinnedFingerprint) {
     const pinned = normalizeFingerprint(options.pinnedFingerprint);
     const presented = normalizeFingerprint(presentedFp);
-    if (timingSafeStringEqual(pinned, presented)) {
+    if (constantTimeEqual(pinned, presented)) {
       return { accepted: true, reason: `host key ${presentedFp} matches pinned fingerprint for ${target}` };
     }
     return {

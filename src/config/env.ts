@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
-import { parseHostKeyCheckMode } from "../utils/ssh-host-key.js";
+import { parseHostKeyCheckMode, normalizeKnownHostsFiles } from "../utils/ssh-host-key.js";
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
@@ -675,12 +675,8 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   // SSH known_hosts file override (optional; space/comma-separated for multiple).
   const knownHostsRaw = args["ssh-known-hosts"] ?? process.env.SSH_KNOWN_HOSTS;
   if (knownHostsRaw) {
-    const files = knownHostsRaw
-      .split(/[\s,]+/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0)
-      .map((p) => (p.startsWith("~/") ? path.join(process.env.HOME || "", p.substring(2)) : p));
-    if (files.length > 0) {
+    const files = normalizeKnownHostsFiles(knownHostsRaw);
+    if (files) {
       config.knownHostsFiles = files;
       sources.push(
         args["ssh-known-hosts"] ? "ssh-known-hosts from command line" : "SSH_KNOWN_HOSTS from environment"

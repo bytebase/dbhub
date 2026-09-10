@@ -23,10 +23,11 @@ export interface SSHConfig {
   ssh_keepalive_count_max?: number;
   /**
    * SSH host key verification mode (MITM defense; CWE-295):
-   * "strict" (default) | "accept-new" | "off". Also accepts OpenSSH synonyms
-   * "yes"/"no". Omit to use the secure default ("strict").
+   * "strict" (default) | "accept-new" | "off". The TOML file may also use the
+   * OpenSSH synonyms "yes"/"no"; those are normalized to a canonical mode at
+   * load time. Omit to use the secure default ("strict").
    */
-  ssh_host_key_check?: string;
+  ssh_host_key_check?: import("../utils/ssh-host-key.js").HostKeyCheckMode;
   /**
    * known_hosts file path(s) used for host key verification (and appended to
    * under accept-new). A single path or a list. When omitted, OpenSSH defaults
