@@ -530,7 +530,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### SSH Tunnel Options
 
 <ParamField path="ssh_*" type="group">
-  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_proxy_jump`.
+  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_proxy_jump`, `ssh_host_key_check`, `ssh_known_hosts`, `ssh_host_fingerprint`.
 
   ```toml
   [[sources]]
@@ -544,9 +544,16 @@ Sources define database connections. Each source represents a database that DBHu
   ssh_key = "~/.ssh/id_rsa"  # File path or base64-encoded key
   ssh_passphrase = "my_key_passphrase"  # Optional
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
+
+  # Host key verification (defends against man-in-the-middle on the tunnel)
+  ssh_host_key_check = "strict"          # "strict" (default) | "accept-new" | "off"
+  # ssh_known_hosts = "~/.ssh/known_hosts"   # override known_hosts location(s)
+  # ssh_host_fingerprint = "SHA256:..."      # pin the server host key instead
   ```
 
   `ssh_key` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format.
+
+  `ssh_host_key_check` controls how the bastion's host key is verified, defaulting to `strict`: the key must already be trusted (present in `ssh_known_hosts` or matching `ssh_host_fingerprint`), otherwise the connection is refused. This prevents an on-path attacker from impersonating the bastion and capturing credentials. Use `accept-new` to trust an unknown host on first use (and record it), or `off` to disable verification (insecure). Verification applies to every ProxyJump hop as well as the target.
 
   See [Command-Line Options - SSH Tunnel](/config/command-line#ssh-tunnel-options) for complete documentation and examples.
 </ParamField>

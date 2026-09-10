@@ -7,6 +7,7 @@ import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
+import { parseHostKeyCheckMode } from "../utils/ssh-host-key.js";
 
 /**
  * Load and parse TOML configuration file
@@ -492,6 +493,18 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid ssh_port. ` +
           `Must be between 1 and 65535.`
+      );
+    }
+  }
+
+  // Validate SSH host key verification mode if provided (MITM defense; CWE-295).
+  if (source.ssh_host_key_check !== undefined) {
+    try {
+      parseHostKeyCheckMode(String(source.ssh_host_key_check));
+    } catch {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid ssh_host_key_check ` +
+          `"${source.ssh_host_key_check}". Must be one of: strict, accept-new, off (or yes/no).`
       );
     }
   }

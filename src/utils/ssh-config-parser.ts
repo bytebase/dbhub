@@ -195,6 +195,28 @@ export function parseSSHConfig(
       console.error('Warning: ProxyCommand in SSH config is not supported by DBHub. Use ProxyJump instead.');
     }
 
+    // StrictHostKeyChecking → host key verification mode (MITM defense; CWE-295).
+    // OpenSSH values: yes|no|accept-new|ask|off. "ask" can't prompt in a
+    // non-interactive server, so it maps to the safe "strict".
+    if (hostConfig.StrictHostKeyChecking) {
+      const value = String(hostConfig.StrictHostKeyChecking).trim().toLowerCase();
+      if (value === 'yes') sshConfig.hostKeyCheck = 'strict';
+      else if (value === 'no' || value === 'off') sshConfig.hostKeyCheck = 'off';
+      else if (value === 'accept-new') sshConfig.hostKeyCheck = 'accept-new';
+      else if (value === 'ask') sshConfig.hostKeyCheck = 'strict';
+    }
+
+    // UserKnownHostsFile → known_hosts file(s). May list several space-separated
+    // paths; "none" disables file-based verification (left to pin/mode).
+    if (hostConfig.UserKnownHostsFile) {
+      const files = String(hostConfig.UserKnownHostsFile)
+        .split(/\s+/)
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0 && f.toLowerCase() !== 'none')
+        .map((f) => expandTilde(f));
+      if (files.length > 0) sshConfig.knownHostsFiles = files;
+    }
+
     // Validate that we have minimum required fields. Top-level `ssh_host` resolution
     // requires a username; ProxyJump alias hops can inherit it from the target.
     if (!sshConfig.host || (requireUser && !sshConfig.username)) {

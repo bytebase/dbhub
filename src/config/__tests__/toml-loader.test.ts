@@ -429,6 +429,37 @@ ssh_port = 99999
       expect(() => loadTomlConfig()).toThrow('invalid ssh_port');
     });
 
+    it('should throw error for invalid ssh_host_key_check', () => {
+      const tomlContent = `
+[[sources]]
+id = "test"
+dsn = "postgres://user:pass@localhost:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+ssh_host_key_check = "relaxed"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid ssh_host_key_check');
+    });
+
+    it('should accept a valid ssh_host_key_check mode', () => {
+      const tomlContent = `
+[[sources]]
+id = "test"
+dsn = "postgres://user:pass@localhost:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+ssh_host_key_check = "accept-new"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const config = loadTomlConfig();
+      expect(config.sources[0].ssh_host_key_check).toBe('accept-new');
+    });
+
     it('should throw error for non-existent config file specified by --config', () => {
       process.argv = ['node', 'test', '--config', '/nonexistent/path/config.toml'];
 

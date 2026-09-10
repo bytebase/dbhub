@@ -36,6 +36,31 @@ export interface SSHTunnelConfig {
   keepaliveCountMax?: number;
 
   /**
+   * Host key verification mode (defends against MITM on the tunnel; CWE-295):
+   * - `strict` (default): only a key matching a known_hosts entry or the pinned
+   *   fingerprint is accepted; unknown/changed/revoked keys are rejected.
+   * - `accept-new`: trust an unknown host on first use and remember it; a known
+   *   host must still match.
+   * - `off`: accept any key without verification (insecure opt-out).
+   * When omitted, the tunnel uses `strict`.
+   */
+  hostKeyCheck?: import("../utils/ssh-host-key.js").HostKeyCheckMode;
+
+  /**
+   * known_hosts file path(s) consulted for verification (and appended to under
+   * `accept-new`). When omitted, OpenSSH's defaults (`~/.ssh/known_hosts`,
+   * `~/.ssh/known_hosts2`) are used.
+   */
+  knownHostsFiles?: string[];
+
+  /**
+   * Optional pinned SSH host key fingerprint (`SHA256:...`) for the target
+   * server. When set it is the sole trust anchor for the target host, taking
+   * priority over known_hosts.
+   */
+  hostFingerprint?: string;
+
+  /**
    * Fully-resolved jump-host chain (in connection order), produced by
    * `resolveJumpHosts` from `proxyJump` + `~/.ssh/config`. When present, the tunnel
    * uses these (with their per-hop credentials) instead of re-parsing `proxyJump`

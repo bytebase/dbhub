@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 
 import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
+import { parseHostKeyCheckMode } from "../utils/ssh-host-key.js";
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
@@ -659,6 +660,45 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     sources.push("SSH_PROXY_JUMP from environment");
   }
 
+  // SSH host key verification mode (MITM defense; CWE-295). Default is strict
+  // (applied in the tunnel), so this only needs to capture an explicit override.
+  const hostKeyCheckRaw = args["ssh-host-key-check"] ?? process.env.SSH_HOST_KEY_CHECK;
+  if (hostKeyCheckRaw) {
+    config.hostKeyCheck = parseHostKeyCheckMode(hostKeyCheckRaw);
+    sources.push(
+      args["ssh-host-key-check"]
+        ? "ssh-host-key-check from command line"
+        : "SSH_HOST_KEY_CHECK from environment"
+    );
+  }
+
+  // SSH known_hosts file override (optional; space/comma-separated for multiple).
+  const knownHostsRaw = args["ssh-known-hosts"] ?? process.env.SSH_KNOWN_HOSTS;
+  if (knownHostsRaw) {
+    const files = knownHostsRaw
+      .split(/[\s,]+/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0)
+      .map((p) => (p.startsWith("~/") ? path.join(process.env.HOME || "", p.substring(2)) : p));
+    if (files.length > 0) {
+      config.knownHostsFiles = files;
+      sources.push(
+        args["ssh-known-hosts"] ? "ssh-known-hosts from command line" : "SSH_KNOWN_HOSTS from environment"
+      );
+    }
+  }
+
+  // SSH pinned host key fingerprint (optional; "SHA256:...").
+  const fingerprintRaw = args["ssh-host-fingerprint"] ?? process.env.SSH_HOST_FINGERPRINT;
+  if (fingerprintRaw) {
+    config.hostFingerprint = fingerprintRaw.trim();
+    sources.push(
+      args["ssh-host-fingerprint"]
+        ? "ssh-host-fingerprint from command line"
+        : "SSH_HOST_FINGERPRINT from environment"
+    );
+  }
+
   const parseNonNegativeInteger = (value: string, name: string): number => {
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed < 0) {
@@ -825,6 +865,9 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.ssh_passphrase = sshResult.config.passphrase;
       source.ssh_keepalive_interval = sshResult.config.keepaliveInterval;
       source.ssh_keepalive_count_max = sshResult.config.keepaliveCountMax;
+      if (sshResult.config.hostKeyCheck) source.ssh_host_key_check = sshResult.config.hostKeyCheck;
+      if (sshResult.config.knownHostsFiles) source.ssh_known_hosts = sshResult.config.knownHostsFiles;
+      if (sshResult.config.hostFingerprint) source.ssh_host_fingerprint = sshResult.config.hostFingerprint;
     }
 
     // Add init script for demo mode

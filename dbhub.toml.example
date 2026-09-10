@@ -83,6 +83,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # # ssh_passphrase = "your_key_passphrase"  # If key is encrypted
 # # ssh_keepalive_interval = 60  # Send keepalive every 60 seconds to prevent idle disconnects
 # # ssh_keepalive_count_max = 3  # Disconnect after 3 missed responses
+# # Host key verification (MITM defense). "strict" (default) rejects unknown/changed
+# # keys; "accept-new" trusts on first use; "off" disables verification (insecure).
+# # ssh_host_key_check = "strict"
+# # ssh_known_hosts = "~/.ssh/known_hosts"        # override known_hosts location(s)
+# # ssh_host_fingerprint = "SHA256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # pin the host key
 
 # Production PostgreSQL (multi-hop SSH through multiple jump hosts)
 # [[sources]]
@@ -377,6 +382,9 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_proxy_jump (ProxyJump for multi-hop: "jump1.com,user@jump2.com:2222")
 #   ssh_keepalive_interval (seconds between keepalive packets, default: 0 = disabled)
 #   ssh_keepalive_count_max (max missed keepalive responses, default: 3)
+#   ssh_host_key_check (host key verification: "strict" (default) | "accept-new" | "off")
+#   ssh_known_hosts (known_hosts file path(s); default ~/.ssh/known_hosts)
+#   ssh_host_fingerprint (pin the server host key: "SHA256:...")
 #
 # SSL Mode (for network databases, not SQLite):
 #   sslmode = "disable"      # No SSL

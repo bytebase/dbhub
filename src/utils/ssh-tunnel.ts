@@ -4,6 +4,12 @@ import { Server, createServer } from 'net';
 import type { Duplex } from 'stream';
 import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo, JumpHost } from '../types/ssh.js';
 import { resolveSymlink, parseJumpHosts } from './ssh-config-parser.js';
+import {
+  decideHostKey,
+  getDefaultKnownHostsFiles,
+  DEFAULT_HOST_KEY_CHECK_MODE,
+  type HostKeyVerifierOptions,
+} from './ssh-host-key.js';
 
 /**
  * SSH Tunnel implementation for secure database connections.
@@ -46,8 +52,20 @@ export class SSHTunnel {
         throw new Error('Either password or privateKey must be provided for SSH authentication');
       }
 
+      // Host key verification policy (MITM defense; CWE-295). Applied to every
+      // hop and the final target. A pinned fingerprint, when configured, is the
+      // target host's anchor only — jump hops verify via known_hosts.
+      const verificationBase: HostKeyVerifierOptions = {
+        mode: config.hostKeyCheck ?? DEFAULT_HOST_KEY_CHECK_MODE,
+        knownHostsFiles:
+          config.knownHostsFiles && config.knownHostsFiles.length > 0
+            ? config.knownHostsFiles
+            : getDefaultKnownHostsFiles(),
+        pinnedFingerprint: config.hostFingerprint,
+      };
+
       // Establish the SSH connection chain
-      const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer);
+      const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer, verificationBase);
 
       // Create local server for the tunnel
       return await this.createLocalTunnel(finalClient, options);
@@ -90,9 +108,15 @@ export class SSHTunnel {
   private async establishChain(
     jumpHosts: JumpHost[],
     targetConfig: SSHTunnelConfig,
-    privateKey: Buffer | undefined
+    privateKey: Buffer | undefined,
+    verificationBase: HostKeyVerifierOptions
   ): Promise<Client> {
     let previousStream: Duplex | undefined;
+
+    // Jump hops are verified against known_hosts (and the configured mode), but
+    // never against the target's pinned fingerprint — that fingerprint belongs
+    // to the final target host only.
+    const hopVerification: HostKeyVerifierOptions = { ...verificationBase, pinnedFingerprint: undefined };
 
     // Connect through each jump host
     for (let i = 0; i < jumpHosts.length; i++) {
@@ -124,7 +148,8 @@ export class SSHTunnel {
           previousStream,
           `jump host ${i + 1}`,
           targetConfig.keepaliveInterval,
-          targetConfig.keepaliveCountMax
+          targetConfig.keepaliveCountMax,
+          hopVerification
         );
 
         // Forward to the next host
@@ -158,7 +183,8 @@ export class SSHTunnel {
       previousStream,
       jumpHosts.length > 0 ? 'target host' : undefined,
       targetConfig.keepaliveInterval,
-      targetConfig.keepaliveCountMax
+      targetConfig.keepaliveCountMax,
+      verificationBase
     );
 
     this.sshClients.push(finalClient);
@@ -175,16 +201,33 @@ export class SSHTunnel {
     passphrase: string | undefined,
     sock: Duplex | undefined,
     label: string | undefined,
-    keepaliveInterval?: number,
-    keepaliveCountMax?: number
+    keepaliveInterval: number | undefined,
+    keepaliveCountMax: number | undefined,
+    verification: HostKeyVerifierOptions
   ): Promise<Client> {
     return new Promise((resolve, reject) => {
       const client = new Client();
 
+      // Host key verification (MITM defense; CWE-295). ssh2 accepts any key
+      // when no hostVerifier is set, so we always supply one and fail closed.
+      // The decision is synchronous; a rejection reason is captured here so the
+      // 'error' handler can surface it instead of ssh2's generic message.
+      let rejectionReason: string | undefined;
       const sshConfig: ConnectConfig = {
         host: hostInfo.host,
         port: hostInfo.port,
         username: hostInfo.username,
+        hostVerifier: (key: Buffer): boolean => {
+          const decision = decideHostKey(verification, hostInfo.host, hostInfo.port, key);
+          if (decision.accepted) {
+            if (verification.mode !== 'strict') {
+              console.error(`SSH host key: ${decision.reason}`);
+            }
+            return true;
+          }
+          rejectionReason = decision.reason;
+          return false;
+        },
       };
 
       if (password) {
@@ -215,7 +258,12 @@ export class SSHTunnel {
       const onError = (err: Error) => {
         client.removeListener('ready', onReady);
         client.destroy();
-        reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${err.message}`));
+        // A rejected host key surfaces as a generic ssh2 handshake error; prefer
+        // the specific verification reason we captured so operators can act on it.
+        const detail = rejectionReason
+          ? `${rejectionReason}`
+          : `${err.message}`;
+        reject(new Error(`SSH connection error${label ? ` (${label})` : ''}: ${detail}`));
       };
 
       const onReady = () => {

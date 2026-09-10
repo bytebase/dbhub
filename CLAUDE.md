@@ -203,6 +203,7 @@ DBHub supports SSH tunnels for secure database connections through bastion hosts
 - Support for both password and key-based authentication
 - Default SSH key detection (tries `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.)
 - Tunnel lifecycle managed by `ConnectorManager`
+- Host key verification (MITM defense, CWE-295) in `src/utils/ssh-host-key.ts`: every `ssh2` `client.connect()` (target and each ProxyJump hop) is given a `hostVerifier` that fails closed. Modes mirror OpenSSH `StrictHostKeyChecking`: `strict` (default — key must be in `known_hosts` or match a pinned `SHA256:` fingerprint), `accept-new` (trust-on-first-use, appends to `known_hosts`), `off` (accept any key, insecure opt-out). Configured per source via `ssh_host_key_check` / `ssh_known_hosts` / `ssh_host_fingerprint` (TOML) or `--ssh-host-key-check` / `--ssh-known-hosts` / `--ssh-host-fingerprint` (CLI/env); `StrictHostKeyChecking` and `UserKnownHostsFile` are also read from `~/.ssh/config` for aliases. known_hosts parsing handles plain and hashed (`|1|`) entries, `@revoked`, and negated patterns.
 
 ## Code Style
 

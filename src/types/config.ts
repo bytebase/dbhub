@@ -21,6 +21,23 @@ export interface SSHConfig {
   ssh_keepalive_interval?: number;
   /** Maximum number of missed keepalive responses before disconnecting (default: 3) */
   ssh_keepalive_count_max?: number;
+  /**
+   * SSH host key verification mode (MITM defense; CWE-295):
+   * "strict" (default) | "accept-new" | "off". Also accepts OpenSSH synonyms
+   * "yes"/"no". Omit to use the secure default ("strict").
+   */
+  ssh_host_key_check?: string;
+  /**
+   * known_hosts file path(s) used for host key verification (and appended to
+   * under accept-new). A single path or a list. When omitted, OpenSSH defaults
+   * (~/.ssh/known_hosts, ~/.ssh/known_hosts2) are used.
+   */
+  ssh_known_hosts?: string | string[];
+  /**
+   * Pinned SSH host key fingerprint ("SHA256:...") for the target server. When
+   * set, it is the sole trust anchor for the target host, ahead of known_hosts.
+   */
+  ssh_host_fingerprint?: string;
 }
 
 /**
