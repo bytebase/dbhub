@@ -65,7 +65,7 @@ class PostgresDSNParser implements DSNParser {
         port: url.port ? parseInt(url.port) : 5432,
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
         user: url.username,
-        password: url.password,
+        password: config?.password ?? url.password,
       };
 
       let sslmode: string | undefined;
@@ -205,6 +205,11 @@ export class PostgresConnector implements Connector {
       }
 
       this.pool = new Pool(poolConfig);
+      // pg removes failed idle clients itself. Keep the pool available so the
+      // next request can authenticate a replacement, including after idle timeouts.
+      this.pool.on("error", (error) => {
+        console.error(`PostgreSQL idle connection error for source '${this.sourceId}':`, error.message);
+      });
 
       // Test the connection
       const client = await this.pool.connect();

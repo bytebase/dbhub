@@ -7,6 +7,7 @@ const signerMocks = vi.hoisted(() => ({
 }));
 const credentialProviderMocks = vi.hoisted(() => ({
   fromIni: vi.fn(),
+  fromNodeProviderChain: vi.fn(),
 }));
 
 vi.mock('@aws-sdk/rds-signer', () => {
@@ -25,6 +26,7 @@ vi.mock('@aws-sdk/rds-signer', () => {
 
 vi.mock('@aws-sdk/credential-providers', () => ({
   fromIni: credentialProviderMocks.fromIni,
+  fromNodeProviderChain: credentialProviderMocks.fromNodeProviderChain,
 }));
 
 describe('generateRdsAuthToken', () => {
@@ -47,6 +49,7 @@ describe('generateRdsAuthToken', () => {
 
     expect(credentialProviderMocks.fromIni).toHaveBeenCalledWith({
       profile: 'ngqa',
+      ignoreCache: true,
     });
     expect(signerMocks.constructor).toHaveBeenCalledWith({
       hostname: 'mydb.abc123.us-east-1.rds.amazonaws.com',
@@ -59,6 +62,8 @@ describe('generateRdsAuthToken', () => {
 
   it('should create signer with expected params and return token', async () => {
     signerMocks.getAuthToken.mockResolvedValue('iam-token');
+    const defaultCredentials = vi.fn();
+    credentialProviderMocks.fromNodeProviderChain.mockReturnValue(defaultCredentials);
 
     const token = await generateRdsAuthToken({
       hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
@@ -66,12 +71,14 @@ describe('generateRdsAuthToken', () => {
       username: 'dbuser@example.com',
       region: 'eu-west-1',
     });
+    expect(credentialProviderMocks.fromNodeProviderChain).toHaveBeenCalledWith({ ignoreCache: true });
 
     expect(signerMocks.constructor).toHaveBeenCalledWith({
       hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
       port: 3306,
       username: 'dbuser@example.com',
       region: 'eu-west-1',
+      credentials: defaultCredentials,
     });
     expect(signerMocks.getAuthToken).toHaveBeenCalledTimes(1);
     expect(token).toBe('iam-token');

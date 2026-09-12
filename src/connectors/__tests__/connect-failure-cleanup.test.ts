@@ -96,6 +96,7 @@ describe("connect() failure cleanup", () => {
   it("PostgreSQL closes the pool when the connection probe fails", async () => {
     const end = vi.fn();
     pgPoolCtor.mockReturnValue({
+      on: vi.fn(),
       connect: vi.fn().mockRejectedValue(PROBE_FAILURE),
       end,
     });

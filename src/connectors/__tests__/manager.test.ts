@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectorManager } from "../manager.js";
+import { ConnectorRegistry, type Connector, type ConnectorConfig } from "../interface.js";
 import { SSHTunnel } from "../../utils/ssh-tunnel.js";
 import type { SourceConfig } from "../../types/config.js";
 import { homedir } from "os";
@@ -192,5 +193,115 @@ describe("ConnectorManager IAM DSN rewrite", () => {
     expect(dsn).toContain("connectTimeout=5000");
     expect(dsn).toContain("sslmode=require");
     expect(dsn).not.toContain("sslmode=disable");
+  });
+});
+
+describe("PostgreSQL IAM authentication on demand", () => {
+  const source: SourceConfig = {
+    id: "production", type: "postgres", host: "db.example.com", port: 5432,
+    database: "db", user: "db_user", aws_iam_auth: true,
+    aws_region: "us-east-1", aws_profile: "production", lazy: true,
+  };
+  let manager: ConnectorManager;
+  let config: ConnectorConfig;
+  let dsn: string;
+  const disconnect = vi.fn();
+  const connect = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    mocks.generateRdsAuthToken.mockReset().mockResolvedValue("token");
+    connect.mockReset().mockImplementation(async (value: string, _init: string, options: ConnectorConfig) => {
+      dsn = value;
+      config = options;
+      await options.password?.();
+    });
+    manager = new ConnectorManager();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue({
+      clone: () => ({
+        id: "postgres", disconnect, connect,
+      }),
+    } as unknown as Connector);
+  });
+
+  afterEach(async () => {
+    await manager.disconnect();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("authenticates new connections, never refreshes an idle source on a timer", async () => {
+    await manager.connectWithSources([source]);
+    expect(mocks.generateRdsAuthToken).not.toHaveBeenCalled();
+    await manager.ensureConnected(source.id);
+    expect(config.password).toBeTypeOf("function");
+    expect(dsn).not.toContain("token");
+    expect(dsn).toContain("sslmode=require");
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(1);
+
+    // A pool opening several sockets shares only the in-flight token request.
+    const password = config.password!;
+    await Promise.all(Array.from({ length: 8 }, () => password()));
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await expect(password()).rejects.toThrow("SSO session expired");
+    await expect(password()).resolves.toBe("token");
+    expect(manager.getConnector(source.id)).toBeDefined();
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(4);
+  });
+
+  it("retries failed initial authentication only when another request arrives", async () => {
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await manager.connectWithSources([source]);
+    await expect(manager.ensureConnected(source.id)).rejects.toThrow("SSO session expired");
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(1);
+    await Promise.all(Array.from({ length: 8 }, () => manager.ensureConnected(source.id)));
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
+    expect(manager.getSourceIds()).toEqual([source.id]);
+    expect(manager.getConnector(source.id)).toBeDefined();
+  });
+
+  it("signs the original endpoint through SSH and cleans up a failed authentication", async () => {
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    vi.spyOn(SSHTunnel.prototype, "establish").mockResolvedValue({
+      localPort: 15432, localHost: "127.0.0.1",
+    } as any);
+    const close = vi.spyOn(SSHTunnel.prototype, "close").mockResolvedValue();
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await manager.connectWithSources([{ ...source, sslmode: "verify-full",
+      ssh_host: "bastion.example.com", ssh_user: "user", ssh_key: "/fake/key" }]);
+    await expect(manager.ensureConnected(source.id)).rejects.toThrow("SSO session expired");
+    expect(close).toHaveBeenCalledTimes(1);
+    await manager.ensureConnected(source.id);
+    expect(dsn).toContain("127.0.0.1:15432");
+    expect(dsn).toContain("sslmode=verify-full");
+    expect(mocks.generateRdsAuthToken).toHaveBeenLastCalledWith({
+      hostname: "db.example.com", port: 5432, username: "db_user",
+      region: "us-east-1", profile: "production",
+    });
+  });
+
+  it("shares a still-running credential helper after an initial socket timeout", async () => {
+    let finishLogin!: (token: string) => void;
+    mocks.generateRdsAuthToken.mockReturnValueOnce(new Promise<string>(resolve => { finishLogin = resolve; }));
+    connect.mockImplementationOnce(async (_dsn, _init, options: ConnectorConfig) => {
+      void options.password!().catch(() => {});
+      throw new Error("Connection timeout");
+    });
+    await manager.connectWithSources([source]);
+    await expect(manager.ensureConnected(source.id)).rejects.toThrow("Connection timeout");
+    const retry = manager.ensureConnected(source.id);
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(1);
+    finishLogin("token");
+    await retry;
+    expect(manager.getConnector(source.id)).toBeDefined();
   });
 });

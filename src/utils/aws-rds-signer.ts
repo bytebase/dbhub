@@ -33,10 +33,12 @@ export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<
     region: params.region,
   };
 
-  if (params.profile) {
-    const { fromIni } = await import("@aws-sdk/credential-providers");
-    signerConfig.credentials = fromIni({ profile: params.profile });
-  }
+  const { fromIni, fromNodeProviderChain } = await import("@aws-sdk/credential-providers");
+  // Re-read replaced shared credentials on the next attempt after reauthentication.
+  // An explicit profile must not fall back to an unrelated ambient identity.
+  signerConfig.credentials = params.profile
+    ? fromIni({ profile: params.profile, ignoreCache: true })
+    : fromNodeProviderChain({ ignoreCache: true });
 
   const signer = new Signer(signerConfig);
 
