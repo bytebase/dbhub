@@ -86,7 +86,7 @@ class PostgresDSNParser implements DSNParser {
       } else if (sslmode === "require") {
         poolConfig.ssl = { rejectUnauthorized: false };
       } else if (sslmode === "verify-ca" || sslmode === "verify-full") {
-        const sslConfig: pg.ConnectionOptions["ssl"] & object = { rejectUnauthorized: true };
+        const sslConfig: pg.PoolConfig["ssl"] & object = { rejectUnauthorized: true };
         // verify-ca checks the certificate chain but does not verify the server hostname,
         // matching libpq behavior. verify-full (the default with rejectUnauthorized: true)
         // verifies both the certificate chain and the hostname.
