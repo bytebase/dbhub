@@ -105,7 +105,7 @@ class PostgresDSNParser implements DSNParser {
         port: url.port ? parseInt(url.port) : 5432,
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
         user: url.username,
-        password: url.password,
+        password: config?.password ?? url.password,
       };
 
       let sslmode: string | undefined;
