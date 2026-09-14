@@ -84,6 +84,7 @@ describe("connect() failure cleanup", () => {
     mariadbCreatePool.mockReturnValue({
       query: vi.fn().mockRejectedValue(PROBE_FAILURE),
       end,
+      on: vi.fn(),
     });
 
     const connector = new MariaDBConnector();
@@ -98,6 +99,7 @@ describe("connect() failure cleanup", () => {
     pgPoolCtor.mockReturnValue({
       connect: vi.fn().mockRejectedValue(PROBE_FAILURE),
       end,
+      on: vi.fn(),
     });
 
     const connector = new PostgresConnector();

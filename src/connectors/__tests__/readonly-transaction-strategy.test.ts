@@ -53,6 +53,8 @@ function makeFakePool(version: string, wrapResults: (rows: any[]) => any) {
     query: vi.fn(async () => wrapResults([{ version }])),
     getConnection: vi.fn(async () => conn),
     end: vi.fn(),
+    // Connectors attach a pool 'error' listener at connect time.
+    on: vi.fn(),
   };
   return { pool, conn, statements };
 }

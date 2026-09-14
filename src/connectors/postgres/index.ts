@@ -206,6 +206,18 @@ export class PostgresConnector implements Connector {
 
       this.pool = new Pool(poolConfig);
 
+      // pg-pool re-emits an idle client's error (server restart, failover,
+      // idle-timeout close) as an 'error' event on the pool. Without a listener
+      // Node treats it as unhandled and exits the whole process. The client has
+      // already been purged from the pool by the time this fires, so logging is
+      // all that is needed; the next query checks out a fresh connection.
+      this.pool.on("error", (err: Error) => {
+        console.error(
+          `PostgreSQL pool (source "${this.sourceId}"): idle connection dropped, will reconnect on next query:`,
+          err.message
+        );
+      });
+
       // Test the connection
       const client = await this.pool.connect();
       client.release();
