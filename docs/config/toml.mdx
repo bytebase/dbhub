@@ -245,6 +245,34 @@ Sources define database connections. Each source represents a database that DBHu
   another AWS identity. When `aws_profile` is omitted, the AWS SDK default
   credential chain is used.
 
+  PostgreSQL generates a token when the driver opens a physical connection.
+  Existing pooled connections stay open; DBHub does not refresh PostgreSQL IAM
+  credentials on a timer. If a server closes an idle session, the next request
+  opens a replacement using a fresh token. Sources can have different server
+  idle timeouts without configuring a matching refresh interval in DBHub.
+
+  Credential renewal follows your AWS configuration. A `credential_process`
+  helper can renew credentials silently or perform its own browser login.
+  With AWS SSO, complete `aws sso login --profile <profile>` when the SDK
+  reports that login is required, then retry the request. A failed attempt
+  remains retryable; DBHub does not automatically replay SQL or repeatedly
+  retry authentication in the background. Concurrent PostgreSQL connections
+  for one source share an in-progress token request.
+
+  Use `lazy = true` to defer the initial connection and authentication until
+  the first request. Otherwise, the initial connection is checked at startup.
+  `connection_timeout` includes time spent waiting for the password callback;
+  a credential helper's browser login may outlast it. Completing login and
+  retrying is supported, but a socket timeout does not cancel the helper.
+
+  Replaced shared-credential-file values are read on the next authentication
+  attempt. Changes to environment variables in another shell cannot update a
+  running DBHub process; use a refreshable credential provider for temporary
+  credentials. Direct assume-role MFA prompts require a credential helper;
+  DBHub does not supply an interactive MFA callback.
+
+  MySQL and MariaDB continue to use periodic IAM pool refresh.
+
   ```toml
   [[sources]]
   id = "production"

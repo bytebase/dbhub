@@ -9,6 +9,7 @@ import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
+import { closeQuietly } from "../utils/resource-cleanup.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -30,6 +31,9 @@ export class ConnectorManager {
   // Lazy connection support
   private lazySources: Map<string, SourceConfig> = new Map(); // Sources pending lazy connection
   private pendingConnections: Map<string, Promise<void>> = new Map(); // Prevent race conditions
+  // A socket timeout does not cancel a credential helper. Share its in-flight
+  // attempt across retries of the same config, but never across changed profiles.
+  private pendingIamTokens = new WeakMap<SourceConfig, Promise<string>>();
 
   constructor() {
     if (!managerInstance) {
@@ -142,8 +146,9 @@ export class ConnectorManager {
    */
   private async connectSource(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
+    const config: ConnectorConfig = {};
     // Build DSN from source config
-    const dsn = await this.buildConnectionDSN(source);
+    const dsn = await this.buildConnectionDSN(source, config);
     console.error(`  - ${sourceId}: ${redactDSN(dsn)}`);
 
     // Setup SSH tunnel if needed
@@ -251,7 +256,6 @@ export class ConnectorManager {
     (connector as any).sourceId = sourceId;
 
     // Build config for database-specific options
-    const config: ConnectorConfig = {};
     if (source.connection_timeout !== undefined) {
       config.connectionTimeoutSeconds = source.connection_timeout;
     }
@@ -282,7 +286,17 @@ export class ConnectorManager {
     }
 
     // Connect to the database with config and optional init script
-    await connector.connect(actualDSN, source.init_script, config);
+    try {
+      await connector.connect(actualDSN, source.init_script, config);
+    } catch (error) {
+      // On-demand authentication can fail after the tunnel has been opened.
+      const tunnel = this.sshTunnels.get(sourceId);
+      if (tunnel) {
+        this.sshTunnels.delete(sourceId);
+        await closeQuietly(() => tunnel.close());
+      }
+      throw error;
+    }
 
     // Store connector
     this.connectors.set(sourceId, connector);
@@ -295,7 +309,7 @@ export class ConnectorManager {
     // Store source config (for API exposure)
     this.sourceConfigs.set(sourceId, source);
 
-    // Keep AWS IAM auth sources fresh by rotating pool credentials before token expiry.
+    // MySQL/MariaDB still rotate pools; PostgreSQL authenticates on demand.
     this.scheduleIamRefresh(source);
   }
 
@@ -465,7 +479,7 @@ export class ConnectorManager {
       clearTimeout(existingTimer);
       this.iamRefreshTimers.delete(sourceId);
     }
-    if (!source.aws_iam_auth) {
+    if (!source.aws_iam_auth || source.type === "postgres") {
       return;
     }
 
@@ -522,7 +536,7 @@ export class ConnectorManager {
    * Build a connection DSN, optionally replacing password with
    * an AWS RDS IAM auth token when aws_iam_auth is enabled.
    */
-  private async buildConnectionDSN(source: SourceConfig): Promise<string> {
+  private async buildConnectionDSN(source: SourceConfig, config: ConnectorConfig = {}): Promise<string> {
     const dsn = buildDSNFromSource(source);
 
     if (!source.aws_iam_auth) {
@@ -553,13 +567,22 @@ export class ConnectorManager {
       );
     }
 
-    const token = await generateRdsAuthToken({
-      hostname,
-      port,
-      username,
-      region: source.aws_region,
-      profile: source.aws_profile,
-    });
+    // Share concurrent authentication attempts, never retain a failed promise or
+    // cache a token's lifetime ourselves. The AWS provider owns credential refresh.
+    const password = () => {
+      let pending = this.pendingIamTokens.get(source);
+      if (!pending) {
+        pending = generateRdsAuthToken({
+          hostname, port, username, region: source.aws_region!, profile: source.aws_profile,
+        }).finally(() => { this.pendingIamTokens.delete(source); });
+        this.pendingIamTokens.set(source, pending);
+      }
+      return pending;
+    };
+    if (source.type === "postgres") {
+      config.password = password;
+    }
+    const token = source.type === "postgres" ? "" : await password();
 
     const queryParams = new Map(parsed.searchParams);
     const currentSslMode = queryParams.get("sslmode");

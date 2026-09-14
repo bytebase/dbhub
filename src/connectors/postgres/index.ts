@@ -65,7 +65,7 @@ class PostgresDSNParser implements DSNParser {
         port: url.port ? parseInt(url.port) : 5432,
         database: url.pathname ? url.pathname.substring(1) : '', // Remove leading '/' if exists
         user: url.username,
-        password: url.password,
+        password: config?.password ?? url.password,
       };
 
       let sslmode: string | undefined;
@@ -86,7 +86,7 @@ class PostgresDSNParser implements DSNParser {
       } else if (sslmode === "require") {
         poolConfig.ssl = { rejectUnauthorized: false };
       } else if (sslmode === "verify-ca" || sslmode === "verify-full") {
-        const sslConfig: pg.ConnectionOptions["ssl"] & object = { rejectUnauthorized: true };
+        const sslConfig: pg.PoolConfig["ssl"] & object = { rejectUnauthorized: true };
         // verify-ca checks the certificate chain but does not verify the server hostname,
         // matching libpq behavior. verify-full (the default with rejectUnauthorized: true)
         // verifies both the certificate chain and the hostname.
@@ -205,6 +205,11 @@ export class PostgresConnector implements Connector {
       }
 
       this.pool = new Pool(poolConfig);
+      // pg removes failed idle clients itself. Keep the pool available so the
+      // next request can authenticate a replacement, including after idle timeouts.
+      this.pool.on("error", (error) => {
+        console.error(`PostgreSQL idle connection error for source '${this.sourceId}':`, error.message);
+      });
 
       // pg-pool re-emits an idle client's error (server restart, failover,
       // idle-timeout close) as an 'error' event on the pool. Without a listener
