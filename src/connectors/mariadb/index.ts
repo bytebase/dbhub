@@ -162,6 +162,20 @@ export class MariaDBConnector implements Connector {
 
       this.pool = mariadb.createPool(connectionConfig);
 
+      // The mariadb pool keeps `minimumIdle` connections open in the background
+      // (defaults to connectionLimit) and emits an 'error' event on the pool when
+      // one of those background reconnect attempts fails, e.g. while the server
+      // is restarting. Without a listener Node treats it as unhandled and exits
+      // the whole process. The pool retries with backoff on its own, so logging
+      // is all that is needed here. The typings omit this event, but the runtime
+      // Pool is an EventEmitter.
+      (this.pool as unknown as NodeJS.EventEmitter).on("error", (err: Error) => {
+        console.error(
+          `MariaDB pool (source "${this.sourceId}"): background connection error, pool will retry:`,
+          err.message
+        );
+      });
+
       // Test the connection and detect the server flavor in the same round trip.
       const rows = await this.pool.query("SELECT VERSION() AS version");
       this.supportsReadOnlyTransaction = !isTiDBVersion(rows?.[0]?.version);
