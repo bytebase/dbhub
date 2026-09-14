@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@bytebase/dbhub@1.2.3",
+        "@bytebase/dbhub@1.2.4",
         "--transport",
         "stdio",
         "--config",
