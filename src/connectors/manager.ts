@@ -97,7 +97,7 @@ export class ConnectorManager {
     if (!lazySource) {
       if (sourceId) {
         throw new Error(
-          `Source '${sourceId}' not found. Available sources: ${this.sourceIds.join(", ")}`
+          `Source '${sourceId}' not found. Available sources: ${this.getAvailableSourceIds().join(", ")}`
         );
       } else {
         throw new Error("No sources configured. Call connectWithSources() first.");
@@ -352,7 +352,7 @@ export class ConnectorManager {
     if (!connector) {
       if (sourceId) {
         throw new Error(
-          `Source '${sourceId}' not found. Available sources: ${this.sourceIds.join(", ")}`
+          `Source '${sourceId}' not found. Available sources: ${this.getAvailableSourceIds().join(", ")}`
         );
       } else {
         throw new Error("No sources connected. Call connectWithSources() first.");
@@ -394,6 +394,15 @@ export class ConnectorManager {
    */
   getSourceIds(): string[] {
     return [...this.sourceIds];
+  }
+
+  /**
+   * Source IDs that can actually serve a request: connected, or registered for
+   * lazy (re)connection on first use. Used for error messages so a source that
+   * is neither is not reported as available.
+   */
+  private getAvailableSourceIds(): string[] {
+    return this.sourceIds.filter(id => this.connectors.has(id) || this.lazySources.has(id));
   }
 
   /** Get all available source IDs */
@@ -481,8 +490,10 @@ export class ConnectorManager {
           error
         );
       } finally {
-        // Continue rotating as long as source remains configured and not shutting down.
-        if (!this.isDisconnecting && this.sourceConfigs.has(sourceId)) {
+        // Continue rotating only while the source is still connected and not shutting
+        // down. A source whose refresh failed has been handed back to lazySources, and
+        // its next successful connectSource() re-arms the timer.
+        if (!this.isDisconnecting && this.connectors.has(sourceId)) {
           this.scheduleIamRefresh(source);
         }
       }
@@ -515,7 +526,17 @@ export class ConnectorManager {
       return;
     }
 
-    await this.connectSource(source);
+    try {
+      await this.connectSource(source);
+    } catch (error) {
+      // The old connector is already gone. Register the source for lazy reconnection so
+      // the next tool call retries (e.g. after the user re-authenticates) instead of
+      // failing forever with "Source not found".
+      if (!this.isDisconnecting && this.sourceConfigs.has(sourceId)) {
+        this.lazySources.set(sourceId, source);
+      }
+      throw error;
+    }
   }
 
   /**
