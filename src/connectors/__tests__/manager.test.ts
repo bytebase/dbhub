@@ -293,12 +293,56 @@ describe("ConnectorManager IAM refresh recovery", () => {
     await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
     expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
 
-    // No further ticks: reconnection is driven by the next tool call, not a timer that
-    // would otherwise fire every 14 minutes and return at the guard.
+    // The timer must not be re-armed for a source that is no longer connected. (The
+    // previous implementation re-armed here and then returned at the guard on every
+    // later tick, so the token call count alone cannot tell the two apart.)
+    expect(vi.getTimerCount()).toBe(0);
+
+    // No further ticks: reconnection is driven by the next tool call.
     await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS * 3);
     expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
 
     await manager.disconnect();
+  });
+
+  it("should close the SSH tunnel when the database connection fails so a retry does not leak it", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockResolvedValue({ localPort: 55555, targetHost: "db.internal", targetPort: 5432 });
+    const closeSpy = vi.spyOn(SSHTunnel.prototype, "close").mockResolvedValue(undefined);
+    const prototype = ConnectorRegistry.getConnectorForDSN("postgres://x") as any;
+    const originalClone = prototype.clone;
+    prototype.clone = () => {
+      const instance = originalClone();
+      instance.connect.mockRejectedValue(new Error("password authentication failed"));
+      return instance;
+    };
+
+    const manager = new ConnectorManager();
+    const source: SourceConfig = {
+      id: "pg_ssh",
+      type: "postgres",
+      dsn: "postgres://user:pass@db.internal:5432/mydb",
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_password: "secret",
+      lazy: true,
+    };
+    await manager.connectWithSources([source]);
+
+    await expect(manager.ensureConnected("pg_ssh")).rejects.toThrow("password authentication failed");
+    expect(establishSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect((manager as any).sshTunnels.size).toBe(0);
+
+    // A retry opens exactly one new tunnel and, on failure, closes that one too.
+    await expect(manager.ensureConnected("pg_ssh")).rejects.toThrow("password authentication failed");
+    expect(establishSpy).toHaveBeenCalledTimes(2);
+    expect(closeSpy).toHaveBeenCalledTimes(2);
+    expect((manager as any).sshTunnels.size).toBe(0);
+    expect(instances).toHaveLength(2);
   });
 
   it("should not list a source as available when it can neither serve nor reconnect", () => {

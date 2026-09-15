@@ -148,6 +148,7 @@ export class ConnectorManager {
 
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
+    let tunnel: SSHTunnel | undefined;
     if (source.ssh_host) {
       const sshConfigPath = getDefaultSSHConfigPath();
       // If ssh_host looks like an SSH config alias, resolve from ~/.ssh/config
@@ -208,7 +209,7 @@ export class ConnectorManager {
       const targetPort = parseInt(url.port) || this.getDefaultPort(dsn);
 
       // Create and establish SSH tunnel
-      const tunnel = new SSHTunnel();
+      tunnel = new SSHTunnel();
       let tunnelInfo: SSHTunnelInfo;
       try {
         tunnelInfo = await tunnel.establish(sshConfig, {
@@ -281,8 +282,23 @@ export class ConnectorManager {
       config.collation = source.collation;
     }
 
-    // Connect to the database with config and optional init script
-    await connector.connect(actualDSN, source.init_script, config);
+    // Connect to the database with config and optional init script. If this fails,
+    // close the tunnel established for this attempt: the source may be retried (lazy
+    // connection or a failed IAM refresh), and each retry would otherwise open a new
+    // tunnel and orphan this one's SSH clients and local listener.
+    try {
+      await connector.connect(actualDSN, source.init_script, config);
+    } catch (error) {
+      if (tunnel) {
+        this.sshTunnels.delete(sourceId);
+        try {
+          await tunnel.close();
+        } catch (closeError) {
+          console.error(`Error closing SSH tunnel for source '${sourceId}':`, closeError);
+        }
+      }
+      throw error;
+    }
 
     // Store connector
     this.connectors.set(sourceId, connector);
