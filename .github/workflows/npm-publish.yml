@@ -203,7 +203,34 @@ jobs:
 
       - name: Publish to MCP Registry
         if: env.SHOULD_PUBLISH == 'true' && env.SHOULD_PUBLISH_MCP == 'true'
-        run: ./mcp-publisher publish
+        run: |
+          max_attempts=10
+          retry_delay_seconds=15
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Publishing to MCP Registry (attempt ${attempt}/${max_attempts})..."
+
+            if output=$(./mcp-publisher publish 2>&1); then
+              echo "$output"
+              echo "✅ Successfully published to MCP Registry!"
+              exit 0
+            fi
+
+            echo "$output"
+
+            if ! grep -Fq "version '${PACKAGE_VERSION}' was not found" <<< "$output"; then
+              echo "Registry publish failed with a non-retryable error."
+              exit 1
+            fi
+
+            if [ "$attempt" -eq "$max_attempts" ]; then
+              echo "MCP Registry still could not see @bytebase/dbhub@${PACKAGE_VERSION} after ${max_attempts} attempts."
+              exit 1
+            fi
+
+            echo "MCP Registry has not observed @bytebase/dbhub@${PACKAGE_VERSION} yet. Waiting ${retry_delay_seconds}s before retrying..."
+            sleep "$retry_delay_seconds"
+          done
 
       # Display a message when skipping publication
       - name: Skip publishing
