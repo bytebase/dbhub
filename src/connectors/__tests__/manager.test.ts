@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectorManager } from "../manager.js";
+import { ConnectorRegistry } from "../interface.js";
 import { SSHTunnel } from "../../utils/ssh-tunnel.js";
 import type { SourceConfig } from "../../types/config.js";
 import { homedir } from "os";
@@ -192,5 +193,121 @@ describe("ConnectorManager IAM DSN rewrite", () => {
     expect(dsn).toContain("connectTimeout=5000");
     expect(dsn).toContain("sslmode=require");
     expect(dsn).not.toContain("sslmode=disable");
+  });
+});
+
+describe("ConnectorManager IAM refresh recovery", () => {
+  const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000;
+
+  function makeIamSource(): SourceConfig {
+    return {
+      id: "mysql_iam",
+      type: "mysql",
+      dsn: "mysql://dbuser:ignored@mydb.abc123.eu-west-1.rds.amazonaws.com:3306/mydb",
+      aws_iam_auth: true,
+      aws_region: "eu-west-1",
+    };
+  }
+
+  function stubConnectorRegistry() {
+    const instances: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+    const prototype = {
+      id: "mysql",
+      clone: () => {
+        const instance = {
+          id: "mysql",
+          connect: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn().mockResolvedValue(undefined),
+        };
+        instances.push(instance);
+        return instance;
+      },
+    };
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(prototype as any);
+    return instances;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("should recover a source whose IAM refresh failed once credentials are valid again", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-1");
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+    expect(instances).toHaveLength(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[0]);
+
+    // Refresh tick fires while the SSO session is expired: minting the token throws.
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
+
+    // The source stays known and is still listed as available, because a tool call
+    // will retry the connection. Before the fix this threw "Source 'mysql_iam' not
+    // found. Available sources: mysql_iam" and there was no way back.
+    expect(manager.getSourceIds()).toEqual(["mysql_iam"]);
+
+    // Still broken: the next tool call surfaces the real cause, not "not found".
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await expect(manager.ensureConnected("mysql_iam")).rejects.toThrow("SSO session expired");
+
+    // User re-authenticates: the next tool call reconnects transparently.
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-2");
+    await manager.ensureConnected("mysql_iam");
+    expect(instances).toHaveLength(2);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[1]);
+    expect(instances[1].connect).toHaveBeenCalledWith(
+      expect.stringContaining("token-2"),
+      undefined,
+      expect.any(Object)
+    );
+
+    // Refresh rotation resumes for the recovered connection.
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-3");
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances).toHaveLength(3);
+    expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[2]);
+
+    await manager.disconnect();
+  });
+
+  it("should stop re-arming the refresh timer for a source that is no longer connected", async () => {
+    stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-1");
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
+
+    // No further ticks: reconnection is driven by the next tool call, not a timer that
+    // would otherwise fire every 14 minutes and return at the guard.
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS * 3);
+    expect(mocks.generateRdsAuthToken).toHaveBeenCalledTimes(2);
+
+    await manager.disconnect();
+  });
+
+  it("should not list a source as available when it can neither serve nor reconnect", () => {
+    const manager = new ConnectorManager();
+    (manager as any).sourceIds = ["alive", "dead"];
+    (manager as any).connectors.set("alive", {});
+
+    expect(() => manager.getConnector("dead")).toThrow(
+      /^Source 'dead' not found\. Available sources: alive$/
+    );
   });
 });
