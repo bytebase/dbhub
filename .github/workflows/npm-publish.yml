@@ -170,14 +170,15 @@ jobs:
           npm publish --access public --tag ${{ env.NPM_TAG }} --provenance
           echo "✅ Successfully published to npm with provenance!"
 
-      # ---- MCP Registry publish (runs only after a successful npm publish) ----
+      # ---- MCP Registry publish ----
       # The registry validates that the npm package version referenced by
-      # server.json exists, so these steps must come after npm publish.
+      # server.json exists, so these steps come after npm publish. They are
+      # deliberately NOT gated on SHOULD_PUBLISH: if a previous run published to
+      # npm but failed to register (e.g. the registry checked npm before the new
+      # version had propagated), re-running the job must still register it.
 
-      # Skip if server.json's version is already in the MCP Registry (e.g. a
-      # manual npm re-publish where server.json didn't change).
+      # Skip if server.json's version is already in the MCP Registry.
       - name: Check MCP Registry for existing version
-        if: env.SHOULD_PUBLISH == 'true'
         run: |
           NAME=$(jq -r '.name' server.json)
           VERSION=$(jq -r '.version' server.json)
@@ -192,17 +193,35 @@ jobs:
             echo "SHOULD_PUBLISH_MCP=true" >> $GITHUB_ENV
           fi
 
+      # A freshly published version can take a little while to become visible on
+      # the npm registry, and the MCP Registry rejects a server.json that points
+      # at a version it cannot see yet. Poll until it is there.
+      - name: Wait for npm to serve the version
+        if: env.SHOULD_PUBLISH_MCP == 'true'
+        run: |
+          VERSION=$(jq -r '.version' server.json)
+          for attempt in $(seq 1 30); do
+            if npm view "@bytebase/dbhub@${VERSION}" version &> /dev/null; then
+              echo "@bytebase/dbhub@${VERSION} is visible on npm."
+              exit 0
+            fi
+            echo "Attempt ${attempt}/30: @bytebase/dbhub@${VERSION} not visible on npm yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::@bytebase/dbhub@${VERSION} did not appear on npm within 5 minutes; cannot register it in the MCP Registry."
+          exit 1
+
       - name: Install MCP Publisher
-        if: env.SHOULD_PUBLISH == 'true' && env.SHOULD_PUBLISH_MCP == 'true'
+        if: env.SHOULD_PUBLISH_MCP == 'true'
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Login to MCP Registry
-        if: env.SHOULD_PUBLISH == 'true' && env.SHOULD_PUBLISH_MCP == 'true'
+        if: env.SHOULD_PUBLISH_MCP == 'true'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        if: env.SHOULD_PUBLISH == 'true' && env.SHOULD_PUBLISH_MCP == 'true'
+        if: env.SHOULD_PUBLISH_MCP == 'true'
         run: ./mcp-publisher publish
 
       # Display a message when skipping publication
