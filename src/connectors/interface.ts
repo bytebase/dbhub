@@ -142,6 +142,8 @@ export interface ConnectorConfig {
   connectionTimeoutSeconds?: number;
   /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
   queryTimeoutSeconds?: number;
+  /** Maximum connections in a PostgreSQL source pool */
+  poolMaxConnections?: number;
   /**
    * Read-only mode for SDK-level enforcement (PostgreSQL, SQLite)
    * - PostgreSQL: Sets default_transaction_read_only at connection level

@@ -20,6 +20,7 @@
 id = "local_pg"
 description = "Local development database"
 dsn = "postgres://postgres:postgres@localhost:5432/myapp"
+# pool_max_connections = 5  # Optional: per-process, per-source pool limit (default: 10)
 
 # Local PostgreSQL - Individual parameters (use when password contains special characters like @, :, /)
 # [[sources]]

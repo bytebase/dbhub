@@ -46,6 +46,7 @@ class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
     const queryTimeoutSeconds = config?.queryTimeoutSeconds;
+    const poolMaxConnections = config?.poolMaxConnections;
     // Basic validation
     if (!this.isValidDSN(dsn)) {
       const obfuscatedDSN = obfuscateDSNPassword(dsn);
@@ -124,6 +125,10 @@ class PostgresDSNParser implements DSNParser {
         const queryTimeoutMs = queryTimeoutSeconds * 1000;
         poolConfig.statement_timeout = queryTimeoutMs;
         poolConfig.query_timeout = queryTimeoutMs + POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS;
+      }
+
+      if (poolMaxConnections !== undefined) {
+        poolConfig.max = poolMaxConnections;
       }
 
       return poolConfig;
