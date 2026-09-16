@@ -260,6 +260,9 @@ export class ConnectorManager {
     if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
       config.queryTimeoutSeconds = source.query_timeout;
     }
+    if (source.pool_max_connections !== undefined) {
+      config.poolMaxConnections = source.pool_max_connections;
+    }
     // Note: read-only enforcement is per-tool, not per-source. It is applied at
     // execution time via ExecuteOptions.readonly. Some connectors also add an
     // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),

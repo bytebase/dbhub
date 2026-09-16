@@ -482,6 +482,24 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  if (source.pool_max_connections !== undefined) {
+    if (source.type !== "postgres") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has 'pool_max_connections' but it is only supported for PostgreSQL sources.`
+      );
+    }
+    if (
+      !Number.isInteger(source.pool_max_connections) ||
+      source.pool_max_connections < 1 ||
+      source.pool_max_connections > 1000
+    ) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid pool_max_connections. ` +
+          `Must be an integer between 1 and 1000.`
+      );
+    }
+  }
+
   // Validate SSH port if provided
   if (source.ssh_port !== undefined) {
     if (

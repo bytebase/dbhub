@@ -111,6 +111,24 @@ describe('DSN Parser - PostgreSQL query timeout', () => {
   });
 });
 
+describe('DSN Parser - PostgreSQL pool size', () => {
+  it('maps the configured maximum to pg PoolConfig.max', async () => {
+    const parser = new PostgresConnector().dsnParser;
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db', {
+      poolMaxConnections: 5,
+    });
+
+    expect(config.max).toBe(5);
+  });
+
+  it('leaves pg defaults unchanged when no maximum is configured', async () => {
+    const parser = new PostgresConnector().dsnParser;
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db');
+
+    expect(config.max).toBeUndefined();
+  });
+});
+
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {
     const connector = new MySQLConnector();

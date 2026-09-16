@@ -1144,6 +1144,52 @@ query_timeout = 120
       });
     });
 
+    describe('pool_max_connections validation', () => {
+      it('should accept a positive integer for PostgreSQL', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+pool_max_connections = 5
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result?.sources[0].pool_max_connections).toBe(5);
+      });
+
+      it.each([
+        ['zero', '0'],
+        ['negative', '-1'],
+        ['fractional', '1.5'],
+        ['string', '"5"'],
+        ['above the limit', '1001'],
+      ])('should reject a %s value', (_label, value) => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+pool_max_connections = ${value}
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid pool_max_connections');
+      });
+
+      it('should reject pool_max_connections for non-PostgreSQL sources', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+pool_max_connections = 5
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('only supported for PostgreSQL');
+      });
+    });
+
     describe('search_path validation', () => {
       it('should accept search_path for PostgreSQL source', () => {
         const tomlContent = `

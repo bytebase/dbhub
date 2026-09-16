@@ -196,6 +196,34 @@ describe("ConnectorManager IAM DSN rewrite", () => {
   });
 });
 
+describe("ConnectorManager PostgreSQL pool configuration", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("passes pool_max_connections to the connector", async () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue({
+      id: "postgres",
+      clone: () => ({ id: "postgres", connect, disconnect: vi.fn() }),
+    } as any);
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([{
+      id: "postgres",
+      type: "postgres",
+      dsn: "postgres://user:pass@localhost:5432/db",
+      pool_max_connections: 5,
+    }]);
+
+    expect(connect).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ poolMaxConnections: 5 })
+    );
+  });
+});
+
 describe("ConnectorManager IAM refresh recovery", () => {
   const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000;
 
