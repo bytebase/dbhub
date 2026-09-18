@@ -118,13 +118,14 @@ The [Claude Code Plugin](/claude-code-plugin) registers the DBHub MCP server in 
           - --port
           - "8080"
           - --dsn
-          - "postgres://user:password@database:5432/dbname"
+          - "postgres://user:password@database:5432/dbname?sslmode=disable"
         depends_on:
           - database
 
       database:
-        image: postgres:15-alpine
+        image: postgres:18-alpine
         environment:
+          POSTGRES_USER: user
           POSTGRES_PASSWORD: password
           POSTGRES_DB: dbname
     ```
