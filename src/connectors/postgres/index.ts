@@ -712,9 +712,10 @@ export class PostgresConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - apply maxRows (with a truncation probe row) if applicable
         const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-          statements[0],
-          options.maxRows
-        );
+            statements[0],
+            options.maxRows,
+            "postgres"
+          );
 
         // Engine-level read-only enforcement: when the tool is read-only, run the
         // statement inside a READ ONLY transaction so the database itself rejects any
@@ -780,9 +781,10 @@ export class PostgresConnector implements Connector {
           for (let statement of statements) {
             // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
             const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-              statement,
-              options.maxRows
-            );
+            statement,
+            options.maxRows,
+            "postgres"
+          );
 
             const result = await client.query(processedStatement);
             const resultSet: SQLResultSet = {

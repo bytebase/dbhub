@@ -396,24 +396,22 @@ describe('MySQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
-    it('should not apply maxRows to CTE queries (WITH clause)', async () => {
-      // Test that maxRows is not applied to CTE queries (WITH clause)
-      try {
-        const result = await mysqlTest.connector.executeSQL(`
-          WITH user_summary AS (
-            SELECT name, age FROM users WHERE age IS NOT NULL
-          )
-          SELECT * FROM user_summary ORDER BY age
-        `, { maxRows: 2 });
-        
-        // Should return all rows since WITH queries are not limited
-        expect(result.resultSets[0].rows.length).toBeGreaterThan(2);
-        expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-        expect(result.resultSets[0].rows[0]).toHaveProperty('age');
-      } catch (error) {
-        // Some MySQL versions might not support CTE, that's okay
-        console.log('CTE not supported in this MySQL version, skipping test');
-      }
+    it('should apply maxRows to CTE queries (WITH clause)', async () => {
+      // A CTE is the ordinary shape of an analytical query, so leaving it
+      // uncapped left max_rows silently inert for most real queries.
+      // No try/catch: the test container runs MySQL 8, which supports CTEs,
+      // and a catch-all would swallow the assertions too.
+      const result = await mysqlTest.connector.executeSQL(`
+        WITH user_summary AS (
+          SELECT name, age FROM users WHERE age IS NOT NULL
+        )
+        SELECT * FROM user_summary ORDER BY age
+      `, { maxRows: 2 });
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
+      expect(result.resultSets[0].rows[0]).toHaveProperty('age');
     });
 
     it('should handle maxRows with multiple SELECT statements', async () => {

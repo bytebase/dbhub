@@ -178,6 +178,19 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   sqlserver: mutatingPatternSqlServer,
 };
 
+/**
+ * Whether (comment/string-stripped) SQL contains a data-modifying keyword.
+ * Shared by the read-only classifier's CTE check and the row limiter, so both
+ * agree on what counts as a write hidden inside a WITH. Falls back to the
+ * dialect-independent keyword set when no connector type is given.
+ */
+export function hasMutatingKeyword(
+  strippedSQL: string,
+  connectorType?: ConnectorType | string
+): boolean {
+  return (mutatingPatterns[connectorType as ConnectorType] ?? mutatingPattern).test(strippedSQL);
+}
+
 const selectIntoPattern = /\bselect\b[\s\S]+\binto\b/i;
 
 /**
@@ -251,11 +264,8 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
   }
 
   // WITH statements can embed DML in CTEs (e.g. WITH cte AS (UPDATE ...))
-  if (firstWord === "with") {
-    const pattern = mutatingPatterns[connectorType as ConnectorType] ?? mutatingPattern;
-    if (pattern.test(cleanedSQL)) {
-      return false;
-    }
+  if (firstWord === "with" && hasMutatingKeyword(cleanedSQL, connectorType)) {
+    return false;
   }
 
   // SQLite PRAGMA: a pragma that sets a value mutates durable or session state and
