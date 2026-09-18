@@ -687,7 +687,7 @@ export class MySQLConnector implements Connector {
           let probes: boolean[] = [];
           if (options.maxRows) {
             const rewrites = statements.map(statement =>
-              SQLRowLimiter.applyMaxRowsWithTruncationProbe(statement, options.maxRows)
+              SQLRowLimiter.applyMaxRowsWithTruncationProbe(statement, options.maxRows, "mysql")
             );
             probes = rewrites.map(rewrite => rewrite.probeApplied);
 

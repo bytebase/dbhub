@@ -284,11 +284,45 @@ describe("SQLRowLimiter", () => {
     });
   });
 
+  describe("dialect-aware scanning", () => {
+    it("does not mistake a PostgreSQL dollar-quoted literal for a data-modifying CTE", () => {
+      const sql = "WITH x AS (SELECT $$DELETE FROM t$$ AS s) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100, "postgres")).toBe(`${sql}\nLIMIT 100`);
+      // Without the dialect only ANSI quoting is known, so the statement is
+      // left alone (uncapped, the fail-safe direction).
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(sql);
+    });
+
+    it("does not let a parenthesis inside a MySQL backtick identifier hide the statement's LIMIT", () => {
+      const sql = "SELECT * FROM `a(` LIMIT 500";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100, "mysql")).toBe("SELECT * FROM `a(` LIMIT 100");
+    });
+
+    it("does not mistake a SQL Server bracket identifier for a data-modifying CTE", () => {
+      const sql = "WITH x AS (SELECT [delete] FROM t) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH x AS (SELECT [delete] FROM t) SELECT TOP 100 * FROM x"
+      );
+    });
+
+    it("recognizes REPLACE INTO as a write inside a MySQL CTE", () => {
+      const sql = "WITH x AS (SELECT 1) REPLACE INTO t SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRows(sql, 100, "mysql")).toBe(sql);
+    });
+  });
+
   describe("applyMaxRowsForSQLServer - comments and CTEs", () => {
     it("caps a query introduced by a leading comment", () => {
       const sql = "-- tag\nSELECT * FROM users";
       expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
         "-- tag\nSELECT TOP 100 * FROM users"
+      );
+    });
+
+    it("caps a CTE introduced by the T-SQL `;WITH` convention", () => {
+      const sql = ";WITH x AS (SELECT id FROM t) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        ";WITH x AS (SELECT id FROM t) SELECT TOP 100 * FROM x"
       );
     });
 

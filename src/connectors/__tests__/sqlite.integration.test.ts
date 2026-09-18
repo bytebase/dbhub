@@ -440,6 +440,18 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
+    it('should return rows and apply maxRows to a query introduced by a comment', async () => {
+      // SQLite picks all() vs run() by leading keyword; a leading comment
+      // used to send a SELECT down the run() path and discard its rows.
+      const result = await sqliteTest.connector.executeSQL(
+        '-- dbhub attribution tag\nSELECT name FROM users ORDER BY name',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
     it('should apply maxRows to CTE queries (WITH clause)', async () => {
       // A CTE is the ordinary shape of an analytical query, so leaving it
       // uncapped left max_rows silently inert for most real queries.

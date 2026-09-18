@@ -50,24 +50,30 @@ export class SQLRowLimiter {
    * the rows handed back while the write still runs in full. Detection there is
    * the same keyword heuristic the read-only classifier uses, so a false
    * positive only means the statement keeps the old behaviour of not being limited.
+   *
+   * `dialect` selects the connector's scanner so dialect-specific quoting
+   * (PostgreSQL dollar quotes, MySQL backticks, SQL Server brackets) is
+   * blanked the same way the read-only classifier blanks it; without it only
+   * ANSI syntax is recognized.
    */
-  static isSelectQuery(sql: string): boolean {
-    const blankedSQL = blankCommentsAndStrings(sql).trim().toLowerCase();
+  static isSelectQuery(sql: string, dialect?: ConnectorType): boolean {
+    const blankedSQL = blankCommentsAndStrings(sql, dialect).trim().toLowerCase();
     // Leading parentheses are skipped: `(SELECT ...) UNION (SELECT ...)` is a
-    // row-returning statement whose first token is `(`.
-    const firstKeyword = /^[(\s]*([a-z_]+)/.exec(blankedSQL)?.[1] ?? "";
+    // row-returning statement whose first token is `(`. So is a leading
+    // statement separator: T-SQL convention prefixes a CTE as `;WITH`.
+    const firstKeyword = /^[(;\s]*([a-z_]+)/.exec(blankedSQL)?.[1] ?? "";
     if (firstKeyword === "select") {
       return true;
     }
-    return firstKeyword === "with" && !hasMutatingKeyword(blankedSQL);
+    return firstKeyword === "with" && !hasMutatingKeyword(blankedSQL, dialect);
   }
 
   /**
    * Check if a SQL statement has a LIMIT clause of its own (not one nested in
    * a CTE body or subquery).
    */
-  static hasLimitClause(sql: string): boolean {
-    return this.findTopLevelLimit(sql) !== null;
+  static hasLimitClause(sql: string, dialect?: ConnectorType): boolean {
+    return this.findTopLevelLimit(sql, dialect) !== null;
   }
 
   /**
@@ -82,8 +88,8 @@ export class SQLRowLimiter {
    * own, or when that LIMIT is a parameter placeholder rather than a literal
    * (see hasParameterizedLimit).
    */
-  static extractLimitValue(sql: string): number | null {
-    return this.findTopLevelLimit(sql)?.value ?? null;
+  static extractLimitValue(sql: string, dialect?: ConnectorType): number | null {
+    return this.findTopLevelLimit(sql, dialect)?.value ?? null;
   }
 
   /**
@@ -97,16 +103,16 @@ export class SQLRowLimiter {
    * Check if the statement's own LIMIT clause uses a parameter placeholder
    * ($1, ?, @p1) instead of a literal number.
    */
-  static hasParameterizedLimit(sql: string): boolean {
-    const limit = this.findTopLevelLimit(sql);
+  static hasParameterizedLimit(sql: string, dialect?: ConnectorType): boolean {
+    const limit = this.findTopLevelLimit(sql, dialect);
     return limit !== null && limit.value === null;
   }
 
   /**
    * Add or tighten the LIMIT clause of a SQL statement
    */
-  static applyLimitToQuery(sql: string, maxRows: number): string {
-    const limit = this.findTopLevelLimit(sql);
+  static applyLimitToQuery(sql: string, maxRows: number, dialect?: ConnectorType): string {
+    const limit = this.findTopLevelLimit(sql, dialect);
 
     if (limit !== null && limit.value !== null) {
       // Splice at the clause's own position rather than replacing the first
@@ -168,11 +174,12 @@ export class SQLRowLimiter {
   }
 
   /** The statement's own LIMIT clause, literal or parameterized ($1, ?, @p1). */
-  private static findTopLevelLimit(sql: string): TopLevelClause | null {
+  private static findTopLevelLimit(sql: string, dialect?: ConnectorType): TopLevelClause | null {
     const match = this.findTopLevelMatch(
       sql,
       /\(|\)|\blimit\s+(?:(\d+)|\$\d+|\?|@p\d+)/gi,
-      "last"
+      "last",
+      dialect
     );
     if (match === null) {
       return null;
@@ -278,15 +285,17 @@ export class SQLRowLimiter {
    *
    * For parameterized LIMIT clauses (e.g., LIMIT $1 or LIMIT ?), we wrap the query in a subquery
    * to enforce max_rows as a hard cap, since the parameter value is not known until runtime.
+   *
+   * `dialect` selects the connector's comment/string scanner (see isSelectQuery).
    */
-  static applyMaxRows(sql: string, maxRows: number | undefined): string {
-    if (!maxRows || !this.isSelectQuery(sql)) {
+  static applyMaxRows(sql: string, maxRows: number | undefined, dialect?: ConnectorType): string {
+    if (!maxRows || !this.isSelectQuery(sql, dialect)) {
       return sql;
     }
 
     // If query has a parameterized LIMIT, wrap it in a subquery with maxRows
     // This ensures max_rows is respected even when user provides a large parameter value
-    if (this.hasParameterizedLimit(sql)) {
+    if (this.hasParameterizedLimit(sql, dialect)) {
       // Wrap the query: SELECT * FROM (original_query) AS subq LIMIT max_rows
       // Note: Subquery wrapping is safe for PostgreSQL, MySQL, MariaDB, and SQLite
       const { sql: sqlWithoutSemicolon, semicolon } = trimSemicolon(sql);
@@ -297,14 +306,14 @@ export class SQLRowLimiter {
     }
 
     // For literal LIMIT values, apply the minimum logic
-    return this.applyLimitToQuery(sql, maxRows);
+    return this.applyLimitToQuery(sql, maxRows, dialect);
   }
 
   /**
    * Apply maxRows limit to a row-returning query using SQL Server TOP syntax
    */
   static applyMaxRowsForSQLServer(sql: string, maxRows: number | undefined): string {
-    if (!maxRows || !this.isSelectQuery(sql)) {
+    if (!maxRows || !this.isSelectQuery(sql, "sqlserver")) {
       return sql;
     }
     return this.applyTopToQuery(sql, maxRows);
@@ -321,17 +330,21 @@ export class SQLRowLimiter {
    * user asked for fewer rows than the cap — that is their limit, not
    * truncation).
    */
-  static applyMaxRowsWithTruncationProbe(sql: string, maxRows: number | undefined): MaxRowsRewrite {
-    if (!maxRows || !this.isSelectQuery(sql)) {
+  static applyMaxRowsWithTruncationProbe(
+    sql: string,
+    maxRows: number | undefined,
+    dialect?: ConnectorType
+  ): MaxRowsRewrite {
+    if (!maxRows || !this.isSelectQuery(sql, dialect)) {
       return { sql, probeApplied: false };
     }
-    if (!this.hasParameterizedLimit(sql)) {
-      const existingLimit = this.extractLimitValue(sql);
+    if (!this.hasParameterizedLimit(sql, dialect)) {
+      const existingLimit = this.extractLimitValue(sql, dialect);
       if (existingLimit !== null && existingLimit <= maxRows) {
         return { sql, probeApplied: false };
       }
     }
-    return { sql: this.applyMaxRows(sql, maxRows + 1), probeApplied: true };
+    return { sql: this.applyMaxRows(sql, maxRows + 1, dialect), probeApplied: true };
   }
 
   /**
@@ -344,7 +357,7 @@ export class SQLRowLimiter {
     sql: string,
     maxRows: number | undefined
   ): MaxRowsRewrite {
-    if (!maxRows || !this.isSelectQuery(sql)) {
+    if (!maxRows || !this.isSelectQuery(sql, "sqlserver")) {
       return { sql, probeApplied: false };
     }
     if (!this.hasSetOperator(sql)) {

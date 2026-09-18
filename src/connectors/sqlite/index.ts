@@ -26,7 +26,7 @@ import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
@@ -457,6 +457,25 @@ export class SQLiteConnector implements Connector {
   }
 
 
+  /**
+   * Whether a statement returns rows (and so must run via `all()` rather than
+   * `run()`). Classified on the comment/string-stripped text so a leading
+   * attribution comment cannot hide a SELECT, matching the row limiter and the
+   * read-only classifier.
+   */
+  private returnsRows(statement: string): boolean {
+    const stripped = stripCommentsAndStrings(statement, "sqlite").toLowerCase().trim();
+    return stripped.startsWith('select') ||
+           stripped.startsWith('with') ||
+           stripped.startsWith('explain') ||
+           stripped.startsWith('analyze') ||
+           (stripped.startsWith('pragma') &&
+            (stripped.includes('table_info') ||
+             stripped.includes('index_info') ||
+             stripped.includes('index_list') ||
+             stripped.includes('foreign_key_list')));
+  }
+
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");
@@ -478,16 +497,7 @@ export class SQLiteConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - determine if it returns data
         let processedStatement = statements[0];
-        const trimmedStatement = statements[0].toLowerCase().trim();
-        const isReadStatement = trimmedStatement.startsWith('select') ||
-                               trimmedStatement.startsWith('with') ||
-                               trimmedStatement.startsWith('explain') ||
-                               trimmedStatement.startsWith('analyze') ||
-                               (trimmedStatement.startsWith('pragma') &&
-                                (trimmedStatement.includes('table_info') ||
-                                 trimmedStatement.includes('index_info') ||
-                                 trimmedStatement.includes('index_list') ||
-                                 trimmedStatement.includes('foreign_key_list')));
+        const isReadStatement = this.returnsRows(statements[0]);
 
         // Apply maxRows limit (with a truncation probe row) to SELECT queries
         // if specified (not PRAGMA/ANALYZE)
@@ -495,7 +505,8 @@ export class SQLiteConnector implements Connector {
         if (options.maxRows) {
           const rewrite = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
             processedStatement,
-            options.maxRows
+            options.maxRows,
+            "sqlite"
           );
           processedStatement = rewrite.sql;
           probeApplied = rewrite.probeApplied;
@@ -537,16 +548,7 @@ export class SQLiteConnector implements Connector {
 
         // Separate read and write operations
         for (const statement of statements) {
-          const trimmedStatement = statement.toLowerCase().trim();
-          if (trimmedStatement.startsWith('select') ||
-              trimmedStatement.startsWith('with') ||
-              trimmedStatement.startsWith('explain') ||
-              trimmedStatement.startsWith('analyze') ||
-              (trimmedStatement.startsWith('pragma') &&
-               (trimmedStatement.includes('table_info') ||
-                trimmedStatement.includes('index_info') ||
-                trimmedStatement.includes('index_list') ||
-                trimmedStatement.includes('foreign_key_list')))) {
+          if (this.returnsRows(statement)) {
             readStatements.push(statement);
           } else {
             writeStatements.push(statement);
@@ -577,7 +579,8 @@ export class SQLiteConnector implements Connector {
           // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
           const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
             statement,
-            options.maxRows
+            options.maxRows,
+            "sqlite"
           );
           const rows = this.prepare(processedStatement).all();
           const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
