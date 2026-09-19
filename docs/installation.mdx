@@ -103,32 +103,63 @@ The [Claude Code Plugin](/claude-code-plugin) registers the DBHub MCP server in 
   </Tab>
 
   <Tab title="Docker Compose">
-    For development environments using Docker Compose, add DBHub to your `docker-compose.yml`:
+    For development environments using Docker Compose, add DBHub to your `docker-compose.yml`.
+    Keep the database password out of the Compose file: put it in a gitignored `.env` next to
+    `docker-compose.yml`, and let Compose interpolate it. DBHub reads the connection from the
+    `DB_*` variables, so the password never has to be URL-encoded into a DSN.
+
+    ```bash .env
+    POSTGRES_USER=user
+    POSTGRES_PASSWORD=change-me
+    POSTGRES_DB=dbname
+    ```
 
     ```yaml docker-compose.yml
     services:
       dbhub:
         image: bytebase/dbhub:latest
         container_name: dbhub
+        init: true
         ports:
-          - "8080:8080"
-        command:
-          - --transport
-          - http
-          - --port
-          - "8080"
-          - --dsn
-          - "postgres://user:password@database:5432/dbname?sslmode=disable"
+          - "127.0.0.1:8080:8080"
+        environment:
+          TRANSPORT: http
+          PORT: "8080"
+          DB_TYPE: postgres
+          DB_HOST: database
+          DB_PORT: "5432"
+          DB_USER: ${POSTGRES_USER}
+          DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+          DB_NAME: ${POSTGRES_DB}
         depends_on:
-          - database
+          database:
+            condition: service_healthy
 
       database:
         image: postgres:18-alpine
         environment:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dbname
+          POSTGRES_USER: ${POSTGRES_USER}
+          POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+          POSTGRES_DB: ${POSTGRES_DB}
+        volumes:
+          - postgres_data:/var/lib/postgresql
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+          interval: 2s
+          timeout: 5s
+          retries: 10
+          start_period: 5s
+
+    volumes:
+      postgres_data:
     ```
+
+    <Note>
+    `${POSTGRES_PASSWORD:?...}` makes `docker compose up` fail fast when the password is unset, and
+    `depends_on` with `condition: service_healthy` holds DBHub back until Postgres accepts connections.
+    Binding to `127.0.0.1` keeps the MCP endpoint off the network; drop the prefix, or add
+    [`--auth-token`](/config/command-line), if other machines need to reach it.
+    </Note>
   </Tab>
 </Tabs>
 
