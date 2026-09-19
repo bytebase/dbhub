@@ -542,15 +542,18 @@ export class OracleConnector implements Connector {
             LONGEST_ACTIVE_QUERY_SECONDS: number | null;
           }>(
             connection,
-            // TADDR is non-null while the session has an open transaction;
+            // STATUS is ACTIVE (running a call), INACTIVE (idle), or one of
+            // the transitional states KILLED / SNIPED / CACHED, which count
+            // toward the total but are neither active nor idle. TADDR is
+            // non-null while the session has an open transaction;
             // LAST_CALL_ET is seconds since the current call began (ACTIVE)
             // or since the last call ended (otherwise).
             `SELECT
                COUNT(*) AS total,
                SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active,
-               SUM(CASE WHEN status <> 'ACTIVE' THEN 1 ELSE 0 END) AS idle,
-               SUM(CASE WHEN status <> 'ACTIVE' AND taddr IS NOT NULL THEN 1 ELSE 0 END) AS idle_in_transaction,
-               MAX(CASE WHEN status <> 'ACTIVE' AND taddr IS NOT NULL THEN last_call_et END) AS longest_idle_in_transaction_seconds,
+               SUM(CASE WHEN status = 'INACTIVE' THEN 1 ELSE 0 END) AS idle,
+               SUM(CASE WHEN status = 'INACTIVE' AND taddr IS NOT NULL THEN 1 ELSE 0 END) AS idle_in_transaction,
+               MAX(CASE WHEN status = 'INACTIVE' AND taddr IS NOT NULL THEN last_call_et END) AS longest_idle_in_transaction_seconds,
                MAX(CASE WHEN status = 'ACTIVE' THEN last_call_et END) AS longest_active_query_seconds
              FROM v$session
              WHERE type = 'USER'
