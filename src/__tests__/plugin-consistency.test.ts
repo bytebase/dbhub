@@ -38,6 +38,14 @@ describe("Claude Code plugin consistency", () => {
     expect(mcp.mcpServers.dbhub.args).toContain(`@bytebase/dbhub@${pkg.version}`);
   });
 
+  it("server.json description fits the MCP Registry's 100-character limit", () => {
+    // The registry rejects the publish (HTTP 422) when the description is
+    // longer than 100 characters, which is only discovered post-merge when
+    // the release workflow runs.
+    const server = readJson("server.json");
+    expect(server.description.length).toBeLessThanOrEqual(100);
+  });
+
   it("server.json version matches package.json", () => {
     const server = readJson("server.json");
     expect(server.version).toBe(pkg.version);

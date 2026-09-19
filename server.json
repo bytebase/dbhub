@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.bytebase/dbhub",
   "title": "DBHub",
-  "description": "Minimal, token-efficient Database MCP Server for PostgreSQL, MySQL, SQL Server, Oracle, SQLite, MariaDB",
+  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite",
   "repository": {
     "url": "https://github.com/bytebase/dbhub",
     "source": "github"
