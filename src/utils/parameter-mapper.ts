@@ -26,10 +26,12 @@ export const PARAMETER_STYLES = {
  * @returns The detected parameter style
  */
 export function detectParameterStyle(
-  statement: string
+  statement: string,
+  connectorType?: ConnectorType
 ): "numbered" | "positional" | "named" | "colon" | "none" {
-  // Strip comments and strings to avoid matching parameters inside them
-  const cleanedSQL = stripCommentsAndStrings(statement);
+  // Strip comments and strings (with the dialect's quoting rules, e.g. Oracle
+  // q'[...]' literals) to avoid matching parameters inside them
+  const cleanedSQL = stripCommentsAndStrings(statement, connectorType);
 
   // Check for PostgreSQL-style numbered parameters ($1, $2, etc.)
   if (/\$\d+/.test(cleanedSQL)) {
@@ -66,7 +68,7 @@ export function validateParameterStyle(
   statement: string,
   connectorType: ConnectorType
 ): void {
-  const detectedStyle = detectParameterStyle(statement);
+  const detectedStyle = detectParameterStyle(statement, connectorType);
   const expectedStyle = PARAMETER_STYLES[connectorType];
 
   if (detectedStyle === "none") {
@@ -97,10 +99,10 @@ export function validateParameterStyle(
  * @returns Number of parameter placeholders required (highest index for numbered/named)
  * @throws Error if numbered/named parameters are not sequential starting from 1
  */
-export function countParameters(statement: string): number {
-  const style = detectParameterStyle(statement);
+export function countParameters(statement: string, connectorType?: ConnectorType): number {
+  const style = detectParameterStyle(statement, connectorType);
   // Strip comments and strings to avoid matching parameters inside them
-  const cleanedSQL = stripCommentsAndStrings(statement);
+  const cleanedSQL = stripCommentsAndStrings(statement, connectorType);
 
   switch (style) {
     case "numbered":
@@ -158,7 +160,7 @@ export function validateParameters(
   // Validate parameter style matches connector
   validateParameterStyle(statement, connectorType);
 
-  const paramCount = countParameters(statement);
+  const paramCount = countParameters(statement, connectorType);
   const definedCount = parameters?.length || 0;
 
   if (paramCount !== definedCount) {

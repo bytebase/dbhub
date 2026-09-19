@@ -506,6 +506,8 @@ describe("isReadOnlySQL", () => {
     it("still allows Oracle columns or tables merely named after a package", () => {
       expect(isReadOnlySQL("SELECT utl_http FROM audit_log", "oracle")).toBe(true);
       expect(isReadOnlySQL("SELECT * FROM dbms_sql", "oracle")).toBe(true);
+      // A qualified column reference is not a member call.
+      expect(isReadOnlySQL("SELECT dbms_sql.foo FROM t dbms_sql", "oracle")).toBe(true);
     });
 
     it("rejects an escape-hatch call buried in a subquery / FROM clause", () => {

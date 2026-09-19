@@ -151,6 +151,12 @@ describe("Parameter Mapper", () => {
   });
 
   describe("countParameters", () => {
+    it("should ignore a :N inside an Oracle q-quoted literal when given the dialect", () => {
+      const sql = "SELECT q'[it's :1]' AS s FROM t WHERE id = :1";
+      expect(countParameters(sql, "oracle")).toBe(1);
+      expect(() => validateParameters(sql, [{ name: "id", type: "integer", description: "id" }], "oracle")).not.toThrow();
+    });
+
     it("should count and validate Oracle colon-numbered parameters", () => {
       expect(countParameters("SELECT * FROM users WHERE id = :1 AND x = :2 OR y = :1")).toBe(2);
       expect(() => countParameters("SELECT * FROM users WHERE id = :1 AND x = :3")).toThrow(

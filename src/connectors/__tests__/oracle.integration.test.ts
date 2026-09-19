@@ -237,6 +237,24 @@ describe('Oracle Connector Integration Tests', () => {
       expect(result.resultSets).toHaveLength(1);
     });
 
+    it('keeps a PL/SQL block whole in the middle of a mixed batch', async () => {
+      const result = await oracleTest.connector.executeSQL(`
+        INSERT INTO products (name, price) VALUES ('Widget D', 1);
+        DECLARE
+          n NUMBER;
+        BEGIN
+          SELECT COUNT(*) INTO n FROM products WHERE name = 'Widget D';
+          IF n = 1 THEN
+            UPDATE products SET price = 2 WHERE name = 'Widget D';
+          END IF;
+        END;
+        SELECT price FROM products WHERE name = 'Widget D';
+        DELETE FROM products WHERE name = 'Widget D';
+      `, {});
+      expect(result.resultSets).toHaveLength(4);
+      expect(Number(result.resultSets[2].rows[0].PRICE)).toBe(2);
+    });
+
     it('caps rows with maxRows and flags truncation exactly', async () => {
       const capped = await oracleTest.connector.executeSQL('SELECT * FROM users ORDER BY id', { maxRows: 2 });
       expect(capped.resultSets[0].rows).toHaveLength(2);

@@ -171,11 +171,12 @@ export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly
 /**
  * What must follow an escape-hatch keyword for it to count as an invocation.
  * Functions are matched in call position (`name(`); Oracle's entries are
- * packages, invoked through member access (`package.member(`). Either way a
- * column or table merely named after the keyword still classifies as read-only.
+ * packages, invoked through a member call (`package.member(`). Either way a
+ * column, table or alias merely named after the keyword, or a qualified
+ * column reference like `dbms_sql.foo`, still classifies as read-only.
  */
 const escapeHatchCallSuffix: Partial<Record<ConnectorType, string>> = {
-  oracle: "\\s*\\.",
+  oracle: "\\s*\\.\\s*[a-z_][a-z0-9_$#]*\\s*\\(",
 };
 const DEFAULT_CALL_SUFFIX = "\\s*\\(";
 

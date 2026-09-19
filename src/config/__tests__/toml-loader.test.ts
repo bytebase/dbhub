@@ -728,10 +728,31 @@ sslmode = "require"
         expect(() => loadTomlConfig()).toThrow("SQLite does not support SSL");
       });
 
+      it('should accept sslmode = verify-full for oracle and carry it into the DSN', () => {
+        const tomlContent = `
+[[sources]]
+id = "ora"
+type = "oracle"
+host = "db.example.com"
+port = 2484
+database = "PROD"
+user = "app"
+password = "secret"
+sslmode = "verify-full"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const config = loadTomlConfig();
+        expect(buildDSNFromSource(config.sources[0])).toBe(
+          'oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full'
+        );
+      });
+
       it.each([
         ['verify-ca', 'mysql'],
         ['verify-full', 'mariadb'],
         ['verify-ca', 'sqlserver'],
+        ['verify-ca', 'oracle'],
       ])('should reject sslmode = %j for %s', (sslmode, type) => {
         const tomlContent = `
 [[sources]]
@@ -746,7 +767,7 @@ sslmode = "${sslmode}"
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
         expect(() => loadTomlConfig()).toThrow(
-          `sslmode '${sslmode}' which is only supported for PostgreSQL`
+          `sslmode '${sslmode}' which is not supported for ${type}`
         );
       });
 

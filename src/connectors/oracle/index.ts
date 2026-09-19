@@ -17,7 +17,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import {
   LEADING_SQL_NOISE,
-  splitSQLStatements,
+  blankCommentsAndStrings,
   stripCommentsAndStrings,
 } from "../../utils/sql-parser.js";
 import { isReadOnlySQL } from "../../utils/allowed-keywords.js";
@@ -148,12 +148,19 @@ export class OracleConnector implements Connector {
   private sourceId: string = "default";
 
   /**
-   * A PL/SQL block or a DDL statement that contains one. These must reach the
-   * server as a single statement with their internal semicolons intact, so
-   * they are never split on `;`.
+   * Leading keywords of a statement whose body is PL/SQL. Such a statement
+   * ends at the semicolon that closes its outermost BEGIN ... END, not at
+   * the first semicolon (see splitStatements).
    */
-  private static readonly PLSQL_BLOCK =
-    /^(?:begin|declare|create\s+(?:or\s+replace\s+)?(?:(?:editionable|noneditionable)\s+)?(?:procedure|function|package|trigger|type))\b/i;
+  private static readonly PLSQL_BODY =
+    /^(?:begin|declare|create\s+(?:or\s+replace\s+)?(?:(?:editionable|noneditionable)\s+)?(?:procedure|function|trigger))\b/i;
+
+  /**
+   * Package specs/bodies and type bodies: `IS ... END name;` with no BEGIN
+   * of their own at the top level, so the IS/AS opens the block.
+   */
+  private static readonly PLSQL_UNIT =
+    /^create\s+(?:or\s+replace\s+)?(?:(?:editionable|noneditionable)\s+)?(?:package(?:\s+body)?|type\s+body)\b/i;
 
   getId(): string {
     return this.sourceId;
@@ -620,17 +627,75 @@ export class OracleConnector implements Connector {
   }
 
   /**
-   * Oracle executes exactly one statement per round trip, and rejects the
-   * trailing `;` of a plain SQL statement (ORA-00933) while *requiring* it
-   * inside a PL/SQL block. So: a PL/SQL block (or the DDL that creates one)
-   * is sent whole, minus any SQL*Plus `/` terminator; anything else is split
-   * on top-level semicolons, which the splitter also strips.
+   * Split a batch into the statements Oracle executes one per round trip.
+   *
+   * Plain SQL ends at a top-level semicolon, which is stripped: Oracle
+   * rejects a trailing `;` on a SQL statement (ORA-00933). A PL/SQL block,
+   * or the DDL that creates one, *requires* its semicolons and is sent
+   * whole: it ends at the `;` that closes its outermost BEGIN ... END
+   * (depth-tracked over `begin`/`case` ... `end`, with `end if` / `end loop`
+   * neutral), or at a SQL*Plus `/` line, which is dropped either way. The
+   * scan runs on the comment/string-blanked text so nothing inside a
+   * literal or comment counts.
    */
-  private static splitStatements(sql: string): string[] {
-    if (OracleConnector.PLSQL_BLOCK.test(sql)) {
-      return [sql.replace(/\s*\/\s*$/, "").trim()];
+  static splitStatements(sql: string): string[] {
+    const blanked = blankCommentsAndStrings(sql, "oracle");
+    const statements: string[] = [];
+    // Whitespace and SQL*Plus `/` terminator lines between statements.
+    const boundary = /(?:\s|\/(?=[ \t]*(?:\r?\n|$)))*/y;
+    // Block-depth tokens: `end if` / `end loop` close constructs that never
+    // opened depth, so they are neutral; every other `end` closes a `begin`
+    // or a `case`.
+    const token = /\b(begin|case|end)\b(?:\s+(if|loop|case))?|;|^[ \t]*\/[ \t]*$/gim;
+
+    let i = 0;
+    while (i < blanked.length) {
+      boundary.lastIndex = i;
+      i += boundary.exec(blanked)![0].length;
+      if (i >= blanked.length) break;
+      const start = i;
+
+      const rest = blanked.slice(i);
+      const isUnit = OracleConnector.PLSQL_UNIT.test(rest);
+      if (!isUnit && !OracleConnector.PLSQL_BODY.test(rest)) {
+        const semi = blanked.indexOf(";", i);
+        const end = semi === -1 ? blanked.length : semi;
+        statements.push(sql.slice(start, end).trim());
+        i = end + 1;
+        continue;
+      }
+
+      // PL/SQL: ends at the `;` closing the outermost block (kept), or at a
+      // `/` line or end of input.
+      let depth = isUnit ? 1 : 0;
+      let opened = isUnit;
+      let end = blanked.length;
+      token.lastIndex = i;
+      let m: RegExpExecArray | null;
+      while ((m = token.exec(blanked)) !== null) {
+        if (m[0] === ";") {
+          if (opened && depth === 0) {
+            end = m.index + 1;
+            break;
+          }
+        } else if (m[1] === undefined) {
+          end = m.index; // `/` terminator line
+          break;
+        } else {
+          const keyword = m[1].toLowerCase();
+          const closes = m[2]?.toLowerCase();
+          if (keyword === "begin" || keyword === "case") {
+            depth++;
+            opened = true;
+          } else if (closes === undefined || closes === "case") {
+            depth--;
+          }
+        }
+      }
+      statements.push(sql.slice(start, end).trim());
+      i = end;
     }
-    return splitSQLStatements(sql, "oracle");
+    return statements;
   }
 
   /**

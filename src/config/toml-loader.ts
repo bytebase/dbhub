@@ -532,13 +532,20 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
+    // verify-ca is PostgreSQL-only; Oracle's TCPS also offers verify-full
+    // (server certificate DN matched against the host).
+    const verifyModesByType: Record<string, string[]> = {
+      postgres: ["verify-ca", "verify-full"],
+      oracle: ["verify-full"],
+    };
     if (
       (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
-      source.type !== "postgres"
+      !(verifyModesByType[source.type] ?? []).includes(source.sslmode)
     ) {
+      const supported = ["disable", "require", ...(verifyModesByType[source.type] ?? [])];
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is only supported for PostgreSQL. ` +
-          `Valid values for ${source.type}: disable, require`
+        `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is not supported for ${source.type}. ` +
+          `Valid values for ${source.type}: ${supported.join(", ")}`
       );
     }
   }
