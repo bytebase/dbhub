@@ -1,5 +1,5 @@
 > [!NOTE]  
-> Brought to you by [Bytebase](https://www.bytebase.com/), the enterprise database MCP server with built-in governance and guardrails.
+> Brought to you by [Bytebase](https://www.bytebase.com/): if you need an enterprise-level database MCP server with built-in guardrails like SQL review, approval flow, data masking, and audit logging beyond what DBHub offers, check out Bytebase.
 
 <p align="center">
  <a href="https://www.star-history.com/bytebase/dbhub">
