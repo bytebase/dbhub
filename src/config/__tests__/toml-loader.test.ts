@@ -771,6 +771,25 @@ sslmode = "${sslmode}"
         );
       });
 
+      it('should reject sslrootcert for oracle even with sslmode verify-full', () => {
+        const certPath = path.join(tempDir, 'ca.pem');
+        fs.writeFileSync(certPath, 'cert-content');
+        const tomlContent = `
+[[sources]]
+id = "ora"
+type = "oracle"
+host = "db.example.com"
+database = "PROD"
+user = "app"
+password = "secret"
+sslmode = "verify-full"
+sslrootcert = '${certPath}'
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('sslrootcert but it is only supported for PostgreSQL');
+      });
+
       it('should reject sslrootcert when sslmode is "require"', () => {
         const certPath = path.join(tempDir, 'ca.pem');
         fs.writeFileSync(certPath, 'cert-content');

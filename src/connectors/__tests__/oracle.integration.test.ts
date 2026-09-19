@@ -264,6 +264,19 @@ describe('Oracle Connector Integration Tests', () => {
       expect(uncapped.resultSets[0].truncated).toBeUndefined();
     });
 
+    it('preserves NUMBER integers beyond 2^53 and keeps decimals numeric', async () => {
+      const result = await oracleTest.connector.executeSQL(
+        'SELECT 9007199254740993 AS big, 42 AS small, 1.5 AS dec, NULL AS none FROM dual',
+        {}
+      );
+      expect(result.resultSets[0].rows[0]).toEqual({
+        BIG: 9007199254740993n,
+        SMALL: 42,
+        DEC: 1.5,
+        NONE: null,
+      });
+    });
+
     it('keeps a q-quoted literal intact', async () => {
       const result = await oracleTest.connector.executeSQL(`SELECT q'[it's; fine]' AS s FROM dual`, {});
       expect(result.resultSets[0].rows).toEqual([{ S: "it's; fine" }]);

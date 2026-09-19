@@ -561,6 +561,14 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate sslrootcert if provided
   if (source.sslrootcert !== undefined) {
+    // Only the PostgreSQL connector consumes sslrootcert. Rejecting it
+    // elsewhere keeps a trust anchor from being silently ignored (Oracle
+    // verify-full validates against the system trust store / wallet).
+    if (source.type !== "postgres") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has sslrootcert but it is only supported for PostgreSQL.`
+      );
+    }
     if (source.sslmode !== "verify-ca" && source.sslmode !== "verify-full") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslrootcert but sslmode is '${source.sslmode ?? "not set"}'. ` +

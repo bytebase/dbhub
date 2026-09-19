@@ -231,7 +231,7 @@ export class OracleConnector implements Connector {
   ): Promise<T[]> {
     const result = await connection.execute<T>(sql, binds, {
       outFormat: oracledb.OUT_FORMAT_OBJECT,
-      fetchTypeHandler: OracleConnector.fetchLobsAsString,
+      fetchTypeHandler: OracleConnector.fetchTypeHandler,
     });
     return result.rows ?? [];
   }
@@ -242,15 +242,41 @@ export class OracleConnector implements Connector {
   }
 
   /**
-   * Fetch CLOB/NCLOB columns as strings instead of Lob streams, so result rows
-   * are plain JSON. (LONG columns such as ALL_TAB_COLUMNS.DATA_DEFAULT are
-   * already fetched as strings by default.)
+   * Per-column fetch rules:
+   * - CLOB/NCLOB come back as strings instead of Lob streams, so result rows
+   *   are plain JSON. (LONG columns such as ALL_TAB_COLUMNS.DATA_DEFAULT are
+   *   already fetched as strings by default.)
+   * - NUMBER is fetched as its exact decimal string and converted here:
+   *   integers within Number's safe range become numbers, larger integers
+   *   become BigInt (the response serializer renders those as strings), and
+   *   anything with a fraction or exponent becomes a number. The driver's
+   *   default would round a NUMBER(20) identifier above 2^53 silently.
    */
-  private static fetchLobsAsString(metaData: oracledb.Metadata<unknown>) {
+  private static fetchTypeHandler(metaData: oracledb.Metadata<unknown>): oracledb.FetchTypeResponse | undefined {
     if (metaData.dbType === oracledb.DB_TYPE_CLOB || metaData.dbType === oracledb.DB_TYPE_NCLOB) {
       return { type: oracledb.STRING };
     }
+    if (metaData.dbType === oracledb.DB_TYPE_NUMBER) {
+      return { type: oracledb.STRING, converter: OracleConnector.convertNumber };
+    }
     return undefined;
+  }
+
+  /**
+   * See fetchTypeHandler. Receives the NUMBER's decimal string (the generic
+   * signature is what oracledb's converter type requires). Public for unit
+   * testing.
+   */
+  static convertNumber<T>(value: T | null): number | bigint | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const text = String(value);
+    if (/^-?\d+$/.test(text)) {
+      const asNumber = Number(text);
+      return Number.isSafeInteger(asNumber) ? asNumber : BigInt(text);
+    }
+    return Number(text);
   }
 
   /**
@@ -598,7 +624,7 @@ export class OracleConnector implements Connector {
 
         const result = await connection.execute<Record<string, unknown>>(processedSQL, binds, {
           outFormat: oracledb.OUT_FORMAT_OBJECT,
-          fetchTypeHandler: OracleConnector.fetchLobsAsString,
+          fetchTypeHandler: OracleConnector.fetchTypeHandler,
         });
 
         const rows = result.rows ?? [];
@@ -643,10 +669,18 @@ export class OracleConnector implements Connector {
     const statements: string[] = [];
     // Whitespace and SQL*Plus `/` terminator lines between statements.
     const boundary = /(?:\s|\/(?=[ \t]*(?:\r?\n|$)))*/y;
-    // Block-depth tokens: `end if` / `end loop` close constructs that never
-    // opened depth, so they are neutral; every other `end` closes a `begin`
-    // or a `case`.
-    const token = /\b(begin|case|end)\b(?:\s+(if|loop|case))?|;|^[ \t]*\/[ \t]*$/gim;
+    // Plain SQL ends at a `;` or a `/` line.
+    const plainEnd = /;|^[ \t]*\/[ \t]*$/gm;
+    // PL/SQL block-depth tokens. `begin`, `case` and `compound trigger` open
+    // depth; `end if` / `end loop` close constructs that never opened depth,
+    // so they are neutral; every other `end` (bare, `end case`, a compound
+    // trigger's `end before statement` & co.) closes one level.
+    const token = /\b(begin|case|end|compound\s+trigger)\b(?:\s+(if|loop|case))?|;|^[ \t]*\/[ \t]*$/gim;
+
+    const push = (start: number, end: number) => {
+      const text = sql.slice(start, end).trim();
+      if (text) statements.push(text);
+    };
 
     let i = 0;
     while (i < blanked.length) {
@@ -658,10 +692,11 @@ export class OracleConnector implements Connector {
       const rest = blanked.slice(i);
       const isUnit = OracleConnector.PLSQL_UNIT.test(rest);
       if (!isUnit && !OracleConnector.PLSQL_BODY.test(rest)) {
-        const semi = blanked.indexOf(";", i);
-        const end = semi === -1 ? blanked.length : semi;
-        statements.push(sql.slice(start, end).trim());
-        i = end + 1;
+        plainEnd.lastIndex = i;
+        const m = plainEnd.exec(blanked);
+        const end = m?.index ?? blanked.length;
+        push(start, end);
+        i = end + (m?.[0] === ";" ? 1 : 0);
         continue;
       }
 
@@ -684,7 +719,7 @@ export class OracleConnector implements Connector {
         } else {
           const keyword = m[1].toLowerCase();
           const closes = m[2]?.toLowerCase();
-          if (keyword === "begin" || keyword === "case") {
+          if (keyword !== "end") {
             depth++;
             opened = true;
           } else if (closes === undefined || closes === "case") {
@@ -692,7 +727,7 @@ export class OracleConnector implements Connector {
           }
         }
       }
-      statements.push(sql.slice(start, end).trim());
+      push(start, end);
       i = end;
     }
     return statements;

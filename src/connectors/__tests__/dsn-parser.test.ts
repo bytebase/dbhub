@@ -484,4 +484,54 @@ describe('OracleConnector.splitStatements', () => {
     expect(split('SELECT 1 FROM dual;\n/\n')).toEqual(['SELECT 1 FROM dual']);
     expect(split('BEGIN NULL; END;\n/')).toEqual(['BEGIN NULL; END;']);
   });
+
+  it('honours a slash line as the boundary of plain SQL with no semicolon', () => {
+    expect(split('SELECT 1 FROM dual\n/\nSELECT 2 FROM dual')).toEqual([
+      'SELECT 1 FROM dual',
+      'SELECT 2 FROM dual',
+    ]);
+  });
+
+  it('ignores empty statements from consecutive separators', () => {
+    expect(split('SELECT 1 FROM dual;; SELECT 2 FROM dual;\n;\n')).toEqual([
+      'SELECT 1 FROM dual',
+      'SELECT 2 FROM dual',
+    ]);
+  });
+
+  it('keeps a compound trigger whole through its section terminators', () => {
+    const trigger = [
+      'CREATE OR REPLACE TRIGGER audit_t',
+      '  FOR INSERT OR UPDATE ON t',
+      '  COMPOUND TRIGGER',
+      '  n NUMBER := 0;',
+      '  BEFORE STATEMENT IS',
+      '  BEGIN',
+      '    n := 0;',
+      '  END BEFORE STATEMENT;',
+      '  AFTER EACH ROW IS',
+      '  BEGIN',
+      '    n := n + 1;',
+      '  END AFTER EACH ROW;',
+      '  AFTER STATEMENT IS',
+      '  BEGIN',
+      '    NULL;',
+      '  END AFTER STATEMENT;',
+      'END audit_t;',
+    ].join('\n');
+    expect(split(`${trigger}\nSELECT 1 FROM dual`)).toEqual([trigger, 'SELECT 1 FROM dual']);
+  });
+});
+
+describe('OracleConnector.convertNumber', () => {
+  it('returns safe integers as numbers, larger integers as BigInt, decimals as numbers', () => {
+    expect(OracleConnector.convertNumber('42')).toBe(42);
+    expect(OracleConnector.convertNumber('-7')).toBe(-7);
+    expect(OracleConnector.convertNumber('9007199254740991')).toBe(9007199254740991);
+    expect(OracleConnector.convertNumber('9007199254740993')).toBe(9007199254740993n);
+    expect(OracleConnector.convertNumber('-12345678901234567890')).toBe(-12345678901234567890n);
+    expect(OracleConnector.convertNumber('1.5')).toBe(1.5);
+    expect(OracleConnector.convertNumber('1E+125')).toBe(1e125);
+    expect(OracleConnector.convertNumber(null)).toBeNull();
+  });
 });
