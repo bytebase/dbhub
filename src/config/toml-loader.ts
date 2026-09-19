@@ -396,7 +396,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "oracle"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +

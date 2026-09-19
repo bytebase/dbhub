@@ -14,6 +14,11 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // SQL Server has no native EXPLAIN statement; the connector translates a
   // leading `EXPLAIN` into a SET SHOWPLAN_XML request (see SQLServerConnector).
   sqlserver: ["select", "with", "explain"],
+  // Oracle's native form is `EXPLAIN PLAN FOR <stmt>`; the connector accepts
+  // both that and a bare `EXPLAIN <stmt>` and reads the plan back through
+  // DBMS_XPLAN (see OracleConnector.explainQuery). EXPLAIN PLAN only parses
+  // the statement, it never executes it.
+  oracle: ["select", "with", "explain"],
 };
 
 /**
@@ -125,6 +130,13 @@ export const sqlServerPassThroughPattern = new RegExp(
  *   remote/ad-hoc source outside the local read-only transaction
  *   (sqlServerPassThroughKeywords, reused here as the single source of truth).
  *
+ * - Oracle: the UTL_* / DBMS_* packages callable from a plain SELECT that
+ *   reach the network or filesystem (UTL_HTTP, UTL_TCP, UTL_SMTP, UTL_INADDR,
+ *   UTL_FILE, DBMS_LDAP) or run arbitrary code (DBMS_SQL, DBMS_SCHEDULER,
+ *   DBMS_JAVA, DBMS_LOB.FILEOPEN & co). These are packages, so they are
+ *   matched on the package prefix in member-access position
+ *   (`utl_http.request(`), see oraclePackageEscapePattern.
+ *
  * This is a best-effort guardrail: name matching is bypassable (quoted
  * identifiers, executable version comments), so least-privilege database
  * accounts remain the security boundary. See issue #377.
@@ -141,12 +153,40 @@ export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly
   sqlserver: sqlServerPassThroughKeywords,
 };
 
-const escapeHatchFunctionPatterns: Partial<Record<ConnectorType, RegExp>> = Object.fromEntries(
-  Object.entries(escapeHatchFunctionKeywords).map(([type, keywords]) => [
-    type,
-    new RegExp(`\\b(?:${keywords.join("|")})\\s*\\(`, "i"),
-  ])
+/**
+ * Oracle packages that a SELECT can call (via `package.member(...)`) to reach
+ * outside the database. Matched on the package prefix followed by a member
+ * access, so a column named `utl_http` still classifies as read-only.
+ */
+export const oracleEscapePackages = [
+  "utl_http",
+  "utl_tcp",
+  "utl_smtp",
+  "utl_inaddr",
+  "utl_file",
+  "dbms_ldap",
+  "dbms_sql",
+  "dbms_scheduler",
+  "dbms_java",
+  "dbms_lob",
+  "dbms_xslprocessor",
+  "dbms_advisor",
+] as const;
+
+const oraclePackageEscapePattern = new RegExp(
+  `\\b(?:${oracleEscapePackages.join("|")})\\s*\\.`,
+  "i",
 );
+
+const escapeHatchFunctionPatterns: Partial<Record<ConnectorType, RegExp>> = {
+  ...Object.fromEntries(
+    Object.entries(escapeHatchFunctionKeywords).map(([type, keywords]) => [
+      type,
+      new RegExp(`\\b(?:${keywords.join("|")})\\s*\\(`, "i"),
+    ])
+  ),
+  oracle: oraclePackageEscapePattern,
+};
 
 /**
  * Whether (comment/string-stripped) SQL invokes one of the dialect's
@@ -176,6 +216,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPatternSqlServer,
+  oracle: mutatingPattern,
 };
 
 /**

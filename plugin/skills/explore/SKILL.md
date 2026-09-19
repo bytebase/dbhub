@@ -14,6 +14,6 @@ Searching `object_type: "column"` with a pattern like `%email%` is the fastest w
 
 ## Querying
 
-- Always add `LIMIT` (or `TOP` on SQL Server) when sampling data — start with `LIMIT 10`. Prefer aggregates (`COUNT`, `GROUP BY`) over pulling rows to characterize data.
+- Always add `LIMIT` (`TOP` on SQL Server, `FETCH FIRST n ROWS ONLY` on Oracle) when sampling data — start with `LIMIT 10`. Prefer aggregates (`COUNT`, `GROUP BY`) over pulling rows to characterize data.
 - Check a table's `full` detail before writing JOINs so you use real column names — don't guess and retry.
 - This plugin is read-only; if a write is rejected, tell the user rather than trying to work around it.

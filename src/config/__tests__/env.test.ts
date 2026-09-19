@@ -192,15 +192,26 @@ describe('Environment Configuration Tests', () => {
     });
 
     it('should throw error for unsupported database type', () => {
-      process.env.DB_TYPE = 'oracle';
+      process.env.DB_TYPE = 'db2';
       process.env.DB_HOST = 'localhost';
       process.env.DB_USER = 'user';
       process.env.DB_PASSWORD = 'pass';
       process.env.DB_NAME = 'db';
 
       expect(() => buildDSNFromEnvParams()).toThrow(
-        'Unsupported DB_TYPE: oracle. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite'
+        'Unsupported DB_TYPE: db2. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite, oracle'
       );
+    });
+
+    it('should build an oracle DSN with the default port', () => {
+      process.env.DB_TYPE = 'oracle';
+      process.env.DB_HOST = 'localhost';
+      process.env.DB_USER = 'user';
+      process.env.DB_PASSWORD = 'pass';
+      process.env.DB_NAME = 'FREEPDB1';
+
+      const result = buildDSNFromEnvParams();
+      expect(result?.dsn).toBe('oracle://user:pass@localhost:1521/FREEPDB1');
     });
 
     it('should use custom port when provided', () => {

@@ -54,6 +54,7 @@ This means the naming convention matters — integration tests MUST have `integr
 - `src/connectors/__tests__/mysql.integration.test.ts`
 - `src/connectors/__tests__/mariadb.integration.test.ts`
 - `src/connectors/__tests__/sqlserver.integration.test.ts`
+- `src/connectors/__tests__/oracle.integration.test.ts`
 - `src/connectors/__tests__/sqlite.integration.test.ts`
 - `src/connectors/__tests__/postgres-ssh.integration.test.ts`
 - `src/connectors/__tests__/multi-sqlite-sources.integration.test.ts`
@@ -119,6 +120,7 @@ Before running integration tests:
 | MySQL | `@testcontainers/mysql` | Supports IAM auth testing |
 | MariaDB | `@testcontainers/mariadb` | Supports IAM auth testing |
 | SQL Server | `@testcontainers/mssqlserver` | Slow startup (3-5 min), needs 4GB+ RAM |
+| Oracle | `@testcontainers/oraclefree` (`gvenzl/oracle-free:23-slim-faststart`) | ~1.2GB pull, 1-2 min startup, needs 2GB+ RAM |
 | SQLite | No container needed | In-memory or file-based |
 
 ## Troubleshooting

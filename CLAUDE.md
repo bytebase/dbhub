@@ -29,6 +29,7 @@ src/
 │   ├── mysql/           # MySQL connector
 │   ├── mariadb/         # MariaDB connector
 │   ├── sqlserver/       # SQL Server connector
+│   ├── oracle/          # Oracle connector (node-oracledb Thin mode, no Instant Client)
 │   └── sqlite/          # SQLite connector
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
@@ -173,8 +174,9 @@ outside TOML and follow the same order:
   - SQL Server: `sqlserver://user:password@localhost:1433/dbname?sslmode=disable`
   - SQL Server (named instance): `sqlserver://user:password@localhost:1433/dbname?instanceName=ENV1`
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
+  - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name; `?sid=ORCL` for a SID; `sslmode=require`/`verify-full` switch to TCPS)
   - SQLite: `sqlite:///path/to/database.db` or `sqlite:///:memory:`
-- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL only, CA + hostname verification). Use `sslrootcert` to specify CA certificate path for verify modes.
+- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL and Oracle, CA + hostname verification). Use `sslrootcert` to specify CA certificate path for verify modes.
 
 ## Testing Approach
 

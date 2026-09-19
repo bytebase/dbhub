@@ -390,12 +390,29 @@ description = "x"
       const tomlContent = `
 [[sources]]
 id = "invalid"
-type = "oracle"
+type = "db2"
 host = "localhost"
 `;
       fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
-      expect(() => loadTomlConfig()).toThrow("invalid type 'oracle'");
+      expect(() => loadTomlConfig()).toThrow("invalid type 'db2'");
+    });
+
+    it('should accept oracle sources and default the port to 1521', () => {
+      const tomlContent = `
+[[sources]]
+id = "ora"
+type = "oracle"
+host = "localhost"
+database = "FREEPDB1"
+user = "app"
+password = "secret"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const config = loadTomlConfig();
+      expect(config.sources[0].type).toBe('oracle');
+      expect(buildDSNFromSource(config.sources[0])).toBe('oracle://app:secret@localhost:1521/FREEPDB1');
     });
 
     it('should throw error for invalid max_rows', () => {

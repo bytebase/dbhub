@@ -251,6 +251,32 @@ describe("stripCommentsAndStrings", () => {
     });
   });
 
+  describe("alternative-quoted strings (Oracle q'...')", () => {
+    it.each([
+      ["q'[it's a ]test]'", "SELECT q'[it's a ]test]' FROM dual", "SELECT   FROM dual"],
+      ["Q'{a'b}'", "SELECT Q'{a'b}' FROM dual", "SELECT   FROM dual"],
+      ["q'<x>'", "SELECT q'<x>' FROM dual", "SELECT   FROM dual"],
+      ["q'!it's!'", "SELECT q'!it's!' FROM dual", "SELECT   FROM dual"],
+    ])("strips %s for Oracle", (_label, sql, expected) => {
+      expect(stripCommentsAndStrings(sql, "oracle")).toBe(expected);
+    });
+
+    it("does not treat a bare q identifier as a quote opener", () => {
+      expect(stripCommentsAndStrings("SELECT q, 'x' FROM t", "oracle")).toBe("SELECT q,   FROM t");
+    });
+
+    it("leaves an unterminated q-quote consuming the rest of the input", () => {
+      expect(stripCommentsAndStrings("SELECT q'[oops FROM t", "oracle")).toBe("SELECT  ");
+    });
+
+    it("splits Oracle statements without breaking on a semicolon inside a q-quote", () => {
+      expect(splitSQLStatements("SELECT q'[a;b]' FROM dual; SELECT 2 FROM dual", "oracle")).toEqual([
+        "SELECT q'[a;b]' FROM dual",
+        "SELECT 2 FROM dual",
+      ]);
+    });
+  });
+
   describe("bracket-quoted identifiers (SQL Server/SQLite)", () => {
     it("should strip bracket-quoted identifier for SQL Server", () => {
       const sql = "SELECT * FROM [my table]";

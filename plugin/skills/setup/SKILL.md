@@ -13,6 +13,7 @@ The database connection string (DSN) is entered in the plugin's configuration di
    - MySQL: `mysql://user:password@localhost:3306/dbname`
    - MariaDB: `mariadb://user:password@localhost:3306/dbname`
    - SQL Server: `sqlserver://user:password@localhost:1433/dbname`
+   - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name)
    - SQLite: `sqlite:///absolute/path/to/database.db` (no credentials)
 
    Append `?sslmode=require` for SSL (`sslmode=disable` for local databases). URL-encode special characters in the password. Recommend a least-privilege, read-only database account. Full DSN options (SQL Server named instances/NTLM, PostgreSQL cert verification): https://dbhub.ai/installation
