@@ -141,6 +141,21 @@ The same tool pattern works across different databases, just adjust the paramete
     description = "Product ID"
     ```
   </Tab>
+
+  <Tab title="Oracle">
+    ```toml
+    [[tools]]
+    name = "get_product"
+    description = "Get product by ID"
+    source = "oracle_db"
+    statement = "SELECT * FROM products WHERE id = :1"
+
+    [[tools.parameters]]
+    name = "product_id"
+    type = "integer"
+    description = "Product ID"
+    ```
+  </Tab>
 </Tabs>
 
 See [Parameter Placeholders](/config/toml#parameters) for syntax reference.

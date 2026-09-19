@@ -7,7 +7,7 @@ Show the execution plan for a SQL statement without running it.
 ## Features
 
 - **Never executes**: Only ever compiles/plans the statement — safe to enable regardless of the source's `readonly` setting
-- **Per-dialect output**: Uses `EXPLAIN` on PostgreSQL, MySQL, MariaDB, and SQL Server, and `EXPLAIN QUERY PLAN` on SQLite (bare `EXPLAIN` on SQLite returns low-level bytecode, not a readable plan)
+- **Per-dialect output**: Uses `EXPLAIN` on PostgreSQL, MySQL, MariaDB, and SQL Server, `EXPLAIN PLAN` + `DBMS_XPLAN` on Oracle, and `EXPLAIN QUERY PLAN` on SQLite (bare `EXPLAIN` on SQLite returns low-level bytecode, not a readable plan)
 - **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
 
 <Note>

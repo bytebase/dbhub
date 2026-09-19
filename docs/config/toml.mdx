@@ -219,6 +219,16 @@ Sources define database connections. Each source represents a database that DBHu
       database = "mydb"
       user = "admin@tenant.onmicrosoft.com"
       authentication = "azure-active-directory-access-token"
+
+      # Oracle (database = service name)
+      [[sources]]
+      id = "oracle_dev"
+      type = "oracle"
+      host = "localhost"
+      port = 1521
+      database = "FREEPDB1"
+      user = "app"
+      password = "secret"
       ```
     </Tab>
   </Tabs>
@@ -269,7 +279,7 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="connection_timeout" type="number">
   Connection timeout in seconds. The maximum time to wait when establishing a database connection.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
 
   ```toml
   [[sources]]
@@ -288,7 +298,7 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="query_timeout" type="number">
   Query timeout in seconds. The maximum time to wait for a query to complete before timing out.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
 
   ```toml
   [[sources]]
@@ -353,9 +363,9 @@ Sources define database connections. Each source represents a database that DBHu
   - `disable` - No SSL/TLS encryption. Data is transmitted in plaintext.
   - `require` - SSL/TLS encryption enabled, but server certificate is not verified.
   - `verify-ca` - SSL with CA certificate verification (no hostname check). **PostgreSQL only.**
-  - `verify-full` - SSL with CA certificate and hostname verification. **PostgreSQL only.**
+  - `verify-full` - SSL with CA certificate and hostname verification. **PostgreSQL and Oracle.**
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server (not applicable to SQLite). The `verify-ca` and `verify-full` modes are only supported for PostgreSQL.
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite). `verify-ca` is PostgreSQL only; `verify-full` is supported on PostgreSQL and Oracle (Oracle validates the server certificate against the system trust store, and `sslrootcert` is PostgreSQL only).
 
   ```toml
   # Basic SSL (all network databases)
@@ -704,6 +714,7 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
   | MariaDB | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
   | SQLite | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
   | SQL Server | `@p1`, `@p2`, `@p3` | `WHERE id = @p1 AND status = @p2` |
+  | Oracle | `:1`, `:2`, `:3` | `WHERE id = :1 AND status = :2` |
 
   <Warning>
   The number of parameters must match the number of placeholders in your SQL statement. Validation occurs at server startup.
