@@ -9,13 +9,25 @@ export interface DatabaseTestConfig {
   supportsStoredProcedures?: boolean;
   expectedStoredProcedures?: string[];
   supportsComments?: boolean;
-  /**
-   * How the engine folds an unquoted identifier. The shared tests create
-   * `users` with columns `id`, `name`, ... and then look those names up in
-   * metadata and in result-row keys; Oracle stores and reports them as
-   * `USERS`, `ID`, `NAME`. Defaults to `preserve` (no folding).
-   */
-  identifierCase?: 'preserve' | 'upper';
+}
+
+/**
+ * The shared tests create `users` with columns `id`, `name`, ... unquoted, and
+ * engines differ in how they report such identifiers back (Oracle folds them
+ * to `USERS`, `ID`, `NAME`). Lookups by name here are therefore
+ * case-insensitive; the engine-specific suites assert the exact casing.
+ */
+function sameIdentifier(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function findColumn<T extends { column_name: string }>(columns: T[], name: string): T | undefined {
+  return columns.find((col) => sameIdentifier(col.column_name, name));
+}
+
+function rowValue(row: Record<string, unknown>, key: string): unknown {
+  const actual = Object.keys(row).find((k) => sameIdentifier(k, key));
+  return actual === undefined ? undefined : row[actual];
 }
 
 export interface TestContainer {
@@ -34,14 +46,6 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
   constructor(config: DatabaseTestConfig) {
     this.config = config;
-  }
-
-  /**
-   * An unquoted identifier as the engine reports it back (see
-   * DatabaseTestConfig.identifierCase).
-   */
-  protected fold(identifier: string): string {
-    return this.config.identifierCase === 'upper' ? identifier.toUpperCase() : identifier;
   }
 
   /**
@@ -149,11 +153,11 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         const schema = await this.connector.getTableSchema('users');
         expect(schema.length).toBeGreaterThan(0);
         
-        const idColumn = schema.find(col => col.column_name === this.fold('id'));
+        const idColumn = findColumn(schema, 'id');
         expect(idColumn).toBeDefined();
         expect(idColumn?.is_nullable).toBe('NO');
         
-        const nameColumn = schema.find(col => col.column_name === this.fold('name'));
+        const nameColumn = findColumn(schema, 'name');
         expect(nameColumn).toBeDefined();
       });
 
@@ -163,7 +167,7 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         
         const primaryIndex = indexes.find(idx => idx.is_primary);
         expect(primaryIndex).toBeDefined();
-        expect(primaryIndex?.column_names).toContain(this.fold('id'));
+        expect(primaryIndex?.column_names.some((c) => sameIdentifier(c, 'id'))).toBe(true);
         
         // Some databases automatically create unique indexes, others handle unique constraints differently
         // We'll just verify we got at least the primary key index
@@ -177,7 +181,7 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
       it('should execute simple SELECT query', async () => {
         const result = await this.connector.executeSQL('SELECT COUNT(*) as count FROM users', {});
         expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(Number(result.resultSets[0].rows[0][this.fold('count')])).toBeGreaterThanOrEqual(3);
+        expect(Number(rowValue(result.resultSets[0].rows[0], 'count'))).toBeGreaterThanOrEqual(3);
       });
 
       it('should execute INSERT and SELECT', async () => {
@@ -190,8 +194,8 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
           "SELECT * FROM users WHERE email = 'test@example.com'", {}
         );
         expect(selectResult.resultSets[0].rows).toHaveLength(1);
-        expect(selectResult.resultSets[0].rows[0][this.fold('name')]).toBe('Test User');
-        expect(Number(selectResult.resultSets[0].rows[0][this.fold('age')])).toBe(25);
+        expect(rowValue(selectResult.resultSets[0].rows[0], 'name')).toBe('Test User');
+        expect(Number(rowValue(selectResult.resultSets[0].rows[0], 'age'))).toBe(25);
       });
 
       it('should handle complex queries with joins', async () => {
@@ -205,8 +209,8 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         `, {});
         
         expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-        expect(result.resultSets[0].rows[0]).toHaveProperty(this.fold('name'));
-        expect(result.resultSets[0].rows[0]).toHaveProperty(this.fold('order_count'));
+        expect(rowValue(result.resultSets[0].rows[0], 'name')).toBeDefined();
+        expect(rowValue(result.resultSets[0].rows[0], 'order_count')).toBeDefined();
       });
     });
   }
@@ -246,14 +250,14 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
         if (this.config.supportsComments) {
           // Databases with comments should return the descriptions we set
-          const nameColumn = schema.find(col => col.column_name === this.fold('name'));
+          const nameColumn = findColumn(schema, 'name');
           expect(nameColumn?.description).toBe('Full name of the user');
 
-          const emailColumn = schema.find(col => col.column_name === this.fold('email'));
+          const emailColumn = findColumn(schema, 'email');
           expect(emailColumn?.description).toBe('Unique email address');
 
           // Columns without comments should have null description
-          const ageColumn = schema.find(col => col.column_name === this.fold('age'));
+          const ageColumn = findColumn(schema, 'age');
           expect(ageColumn?.description).toBeNull();
         } else {
           // Databases without comment support (SQLite) should return null

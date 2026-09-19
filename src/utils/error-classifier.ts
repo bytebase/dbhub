@@ -25,11 +25,14 @@ const NETWORK_CODES = new Set([
   "EHOSTUNREACH",
   "ENETUNREACH",
   "ECONNRESET",
-  // node-oracledb Thin mode wraps the socket failure in its own code rather
-  // than surfacing the errno: NJS-503 "connection to host ... could not be
-  // established".
-  "NJS-503",
 ]);
+
+// Driver-specific "could not reach the source" codes, for drivers that wrap
+// the socket failure instead of surfacing the errno.
+const NETWORK_CODES_BY_TYPE: Partial<Record<ConnectorType, ReadonlySet<string>>> = {
+  // NJS-503: "connection to host ... could not be established" (Thin mode)
+  oracle: new Set(["NJS-503"]),
+};
 
 // Per-connector authentication failure signals. Keyed by code or errno.
 const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
@@ -79,7 +82,10 @@ export function classifyConnectionError(
   }
 
   const code = err.code;
-  if (typeof code === "string" && NETWORK_CODES.has(code)) {
+  if (
+    typeof code === "string" &&
+    (NETWORK_CODES.has(code) || NETWORK_CODES_BY_TYPE[connectorType]?.has(code))
+  ) {
     return { code: "SOURCE_UNREACHABLE", message: unreachableMessage(sourceId) };
   }
 

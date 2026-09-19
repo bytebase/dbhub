@@ -19,7 +19,7 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import { LEADING_SQL_NOISE, splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import {
   sqlServerDynamicSqlKeywords,
   sqlServerDynamicSqlPattern,
@@ -182,14 +182,6 @@ export class SQLServerConnector implements Connector {
   private config?: sql.config;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
-
-  /**
-   * Leading whitespace and SQL comments to skip before looking for a keyword.
-   * The read-only validator strips comments before checking the first keyword,
-   * so the connector must skip them too; otherwise an EXPLAIN preceded by a
-   * comment passes validation but reaches the server untranslated.
-   */
-  private static readonly LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
   /** Boolean spellings PostgreSQL accepts for an EXPLAIN option. */
   private static readonly EXPLAIN_ON = /^(?:true|on|1)$/i;
@@ -745,9 +737,7 @@ export class SQLServerConnector implements Connector {
     // `EXPLAIN ANALYZE` keeps Postgres semantics: the statement really runs and
     // the plan carries actual row counts. SHOWPLAN_XML cannot report those, so
     // that form maps to SET STATISTICS XML instead (see explainAnalyzeQuery).
-    const afterNoise = sqlQuery.slice(
-      sqlQuery.match(SQLServerConnector.LEADING_NOISE)![0].length
-    );
+    const afterNoise = sqlQuery.replace(LEADING_SQL_NOISE, "");
     if (/^explain\b/i.test(afterNoise)) {
       const { analyze, query } = SQLServerConnector.parseExplainPrefix(
         afterNoise.slice("explain".length).trim()

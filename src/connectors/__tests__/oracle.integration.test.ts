@@ -34,7 +34,6 @@ class OracleIntegrationTest extends IntegrationTestBase<OracleTestContainer> {
       supportsStoredProcedures: true,
       expectedStoredProcedures: ['GET_USER_COUNT', 'CALCULATE_TOTAL_AGE'],
       supportsComments: true,
-      identifierCase: 'upper',
     };
     super(config);
   }
@@ -152,6 +151,8 @@ describe('Oracle Connector Integration Tests', () => {
       expect(await oracleTest.connector.tableExists('users')).toBe(true);
       expect(await oracleTest.connector.tableExists('USERS')).toBe(true);
       expect(await oracleTest.connector.tableExists('users', 'test')).toBe(true);
+      // Mixed case is taken as spelled (a quoted identifier), so this is a different name.
+      expect(await oracleTest.connector.tableExists('Users')).toBe(false);
 
       const columns = await oracleTest.connector.getTableSchema('users');
       expect(columns.map((c) => c.column_name)).toEqual(['ID', 'NAME', 'EMAIL', 'AGE']);

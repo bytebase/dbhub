@@ -103,73 +103,44 @@ export function countParameters(statement: string): number {
   const cleanedSQL = stripCommentsAndStrings(statement);
 
   switch (style) {
-    case "numbered": {
-      // Extract all $N parameters and get unique indices
-      const matches = cleanedSQL.match(/\$\d+/g);
-      if (!matches) return 0;
-      const numbers = matches.map((m) => parseInt(m.slice(1), 10));
-      const uniqueIndices = Array.from(new Set(numbers)).sort((a, b) => a - b);
-
-      // Validate parameters are sequential starting from 1
-      const maxIndex = Math.max(...uniqueIndices);
-      for (let i = 1; i <= maxIndex; i++) {
-        if (!uniqueIndices.includes(i)) {
-          throw new Error(
-            `Non-sequential numbered parameters detected. Found placeholders: ${uniqueIndices.map(n => `$${n}`).join(', ')}. ` +
-            `Parameters must be sequential starting from $1 (missing $${i}).`
-          );
-        }
-      }
-
-      return maxIndex;
-    }
-    case "named": {
-      // Extract all @pN parameters and get unique indices
-      const matches = cleanedSQL.match(/@p\d+/g);
-      if (!matches) return 0;
-      const numbers = matches.map((m) => parseInt(m.slice(2), 10));
-      const uniqueIndices = Array.from(new Set(numbers)).sort((a, b) => a - b);
-
-      // Validate parameters are sequential starting from 1
-      const maxIndex = Math.max(...uniqueIndices);
-      for (let i = 1; i <= maxIndex; i++) {
-        if (!uniqueIndices.includes(i)) {
-          throw new Error(
-            `Non-sequential named parameters detected. Found placeholders: ${uniqueIndices.map(n => `@p${n}`).join(', ')}. ` +
-            `Parameters must be sequential starting from @p1 (missing @p${i}).`
-          );
-        }
-      }
-
-      return maxIndex;
-    }
-    case "colon": {
-      // Extract all :N parameters and get unique indices
-      const matches = cleanedSQL.match(/(?<!:):\d+/g);
-      if (!matches) return 0;
-      const numbers = matches.map((m) => parseInt(m.slice(1), 10));
-      const uniqueIndices = Array.from(new Set(numbers)).sort((a, b) => a - b);
-
-      // Validate parameters are sequential starting from 1
-      const maxIndex = Math.max(...uniqueIndices);
-      for (let i = 1; i <= maxIndex; i++) {
-        if (!uniqueIndices.includes(i)) {
-          throw new Error(
-            `Non-sequential colon-numbered parameters detected. Found placeholders: ${uniqueIndices.map(n => `:${n}`).join(', ')}. ` +
-            `Parameters must be sequential starting from :1 (missing :${i}).`
-          );
-        }
-      }
-
-      return maxIndex;
-    }
-    case "positional": {
+    case "numbered":
+      return countIndexedParameters(cleanedSQL, /\$\d+/g, "$", "numbered");
+    case "named":
+      return countIndexedParameters(cleanedSQL, /@p\d+/g, "@p", "named");
+    case "colon":
+      return countIndexedParameters(cleanedSQL, /(?<!:):\d+/g, ":", "colon-numbered");
+    case "positional":
       // Count question marks (positional parameters don't have this issue)
       return (cleanedSQL.match(/\?/g) || []).length;
-    }
     default:
       return 0;
   }
+}
+
+/**
+ * Count `<sigil>N` placeholders and require them to be sequential from 1.
+ * Returns the highest index (the number of parameter values required).
+ */
+function countIndexedParameters(
+  cleanedSQL: string,
+  pattern: RegExp,
+  sigil: string,
+  styleName: string
+): number {
+  const matches = cleanedSQL.match(pattern);
+  if (!matches) return 0;
+  const indices = new Set(matches.map((m) => parseInt(m.slice(sigil.length), 10)));
+  const maxIndex = Math.max(...indices);
+  for (let i = 1; i <= maxIndex; i++) {
+    if (!indices.has(i)) {
+      const found = Array.from(indices).sort((a, b) => a - b).map((n) => `${sigil}${n}`).join(", ");
+      throw new Error(
+        `Non-sequential ${styleName} parameters detected. Found placeholders: ${found}. ` +
+        `Parameters must be sequential starting from ${sigil}1 (missing ${sigil}${i}).`
+      );
+    }
+  }
+  return maxIndex;
 }
 
 /**

@@ -285,6 +285,16 @@ export function blankCommentsAndStrings(sql: string, dialect?: ConnectorType): s
 }
 
 /**
+ * Leading whitespace and SQL comments in front of a statement's first keyword.
+ * Connectors that dispatch on that keyword (e.g. to translate a leading
+ * `EXPLAIN`) must skip the same noise the read-only classifier strips, or a
+ * comment-prefixed EXPLAIN passes validation but reaches the server untranslated.
+ * Always matches (possibly empty), so `sql.replace(LEADING_SQL_NOISE, "")` is
+ * the statement from its first keyword on.
+ */
+export const LEADING_SQL_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
+
+/**
  * Split SQL into individual statements, handling semicolons inside quoted contexts.
  * When no dialect is specified, only ANSI SQL syntax is recognized.
  */

@@ -15,26 +15,20 @@ import {
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
-import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
+import {
+  LEADING_SQL_NOISE,
+  splitSQLStatements,
+  stripCommentsAndStrings,
+} from "../../utils/sql-parser.js";
 import { isReadOnlySQL } from "../../utils/allowed-keywords.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
-/**
- * Everything the connector needs to open a pool, derived from the DSN and the
- * per-source ConnectorConfig.
- */
+/** What the DSN parser hands to the connector. */
 export interface OracleConnectionConfig {
-  user: string;
-  password: string;
-  /** Easy Connect string: `[tcps://]host:port/service` */
-  connectString: string;
-  /** Seconds to wait for the whole Oracle Net handshake */
-  connectTimeout?: number;
+  /** Passed straight to oracledb.createPool */
+  pool: oracledb.PoolAttributes;
   /** Per-statement round-trip timeout, in milliseconds */
   callTimeoutMs?: number;
-  /** Verify the server certificate's DN against the hostname (sslmode=verify-full) */
-  sslServerDNMatch?: boolean;
-  poolMax: number;
 }
 
 /**
@@ -95,18 +89,26 @@ export class OracleDSNParser implements DSNParser {
         connectString = `${useTls ? "tcps://" : ""}${host}:${port}/${service}`;
       }
 
-      return {
+      const pool: oracledb.PoolAttributes = {
         user: url.username,
         password: url.password,
         connectString,
-        ...(config?.connectionTimeoutSeconds !== undefined && {
-          connectTimeout: config.connectionTimeoutSeconds,
-        }),
+        poolMin: 0,
+        poolMax: config?.poolMaxConnections ?? 4,
+        poolIncrement: 1,
+      };
+      if (config?.connectionTimeoutSeconds !== undefined) {
+        pool.connectTimeout = config.connectionTimeoutSeconds;
+      }
+      if (useTls) {
+        pool.sslServerDNMatch = sslmode === "verify-full";
+      }
+
+      return {
+        pool,
         ...(config?.queryTimeoutSeconds !== undefined && {
           callTimeoutMs: config.queryTimeoutSeconds * 1000,
         }),
-        ...(useTls && { sslServerDNMatch: sslmode === "verify-full" }),
-        poolMax: config?.poolMaxConnections ?? 4,
       };
     } catch (error) {
       throw new Error(
@@ -129,11 +131,9 @@ export class OracleDSNParser implements DSNParser {
  * Oracle Instant Client needed).
  *
  * Identifier case: Oracle folds unquoted identifiers to upper case, so the
- * catalog stores `users` as `USERS`. Every metadata lookup therefore matches a
- * name as given *or* upper-cased, which lets callers pass the lower-case names
- * they wrote in their DDL while still finding a case-sensitive quoted
- * identifier by its exact spelling. Names are returned exactly as the catalog
- * holds them.
+ * catalog stores `users` as `USERS`. Metadata lookups apply the same folding
+ * (see foldIdentifier) so callers can pass the names they wrote in their DDL;
+ * names are returned exactly as the catalog holds them.
  */
 export class OracleConnector implements Connector {
   id: ConnectorType = "oracle";
@@ -141,14 +141,11 @@ export class OracleConnector implements Connector {
   dsnParser = new OracleDSNParser();
 
   private pool?: oracledb.Pool;
-  private config?: OracleConnectionConfig;
+  private callTimeoutMs?: number;
   /** CURRENT_SCHEMA of the connected session, resolved once at connect time */
-  private defaultSchema?: string;
+  private defaultSchema = "";
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
-
-  /** Leading whitespace and SQL comments to skip before looking for a keyword. */
-  private static readonly LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
   /**
    * A PL/SQL block or a DDL statement that contains one. These must reach the
@@ -168,36 +165,16 @@ export class OracleConnector implements Connector {
 
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
-      this.config = await this.dsnParser.parse(dsn, config);
-
-      this.pool = await oracledb.createPool({
-        user: this.config.user,
-        password: this.config.password,
-        connectString: this.config.connectString,
-        poolMin: 0,
-        poolMax: this.config.poolMax,
-        poolIncrement: 1,
-        ...(this.config.connectTimeout !== undefined && {
-          connectTimeout: this.config.connectTimeout,
-        }),
-        ...(this.config.sslServerDNMatch !== undefined && {
-          sslServerDNMatch: this.config.sslServerDNMatch,
-        }),
-      });
+      const parsed = await this.dsnParser.parse(dsn, config);
+      this.callTimeoutMs = parsed.callTimeoutMs;
+      this.pool = await oracledb.createPool(parsed.pool);
 
       // Resolve the session's default schema once; it doubles as the
       // connection smoke test so a bad credential fails here, not on first use.
-      const connection = await this.acquire();
-      try {
-        const result = await connection.execute<{ SCHEMA_NAME: string }>(
-          "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS schema_name FROM dual",
-          {},
-          { outFormat: oracledb.OUT_FORMAT_OBJECT }
-        );
-        this.defaultSchema = result.rows?.[0]?.SCHEMA_NAME ?? this.config.user.toUpperCase();
-      } finally {
-        await connection.close();
-      }
+      const rows = await this.query<{ SCHEMA_NAME: string }>(
+        "SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS schema_name FROM dual"
+      );
+      this.defaultSchema = rows[0]?.SCHEMA_NAME ?? OracleConnector.foldIdentifier(parsed.pool.user ?? "");
 
       if (initScript) {
         await this.executeSQL(initScript, {});
@@ -205,11 +182,7 @@ export class OracleConnector implements Connector {
     } catch (error) {
       // Tear down the pool if it was created before the failure, otherwise it
       // strands sockets and keeps the event loop alive (see closeQuietly).
-      if (this.pool) {
-        const pool = this.pool;
-        this.pool = undefined;
-        await closeQuietly(() => pool.close(0));
-      }
+      await closeQuietly(() => this.disconnect());
       throw error;
     }
   }
@@ -228,27 +201,37 @@ export class OracleConnector implements Connector {
       throw new Error("Not connected to Oracle database");
     }
     const connection = await this.pool.getConnection();
-    if (this.config?.callTimeoutMs !== undefined) {
-      connection.callTimeout = this.config.callTimeoutMs;
+    if (this.callTimeoutMs !== undefined) {
+      connection.callTimeout = this.callTimeoutMs;
     }
     return connection;
   }
 
-  /**
-   * Run one catalog query on a short-lived pooled connection. Binds are named
-   * so a value can be referenced twice (`:name` and `UPPER(:name)`).
-   */
-  private async query<T>(sql: string, binds: oracledb.BindParameters = {}): Promise<T[]> {
+  /** Run one or more catalog queries on a single short-lived pooled connection. */
+  private async withConnection<R>(fn: (connection: oracledb.Connection) => Promise<R>): Promise<R> {
     const connection = await this.acquire();
     try {
-      const result = await connection.execute<T>(sql, binds, {
-        outFormat: oracledb.OUT_FORMAT_OBJECT,
-        fetchTypeHandler: OracleConnector.fetchLobsAsString,
-      });
-      return result.rows ?? [];
+      return await fn(connection);
     } finally {
       await connection.close();
     }
+  }
+
+  private static async fetchRows<T>(
+    connection: oracledb.Connection,
+    sql: string,
+    binds: oracledb.BindParameters = {}
+  ): Promise<T[]> {
+    const result = await connection.execute<T>(sql, binds, {
+      outFormat: oracledb.OUT_FORMAT_OBJECT,
+      fetchTypeHandler: OracleConnector.fetchLobsAsString,
+    });
+    return result.rows ?? [];
+  }
+
+  /** Run one catalog query on a short-lived pooled connection. */
+  private query<T>(sql: string, binds: oracledb.BindParameters = {}): Promise<T[]> {
+    return this.withConnection((connection) => OracleConnector.fetchRows<T>(connection, sql, binds));
   }
 
   /**
@@ -264,25 +247,22 @@ export class OracleConnector implements Connector {
   }
 
   /**
-   * The schema to query, upper-cased the way Oracle folds an unquoted
-   * identifier, unless the caller spelled a schema that exists as given.
-   * Callers pass the result to a `= :schema OR = UPPER(:schema)` predicate,
-   * so both spellings are honoured.
+   * The catalog spelling of an identifier a caller wrote unquoted: Oracle
+   * folds those to upper case. A name that already contains an upper-case
+   * letter is taken as spelled, so a case-sensitive quoted identifier like
+   * "MyTable" is still reachable by its exact name. (An all-lower-case quoted
+   * identifier is not; that trade keeps every catalog predicate a plain
+   * equality on an indexed column.)
    */
+  static foldIdentifier(name: string): string {
+    return /[A-Z]/.test(name) ? name : name.toUpperCase();
+  }
+
   private schemaOrDefault(schema?: string): string {
-    if (schema) {
-      return schema;
-    }
-    if (!this.defaultSchema) {
-      throw new Error("Not connected to Oracle database");
-    }
-    return this.defaultSchema;
+    return schema ? OracleConnector.foldIdentifier(schema) : this.defaultSchema;
   }
 
   async getSchemas(): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       // Every Oracle user is a schema; the ~35 Oracle-maintained accounts
       // (SYS, SYSTEM, XDB, ...) are noise for schema exploration, so list only
@@ -292,7 +272,7 @@ export class OracleConnector implements Connector {
          FROM all_users
          WHERE oracle_maintained = 'N' OR username = :current_schema
          ORDER BY username`,
-        { current_schema: this.defaultSchema ?? '' }
+        { current_schema: this.schemaOrDefault() }
       );
       return rows.map((row) => row.USERNAME);
     } catch (error) {
@@ -301,18 +281,15 @@ export class OracleConnector implements Connector {
   }
 
   async getDefaultSchema(): Promise<string | null> {
-    return this.defaultSchema ?? null;
+    return this.defaultSchema || null;
   }
 
   async getTables(schema?: string): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{ TABLE_NAME: string }>(
         `SELECT table_name
          FROM all_tables
-         WHERE (owner = :schema OR owner = UPPER(:schema))
+         WHERE owner = :schema
            AND nested = 'NO'
            AND secondary = 'N'
            AND (iot_type IS NULL OR iot_type = 'IOT')
@@ -327,15 +304,9 @@ export class OracleConnector implements Connector {
   }
 
   async getViews(schema?: string): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{ VIEW_NAME: string }>(
-        `SELECT view_name
-         FROM all_views
-         WHERE owner = :schema OR owner = UPPER(:schema)
-         ORDER BY view_name`,
+        `SELECT view_name FROM all_views WHERE owner = :schema ORDER BY view_name`,
         { schema: this.schemaOrDefault(schema) }
       );
       return rows.map((row) => row.VIEW_NAME);
@@ -345,16 +316,10 @@ export class OracleConnector implements Connector {
   }
 
   async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{ CNT: number }>(
-        `SELECT COUNT(*) AS cnt
-         FROM all_tables
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND (table_name = :table_name OR table_name = UPPER(:table_name))`,
-        { schema: this.schemaOrDefault(schema), table_name: tableName }
+        `SELECT COUNT(*) AS cnt FROM all_tables WHERE owner = :schema AND table_name = :table_name`,
+        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
       return Number(rows[0]?.CNT ?? 0) > 0;
     } catch (error) {
@@ -363,9 +328,6 @@ export class OracleConnector implements Connector {
   }
 
   async getTableSchema(tableName: string, schema?: string): Promise<TableColumn[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{
         COLUMN_NAME: string;
@@ -392,10 +354,10 @@ export class OracleConnector implements Connector {
            ON cc.owner = c.owner
           AND cc.table_name = c.table_name
           AND cc.column_name = c.column_name
-         WHERE (c.owner = :schema OR c.owner = UPPER(:schema))
-           AND (c.table_name = :table_name OR c.table_name = UPPER(:table_name))
+         WHERE c.owner = :schema
+           AND c.table_name = :table_name
          ORDER BY c.column_id`,
-        { schema: this.schemaOrDefault(schema), table_name: tableName }
+        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
 
       return rows.map((row) => ({
@@ -443,9 +405,6 @@ export class OracleConnector implements Connector {
   }
 
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{
         INDEX_NAME: string;
@@ -467,10 +426,10 @@ export class OracleConnector implements Connector {
           AND pk.constraint_type = 'P'
           AND pk.index_owner = i.owner
           AND pk.index_name = i.index_name
-         WHERE (i.table_owner = :schema OR i.table_owner = UPPER(:schema))
-           AND (i.table_name = :table_name OR i.table_name = UPPER(:table_name))
+         WHERE i.table_owner = :schema
+           AND i.table_name = :table_name
          ORDER BY i.index_name, ic.column_position`,
-        { schema: this.schemaOrDefault(schema), table_name: tableName }
+        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
 
       const indexMap = new Map<string, TableIndex>();
@@ -494,16 +453,10 @@ export class OracleConnector implements Connector {
   }
 
   async getTableComment(tableName: string, schema?: string): Promise<string | null> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const rows = await this.query<{ COMMENTS: string | null }>(
-        `SELECT comments
-         FROM all_tab_comments
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND (table_name = :table_name OR table_name = UPPER(:table_name))`,
-        { schema: this.schemaOrDefault(schema), table_name: tableName }
+        `SELECT comments FROM all_tab_comments WHERE owner = :schema AND table_name = :table_name`,
+        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
       return rows[0]?.COMMENTS || null;
     } catch {
@@ -512,18 +465,12 @@ export class OracleConnector implements Connector {
   }
 
   async getTableRowCount(tableName: string, schema?: string): Promise<number | null> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       // Optimizer statistics; NULL until the table has been analyzed, which
       // search_objects reports as an unknown count rather than a stale one.
       const rows = await this.query<{ NUM_ROWS: number | null }>(
-        `SELECT num_rows
-         FROM all_tables
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND (table_name = :table_name OR table_name = UPPER(:table_name))`,
-        { schema: this.schemaOrDefault(schema), table_name: tableName }
+        `SELECT num_rows FROM all_tables WHERE owner = :schema AND table_name = :table_name`,
+        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
       const numRows = rows[0]?.NUM_ROWS;
       return numRows === null || numRows === undefined ? null : Number(numRows);
@@ -533,26 +480,16 @@ export class OracleConnector implements Connector {
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
-      const types =
+      const typeFilter =
         routineType === "function"
-          ? ["FUNCTION"]
+          ? "object_type = 'FUNCTION'"
           : routineType === "procedure"
-            ? ["PROCEDURE"]
-            : ["PROCEDURE", "FUNCTION"];
+            ? "object_type = 'PROCEDURE'"
+            : "object_type IN ('PROCEDURE', 'FUNCTION')";
       const rows = await this.query<{ OBJECT_NAME: string }>(
-        `SELECT object_name
-         FROM all_objects
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND object_type IN (${types.map((_, i) => `:type${i}`).join(", ")})
-         ORDER BY object_name`,
-        {
-          schema: this.schemaOrDefault(schema),
-          ...Object.fromEntries(types.map((type, i) => [`type${i}`, type])),
-        }
+        `SELECT object_name FROM all_objects WHERE owner = :schema AND ${typeFilter} ORDER BY object_name`,
+        { schema: this.schemaOrDefault(schema) }
       );
       return rows.map((row) => row.OBJECT_NAME);
     } catch (error) {
@@ -561,80 +498,73 @@ export class OracleConnector implements Connector {
   }
 
   async getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
     try {
       const schemaToUse = this.schemaOrDefault(schema);
-      const binds = { schema: schemaToUse, name: procedureName };
+      const name = OracleConnector.foldIdentifier(procedureName);
 
-      const objects = await this.query<{ OBJECT_NAME: string; OBJECT_TYPE: string }>(
-        `SELECT object_name, object_type
-         FROM all_objects
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND (object_name = :name OR object_name = UPPER(:name))
-           AND object_type IN ('PROCEDURE', 'FUNCTION')`,
-        binds
-      );
-      if (objects.length === 0) {
-        throw new Error(`Stored procedure '${procedureName}' not found in schema '${schemaToUse}'`);
-      }
-      const object = objects[0];
-      const isFunction = object.OBJECT_TYPE === "FUNCTION";
+      return await this.withConnection(async (connection) => {
+        const objects = await OracleConnector.fetchRows<{ OBJECT_TYPE: string }>(
+          connection,
+          `SELECT object_type
+           FROM all_objects
+           WHERE owner = :schema AND object_name = :name
+             AND object_type IN ('PROCEDURE', 'FUNCTION')`,
+          { schema: schemaToUse, name }
+        );
+        if (objects.length === 0) {
+          throw new Error(`Stored procedure '${procedureName}' not found in schema '${schemaToUse}'`);
+        }
+        const objectType = objects[0].OBJECT_TYPE;
+        const isFunction = objectType === "FUNCTION";
 
-      // Standalone routines only (package_name IS NULL). Position 0 with no
-      // argument name is a function's return value.
-      const args = await this.query<{
-        ARGUMENT_NAME: string | null;
-        POSITION: number;
-        IN_OUT: string;
-        DATA_TYPE: string | null;
-      }>(
-        `SELECT argument_name, position, in_out, data_type
-         FROM all_arguments
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND object_name = :object_name
-           AND package_name IS NULL
-           AND data_level = 0
-         ORDER BY position`,
-        { schema: schemaToUse, object_name: object.OBJECT_NAME }
-      );
+        const [args, source] = await Promise.all([
+          // Standalone routines only (package_name IS NULL). Position 0 with
+          // no argument name is a function's return value.
+          OracleConnector.fetchRows<{
+            ARGUMENT_NAME: string | null;
+            POSITION: number;
+            IN_OUT: string;
+            DATA_TYPE: string | null;
+          }>(
+            connection,
+            `SELECT argument_name, position, in_out, data_type
+             FROM all_arguments
+             WHERE owner = :schema AND object_name = :name
+               AND package_name IS NULL AND data_level = 0
+             ORDER BY position`,
+            { schema: schemaToUse, name }
+          ),
+          OracleConnector.fetchRows<{ TEXT: string }>(
+            connection,
+            `SELECT text FROM all_source
+             WHERE owner = :schema AND name = :name AND type = :object_type
+             ORDER BY line`,
+            { schema: schemaToUse, name, object_type: objectType }
+          ),
+        ]);
 
-      const returnType = args.find((arg) => arg.POSITION === 0 && arg.ARGUMENT_NAME === null)?.DATA_TYPE;
-      const parameterList = args
-        .filter((arg) => arg.ARGUMENT_NAME !== null)
-        .map((arg) => `${arg.ARGUMENT_NAME} ${arg.IN_OUT} ${arg.DATA_TYPE ?? ""}`.trim())
-        .join(", ");
+        const returnType = args.find((arg) => arg.POSITION === 0 && arg.ARGUMENT_NAME === null)?.DATA_TYPE;
+        const parameterList = args
+          .filter((arg) => arg.ARGUMENT_NAME !== null)
+          .map((arg) => `${arg.ARGUMENT_NAME} ${arg.IN_OUT} ${arg.DATA_TYPE ?? ""}`.trim())
+          .join(", ");
 
-      const source = await this.query<{ TEXT: string }>(
-        `SELECT text
-         FROM all_source
-         WHERE (owner = :schema OR owner = UPPER(:schema))
-           AND name = :object_name
-           AND type = :object_type
-         ORDER BY line`,
-        { schema: schemaToUse, object_name: object.OBJECT_NAME, object_type: object.OBJECT_TYPE }
-      );
-
-      return {
-        procedure_name: object.OBJECT_NAME,
-        procedure_type: isFunction ? "function" : "procedure",
-        language: "plsql",
-        parameter_list: parameterList,
-        return_type: isFunction ? returnType ?? undefined : undefined,
-        definition: source.length > 0 ? source.map((row) => row.TEXT).join("") : undefined,
-      };
+        return {
+          procedure_name: name,
+          procedure_type: isFunction ? "function" : "procedure",
+          language: "plsql",
+          parameter_list: parameterList,
+          return_type: isFunction ? returnType ?? undefined : undefined,
+          definition: source.length > 0 ? source.map((row) => row.TEXT).join("") : undefined,
+        };
+      });
     } catch (error) {
       throw new Error(`Failed to get stored procedure details: ${(error as Error).message}`);
     }
   }
 
   async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
-    if (!this.pool) {
-      throw new Error("Not connected to Oracle database");
-    }
-
-    const afterNoise = sqlQuery.slice(sqlQuery.match(OracleConnector.LEADING_NOISE)![0].length);
+    const afterNoise = sqlQuery.replace(LEADING_SQL_NOISE, "");
     if (/^explain\b/i.test(afterNoise)) {
       return this.explainQuery(afterNoise.slice("explain".length), options.readonly, parameters);
     }
@@ -654,51 +584,35 @@ export class OracleConnector implements Connector {
       }
 
       const resultSets: SQLResultSet[] = [];
-      try {
-        for (const statement of statements) {
-          let processedSQL = statement;
-          let probeApplied = false;
-          if (options.maxRows) {
-            const rewrite = SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe(
-              statement,
-              options.maxRows
-            );
-            processedSQL = rewrite.sql;
-            probeApplied = rewrite.probeApplied;
-          }
+      for (const statement of statements) {
+        // Oracle runs one statement per round trip, so the cap is applied per statement.
+        const { sql: processedSQL, probeApplied } =
+          SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe(statement, options.maxRows);
 
-          const result = await connection.execute<Record<string, unknown>>(processedSQL, binds, {
-            outFormat: oracledb.OUT_FORMAT_OBJECT,
-            fetchTypeHandler: OracleConnector.fetchLobsAsString,
-          });
+        const result = await connection.execute<Record<string, unknown>>(processedSQL, binds, {
+          outFormat: oracledb.OUT_FORMAT_OBJECT,
+          fetchTypeHandler: OracleConnector.fetchLobsAsString,
+        });
 
-          const rows = result.rows ?? [];
-          const resultSet: SQLResultSet = {
-            sql: statement,
-            rows,
-            rowCount: result.rows ? rows.length : result.rowsAffected ?? 0,
-          };
-          SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
-          resultSets.push(resultSet);
-        }
-
-        if (options.readonly) {
-          await connection.rollback();
-        } else {
-          await connection.commit();
-        }
-      } catch (error) {
-        // Best-effort rollback so a failed ROLLBACK cannot mask the original error.
-        try {
-          await connection.rollback();
-        } catch {
-          // ignore
-        }
-        throw error;
+        const rows = result.rows ?? [];
+        const resultSet: SQLResultSet = {
+          sql: statement,
+          rows,
+          rowCount: result.rows ? rows.length : result.rowsAffected ?? 0,
+        };
+        SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+        resultSets.push(resultSet);
       }
 
+      if (options.readonly) {
+        await connection.rollback();
+      } else {
+        await connection.commit();
+      }
       return { resultSets };
     } catch (error) {
+      // Best-effort rollback so a failed ROLLBACK cannot mask the original error.
+      await closeQuietly(() => connection.rollback());
       throw new Error(`Failed to execute query: ${(error as Error).message}`);
     } finally {
       await connection.close();
@@ -740,8 +654,7 @@ export class OracleConnector implements Connector {
       .replace(/;\s*$/, "")
       .trim();
 
-    const cleaned = stripCommentsAndStrings(innerQuery, "oracle").trim();
-    if (!cleaned) {
+    if (!stripCommentsAndStrings(innerQuery, "oracle").trim()) {
       throw new Error("EXPLAIN requires a statement to analyze");
     }
     // EXPLAIN is routed here before the read-only transaction is opened. The
@@ -754,42 +667,38 @@ export class OracleConnector implements Connector {
 
     // STATEMENT_ID is VARCHAR2(30); this is well within it.
     const statementId = `dbhub_${Math.random().toString(36).slice(2, 14)}`;
-    const connection = await this.acquire();
-    try {
-      await connection.execute(
-        `EXPLAIN PLAN SET STATEMENT_ID = '${statementId}' FOR ${innerQuery}`,
-        parameters ?? []
-      );
-      const plan = await connection.execute<{ PLAN_TABLE_OUTPUT: string }>(
-        "SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', :id, 'TYPICAL'))",
-        { id: statementId },
-        { outFormat: oracledb.OUT_FORMAT_OBJECT }
-      );
-      const lines = (plan.rows ?? []).map((row) => row.PLAN_TABLE_OUTPUT);
-      return {
-        resultSets: [
-          {
-            rows: lines.length > 0 ? [{ plan: lines.join("\n") }] : [],
-            rowCount: lines.length > 0 ? 1 : 0,
-          },
-        ],
-      };
-    } catch (error) {
-      throw new Error(`Failed to explain query: ${(error as Error).message}`);
-    } finally {
-      // PLAN_TABLE preserves rows for the session, and the session goes back
-      // to the pool: drop this plan so it cannot pile up or leak to a later
-      // caller. Best effort.
+    return this.withConnection(async (connection) => {
       try {
-        await connection.execute("DELETE FROM plan_table WHERE statement_id = :id", {
-          id: statementId,
+        await connection.execute(
+          `EXPLAIN PLAN SET STATEMENT_ID = '${statementId}' FOR ${innerQuery}`,
+          parameters ?? []
+        );
+        const lines = await OracleConnector.fetchRows<{ PLAN_TABLE_OUTPUT: string }>(
+          connection,
+          "SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', :id, 'TYPICAL'))",
+          { id: statementId }
+        );
+        const plan = lines.map((row) => row.PLAN_TABLE_OUTPUT).join("\n");
+        return {
+          resultSets: [
+            {
+              rows: lines.length > 0 ? [{ plan }] : [],
+              rowCount: lines.length > 0 ? 1 : 0,
+            },
+          ],
+        };
+      } catch (error) {
+        throw new Error(`Failed to explain query: ${(error as Error).message}`);
+      } finally {
+        // PLAN_TABLE preserves rows for the session, and the session goes back
+        // to the pool: drop this plan so it cannot pile up or leak to a later
+        // caller. Best effort.
+        await closeQuietly(async () => {
+          await connection.execute("DELETE FROM plan_table WHERE statement_id = :id", { id: statementId });
+          await connection.commit();
         });
-        await connection.commit();
-      } catch {
-        // ignore
       }
-      await connection.close();
-    }
+    });
   }
 }
 
