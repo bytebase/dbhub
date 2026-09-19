@@ -211,6 +211,27 @@ This page covers command-line flags and environment variables. For TOML configur
       </Note>
     </Tab>
 
+    <Tab title="Oracle">
+      ```bash
+      # Format: oracle://[user]:[password]@[host]:[port]/[service_name]?[options]
+      oracle://app:secret@localhost:1521/FREEPDB1
+
+      # Old-style SID instead of a service name
+      oracle://app:secret@localhost:1521/?sid=ORCL
+
+      # TCPS (TLS): require = encrypted, verify-full = certificate DN matched against the host
+      oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
+      ```
+
+      <Note>
+        The path is the **service name** (e.g. `FREEPDB1` on Oracle Database
+        Free). DBHub uses node-oracledb in Thin mode, so no Oracle Instant
+        Client is needed. `verify-full` validates the server certificate
+        against the system trust store; `sslrootcert` is not supported for
+        Oracle.
+      </Note>
+    </Tab>
+
     <Tab title="SQLite">
       ```bash
       # Format: sqlite:///[path/to/database.db] or sqlite:///:memory:
@@ -231,11 +252,12 @@ This page covers command-line flags and environment variables. For TOML configur
 
   | Parameter | Databases | Description | Example |
   |-----------|-----------|-------------|---------|
-  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
+  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
   | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`) | `?sslrootcert=~/.ssl/ca.pem` |
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
   | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
+  | `sid` | Oracle | Connect by SID instead of service name | `?sid=ORCL` |
 
   **SSL/TLS Options:**
 
@@ -245,12 +267,13 @@ This page covers command-line flags and environment variables. For TOML configur
   | MySQL      |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
   | MariaDB    |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
   | SQL Server |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
+  | Oracle     |     ✅    |     ✅    |      ❌     |      ✅      | Plain TCP (`tcps://` only with `require`/`verify-full`) |
   | SQLite     |     ❌    |     ❌    |      ❌     |      ❌      | N/A (file-based) |
 
   - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
   - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
-  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
+  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL and Oracle.** On PostgreSQL use `sslrootcert` to specify the CA certificate path; on Oracle the server certificate is validated against the system trust store.
 
   ```bash
   # Examples
@@ -258,6 +281,7 @@ This page covers command-line flags and environment variables. For TOML configur
   postgres://user:password@localhost:5432/dbname?sslmode=require
   postgres://user:password@rds-host:5432/dbname?sslmode=verify-ca&sslrootcert=~/.ssl/rds-ca.pem
   sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
+  oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
   ```
 </ParamField>
 
@@ -268,9 +292,9 @@ This page covers command-line flags and environment variables. For TOML configur
 
   | Variable | Type | Description |
   |----------|------|-------------|
-  | `DB_TYPE` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `sqlite` |
+  | `DB_TYPE` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite` |
   | `DB_HOST` | string | Database server hostname (not needed for SQLite) |
-  | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`) |
+  | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`), Oracle (`1521`) |
   | `DB_USER` | string | Database username (not needed for SQLite) |
   | `DB_PASSWORD` | string | Database password (not needed for SQLite). Supports special characters without URL encoding. |
   | `DB_NAME` | string | Database name or SQLite file path |

@@ -24,17 +24,17 @@
 ```bash
             +------------------+    +--------------+    +------------------+
             |                  |    |              |    |                  |
-            |                  |    |              |    |                  |
             |  Claude Desktop  +--->+              +--->+    PostgreSQL    |
             |                  |    |              |    |                  |
             |  Claude Code     +--->+              +--->+    SQL Server    |
             |                  |    |              |    |                  |
-            |  Cursor          +--->+    DBHub     +--->+    SQLite        |
+            |  Cursor          +--->+    DBHub     +--->+    Oracle        |
             |                  |    |              |    |                  |
-            |  VS Code         +--->+              +--->+    MySQL         |
+            |  VS Code         +--->+              +--->+    SQLite        |
             |                  |    |              |    |                  |
-            |  Copilot CLI     +--->+              +--->+    MariaDB       |
+            |  Copilot CLI     +--->+              +--->+    MySQL         |
             |                  |    |              |    |                  |
+            |                  |    |              +--->+    MariaDB       |
             |                  |    |              |    |                  |
             +------------------+    +--------------+    +------------------+
                  MCP Clients           MCP Server             Databases

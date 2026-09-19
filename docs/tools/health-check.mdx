@@ -8,7 +8,7 @@ Report operational health metrics for a database source: connection pool state a
 
 - **Connection pool state**: Total/active/idle session counts, idle-in-transaction sessions, the configured connection ceiling, and how long the longest-running query or idle-in-transaction session has been open
 - **Buffer cache hit ratio**: Percentage of reads served from cache vs disk, useful for spotting an undersized cache before it becomes a production incident
-- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, and SQL Server. SQLite has no connection pool or cache-hit concept to report, so `health_check` returns an `UNSUPPORTED` error there
+- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, and SQL Server. SQLite has no connection pool or cache-hit concept to report, and Oracle is not implemented yet, so `health_check` returns an `UNSUPPORTED` error there
 - **Graceful degradation**: On MySQL/MariaDB/SQL Server, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
 - **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
 
