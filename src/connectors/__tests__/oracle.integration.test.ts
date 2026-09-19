@@ -338,6 +338,36 @@ describe('Oracle Connector Integration Tests', () => {
     });
   });
 
+  describe('Oracle-specific: health check', () => {
+    it('reports connection pool state and buffer cache hit ratio, or explains what it cannot read', async () => {
+      const health = await oracleTest.connector.getHealthCheck!();
+
+      // The container's application user may or may not hold
+      // SELECT_CATALOG_ROLE; either way every section is populated or
+      // accounted for by a note, never silently missing.
+      if (health.connections) {
+        expect(health.connections.total).toBeGreaterThanOrEqual(0);
+        expect(health.connections.active).toBeGreaterThanOrEqual(0);
+        expect(health.connections.idle).toBeGreaterThanOrEqual(0);
+        expect(health.connections.idleInTransaction).toBeGreaterThanOrEqual(0);
+        expect(health.connections.idleInTransactionAborted).toBeUndefined();
+        expect(health.connections.maxConnections).toBeGreaterThan(0);
+      } else {
+        expect(health.notes).toEqual(expect.arrayContaining([expect.stringContaining('V$SESSION')]));
+      }
+
+      if (health.bufferCache) {
+        expect(health.bufferCache.blocksHit + health.bufferCache.blocksRead).toBeGreaterThan(0);
+        if (health.bufferCache.hitRatioPct !== null) {
+          expect(health.bufferCache.hitRatioPct).toBeGreaterThanOrEqual(0);
+          expect(health.bufferCache.hitRatioPct).toBeLessThanOrEqual(100);
+        }
+      } else {
+        expect(health.notes).toEqual(expect.arrayContaining([expect.stringContaining('V$SYSSTAT')]));
+      }
+    });
+  });
+
   describe('Oracle-specific: EXPLAIN', () => {
     it('returns an execution plan for a bare EXPLAIN without executing the statement', async () => {
       const result = await oracleTest.connector.executeSQL('EXPLAIN SELECT * FROM users WHERE id = 1', { readonly: true });

@@ -11,7 +11,9 @@ import {
   StoredProcedure,
   ExecuteOptions,
   ConnectorConfig,
+  HealthCheckResult,
 } from "../interface.js";
+import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -514,6 +516,100 @@ export class OracleConnector implements Connector {
     } catch {
       return null;
     }
+  }
+
+  async getHealthCheck(): Promise<HealthCheckResult> {
+    if (!this.pool) {
+      throw new Error("Not connected to Oracle database");
+    }
+
+    const notes: string[] = [];
+    const result: HealthCheckResult = {};
+
+    // V$SESSION / V$PARAMETER / V$SYSSTAT are readable only with
+    // SELECT_CATALOG_ROLE (or SELECT ANY DICTIONARY); without it Oracle
+    // reports ORA-00942 as if the view did not exist. Degrade per section
+    // instead of failing the whole health check.
+    try {
+      const [sessions, params] = await this.withConnection((connection) =>
+        Promise.all([
+          OracleConnector.fetchRows<{
+            TOTAL: number;
+            ACTIVE: number;
+            IDLE: number;
+            IDLE_IN_TRANSACTION: number;
+            LONGEST_IDLE_IN_TRANSACTION_SECONDS: number | null;
+            LONGEST_ACTIVE_QUERY_SECONDS: number | null;
+          }>(
+            connection,
+            // TADDR is non-null while the session has an open transaction;
+            // LAST_CALL_ET is seconds since the current call began (ACTIVE)
+            // or since the last call ended (otherwise).
+            `SELECT
+               COUNT(*) AS total,
+               SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active,
+               SUM(CASE WHEN status <> 'ACTIVE' THEN 1 ELSE 0 END) AS idle,
+               SUM(CASE WHEN status <> 'ACTIVE' AND taddr IS NOT NULL THEN 1 ELSE 0 END) AS idle_in_transaction,
+               MAX(CASE WHEN status <> 'ACTIVE' AND taddr IS NOT NULL THEN last_call_et END) AS longest_idle_in_transaction_seconds,
+               MAX(CASE WHEN status = 'ACTIVE' THEN last_call_et END) AS longest_active_query_seconds
+             FROM v$session
+             WHERE type = 'USER'
+               AND sid <> SYS_CONTEXT('USERENV', 'SID')`
+          ),
+          OracleConnector.fetchRows<{ VALUE: string }>(
+            connection,
+            `SELECT value FROM v$parameter WHERE name = 'sessions'`
+          ),
+        ])
+      );
+      const conn = sessions[0];
+      const maxConnections = params.length > 0 ? Number(params[0].VALUE) : null;
+
+      result.connections = {
+        total: Number(conn.TOTAL ?? 0),
+        active: Number(conn.ACTIVE ?? 0),
+        idle: Number(conn.IDLE ?? 0),
+        idleInTransaction: Number(conn.IDLE_IN_TRANSACTION ?? 0),
+        // Oracle has no equivalent of Postgres's "idle in transaction
+        // (aborted)" state: a failed statement is rolled back on its own
+        // and leaves the transaction usable.
+        maxConnections: maxConnections !== null && maxConnections > 0 ? maxConnections : null,
+        longestIdleInTransactionSeconds: toNullableNumber(conn.LONGEST_IDLE_IN_TRANSACTION_SECONDS),
+        longestActiveQuerySeconds: toNullableNumber(conn.LONGEST_ACTIVE_QUERY_SECONDS),
+      };
+    } catch {
+      notes.push(
+        "Connection pool metrics unavailable: connecting user lacks SELECT on V$SESSION / V$PARAMETER (grant SELECT_CATALOG_ROLE or SELECT ANY DICTIONARY)."
+      );
+    }
+
+    try {
+      const stats = await this.query<{ NAME: string; VALUE: number }>(
+        `SELECT name, value FROM v$sysstat
+         WHERE name IN ('db block gets', 'consistent gets', 'physical reads')`
+      );
+      const byName = Object.fromEntries(stats.map((row) => [row.NAME, Number(row.VALUE)]));
+      // Logical reads = current-mode gets + consistent-mode gets; physical
+      // reads are the subset that had to go to disk.
+      const logicalReads = (byName["db block gets"] ?? 0) + (byName["consistent gets"] ?? 0);
+      const physicalReads = byName["physical reads"] ?? 0;
+
+      result.bufferCache = {
+        hitRatioPct: computeHitRatioPct(logicalReads, physicalReads),
+        blocksHit: logicalReads - physicalReads,
+        blocksRead: physicalReads,
+      };
+    } catch {
+      notes.push(
+        "Buffer cache metrics unavailable: connecting user lacks SELECT on V$SYSSTAT (grant SELECT_CATALOG_ROLE or SELECT ANY DICTIONARY)."
+      );
+    }
+
+    if (notes.length > 0) {
+      result.notes = notes;
+    }
+
+    return result;
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
