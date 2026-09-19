@@ -338,6 +338,69 @@ describe('Oracle Connector Integration Tests', () => {
     });
   });
 
+  describe('Oracle-specific: health check', () => {
+    // The image gives SYSTEM the same password as the application user, so
+    // the test can shape privileges deterministically: grant the app user
+    // the catalog role (privileged path) and create a user without it
+    // (restricted path).
+    const RESTRICTED_USER = 'dbhub_restricted';
+    let restricted: Connector;
+
+    beforeAll(async () => {
+      const admin = new OracleConnector();
+      await admin.connect(oracleTest.connectionString.replace(`${APP_USER}:${APP_PASSWORD}@`, `system:${APP_PASSWORD}@`));
+      try {
+        await admin.executeSQL(`GRANT SELECT_CATALOG_ROLE TO ${APP_USER}`, {});
+        await admin.executeSQL(`CREATE USER ${RESTRICTED_USER} IDENTIFIED BY "${APP_PASSWORD}"`, {});
+        await admin.executeSQL(`GRANT CREATE SESSION TO ${RESTRICTED_USER}`, {});
+      } finally {
+        await admin.disconnect();
+      }
+
+      // A fresh pool so the new role applies to every session it opens.
+      await oracleTest.connector.disconnect();
+      await oracleTest.connector.connect(oracleTest.connectionString);
+
+      restricted = new OracleConnector();
+      await restricted.connect(oracleTest.connectionString.replace(`${APP_USER}:${APP_PASSWORD}@`, `${RESTRICTED_USER}:${APP_PASSWORD}@`));
+    });
+
+    afterAll(async () => {
+      await restricted?.disconnect();
+    });
+
+    it('reports connection pool state and buffer cache hit ratio with SELECT_CATALOG_ROLE', async () => {
+      const health = await oracleTest.connector.getHealthCheck!();
+      expect(health.notes).toBeUndefined();
+
+      expect(health.connections).toBeDefined();
+      expect(health.connections!.total).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.active).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idle).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.active + health.connections!.idle).toBeLessThanOrEqual(health.connections!.total);
+      expect(health.connections!.idleInTransaction).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idleInTransactionAborted).toBeUndefined();
+      expect(health.connections!.maxConnections).toBeGreaterThan(0);
+
+      expect(health.bufferCache).toBeDefined();
+      expect(health.bufferCache!.blocksHit + health.bufferCache!.blocksRead).toBeGreaterThan(0);
+      expect(health.bufferCache!.hitRatioPct).not.toBeNull();
+      expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
+      expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
+    });
+
+    it('degrades to notes, not an error, without the catalog role', async () => {
+      const health = await restricted.getHealthCheck!();
+
+      expect(health.connections).toBeUndefined();
+      expect(health.bufferCache).toBeUndefined();
+      expect(health.notes).toEqual([
+        expect.stringContaining('V$SESSION'),
+        expect.stringContaining('V$SYSSTAT'),
+      ]);
+    });
+  });
+
   describe('Oracle-specific: EXPLAIN', () => {
     it('returns an execution plan for a bare EXPLAIN without executing the statement', async () => {
       const result = await oracleTest.connector.executeSQL('EXPLAIN SELECT * FROM users WHERE id = 1', { readonly: true });

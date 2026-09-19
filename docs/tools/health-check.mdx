@@ -8,8 +8,8 @@ Report operational health metrics for a database source: connection pool state a
 
 - **Connection pool state**: Total/active/idle session counts, idle-in-transaction sessions, the configured connection ceiling, and how long the longest-running query or idle-in-transaction session has been open
 - **Buffer cache hit ratio**: Percentage of reads served from cache vs disk, useful for spotting an undersized cache before it becomes a production incident
-- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, and SQL Server. SQLite has no connection pool or cache-hit concept to report, and Oracle is not implemented yet, so `health_check` returns an `UNSUPPORTED` error there
-- **Graceful degradation**: On MySQL/MariaDB/SQL Server, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
+- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle. SQLite has no connection pool or cache-hit concept to report, so `health_check` returns an `UNSUPPORTED` error there
+- **Graceful degradation**: On MySQL/MariaDB/SQL Server/Oracle, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
 - **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
 
 <Note>
@@ -48,7 +48,7 @@ Call the tool with no arguments — metrics are always for the source the tool i
 
 ### Reduced-privilege output
 
-On MySQL, MariaDB, and SQL Server, some metrics need a privilege the connected user might not have — the tool still returns what it can and explains the gap instead of erroring:
+On MySQL, MariaDB, SQL Server, and Oracle, some metrics need a privilege the connected user might not have — the tool still returns what it can and explains the gap instead of erroring:
 
 ```json Example output (MySQL, without PROCESS privilege)
 {
@@ -68,6 +68,7 @@ On MySQL, MariaDB, and SQL Server, some metrics need a privilege the connected u
 | --- | --- | --- |
 | MySQL / MariaDB | `PROCESS` | Idle-in-transaction detection only; connection/buffer-cache counts are still returned, but without it, connection visibility is restricted to the caller's own sessions (and the diagnostic session itself is excluded), so counts may under-report down to 0 |
 | SQL Server | `VIEW SERVER STATE` (`VIEW DATABASE STATE` on Azure SQL Database) | Both connection pool and buffer cache sections |
+| Oracle | `SELECT_CATALOG_ROLE` (or `SELECT ANY DICTIONARY`) | Both sections: connection pool from `V$SESSION` / `V$PARAMETER`, buffer cache from `V$SYSSTAT` |
 | PostgreSQL | None | All metrics are available to any connected user |
 
 ## Enabling health_check
