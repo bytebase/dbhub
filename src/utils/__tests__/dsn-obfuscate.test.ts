@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   obfuscateDSNPassword,
+  REDACTED_DSN,
   obfuscateSSHConfig,
   getDatabaseTypeFromDSN,
   parseConnectionInfoFromDSN,
@@ -77,6 +78,32 @@ describe('DSN Obfuscation Utilities', () => {
 
       expect(result).toBe('postgres://user:*****@localhost:5432/db');
       expect(result).not.toContain('ss@');
+    });
+
+    it('should obfuscate the whole password when it contains a #', () => {
+      const dsn = 'postgres://user:pa#ss@localhost:5432/db';
+      const result = obfuscateDSNPassword(dsn);
+
+      expect(result).toBe('postgres://user:*****@localhost:5432/db');
+      expect(result).not.toContain('pa#ss');
+    });
+
+    it('should fail closed on a scheme-less DSN instead of echoing it', () => {
+      // SafeURL rejects input without "://", so nothing can be parsed out of
+      // it — but it may still carry a password, so the original must not
+      // be returned.
+      const dsn = 'user:hunter2@localhost/db';
+      const result = obfuscateDSNPassword(dsn);
+
+      expect(result).toBe(REDACTED_DSN);
+      expect(result).not.toContain('hunter2');
+    });
+
+    it('should still obfuscate a DSN with an unknown scheme', () => {
+      const dsn = 'oracle://user:hunter2@localhost:1521/db';
+      const result = obfuscateDSNPassword(dsn);
+
+      expect(result).toBe('oracle://user:*******@localhost:1521/db');
     });
   });
 

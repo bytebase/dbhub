@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { buildDSNFromEnvParams, resolveDSN, resolveHost, resolveId } from '../env.js';
+import { buildDSNFromEnvParams, redactDSN, resolveDSN, resolveHost, resolveId } from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
@@ -352,6 +352,49 @@ describe('Environment Configuration Tests', () => {
       expect(result!.sources).toHaveLength(1);
       expect(result!.sources[0].type).toBe('postgres');
       expect(result!.sources[0].dsn).toBe('postgres://user:my@pass:word@localhost:5432/testdb');
+    });
+
+    it('should not leak the password when the DSN is malformed', async () => {
+      // A scheme-less DSN fails SafeURL parsing; the resulting fatal error is
+      // printed to stderr, so the raw value must never be interpolated into it.
+      process.argv = ['node', 'script.js', '--dsn=user:hunter2@localhost/db'];
+
+      const { resolveSourceConfigs } = await import('../env.js');
+      let message = '';
+      try {
+        await resolveSourceConfigs();
+      } catch (error) {
+        message = (error as Error).message;
+      }
+
+      expect(message).toMatch(/Invalid DSN format/);
+      expect(message).toContain('<redacted DSN>');
+      expect(message).not.toContain('hunter2');
+    });
+  });
+
+  describe('redactDSN', () => {
+    it('should replace the password with asterisks', () => {
+      const result = redactDSN('postgres://user:hunter2@localhost:5432/db');
+      expect(result).not.toContain('hunter2');
+      expect(result).toMatch(/^postgres:\/\/user:\*+@localhost:5432\/db$/);
+    });
+
+    it('should redact passwords containing @ or #', () => {
+      for (const password of ['p@ss', 'pa#ss', 'p@s#s@']) {
+        const result = redactDSN(`postgres://user:${password}@localhost:5432/db`);
+        expect(result).not.toContain(password);
+        expect(result).toMatch(/^postgres:\/\/user:\*+@localhost:5432\/db$/);
+      }
+    });
+
+    it('should fail closed on a scheme-less DSN', () => {
+      const result = redactDSN('user:hunter2@localhost/db');
+      expect(result).toBe('<redacted DSN>');
+    });
+
+    it('should leave SQLite DSNs untouched', () => {
+      expect(redactDSN('sqlite:///path/to/db.sqlite')).toBe('sqlite:///path/to/db.sqlite');
     });
   });
 

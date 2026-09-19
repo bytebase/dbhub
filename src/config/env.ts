@@ -7,7 +7,7 @@ import type { SSHTunnelConfig } from "../types/ssh.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath } from "../utils/ssh-config-parser.js";
 import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
-import { parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
+import { obfuscateDSNPassword, parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
 
 // Create __dirname equivalent for ES modules
@@ -509,26 +509,13 @@ function splitTokenList(value: string): string[] {
 
 /**
  * Redact sensitive information from a DSN string
- * Replaces the password with asterisks
+ * Replaces the password with asterisks; returns a constant placeholder if the
+ * DSN cannot be parsed, so a malformed DSN never leaks its password.
  * @param dsn - The DSN string to redact
  * @returns The sanitized DSN string
  */
 export function redactDSN(dsn: string): string {
-  try {
-    // Create a URL object to parse the DSN
-    const url = new URL(dsn);
-
-    // Replace the password with asterisks
-    if (url.password) {
-      url.password = "*******";
-    }
-
-    // Return the sanitized DSN
-    return url.toString();
-  } catch (error) {
-    // If parsing fails, do basic redaction with regex
-    return dsn.replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@");
-  }
+  return obfuscateDSNPassword(dsn);
 }
 
 /**
@@ -763,7 +750,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       dsnUrl = new SafeURL(dsnResult.dsn);
     } catch (error) {
       throw new Error(
-        `Invalid DSN format: ${dsnResult.dsn}. Expected format: protocol://[user[:password]@]host[:port]/database`
+        `Invalid DSN format: ${redactDSN(dsnResult.dsn)}. Expected format: protocol://[user[:password]@]host[:port]/database`
       );
     }
 
