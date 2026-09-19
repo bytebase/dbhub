@@ -1,5 +1,5 @@
 > [!NOTE]  
-> Brought to you by [Bytebase](https://www.bytebase.com/), open-source database governance platform.
+> Brought to you by [Bytebase](https://www.bytebase.com/). Need an enterprise-grade database MCP server? Bytebase adds the guardrails DBHub leaves to you: SQL review policies, approval workflows, dynamic data masking, fine-grained access control, and audit logging, all managed from a central console.
 
 <p align="center">
  <a href="https://www.star-history.com/bytebase/dbhub">
