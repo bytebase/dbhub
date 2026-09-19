@@ -27,6 +27,13 @@ describe("classifyConnectionError", () => {
     expect(classifyConnectionError({ code: "ELOGIN" }, "sqlserver", "s")?.code).toBe("AUTH_FAILED");
   });
 
+  it("classifies oracle errors: NJS-503 unreachable, ORA-01017/ORA-28000 auth", () => {
+    expect(classifyConnectionError({ code: "NJS-503" }, "oracle", "o")?.code).toBe("SOURCE_UNREACHABLE");
+    expect(classifyConnectionError({ code: "ORA-01017" }, "oracle", "o")?.code).toBe("AUTH_FAILED");
+    expect(classifyConnectionError({ code: "ORA-28000" }, "oracle", "o")?.code).toBe("AUTH_FAILED");
+    expect(classifyConnectionError({ code: "ORA-00942" }, "oracle", "o")).toBeNull();
+  });
+
   it("classifies marked SSH tunnel errors as TUNNEL_FAILED, ahead of network code", () => {
     const err: any = { code: "ECONNREFUSED" };
     err[TUNNEL_ERROR_MARKER] = true;

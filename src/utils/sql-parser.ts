@@ -183,6 +183,33 @@ function scanTokenSQLServer(sql: string, i: number): SQLToken {
     ?? plainToken(i);
 }
 
+/**
+ * Oracle alternative quoting: q'<delim>...<delim>' where a delimiter of
+ * ( [ { < closes with its mirror ) ] } > and any other single character closes
+ * with itself. The body can contain single quotes, so the plain single-quote
+ * scanner would end the literal early and leak its contents into the "plain"
+ * text the read-only classifier inspects.
+ */
+function scanOracleAlternativeQuotedString(sql: string, i: number): SQLToken | null {
+  if ((sql[i] !== "q" && sql[i] !== "Q") || sql[i + 1] !== "'") { return null; }
+  const open = sql[i + 2];
+  if (open === undefined || open === " " || open === "\t" || open === "\n") { return null; }
+  const mirrors: Record<string, string> = { "(": ")", "[": "]", "{": "}", "<": ">" };
+  const close = (mirrors[open] ?? open) + "'";
+  const closeIdx = sql.indexOf(close, i + 3);
+  const end = closeIdx !== -1 ? closeIdx + close.length : sql.length;
+  return { type: TokenType.QuotedBlock, end };
+}
+
+function scanTokenOracle(sql: string, i: number): SQLToken {
+  return scanSingleLineComment(sql, i)
+    ?? scanMultiLineComment(sql, i)
+    ?? scanOracleAlternativeQuotedString(sql, i)
+    ?? scanSingleQuotedString(sql, i)
+    ?? scanDoubleQuotedString(sql, i)
+    ?? plainToken(i);
+}
+
 type TokenScanner = (sql: string, i: number) => SQLToken;
 
 const dialectScanners: Record<ConnectorType, TokenScanner> = {
@@ -191,6 +218,7 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
   mariadb: scanTokenMySQL,
   sqlite: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
+  oracle: scanTokenOracle,
 };
 
 function getScanner(dialect?: ConnectorType): TokenScanner {
@@ -255,6 +283,16 @@ export function blankCommentsAndStrings(sql: string, dialect?: ConnectorType): s
 
   return result;
 }
+
+/**
+ * Leading whitespace and SQL comments in front of a statement's first keyword.
+ * Connectors that dispatch on that keyword (e.g. to translate a leading
+ * `EXPLAIN`) must skip the same noise the read-only classifier strips, or a
+ * comment-prefixed EXPLAIN passes validation but reaches the server untranslated.
+ * Always matches (possibly empty), so `sql.replace(LEADING_SQL_NOISE, "")` is
+ * the statement from its first keyword on.
+ */
+export const LEADING_SQL_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
 
 /**
  * Split SQL into individual statements, handling semicolons inside quoted contexts.

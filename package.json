@@ -61,6 +61,7 @@
     "mariadb": "^3.4.0",
     "mssql": "^11.0.1",
     "mysql2": "^3.13.0",
+    "oracledb": "^7.0.1",
     "pg": "^8.13.3"
   },
   "devDependencies": {
@@ -69,10 +70,12 @@
     "@testcontainers/mariadb": "^11.0.3",
     "@testcontainers/mssqlserver": "^11.0.3",
     "@testcontainers/mysql": "^11.0.3",
+    "@testcontainers/oraclefree": "^11.14.0",
     "@testcontainers/postgresql": "^11.0.3",
     "@types/express": "^4.17.21",
     "@types/mssql": "^9.1.7",
     "@types/node": "^22.13.10",
+    "@types/oracledb": "^7.0.3",
     "@types/pg": "^8.11.11",
     "@types/ssh2": "^1.15.5",
     "concurrently": "^9.2.1",

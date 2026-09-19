@@ -1,6 +1,6 @@
 # DBHub Claude Code Plugin
 
-Claude Code plugin for [DBHub](https://dbhub.ai) — a minimal, token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite. Full guide: https://dbhub.ai/claude-code-plugin
+Claude Code plugin for [DBHub](https://dbhub.ai) — a minimal, token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite. Full guide: https://dbhub.ai/claude-code-plugin
 
 ## What's included
 

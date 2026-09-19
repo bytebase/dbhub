@@ -6,6 +6,7 @@ import type { ConnectorType } from "../connectors/interface.js";
  * - PostgreSQL/SQLite: Double quotes ("identifier")
  * - MySQL/MariaDB: Backticks (`identifier`)
  * - SQL Server: Square brackets ([identifier])
+ * - Oracle: Double quotes ("identifier"); a quoted identifier is case-sensitive
  *
  * This function handles:
  * 1. Database-specific quoting syntax
@@ -16,7 +17,7 @@ import type { ConnectorType } from "../connectors/interface.js";
  * not for user input. User input should always use parameterized queries.
  *
  * @param identifier - The identifier to quote (e.g., table name, schema name)
- * @param dbType - The database type (postgres, mysql, mariadb, sqlite, sqlserver)
+ * @param dbType - The database type (postgres, mysql, mariadb, sqlite, sqlserver, oracle)
  * @returns The properly quoted identifier
  * @throws Error if identifier contains null bytes or control characters
  */
@@ -34,7 +35,8 @@ export function quoteIdentifier(identifier: string, dbType: ConnectorType): stri
   switch (dbType) {
     case "postgres":
     case "sqlite":
-      // PostgreSQL and SQLite use double quotes
+    case "oracle":
+      // PostgreSQL, SQLite and Oracle use double quotes
       // Escape existing double quotes by doubling them
       return `"${identifier.replace(/"/g, '""')}"`;
 

@@ -359,12 +359,14 @@ export class PostgresConnector implements Connector {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
 
-      // Query to get all indexes for the table
+      // Query to get all indexes for the table. attname is of type `name`;
+      // node-pg has no parser for name[] and would hand back the raw '{id}'
+      // string, so the aggregate is cast to text[] to get a real array.
       const result = await client.query(
         `
         SELECT
           i.relname as index_name,
-          array_agg(a.attname) as column_names,
+          array_agg(a.attname::text) as column_names,
           ix.indisunique as is_unique,
           ix.indisprimary as is_primary
         FROM

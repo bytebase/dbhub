@@ -112,10 +112,10 @@ describe('DSN Obfuscation Utilities', () => {
     });
 
     it('should still obfuscate a DSN with an unknown scheme', () => {
-      const dsn = 'oracle://user:hunter2@localhost:1521/db';
+      const dsn = 'db2://user:hunter2@localhost:50000/db';
       const result = obfuscateDSNPassword(dsn);
 
-      expect(result).toBe('oracle://user:*******@localhost:1521/db');
+      expect(result).toBe('db2://user:*******@localhost:50000/db');
     });
   });
 
@@ -143,13 +143,14 @@ describe('DSN Obfuscation Utilities', () => {
       ['mysql://user:pass@localhost:3306/db', 'mysql'],
       ['mariadb://user:pass@localhost:3306/db', 'mariadb'],
       ['sqlserver://user:pass@localhost:1433/db', 'sqlserver'],
+      ['oracle://user:pass@localhost:1521/FREEPDB1', 'oracle'],
       ['sqlite:///path/to/db.db', 'sqlite'],
     ])('should return correct type for %s', (dsn, expected) => {
       expect(getDatabaseTypeFromDSN(dsn)).toBe(expected);
     });
 
     it.each([
-      ['oracle://user:pass@localhost:1521/db', 'unknown protocol'],
+      ['db2://user:pass@localhost:50000/db', 'unknown protocol'],
       ['', 'empty DSN'],
     ])('should return undefined for %s', (dsn) => {
       expect(getDatabaseTypeFromDSN(dsn)).toBeUndefined();
@@ -164,6 +165,7 @@ describe('DSN Obfuscation Utilities', () => {
       ['mysql://root:password@mysql.local:3307/appdb', { type: 'mysql', host: 'mysql.local', port: 3307, database: 'appdb', user: 'root' }],
       ['mariadb://admin:pass123@maria.server:3306/production', { type: 'mariadb', host: 'maria.server', port: 3306, database: 'production', user: 'admin' }],
       ['sqlserver://sa:StrongPass@sqlserver.local:1433/master', { type: 'sqlserver', host: 'sqlserver.local', port: 1433, database: 'master', user: 'sa' }],
+      ['oracle://app:secret@ora.local:1521/FREEPDB1', { type: 'oracle', host: 'ora.local', port: 1521, database: 'FREEPDB1', user: 'app' }],
     ])('should parse %s correctly', (dsn, expected) => {
       expect(parseConnectionInfoFromDSN(dsn)).toEqual(expected);
     });

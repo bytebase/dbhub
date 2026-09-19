@@ -27,12 +27,21 @@ const NETWORK_CODES = new Set([
   "ECONNRESET",
 ]);
 
+// Driver-specific "could not reach the source" codes, for drivers that wrap
+// the socket failure instead of surfacing the errno.
+const NETWORK_CODES_BY_TYPE: Partial<Record<ConnectorType, ReadonlySet<string>>> = {
+  // NJS-503: "connection to host ... could not be established" (Thin mode)
+  oracle: new Set(["NJS-503"]),
+};
+
 // Per-connector authentication failure signals. Keyed by code or errno.
 const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   postgres: ["28P01", "28000"],
   mysql: ["ER_ACCESS_DENIED_ERROR", 1045, 1698],
   mariadb: ["ER_ACCESS_DENIED_ERROR", 1045, 1698],
   sqlserver: ["ELOGIN"],
+  // ORA-01017: invalid username/password; ORA-28000: account locked
+  oracle: ["ORA-01017", "ORA-28000"],
   sqlite: [], // no network/auth layer
 };
 
@@ -73,7 +82,10 @@ export function classifyConnectionError(
   }
 
   const code = err.code;
-  if (typeof code === "string" && NETWORK_CODES.has(code)) {
+  if (
+    typeof code === "string" &&
+    (NETWORK_CODES.has(code) || NETWORK_CODES_BY_TYPE[connectorType]?.has(code))
+  ) {
     return { code: "SOURCE_UNREACHABLE", message: unreachableMessage(sourceId) };
   }
 

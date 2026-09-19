@@ -1,6 +1,6 @@
 {
   "name": "dbhub",
-  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, and SQLite, with skills for connection setup and schema exploration",
+  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite, with skills for connection setup and schema exploration",
   "version": "1.2.5",
   "author": {
     "name": "Bytebase",
@@ -16,13 +16,14 @@
     "mysql",
     "mariadb",
     "sqlserver",
+    "oracle",
     "sqlite"
   ],
   "userConfig": {
     "dsn": {
       "type": "string",
       "title": "Database connection string (DSN)",
-      "description": "Examples: postgres://user:password@localhost:5432/dbname | mysql://user:password@localhost:3306/dbname | mariadb://user:password@localhost:3306/dbname | sqlserver://user:password@localhost:1433/dbname | sqlite:///path/to/database.db. Append ?sslmode=require for SSL. Use a least-privilege, read-only database account.",
+      "description": "Examples: postgres://user:password@localhost:5432/dbname | mysql://user:password@localhost:3306/dbname | mariadb://user:password@localhost:3306/dbname | sqlserver://user:password@localhost:1433/dbname | oracle://user:password@localhost:1521/FREEPDB1 | sqlite:///path/to/database.db. Append ?sslmode=require for SSL. Use a least-privilege, read-only database account.",
       "sensitive": true,
       "required": true
     }

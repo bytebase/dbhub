@@ -93,6 +93,16 @@ describe("Parameter Mapper", () => {
       const sql = "SELECT * FROM users";
       expect(detectParameterStyle(sql)).toBe("none");
     });
+
+    it("should detect Oracle colon-numbered parameters (:1, :2)", () => {
+      const sql = "SELECT * FROM users WHERE id = :1 AND status = :2";
+      expect(detectParameterStyle(sql)).toBe("colon");
+    });
+
+    it("should not mistake a PostgreSQL cast for a colon parameter", () => {
+      expect(detectParameterStyle("SELECT '1'::int FROM t")).toBe("none");
+      expect(detectParameterStyle("SELECT * FROM t WHERE id = $1 AND x = '5'::int")).toBe("numbered");
+    });
   });
 
   describe("validateParameterStyle", () => {
@@ -109,6 +119,13 @@ describe("Parameter Mapper", () => {
     it("should accept named parameters for sqlserver", () => {
       const sql = "SELECT * FROM users WHERE id = @p1";
       expect(() => validateParameterStyle(sql, "sqlserver")).not.toThrow();
+    });
+
+    it("should accept colon parameters for oracle and reject other styles", () => {
+      expect(() => validateParameterStyle("SELECT * FROM users WHERE id = :1", "oracle")).not.toThrow();
+      expect(() => validateParameterStyle("SELECT * FROM users WHERE id = ?", "oracle")).toThrow(
+        /Expected colon style \(:1, :2, :3\)/
+      );
     });
 
     it("should reject positional parameters for postgres", () => {
@@ -134,6 +151,25 @@ describe("Parameter Mapper", () => {
   });
 
   describe("countParameters", () => {
+    it("should ignore a :N inside an Oracle q-quoted literal when given the dialect", () => {
+      const sql = "SELECT q'[it's :1]' AS s FROM t WHERE id = :1";
+      expect(countParameters(sql, "oracle")).toBe(1);
+      expect(() => validateParameters(sql, [{ name: "id", type: "integer", description: "id" }], "oracle")).not.toThrow();
+    });
+
+    it("should reject a zero index in every indexed style", () => {
+      expect(() => countParameters("SELECT * FROM t WHERE id = $0")).toThrow(/parameter \$0/);
+      expect(() => countParameters("SELECT * FROM t WHERE id = @p0")).toThrow(/parameter @p0/);
+      expect(() => countParameters("SELECT * FROM t WHERE id = :0", "oracle")).toThrow(/parameter :0/);
+    });
+
+    it("should count and validate Oracle colon-numbered parameters", () => {
+      expect(countParameters("SELECT * FROM users WHERE id = :1 AND x = :2 OR y = :1")).toBe(2);
+      expect(() => countParameters("SELECT * FROM users WHERE id = :1 AND x = :3")).toThrow(
+        /missing :2/
+      );
+    });
+
     it("should count numbered parameters correctly", () => {
       expect(countParameters("SELECT * FROM users WHERE id = $1")).toBe(1);
       expect(

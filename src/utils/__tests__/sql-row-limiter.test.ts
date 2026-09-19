@@ -311,6 +311,64 @@ describe("SQLRowLimiter", () => {
     });
   });
 
+  describe("applyMaxRowsForOracle", () => {
+    it("wraps a SELECT in an inline view capped with FETCH FIRST", () => {
+      expect(SQLRowLimiter.applyMaxRowsForOracle("SELECT * FROM users", 100)).toBe(
+        "SELECT * FROM (SELECT * FROM users\n) FETCH FIRST 100 ROWS ONLY"
+      );
+    });
+
+    it("drops the trailing semicolon, which Oracle rejects on a plain statement", () => {
+      expect(SQLRowLimiter.applyMaxRowsForOracle("SELECT * FROM users;", 10)).toBe(
+        "SELECT * FROM (SELECT * FROM users\n) FETCH FIRST 10 ROWS ONLY"
+      );
+    });
+
+    it("caps a set operation as a whole, keeping ORDER BY inside the view", () => {
+      const sql = "SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id";
+      expect(SQLRowLimiter.applyMaxRowsForOracle(sql, 5)).toBe(
+        `SELECT * FROM (${sql}\n) FETCH FIRST 5 ROWS ONLY`
+      );
+    });
+
+    it("leaves non-SELECT statements and PL/SQL blocks alone", () => {
+      expect(SQLRowLimiter.applyMaxRowsForOracle("INSERT INTO t VALUES (1)", 10)).toBe(
+        "INSERT INTO t VALUES (1)"
+      );
+      expect(SQLRowLimiter.applyMaxRowsForOracle("BEGIN NULL; END;", 10)).toBe("BEGIN NULL; END;");
+    });
+
+    it("does not mistake a q-quoted literal for a data-modifying CTE", () => {
+      const sql = "WITH x AS (SELECT q'[DELETE FROM t]' AS s FROM dual) SELECT * FROM x";
+      expect(SQLRowLimiter.applyMaxRowsForOracle(sql, 100)).toBe(
+        `SELECT * FROM (${sql}\n) FETCH FIRST 100 ROWS ONLY`
+      );
+    });
+
+    it("leaves a FOR UPDATE locking read uncapped", () => {
+      const sql = "SELECT * FROM users WHERE id = 1 FOR UPDATE";
+      expect(SQLRowLimiter.applyMaxRowsForOracle(sql, 10)).toBe(sql);
+      expect(SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe(sql, 10)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+      // ... but not one that only mentions it inside a string or subquery.
+      expect(SQLRowLimiter.applyMaxRowsForOracle("SELECT 'for update' AS s FROM dual", 10)).toContain("FETCH FIRST 10");
+    });
+
+    it("applies the truncation probe to every row-returning statement", () => {
+      expect(
+        SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe("SELECT * FROM users", 100)
+      ).toEqual({
+        sql: "SELECT * FROM (SELECT * FROM users\n) FETCH FIRST 101 ROWS ONLY",
+        probeApplied: true,
+      });
+      expect(
+        SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe("DELETE FROM users", 100)
+      ).toEqual({ sql: "DELETE FROM users", probeApplied: false });
+    });
+  });
+
   describe("applyMaxRowsForSQLServer - comments and CTEs", () => {
     it("caps a query introduced by a leading comment", () => {
       const sql = "-- tag\nSELECT * FROM users";
