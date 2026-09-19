@@ -84,7 +84,16 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
 }
 
 /**
- * Obfuscates the password in a DSN string for logging purposes
+ * Placeholder returned in place of a DSN that could not be parsed.
+ * Unparseable input (e.g. a scheme-less "user:pass@host/db") may still carry a
+ * password, so the original string is never echoed back.
+ */
+export const REDACTED_DSN = '<redacted DSN>';
+
+/**
+ * Obfuscates the password in a DSN string for logging purposes.
+ * Fails closed: if the DSN cannot be parsed, returns REDACTED_DSN rather than
+ * the original string.
  * @param dsn The original DSN string
  * @returns DSN string with password replaced by asterisks
  */
@@ -103,6 +112,14 @@ export function obfuscateDSNPassword(dsn: string): string {
 
     // Parse DSN using SafeURL
     const url = new SafeURL(dsn);
+
+    // A DSN whose authority lacks an '@' (e.g. "postgres://user:secret/db")
+    // parses with "user" as the host and "secret" as the port. A real port is
+    // always numeric, so treat anything else as unparseable rather than
+    // echoing what is likely a credential.
+    if (url.port && !/^\d+$/.test(url.port)) {
+      return REDACTED_DSN;
+    }
 
     // No password to obfuscate
     if (!url.password) {
@@ -135,8 +152,8 @@ export function obfuscateDSNPassword(dsn: string): string {
 
     return result;
   } catch {
-    // If parsing fails, return original DSN
-    return dsn;
+    // Fail closed: an unparseable DSN may still contain a password
+    return REDACTED_DSN;
   }
 }
 
