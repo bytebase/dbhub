@@ -113,6 +113,14 @@ export function obfuscateDSNPassword(dsn: string): string {
     // Parse DSN using SafeURL
     const url = new SafeURL(dsn);
 
+    // A DSN whose authority lacks an '@' (e.g. "postgres://user:secret/db")
+    // parses with "user" as the host and "secret" as the port. A real port is
+    // always numeric, so treat anything else as unparseable rather than
+    // echoing what is likely a credential.
+    if (url.port && !/^\d+$/.test(url.port)) {
+      return REDACTED_DSN;
+    }
+
     // No password to obfuscate
     if (!url.password) {
       return dsn;

@@ -99,6 +99,18 @@ describe('DSN Obfuscation Utilities', () => {
       expect(result).not.toContain('hunter2');
     });
 
+    it('should fail closed when the authority has no @ and a credential lands in the port', () => {
+      // "user:secret" without a host parses as host "user", port "secret",
+      // so there is no password field to mask — the whole string must be
+      // withheld instead.
+      for (const dsn of ['postgres://user:secret/db', 'postgres://user:secret?sslmode=require']) {
+        const result = obfuscateDSNPassword(dsn);
+
+        expect(result).toBe(REDACTED_DSN);
+        expect(result).not.toContain('secret');
+      }
+    });
+
     it('should still obfuscate a DSN with an unknown scheme', () => {
       const dsn = 'oracle://user:hunter2@localhost:1521/db';
       const result = obfuscateDSNPassword(dsn);
