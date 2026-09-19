@@ -1,5 +1,5 @@
 > [!NOTE]  
-> Brought to you by [Bytebase](https://www.bytebase.com/), open-source database governance platform.
+> If you need an enterprise-level database MCP server with built-in guardrails like approval flow, access control, data masking, and audit logging beyond what DBHub offers, check out [Bytebase](https://www.bytebase.com/).
 
 <p align="center">
  <a href="https://www.star-history.com/bytebase/dbhub">
