@@ -345,6 +345,17 @@ describe("SQLRowLimiter", () => {
       );
     });
 
+    it("leaves a FOR UPDATE locking read uncapped", () => {
+      const sql = "SELECT * FROM users WHERE id = 1 FOR UPDATE";
+      expect(SQLRowLimiter.applyMaxRowsForOracle(sql, 10)).toBe(sql);
+      expect(SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe(sql, 10)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+      // ... but not one that only mentions it inside a string or subquery.
+      expect(SQLRowLimiter.applyMaxRowsForOracle("SELECT 'for update' AS s FROM dual", 10)).toContain("FETCH FIRST 10");
+    });
+
     it("applies the truncation probe to every row-returning statement", () => {
       expect(
         SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe("SELECT * FROM users", 100)

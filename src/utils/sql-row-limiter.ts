@@ -332,7 +332,7 @@ export class SQLRowLimiter {
    * `WITH ... SELECT` needs no special casing.
    */
   static applyMaxRowsForOracle(sql: string, maxRows: number | undefined): string {
-    if (!maxRows || !this.isSelectQuery(sql, "oracle")) {
+    if (!maxRows || !this.isSelectQuery(sql, "oracle") || this.hasOracleForUpdate(sql)) {
       return sql;
     }
     const { sql: sqlWithoutSemicolon } = trimSemicolon(sql);
@@ -343,16 +343,26 @@ export class SQLRowLimiter {
   }
 
   /**
+   * A statement-level `FOR UPDATE` (locking read). Oracle allows neither
+   * `FOR UPDATE` inside an inline view nor a row-limiting clause alongside
+   * it, so such a statement cannot be capped and is left as written.
+   */
+  private static hasOracleForUpdate(sql: string): boolean {
+    return this.findTopLevelMatch(sql, /\(|\)|\bfor\s+update\b/gi, "first", "oracle") !== null;
+  }
+
+  /**
    * Oracle variant of applyMaxRowsWithTruncationProbe. Because the cap always
    * wraps (see applyMaxRowsForOracle), the probe is applied to every
    * row-returning statement; a query whose own cap is tighter than maxRows
    * returns fewer than maxRows + 1 rows and is therefore never flagged.
+   * A `FOR UPDATE` statement is never capped (see hasOracleForUpdate).
    */
   static applyMaxRowsForOracleWithTruncationProbe(
     sql: string,
     maxRows: number | undefined
   ): MaxRowsRewrite {
-    if (!maxRows || !this.isSelectQuery(sql, "oracle")) {
+    if (!maxRows || !this.isSelectQuery(sql, "oracle") || this.hasOracleForUpdate(sql)) {
       return { sql, probeApplied: false };
     }
     return { sql: this.applyMaxRowsForOracle(sql, maxRows + 1), probeApplied: true };

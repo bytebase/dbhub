@@ -243,9 +243,9 @@ export class OracleConnector implements Connector {
 
   /**
    * Per-column fetch rules:
-   * - CLOB/NCLOB come back as strings instead of Lob streams, so result rows
-   *   are plain JSON. (LONG columns such as ALL_TAB_COLUMNS.DATA_DEFAULT are
-   *   already fetched as strings by default.)
+   * - CLOB/NCLOB come back as strings and BLOB as a Buffer instead of Lob
+   *   streams, so result rows are plain JSON. (LONG columns such as
+   *   ALL_TAB_COLUMNS.DATA_DEFAULT are already fetched as strings by default.)
    * - NUMBER is fetched as its exact decimal string and converted here:
    *   integers within Number's safe range become numbers, larger integers
    *   become BigInt (the response serializer renders those as strings), and
@@ -255,6 +255,9 @@ export class OracleConnector implements Connector {
   private static fetchTypeHandler(metaData: oracledb.Metadata<unknown>): oracledb.FetchTypeResponse | undefined {
     if (metaData.dbType === oracledb.DB_TYPE_CLOB || metaData.dbType === oracledb.DB_TYPE_NCLOB) {
       return { type: oracledb.STRING };
+    }
+    if (metaData.dbType === oracledb.DB_TYPE_BLOB) {
+      return { type: oracledb.BUFFER };
     }
     if (metaData.dbType === oracledb.DB_TYPE_NUMBER) {
       return { type: oracledb.STRING, converter: OracleConnector.convertNumber };
@@ -425,7 +428,8 @@ export class OracleConnector implements Connector {
     }
     if (type === "NUMBER") {
       if (row.DATA_PRECISION === null) {
-        return type;
+        // NUMBER(*, s) (INTEGER is NUMBER(*, 0)) has no precision but a scale.
+        return row.DATA_SCALE === null ? type : `NUMBER(*,${row.DATA_SCALE})`;
       }
       return row.DATA_SCALE ? `NUMBER(${row.DATA_PRECISION},${row.DATA_SCALE})` : `NUMBER(${row.DATA_PRECISION})`;
     }
@@ -596,6 +600,42 @@ export class OracleConnector implements Connector {
     }
   }
 
+  /**
+   * Bind values for one statement, keyed by placeholder name. DBHub's
+   * placeholders are `:1`, `:2`, ... and each names parameters[N-1]; binding
+   * by name (rather than handing the driver a positional array) lets a
+   * placeholder repeat (`:1 ... :1`) or appear out of order, and lets a batch
+   * hand each statement only the binds it uses, since the driver rejects a
+   * bind object naming a placeholder the statement lacks (NJS-097).
+   */
+  static bindsFor(statement: string, parameters: unknown[]): Record<string, oracledb.BindParameter> {
+    const binds: Record<string, oracledb.BindParameter> = {};
+    const blanked = blankCommentsAndStrings(statement, "oracle");
+    for (const match of blanked.matchAll(/(?<!:):(\d+)\b/g)) {
+      const index = parseInt(match[1], 10);
+      if (index >= 1 && index <= parameters.length) {
+        binds[match[1]] = parameters[index - 1] as oracledb.BindParameter;
+      }
+    }
+    return binds;
+  }
+
+  /**
+   * Wrap a driver error with context while keeping the properties the
+   * connection-error classifier reads (`code`, `errorNum`), which a plain
+   * `new Error(message)` would drop.
+   */
+  private static wrapError(prefix: string, error: unknown): Error {
+    const wrapped = new Error(`${prefix}: ${(error as Error).message}`, { cause: error });
+    for (const key of ["code", "errorNum", "offset"] as const) {
+      const value = (error as Record<string, unknown> | null)?.[key];
+      if (value !== undefined) {
+        (wrapped as unknown as Record<string, unknown>)[key] = value;
+      }
+    }
+    return wrapped;
+  }
+
   async executeSQL(sqlQuery: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     const afterNoise = sqlQuery.replace(LEADING_SQL_NOISE, "");
     if (/^explain\b/i.test(afterNoise)) {
@@ -603,7 +643,6 @@ export class OracleConnector implements Connector {
     }
 
     const statements = OracleConnector.splitStatements(afterNoise);
-    const binds = parameters ?? [];
 
     const connection = await this.acquire();
     try {
@@ -622,10 +661,14 @@ export class OracleConnector implements Connector {
         const { sql: processedSQL, probeApplied } =
           SQLRowLimiter.applyMaxRowsForOracleWithTruncationProbe(statement, options.maxRows);
 
-        const result = await connection.execute<Record<string, unknown>>(processedSQL, binds, {
-          outFormat: oracledb.OUT_FORMAT_OBJECT,
-          fetchTypeHandler: OracleConnector.fetchTypeHandler,
-        });
+        const result = await connection.execute<Record<string, unknown>>(
+          processedSQL,
+          OracleConnector.bindsFor(statement, parameters ?? []),
+          {
+            outFormat: oracledb.OUT_FORMAT_OBJECT,
+            fetchTypeHandler: OracleConnector.fetchTypeHandler,
+          }
+        );
 
         const rows = result.rows ?? [];
         const resultSet: SQLResultSet = {
@@ -646,7 +689,7 @@ export class OracleConnector implements Connector {
     } catch (error) {
       // Best-effort rollback so a failed ROLLBACK cannot mask the original error.
       await closeQuietly(() => connection.rollback());
-      throw new Error(`Failed to execute query: ${(error as Error).message}`);
+      throw OracleConnector.wrapError("Failed to execute query", error);
     } finally {
       await connection.close();
     }
@@ -771,7 +814,7 @@ export class OracleConnector implements Connector {
       try {
         await connection.execute(
           `EXPLAIN PLAN SET STATEMENT_ID = '${statementId}' FOR ${innerQuery}`,
-          parameters ?? []
+          OracleConnector.bindsFor(innerQuery, parameters ?? [])
         );
         const lines = await OracleConnector.fetchRows<{ PLAN_TABLE_OUTPUT: string }>(
           connection,
@@ -788,7 +831,7 @@ export class OracleConnector implements Connector {
           ],
         };
       } catch (error) {
-        throw new Error(`Failed to explain query: ${(error as Error).message}`);
+        throw OracleConnector.wrapError("Failed to explain query", error);
       } finally {
         // PLAN_TABLE preserves rows for the session, and the session goes back
         // to the pool: drop this plan so it cannot pile up or leak to a later

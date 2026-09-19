@@ -159,6 +159,15 @@ describe('Oracle Connector Integration Tests', () => {
     });
 
     it('renders column types the way DDL spells them', async () => {
+      await oracleTest.connector.executeSQL(
+        'CREATE TABLE type_probe (i INTEGER, s NUMBER(*,2), f FLOAT(10), v NVARCHAR2(20), r RAW(16))',
+        {}
+      );
+      const probe = Object.fromEntries(
+        (await oracleTest.connector.getTableSchema('type_probe')).map((c) => [c.column_name, c.data_type])
+      );
+      expect(probe).toEqual({ I: 'NUMBER(*,0)', S: 'NUMBER(*,2)', F: 'FLOAT(10)', V: 'NVARCHAR2(20)', R: 'RAW(16)' });
+
       const columns = await oracleTest.connector.getTableSchema('orders');
       const byName = Object.fromEntries(columns.map((c) => [c.column_name, c]));
       expect(byName.TOTAL.data_type).toBe('NUMBER(10,2)');
@@ -209,6 +218,30 @@ describe('Oracle Connector Integration Tests', () => {
         ['jane@example.com']
       );
       expect(result.resultSets[0].rows).toEqual([{ NAME: 'Jane Smith' }]);
+    });
+
+    it('binds repeated and reordered placeholders by name, per statement', async () => {
+      const result = await oracleTest.connector.executeSQL(
+        `SELECT :2 AS a, :1 AS b, :1 AS c FROM dual;
+         SELECT :1 AS only FROM dual`,
+        {},
+        ['one', 'two']
+      );
+      expect(result.resultSets[0].rows).toEqual([{ A: 'two', B: 'one', C: 'one' }]);
+      expect(result.resultSets[1].rows).toEqual([{ ONLY: 'one' }]);
+    });
+
+    it('fetches BLOB columns as Buffers and preserves driver error codes', async () => {
+      const blob = await oracleTest.connector.executeSQL(
+        "SELECT TO_BLOB(HEXTORAW('DEADBEEF')) AS b FROM dual",
+        {}
+      );
+      expect(Buffer.isBuffer(blob.resultSets[0].rows[0].B)).toBe(true);
+      expect((blob.resultSets[0].rows[0].B as Buffer).toString('hex')).toBe('deadbeef');
+
+      await expect(
+        oracleTest.connector.executeSQL('SELECT * FROM nonexistent_table', {})
+      ).rejects.toMatchObject({ code: 'ORA-00942' });
     });
 
     it('returns one result set per statement in a batch, with affected counts for writes', async () => {

@@ -157,6 +157,12 @@ describe("Parameter Mapper", () => {
       expect(() => validateParameters(sql, [{ name: "id", type: "integer", description: "id" }], "oracle")).not.toThrow();
     });
 
+    it("should reject a zero index in every indexed style", () => {
+      expect(() => countParameters("SELECT * FROM t WHERE id = $0")).toThrow(/parameter \$0/);
+      expect(() => countParameters("SELECT * FROM t WHERE id = @p0")).toThrow(/parameter @p0/);
+      expect(() => countParameters("SELECT * FROM t WHERE id = :0", "oracle")).toThrow(/parameter :0/);
+    });
+
     it("should count and validate Oracle colon-numbered parameters", () => {
       expect(countParameters("SELECT * FROM users WHERE id = :1 AND x = :2 OR y = :1")).toBe(2);
       expect(() => countParameters("SELECT * FROM users WHERE id = :1 AND x = :3")).toThrow(

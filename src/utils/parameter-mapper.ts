@@ -132,6 +132,11 @@ function countIndexedParameters(
   const matches = cleanedSQL.match(pattern);
   if (!matches) return 0;
   const indices = new Set(matches.map((m) => parseInt(m.slice(sigil.length), 10)));
+  if (indices.has(0)) {
+    throw new Error(
+      `Invalid ${styleName} parameter ${sigil}0. Parameters must be sequential starting from ${sigil}1.`
+    );
+  }
   const maxIndex = Math.max(...indices);
   for (let i = 1; i <= maxIndex; i++) {
     if (!indices.has(i)) {

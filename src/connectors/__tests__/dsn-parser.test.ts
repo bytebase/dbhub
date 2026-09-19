@@ -523,6 +523,24 @@ describe('OracleConnector.splitStatements', () => {
   });
 });
 
+describe('OracleConnector.bindsFor', () => {
+  it('names each :N placeholder after parameters[N-1], once, in any order', () => {
+    expect(OracleConnector.bindsFor('SELECT :2 AS a, :1 AS b, :1 AS c FROM dual', ['one', 'two'])).toEqual({
+      '1': 'one',
+      '2': 'two',
+    });
+  });
+
+  it('includes only the placeholders the statement uses', () => {
+    expect(OracleConnector.bindsFor('SELECT :2 FROM dual', ['one', 'two', 'three'])).toEqual({ '2': 'two' });
+    expect(OracleConnector.bindsFor('SELECT 1 FROM dual', ['one'])).toEqual({});
+  });
+
+  it('ignores :N inside literals, comments and PostgreSQL-style casts', () => {
+    expect(OracleConnector.bindsFor("SELECT q'[:1]' AS s, ':2' AS t, x::1 FROM dual -- :3", ['a', 'b', 'c'])).toEqual({});
+  });
+});
+
 describe('OracleConnector.convertNumber', () => {
   it('returns safe integers as numbers, larger integers as BigInt, decimals as numbers', () => {
     expect(OracleConnector.convertNumber('42')).toBe(42);
