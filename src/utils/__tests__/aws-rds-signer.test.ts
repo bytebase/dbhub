@@ -7,6 +7,7 @@ const signerMocks = vi.hoisted(() => ({
 }));
 const credentialProviderMocks = vi.hoisted(() => ({
   fromIni: vi.fn(),
+  fromNodeProviderChain: vi.fn(),
 }));
 
 vi.mock('@aws-sdk/rds-signer', () => {
@@ -25,6 +26,7 @@ vi.mock('@aws-sdk/rds-signer', () => {
 
 vi.mock('@aws-sdk/credential-providers', () => ({
   fromIni: credentialProviderMocks.fromIni,
+  fromNodeProviderChain: credentialProviderMocks.fromNodeProviderChain,
 }));
 
 describe('generateRdsAuthToken', () => {
@@ -47,7 +49,9 @@ describe('generateRdsAuthToken', () => {
 
     expect(credentialProviderMocks.fromIni).toHaveBeenCalledWith({
       profile: 'ngqa',
+      ignoreCache: true,
     });
+    expect(credentialProviderMocks.fromNodeProviderChain).not.toHaveBeenCalled();
     expect(signerMocks.constructor).toHaveBeenCalledWith({
       hostname: 'mydb.abc123.us-east-1.rds.amazonaws.com',
       port: 5432,
@@ -57,7 +61,9 @@ describe('generateRdsAuthToken', () => {
     });
   });
 
-  it('should create signer with expected params and return token', async () => {
+  it('should use the default provider chain with the file cache disabled when no profile is set', async () => {
+    const chainCredentials = vi.fn();
+    credentialProviderMocks.fromNodeProviderChain.mockReturnValue(chainCredentials);
     signerMocks.getAuthToken.mockResolvedValue('iam-token');
 
     const token = await generateRdsAuthToken({
@@ -67,11 +73,16 @@ describe('generateRdsAuthToken', () => {
       region: 'eu-west-1',
     });
 
+    expect(credentialProviderMocks.fromNodeProviderChain).toHaveBeenCalledWith({
+      ignoreCache: true,
+    });
+    expect(credentialProviderMocks.fromIni).not.toHaveBeenCalled();
     expect(signerMocks.constructor).toHaveBeenCalledWith({
       hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
       port: 3306,
       username: 'dbuser@example.com',
       region: 'eu-west-1',
+      credentials: chainCredentials,
     });
     expect(signerMocks.getAuthToken).toHaveBeenCalledTimes(1);
     expect(token).toBe('iam-token');
