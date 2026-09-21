@@ -35,7 +35,7 @@ export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<
 
   if (params.profile) {
     const { fromIni } = await import("@aws-sdk/credential-providers");
-    signerConfig.credentials = fromIni({ profile: params.profile });
+    signerConfig.credentials = fromIni({ profile: params.profile, ignoreCache: true });
   }
 
   const signer = new Signer(signerConfig);
