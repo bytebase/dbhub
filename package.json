@@ -1,6 +1,6 @@
 {
   "name": "dbhub",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "mcpName": "io.github.bytebase/dbhub",
   "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite",
   "repository": {
