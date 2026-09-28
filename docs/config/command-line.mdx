@@ -254,6 +254,8 @@ This page covers command-line flags and environment variables. For TOML configur
   |-----------|-----------|-------------|---------|
   | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
   | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`) | `?sslrootcert=~/.ssl/ca.pem` |
+  | `sslcert` | PostgreSQL | PEM client certificate for client certificate authentication (set with `sslkey`; requires `require`, `verify-ca` or `verify-full`) | `?sslcert=~/.ssl/client.crt` |
+  | `sslkey` | PostgreSQL | Unencrypted PEM private key for `sslcert` | `?sslkey=~/.ssl/client.key` |
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
   | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
@@ -280,6 +282,7 @@ This page covers command-line flags and environment variables. For TOML configur
   postgres://user:password@localhost:5432/dbname?sslmode=disable
   postgres://user:password@localhost:5432/dbname?sslmode=require
   postgres://user:password@rds-host:5432/dbname?sslmode=verify-ca&sslrootcert=~/.ssl/rds-ca.pem
+  postgres://user:password@pg-host:5432/dbname?sslmode=require&sslcert=~/.ssl/client.crt&sslkey=~/.ssl/client.key
   sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
   oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
   ```

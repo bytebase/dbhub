@@ -70,6 +70,20 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # sslmode = "verify-ca"
 # sslrootcert = "~/.ssl/rds-combined-ca-bundle.pem"
 
+# PostgreSQL with client certificate authentication (pg_hba.conf `hostssl ... cert`)
+# [[sources]]
+# id = "pg_client_cert"
+# type = "postgres"
+# host = "db.example.internal"
+# port = 5432
+# database = "app"
+# user = "app"
+# password = "${PG_PASSWORD}"
+# sslmode = "verify-ca"
+# sslrootcert = "~/.certs/ca.crt"
+# sslcert = "~/.certs/client.crt"
+# sslkey = "~/.certs/client.key"
+
 # Production PostgreSQL (behind SSH bastion, lazy connection)
 # [[sources]]
 # id = "prod_pg"
@@ -411,6 +425,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   sslmode = "verify-ca"    # SSL with CA certificate verification (PostgreSQL only)
 #   sslmode = "verify-full"  # SSL with CA + hostname verification (PostgreSQL only)
 #   sslrootcert = "~/.ssl/ca.pem"  # CA certificate path (requires verify-ca or verify-full)
+#   sslcert = "~/.ssl/client.crt"  # PEM client certificate (PostgreSQL only; set with sslkey, needs sslmode require/verify-*)
+#   sslkey = "~/.ssl/client.key"   # Unencrypted PEM private key for sslcert (PostgreSQL only)
 #
 # SQL Server Authentication:
 #   authentication = "ntlm"                              # Windows/NTLM auth (requires domain)

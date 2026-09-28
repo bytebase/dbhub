@@ -1,6 +1,8 @@
 /**
- * Thrown when a CA certificate file specified via `sslrootcert` cannot be read
- * (e.g. the file does not exist or is not accessible).
+ * Thrown when an SSL file referenced by a DSN parameter (`sslrootcert`,
+ * `sslcert`, `sslkey`) cannot be read or used, or when those parameters are
+ * combined inconsistently (e.g. `sslcert` without `sslkey`, or a client
+ * certificate on a connection with TLS disabled).
  */
 export class FailedToReadCertificate extends Error {
   constructor(message: string) {

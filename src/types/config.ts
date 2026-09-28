@@ -39,6 +39,8 @@ export interface ConnectionParams {
   instanceName?: string; // SQL Server named instance support
   sslmode?: "disable" | "require" | "verify-ca" | "verify-full"; // SSL mode for network databases (not applicable to SQLite, verify-* only applicable for PostgreSQL)
   sslrootcert?: string; // CA certificate path (requires verify-ca or verify-full)
+  sslcert?: string; // PEM client certificate path for client certificate authentication (PostgreSQL only; requires sslkey and sslmode require/verify-ca/verify-full)
+  sslkey?: string; // PEM private key path for sslcert (PostgreSQL only; unencrypted)
   // SQL Server authentication options
   authentication?: "ntlm" | "azure-active-directory-access-token";
   domain?: string; // Required for NTLM authentication
