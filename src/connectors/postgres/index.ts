@@ -32,6 +32,9 @@ const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
 /** SSL modes in which a client certificate is presented to the server. */
 const CLIENT_CERT_SSL_MODES = ["require", "verify-ca", "verify-full"];
 
+/** SSL modes this parser maps to a node-postgres `ssl` setting. */
+const SUPPORTED_SSL_MODES = ["disable", ...CLIENT_CERT_SSL_MODES];
+
 /**
  * Read a PEM file referenced by an SSL DSN parameter, expanding a leading `~/`.
  * Wraps any read failure in FailedToReadCertificate so callers can tell a
@@ -67,10 +70,11 @@ function isEncryptedPemKey(pem: string): boolean {
  * - sslmode=require: SSL connection without certificate verification
  * - sslmode=verify-ca: SSL with CA certificate verification, no hostname check
  * - sslmode=verify-full: SSL with CA certificate and hostname verification
- * - Any other value: SSL with default Node.js TLS settings
+ * - Any other value is rejected (libpq's allow/prefer have no node-postgres equivalent)
  *
  * Optional parameter for verify-ca/verify-full:
- * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
+ * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion).
+ *   Rejected with any other sslmode rather than silently ignored.
  *
  * Optional parameters for client certificate authentication (require/verify-ca/verify-full):
  * - sslcert=/path/to/client.crt: PEM client certificate (supports ~/ expansion)
@@ -123,6 +127,27 @@ class PostgresDSNParser implements DSNParser {
         // Add other parameters as needed
       });
 
+      // An unrecognised mode (libpq's allow/prefer, or a typo) used to fall
+      // through to `ssl: true`, which verifies against the system CA store and
+      // never falls back to plaintext — the opposite of what allow/prefer ask
+      // for. Reject it instead of guessing.
+      if (sslmode !== undefined && !SUPPORTED_SSL_MODES.includes(sslmode)) {
+        throw new Error(
+          `Unsupported sslmode '${sslmode}'. Valid values: ${SUPPORTED_SSL_MODES.join(", ")}`
+        );
+      }
+
+      // sslrootcert is only read for verify-ca/verify-full. libpq treats
+      // require + a root CA as verify-ca, so a DSN copied from psql would
+      // otherwise connect unverified without any warning. Fail fast and let
+      // the user pick the mode explicitly (matches TOML validation).
+      if (sslrootcert !== undefined && sslmode !== "verify-ca" && sslmode !== "verify-full") {
+        throw new FailedToReadCertificate(
+          `sslrootcert requires sslmode 'verify-ca' or 'verify-full' (got '${sslmode ?? "not set"}'). ` +
+            `Use sslmode=verify-ca to verify the server certificate against it, or remove sslrootcert.`
+        );
+      }
+
       // Client certificate authentication: both halves are needed for a TLS
       // handshake, and node-postgres only speaks TLS in the modes below, so a
       // cert on a plaintext connection would be silently dropped. Fail fast.
@@ -154,8 +179,6 @@ class PostgresDSNParser implements DSNParser {
           sslConfig.ca = await readPemFile(sslrootcert, "SSL root certificate");
         }
         poolConfig.ssl = sslConfig;
-      } else if (sslmode !== undefined) {
-        poolConfig.ssl = true;
       }
 
       if (sslcert !== undefined && sslkey !== undefined) {
