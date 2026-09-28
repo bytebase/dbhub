@@ -29,6 +29,36 @@ import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
 
+/** SSL modes in which a client certificate is presented to the server. */
+const CLIENT_CERT_SSL_MODES = ["require", "verify-ca", "verify-full"];
+
+/**
+ * Read a PEM file referenced by an SSL DSN parameter, expanding a leading `~/`.
+ * Wraps any read failure in FailedToReadCertificate so callers can tell a
+ * misconfigured cert path apart from a malformed DSN.
+ */
+async function readPemFile(filePath: string, label: string): Promise<string> {
+  const resolved = filePath.startsWith("~/")
+    ? path.join(os.homedir(), filePath.slice(2))
+    : filePath;
+  try {
+    return await fs.promises.readFile(resolved, "utf-8");
+  } catch (err) {
+    throw new FailedToReadCertificate(
+      `Failed to read ${label} at '${resolved}': ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+}
+
+/**
+ * Node's TLS layer needs a passphrase to open an encrypted PEM key and fails
+ * with an opaque decoder error otherwise. Detect the common PEM markers and
+ * fail with a clear message instead (sslpassword is not supported yet).
+ */
+function isEncryptedPemKey(pem: string): boolean {
+  return pem.includes("ENCRYPTED PRIVATE KEY") || pem.includes("Proc-Type: 4,ENCRYPTED");
+}
+
 /**
  * PostgreSQL DSN Parser
  * Handles DSN strings like: postgres://user:password@localhost:5432/dbname?sslmode=disable
@@ -41,6 +71,11 @@ const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
  *
  * Optional parameter for verify-ca/verify-full:
  * - sslrootcert=/path/to/ca.pem: Path to CA certificate bundle (supports ~/ expansion)
+ *
+ * Optional parameters for client certificate authentication (require/verify-ca/verify-full):
+ * - sslcert=/path/to/client.crt: PEM client certificate (supports ~/ expansion)
+ * - sslkey=/path/to/client.key: PEM private key for sslcert (unencrypted; supports ~/ expansion)
+ * Both must be set together, and only take effect when TLS is enabled.
  */
 class PostgresDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<pg.PoolConfig> {
@@ -71,6 +106,8 @@ class PostgresDSNParser implements DSNParser {
 
       let sslmode: string | undefined;
       let sslrootcert: string | undefined;
+      let sslcert: string | undefined;
+      let sslkey: string | undefined;
 
       // Handle query parameters (like sslmode, sslrootcert, etc.)
       url.forEachSearchParam((value, key) => {
@@ -78,9 +115,28 @@ class PostgresDSNParser implements DSNParser {
           sslmode = value;
         } else if (key === "sslrootcert") {
           sslrootcert = value;
+        } else if (key === "sslcert") {
+          sslcert = value;
+        } else if (key === "sslkey") {
+          sslkey = value;
         }
         // Add other parameters as needed
       });
+
+      // Client certificate authentication: both halves are needed for a TLS
+      // handshake, and node-postgres only speaks TLS in the modes below, so a
+      // cert on a plaintext connection would be silently dropped. Fail fast.
+      if ((sslcert === undefined) !== (sslkey === undefined)) {
+        throw new FailedToReadCertificate(
+          "sslcert and sslkey must be set together for client certificate authentication"
+        );
+      }
+      if (sslcert !== undefined && !CLIENT_CERT_SSL_MODES.includes(sslmode ?? "")) {
+        throw new FailedToReadCertificate(
+          `sslcert/sslkey require sslmode to be one of ${CLIENT_CERT_SSL_MODES.join(", ")} ` +
+            `(got '${sslmode ?? "not set"}')`
+        );
+      }
 
       if (sslmode === "disable") {
         poolConfig.ssl = false;
@@ -95,20 +151,26 @@ class PostgresDSNParser implements DSNParser {
           sslConfig.checkServerIdentity = () => undefined;
         }
         if (sslrootcert) {
-          const certPath = sslrootcert.startsWith("~/")
-            ? path.join(os.homedir(), sslrootcert.slice(2))
-            : sslrootcert;
-          try {
-            sslConfig.ca = await fs.promises.readFile(certPath, "utf-8");
-          } catch (err) {
-            throw new FailedToReadCertificate(
-              `Failed to read SSL root certificate at '${certPath}': ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
+          sslConfig.ca = await readPemFile(sslrootcert, "SSL root certificate");
         }
         poolConfig.ssl = sslConfig;
       } else if (sslmode !== undefined) {
         poolConfig.ssl = true;
+      }
+
+      if (sslcert !== undefined && sslkey !== undefined) {
+        const key = await readPemFile(sslkey, "SSL client key");
+        if (isEncryptedPemKey(key)) {
+          throw new FailedToReadCertificate(
+            `SSL client key at '${sslkey}' is encrypted; encrypted private keys are not supported. ` +
+              `Decrypt it first, e.g. 'openssl pkey -in client.key -out client-plain.key'`
+          );
+        }
+        // sslmode is validated above, so poolConfig.ssl is an object here
+        Object.assign(poolConfig.ssl as object, {
+          cert: await readPemFile(sslcert, "SSL client certificate"),
+          key,
+        });
       }
 
       // Apply connection timeout if specified

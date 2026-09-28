@@ -871,6 +871,190 @@ sslrootcert = "/nonexistent/ca.pem"
       });
     });
 
+    describe('client certificate (sslcert/sslkey) validation', () => {
+      let certPath: string;
+      let keyPath: string;
+
+      beforeEach(() => {
+        certPath = path.join(tempDir, 'client.crt');
+        keyPath = path.join(tempDir, 'client.key');
+        fs.writeFileSync(certPath, 'cert-content');
+        fs.writeFileSync(keyPath, 'key-content');
+      });
+
+      const writeSource = (extra: string, type = 'postgres'): void => {
+        fs.writeFileSync(
+          path.join(tempDir, 'dbhub.toml'),
+          `
+[[sources]]
+id = "test_db"
+type = "${type}"
+host = "localhost"
+database = "testdb"
+user = "user"
+password = "pass"
+${extra}
+`
+        );
+      };
+
+      it.each(['require', 'verify-ca', 'verify-full'])(
+        'should accept sslcert + sslkey with sslmode = "%s"',
+        (sslmode) => {
+          writeSource(`sslmode = "${sslmode}"\nsslcert = '${certPath}'\nsslkey = '${keyPath}'`);
+
+          const result = loadTomlConfig();
+
+          expect(result?.sources[0].sslcert).toBe(certPath);
+          expect(result?.sources[0].sslkey).toBe(keyPath);
+          expect(buildDSNFromSource(result!.sources[0])).toBe(
+            `postgres://user:pass@localhost:5432/testdb?sslmode=${sslmode}` +
+              `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`
+          );
+        }
+      );
+
+      it('should accept sslcert + sslkey together with sslrootcert', () => {
+        const caPath = path.join(tempDir, 'ca.pem');
+        fs.writeFileSync(caPath, 'ca-content');
+        writeSource(
+          `sslmode = "verify-full"\nsslrootcert = '${caPath}'\nsslcert = '${certPath}'\nsslkey = '${keyPath}'`
+        );
+
+        const result = loadTomlConfig();
+
+        expect(buildDSNFromSource(result!.sources[0])).toBe(
+          `postgres://user:pass@localhost:5432/testdb?sslmode=verify-full` +
+            `&sslrootcert=${encodeURIComponent(caPath)}` +
+            `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`
+        );
+      });
+
+      // expandHomeDir binds os.homedir at import time, so a spy cannot redirect
+      // it; write the fixtures under the real home directory instead.
+      const withHomeCerts = (fn: (relDir: string, homeCert: string, homeKey: string) => void): void => {
+        const relDir = `.dbhub-test-${process.pid}-${Date.now()}`;
+        const absDir = path.join(os.homedir(), relDir);
+        fs.mkdirSync(absDir, { recursive: true });
+        try {
+          fs.writeFileSync(path.join(absDir, 'client.crt'), 'cert');
+          fs.writeFileSync(path.join(absDir, 'client.key'), 'key');
+          fn(relDir, path.join(absDir, 'client.crt'), path.join(absDir, 'client.key'));
+        } finally {
+          fs.rmSync(absDir, { recursive: true, force: true });
+        }
+      };
+
+      it('should expand ~ in sslcert and sslkey', () => {
+        withHomeCerts((relDir, homeCert, homeKey) => {
+          writeSource(`sslmode = "require"\nsslcert = "~/${relDir}/client.crt"\nsslkey = "~/${relDir}/client.key"`);
+
+          const result = loadTomlConfig();
+
+          expect(result?.sources[0].sslcert).toBe(homeCert);
+          expect(result?.sources[0].sslkey).toBe(homeKey);
+        });
+      });
+
+      it('should reject sslcert/sslkey for non-PostgreSQL sources', () => {
+        writeSource(`sslmode = "require"\nsslcert = '${certPath}'\nsslkey = '${keyPath}'`, 'mysql');
+
+        expect(() => loadTomlConfig()).toThrow('sslcert/sslkey but they are only supported for PostgreSQL');
+      });
+
+      it('should reject sslcert without sslkey', () => {
+        writeSource(`sslmode = "require"\nsslcert = '${certPath}'`);
+
+        expect(() => loadTomlConfig()).toThrow('has sslcert without sslkey');
+      });
+
+      it('should reject sslkey without sslcert', () => {
+        writeSource(`sslmode = "require"\nsslkey = '${keyPath}'`);
+
+        expect(() => loadTomlConfig()).toThrow('has sslkey without sslcert');
+      });
+
+      it('should reject sslcert/sslkey when sslmode = "disable"', () => {
+        writeSource(`sslmode = "disable"\nsslcert = '${certPath}'\nsslkey = '${keyPath}'`);
+
+        expect(() => loadTomlConfig()).toThrow(
+          "sslcert/sslkey but sslmode is 'disable'. sslcert/sslkey require sslmode 'require', 'verify-ca' or 'verify-full'"
+        );
+      });
+
+      it('should reject sslcert/sslkey when sslmode is not set', () => {
+        writeSource(`sslcert = '${certPath}'\nsslkey = '${keyPath}'`);
+
+        expect(() => loadTomlConfig()).toThrow("sslcert/sslkey but sslmode is 'not set'");
+      });
+
+      it('should reject sslkey when the file does not exist', () => {
+        writeSource(`sslmode = "require"\nsslcert = '${certPath}'\nsslkey = "/nonexistent/client.key"`);
+
+        expect(() => loadTomlConfig()).toThrow(
+          "sslkey file not found or not accessible: '/nonexistent/client.key'"
+        );
+      });
+
+      it('should reject sslcert when the path is a directory', () => {
+        writeSource(`sslmode = "require"\nsslcert = '${tempDir}'\nsslkey = '${keyPath}'`);
+
+        expect(() => loadTomlConfig()).toThrow(`sslcert path is not a regular file: '${tempDir}'`);
+      });
+
+      it('should populate sslcert and sslkey fields from DSN query parameters', () => {
+        fs.writeFileSync(
+          path.join(tempDir, 'dbhub.toml'),
+          `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}"
+`
+        );
+
+        const result = loadTomlConfig();
+
+        expect(result?.sources[0].sslcert).toBe(certPath);
+        expect(result?.sources[0].sslkey).toBe(keyPath);
+      });
+
+      it('should reject a sslcert field that conflicts with the DSN', () => {
+        const otherCert = path.join(tempDir, 'other.crt');
+        fs.writeFileSync(otherCert, 'other');
+        fs.writeFileSync(
+          path.join(tempDir, 'dbhub.toml'),
+          `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=${encodeURIComponent(otherCert)}&sslkey=${encodeURIComponent(keyPath)}"
+sslcert = '${certPath}'
+sslkey = '${keyPath}'
+`
+        );
+
+        expect(() => loadTomlConfig()).toThrow('conflicting sslcert');
+      });
+
+      it('should accept a sslkey field that matches the DSN after ~ expansion', () => {
+        withHomeCerts((relDir, homeCert, homeKey) => {
+          fs.writeFileSync(
+            path.join(tempDir, 'dbhub.toml'),
+            `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=${encodeURIComponent(homeCert)}&sslkey=${encodeURIComponent(homeKey)}"
+sslcert = "~/${relDir}/client.crt"
+sslkey = "~/${relDir}/client.key"
+`
+          );
+
+          const result = loadTomlConfig();
+
+          expect(result?.sources[0].sslkey).toBe(homeKey);
+        });
+      });
+    });
+
     describe('SQL Server authentication validation', () => {
       it('should accept authentication = "ntlm" with domain', () => {
         const tomlContent = `
@@ -1611,6 +1795,51 @@ collation = "utf8mb4_0900_ai_ci"
         'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=' +
           encodeURIComponent('/etc/ssl/ca bundle.pem')
       );
+    });
+
+    it('should merge sslcert and sslkey fields into a postgres DSN for require', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db',
+        sslmode: 'require',
+        sslcert: '/etc/ssl/client cert.crt',
+        sslkey: '/etc/ssl/client.key',
+      };
+
+      const dsn = buildDSNFromSource(source);
+
+      expect(dsn).toBe(
+        'postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=' +
+          encodeURIComponent('/etc/ssl/client cert.crt') +
+          '&sslkey=' +
+          encodeURIComponent('/etc/ssl/client.key')
+      );
+    });
+
+    it('should not duplicate sslcert/sslkey already present in the DSN', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=%2Fc.crt&sslkey=%2Fc.key',
+        sslcert: '/c.crt',
+        sslkey: '/c.key',
+      };
+
+      expect(buildDSNFromSource(source)).toBe(source.dsn);
+    });
+
+    it('should not merge sslcert/sslkey when sslmode is disable', () => {
+      const source: SourceConfig = {
+        id: 'test',
+        type: 'postgres',
+        dsn: 'postgres://user:pass@localhost:5432/db',
+        sslmode: 'disable',
+        sslcert: '/c.crt',
+        sslkey: '/c.key',
+      };
+
+      expect(buildDSNFromSource(source)).toBe('postgres://user:pass@localhost:5432/db?sslmode=disable');
     });
 
     it('should not merge sslrootcert when sslmode is not a verify mode', () => {

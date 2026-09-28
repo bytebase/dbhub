@@ -419,6 +419,46 @@ Sources define database connections. Each source represents a database that DBHu
   </Tip>
 </ParamField>
 
+### sslcert / sslkey
+
+<ParamField path="sslcert" type="string">
+  Path to a PEM client certificate for **client certificate authentication**. Use when the server enforces `hostssl ... cert` or `clientcert=verify-ca` / `verify-full` in `pg_hba.conf` and rejects connections with `connection requires a valid client certificate`.
+
+  Must be set together with `sslkey`, and requires `sslmode` to be `require`, `verify-ca` or `verify-full` (the certificate is only presented over TLS). It is independent of `sslrootcert`: `require` + `sslcert`/`sslkey` authenticates the client without verifying the server.
+
+  Supports `~/` path expansion.
+
+  **PostgreSQL only.**
+</ParamField>
+
+<ParamField path="sslkey" type="string">
+  Path to the PEM private key for `sslcert`. The key must be **unencrypted** (an encrypted key is rejected at startup; `sslpassword` is not supported). DER-encoded keys are not accepted.
+
+  Keep the key file private (`chmod 0600`); DBHub reads it once at startup and never logs its contents.
+
+  Supports `~/` path expansion.
+
+  **PostgreSQL only.**
+
+  ```toml
+  [[sources]]
+  id = "dev"
+  type = "postgres"
+  host = "db.example.internal"
+  database = "app"
+  user = "app"
+  password = "${PG_PASSWORD}"
+  sslmode = "verify-ca"
+  sslrootcert = "~/.certs/ca.crt"
+  sslcert = "~/.certs/client.crt"
+  sslkey = "~/.certs/client.key"
+  ```
+
+  <Tip>
+  Can also be set via DSN query parameters: `?sslmode=require&sslcert=/path/to/client.crt&sslkey=/path/to/client.key`
+  </Tip>
+</ParamField>
+
 ### instanceName
 
 <ParamField path="instanceName" type="string">
@@ -856,6 +896,8 @@ default = 10
 | `pool_max_connections` | integer | ❌ | PostgreSQL pool size per process and source (default: `10`, range: `1`-`1000`) |
 | `sslmode` | string | ❌ | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` |
 | `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
+| `sslcert` | string | ❌ | PEM client certificate path for client certificate authentication (PostgreSQL only, requires `sslkey` and TLS enabled) |
+| `sslkey` | string | ❌ | Unencrypted PEM private key path for `sslcert` (PostgreSQL only) |
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |

@@ -257,18 +257,54 @@ function getRawDSNQueryParam(dsn: string, key: string): string | null {
   return null;
 }
 
+/** SSL modes in which a PostgreSQL client certificate (sslcert/sslkey) is presented. */
+const CLIENT_CERT_SSL_MODES: ReadonlyArray<string> = ["require", "verify-ca", "verify-full"];
+
+/**
+ * Ensure a file referenced by a source field exists, is a regular file and is
+ * readable, so a bad path fails at config load rather than at first connect.
+ */
+function validateReadableFile(
+  source: SourceConfig,
+  field: string,
+  filePath: string,
+  configPath: string
+): void {
+  const expandedPath = expandHomeDir(filePath);
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(expandedPath);
+  } catch {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' ${field} file not found or not accessible: '${expandedPath}'`
+    );
+  }
+  if (!stats.isFile()) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' ${field} path is not a regular file: '${expandedPath}'`
+    );
+  }
+  try {
+    fs.accessSync(expandedPath, fs.constants.R_OK);
+  } catch {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' ${field} file is not readable: '${expandedPath}'`
+    );
+  }
+}
+
 /**
  * Reject standalone fields that contradict a DSN.
  *
  * A DSN already encodes the connection identity (type/host/port/database/user/
- * password) and may carry query parameters (sslmode/sslrootcert plus the SQL
+ * password) and may carry query parameters (sslmode/sslrootcert/sslcert/sslkey plus the SQL
  * Server instanceName/authentication/domain). When the user also sets one of
  * those as a standalone field with a different value, the DSN wins at connection
  * time (buildDSNFromSource returns the DSN), so the field would be silently
  * ignored — we fail fast here instead.
  *
  * A field left unset never trips this check: processSourceConfigs() copies a
- * subset of these (type/host/port/database/user + sslmode/sslrootcert) from the
+ * subset of these (type/host/port/database/user + sslmode/sslrootcert/sslcert/sslkey) from the
  * DSN into the source when the field is unset, so they end up matching.
  */
 function validateDSNFieldConflicts(source: SourceConfig, configPath: string): void {
@@ -360,6 +396,15 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     expandHomeDir(source.sslrootcert) !== expandHomeDir(dsnSslrootcert)
   ) {
     conflict("sslrootcert", expandHomeDir(source.sslrootcert), expandHomeDir(dsnSslrootcert));
+  }
+
+  // sslcert/sslkey are compared the same way as sslrootcert: as expanded paths.
+  for (const field of ["sslcert", "sslkey"] as const) {
+    const fieldValue = source[field];
+    const dsnValue = getRawDSNQueryParam(source.dsn!, field);
+    if (fieldValue && dsnValue !== null && expandHomeDir(fieldValue) !== expandHomeDir(dsnValue)) {
+      conflict(field, expandHomeDir(fieldValue), expandHomeDir(dsnValue));
+    }
   }
 
   const dsnInstanceName = getRawDSNQueryParam(source.dsn!, "instanceName");
@@ -552,7 +597,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Reject fields that contradict the DSN. A DSN already encodes the connection
   // identity (type/host/port/database/user/password) and may carry query params
-  // (sslmode/sslrootcert/instanceName/authentication/domain). When the same value
+  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain). When the same value
   // is also set as a standalone field with a different value, the field is
   // silently ignored at connection time, so we fail fast instead.
   if (source.dsn) {
@@ -576,27 +621,36 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    const expandedPath = expandHomeDir(source.sslrootcert);
-    let stats: fs.Stats;
-    try {
-      stats = fs.statSync(expandedPath);
-    } catch {
+    validateReadableFile(source, "sslrootcert", source.sslrootcert, configPath);
+  }
+
+  // Validate client certificate authentication (sslcert + sslkey)
+  if (source.sslcert !== undefined || source.sslkey !== undefined) {
+    // Only the PostgreSQL connector presents a client certificate.
+    if (source.type !== "postgres") {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' sslrootcert file not found or not accessible: '${expandedPath}'`
+        `Configuration file ${configPath}: source '${source.id}' has sslcert/sslkey but they are only supported for PostgreSQL.`
       );
     }
-    if (!stats.isFile()) {
+    // A TLS handshake needs both the certificate and its private key.
+    if (source.sslcert === undefined || source.sslkey === undefined) {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' sslrootcert path is not a regular file: '${expandedPath}'`
+        `Configuration file ${configPath}: source '${source.id}' has ${source.sslcert !== undefined ? "sslcert" : "sslkey"} ` +
+          `without ${source.sslcert !== undefined ? "sslkey" : "sslcert"}. ` +
+          `sslcert and sslkey must be set together for client certificate authentication`
       );
     }
-    try {
-      fs.accessSync(expandedPath, fs.constants.R_OK);
-    } catch {
+    // libpq sends the client certificate in every SSL mode, but node-postgres
+    // only negotiates TLS for these modes — on a plaintext connection the
+    // certificate would be silently ignored.
+    if (!CLIENT_CERT_SSL_MODES.includes(source.sslmode ?? "")) {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' sslrootcert file is not readable: '${expandedPath}'`
+        `Configuration file ${configPath}: source '${source.id}' has sslcert/sslkey but sslmode is '${source.sslmode ?? "not set"}'. ` +
+          `sslcert/sslkey require sslmode 'require', 'verify-ca' or 'verify-full'`
       );
     }
+    validateReadableFile(source, "sslcert", source.sslcert, configPath);
+    validateReadableFile(source, "sslkey", source.sslkey, configPath);
   }
 
   // Validate SQL Server authentication options
@@ -802,9 +856,11 @@ function processSourceConfigs(
       processed.ssh_key = expandHomeDir(processed.ssh_key);
     }
 
-    // Expand ~ in sslrootcert path
-    if (processed.sslrootcert) {
-      processed.sslrootcert = expandHomeDir(processed.sslrootcert);
+    // Expand ~ in SSL file paths
+    for (const field of ["sslrootcert", "sslcert", "sslkey"] as const) {
+      if (processed[field]) {
+        processed[field] = expandHomeDir(processed[field]!);
+      }
     }
 
     // Expand ~ and resolve a relative SQLite database path
@@ -846,9 +902,11 @@ function processSourceConfigs(
         if (!processed.sslmode && dsnSslmode) {
           processed.sslmode = dsnSslmode as SourceConfig["sslmode"];
         }
-        const dsnSslrootcert = url.getSearchParam("sslrootcert");
-        if (!processed.sslrootcert && dsnSslrootcert) {
-          processed.sslrootcert = dsnSslrootcert;
+        for (const field of ["sslrootcert", "sslcert", "sslkey"] as const) {
+          const dsnValue = url.getSearchParam(field);
+          if (!processed[field] && dsnValue) {
+            processed[field] = dsnValue;
+          }
         }
       } catch {
         // DSN parsing for query params is best-effort; connector will handle errors
@@ -943,15 +1001,7 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
     additions.push(`sslmode=${source.sslmode}`);
   }
 
-  if (
-    source.sslrootcert &&
-    source.type === "postgres" &&
-    (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
-    !hasParam("sslrootcert")
-  ) {
-    const expandedCertPath = expandHomeDir(source.sslrootcert);
-    additions.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
-  }
+  additions.push(...postgresSslFileParams(source).filter(({ key }) => !hasParam(key)).map(({ param }) => param));
 
   if (additions.length === 0) {
     return dsn;
@@ -972,12 +1022,37 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
 }
 
 /**
+ * PostgreSQL SSL file parameters (sslrootcert/sslcert/sslkey) to append to a
+ * DSN query string, with `~/` expanded and the path percent-encoded. Only the
+ * parameters the connector would actually honour are emitted: sslrootcert for
+ * verify-* modes, sslcert/sslkey for require/verify-ca/verify-full
+ * (disable or an unset sslmode is rejected by validation).
+ */
+function postgresSslFileParams(source: SourceConfig): Array<{ key: string; param: string }> {
+  if (source.type !== "postgres") {
+    return [];
+  }
+  const params: Array<{ key: string; param: string }> = [];
+  const push = (key: "sslrootcert" | "sslcert" | "sslkey"): void => {
+    params.push({ key, param: `${key}=${encodeURIComponent(expandHomeDir(source[key]!))}` });
+  };
+  if (source.sslrootcert && (source.sslmode === "verify-ca" || source.sslmode === "verify-full")) {
+    push("sslrootcert");
+  }
+  if (source.sslcert && source.sslkey && CLIENT_CERT_SSL_MODES.includes(source.sslmode ?? "")) {
+    push("sslcert");
+    push("sslkey");
+  }
+  return params;
+}
+
+/**
  * Build DSN from source connection parameters
  * Similar to buildDSNFromEnvParams in env.ts but for TOML sources
  */
 export function buildDSNFromSource(source: SourceConfig): string {
   // If DSN is already provided, use it — but merge in dual-home fields
-  // (sslmode/sslrootcert/instanceName/authentication/domain) so they actually
+  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain) so they actually
   // affect the connection. Conflicts between the DSN query string and these
   // fields are rejected at validation time, so any param already present in the
   // DSN is guaranteed to match.
@@ -1060,14 +1135,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
     queryParams.push(`sslmode=${source.sslmode}`);
   }
 
-  if (
-    source.sslrootcert &&
-    source.type === "postgres" &&
-    (source.sslmode === "verify-ca" || source.sslmode === "verify-full")
-  ) {
-    const expandedCertPath = expandHomeDir(source.sslrootcert);
-    queryParams.push(`sslrootcert=${encodeURIComponent(expandedCertPath)}`);
-  }
+  queryParams.push(...postgresSslFileParams(source).map(({ param }) => param));
 
   // Append query string if any params exist
   if (queryParams.length > 0) {

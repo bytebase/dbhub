@@ -100,6 +100,127 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
   });
 });
 
+describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {
+  const connector = new PostgresConnector();
+  const parser = connector.dsnParser;
+  let tempDir: string;
+  let caPath: string;
+  let certPath: string;
+  let keyPath: string;
+  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
+  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
+  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
+
+  const base = 'postgres://user:pass@localhost:5432/db';
+  const clientCertParams = () =>
+    `sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-clientcert-test-'));
+    caPath = path.join(tempDir, 'ca.pem');
+    certPath = path.join(tempDir, 'client.crt');
+    keyPath = path.join(tempDir, 'client.key');
+    fs.writeFileSync(caPath, CA);
+    fs.writeFileSync(certPath, CERT);
+    fs.writeFileSync(keyPath, KEY);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('should load cert and key with sslmode=require without verifying the server', async () => {
+    const config = await parser.parse(`${base}?sslmode=require&${clientCertParams()}`);
+    expect(config.ssl).toEqual({ rejectUnauthorized: false, cert: CERT, key: KEY });
+  });
+
+  it('should load cert and key with sslmode=verify-ca', async () => {
+    const config = await parser.parse(`${base}?sslmode=verify-ca&${clientCertParams()}`);
+    const ssl = config.ssl as Record<string, unknown>;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.cert).toBe(CERT);
+    expect(ssl.key).toBe(KEY);
+    expect(typeof ssl.checkServerIdentity).toBe('function');
+  });
+
+  it('should load cert and key alongside sslrootcert with sslmode=verify-full', async () => {
+    const config = await parser.parse(
+      `${base}?sslmode=verify-full&sslrootcert=${encodeURIComponent(caPath)}&${clientCertParams()}`
+    );
+    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
+  });
+
+  it('should expand ~ in sslcert and sslkey paths', async () => {
+    const mockHomedir = vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+    try {
+      const config = await parser.parse(
+        `${base}?sslmode=require&sslcert=${encodeURIComponent('~/client.crt')}&sslkey=${encodeURIComponent('~/client.key')}`
+      );
+      expect(config.ssl).toEqual({ rejectUnauthorized: false, cert: CERT, key: KEY });
+    } finally {
+      mockHomedir.mockRestore();
+    }
+  });
+
+  it('should reject sslcert without sslkey', async () => {
+    await expect(
+      parser.parse(`${base}?sslmode=require&sslcert=${encodeURIComponent(certPath)}`)
+    ).rejects.toThrow('sslcert and sslkey must be set together');
+  });
+
+  it('should reject sslkey without sslcert', async () => {
+    await expect(
+      parser.parse(`${base}?sslmode=require&sslkey=${encodeURIComponent(keyPath)}`)
+    ).rejects.toThrow('sslcert and sslkey must be set together');
+  });
+
+  it('should reject a client certificate when sslmode=disable', async () => {
+    await expect(parser.parse(`${base}?sslmode=disable&${clientCertParams()}`)).rejects.toThrow(
+      "sslcert/sslkey require sslmode to be one of require, verify-ca, verify-full (got 'disable')"
+    );
+  });
+
+  it('should reject a client certificate when sslmode is not set', async () => {
+    await expect(parser.parse(`${base}?${clientCertParams()}`)).rejects.toThrow(
+      "sslcert/sslkey require sslmode to be one of require, verify-ca, verify-full (got 'not set')"
+    );
+  });
+
+  it('should throw FailedToReadCertificate naming the missing key file', async () => {
+    fs.rmSync(keyPath);
+    const err = await parser
+      .parse(`${base}?sslmode=require&${clientCertParams()}`)
+      .catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).name).toBe('FailedToReadCertificate');
+    expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
+  });
+
+  it('should throw FailedToReadCertificate naming the missing cert file', async () => {
+    fs.rmSync(certPath);
+    await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
+      `Failed to read SSL client certificate at '${certPath}'`
+    );
+  });
+
+  it('should reject an encrypted PKCS#8 private key with a clear message', async () => {
+    fs.writeFileSync(keyPath, '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n');
+    await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
+      'encrypted private keys are not supported'
+    );
+  });
+
+  it('should reject an encrypted legacy PEM private key with a clear message', async () => {
+    fs.writeFileSync(
+      keyPath,
+      '-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,00\n\nx\n-----END RSA PRIVATE KEY-----\n'
+    );
+    await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
+      'encrypted private keys are not supported'
+    );
+  });
+});
+
 describe('DSN Parser - PostgreSQL query timeout', () => {
   it('configures a server-side statement timeout before the client fallback', async () => {
     const parser = new PostgresConnector().dsnParser;
