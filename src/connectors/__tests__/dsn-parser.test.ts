@@ -87,17 +87,35 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
     await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
   });
 
-  it('should ignore sslrootcert when sslmode=require', async () => {
-    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=require&sslrootcert=${encodeURIComponent(certPath)}`;
-    const config = await parser.parse(dsn);
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  it.each(['require', 'disable'])('should reject sslrootcert when sslmode=%s', async (sslmode) => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=${sslmode}&sslrootcert=${encodeURIComponent(certPath)}`;
+    await expect(parser.parse(dsn)).rejects.toThrow(
+      `sslrootcert requires sslmode 'verify-ca' or 'verify-full' (got '${sslmode}')`
+    );
   });
 
-  it('should ignore sslrootcert when sslmode=disable', async () => {
-    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=disable&sslrootcert=${encodeURIComponent(certPath)}`;
-    const config = await parser.parse(dsn);
-    expect(config.ssl).toBe(false);
+  it('should reject sslrootcert when sslmode is not set', async () => {
+    const dsn = `postgres://user:pass@localhost:5432/db?sslrootcert=${encodeURIComponent(certPath)}`;
+    await expect(parser.parse(dsn)).rejects.toThrow(
+      "sslrootcert requires sslmode 'verify-ca' or 'verify-full' (got 'not set')"
+    );
   });
+
+  it('should leave ssl unset when sslmode is not set', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db');
+    expect(config.ssl).toBeUndefined();
+  });
+
+  it.each(['prefer', 'allow', 'verify_full', 'true'])(
+    'should reject unsupported sslmode=%s',
+    async (sslmode) => {
+      await expect(
+        parser.parse(`postgres://user:pass@localhost:5432/db?sslmode=${sslmode}`)
+      ).rejects.toThrow(
+        `Unsupported sslmode '${sslmode}'. Valid values: disable, require, verify-ca, verify-full`
+      );
+    }
+  );
 });
 
 describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {

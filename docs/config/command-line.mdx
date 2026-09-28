@@ -253,7 +253,7 @@ This page covers command-line flags and environment variables. For TOML configur
   | Parameter | Databases | Description | Example |
   |-----------|-----------|-------------|---------|
   | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
-  | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`) | `?sslrootcert=~/.ssl/ca.pem` |
+  | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`; rejected with `require`, `disable` or no `sslmode`) | `?sslrootcert=~/.ssl/ca.pem` |
   | `sslcert` | PostgreSQL | PEM client certificate for client certificate authentication (set with `sslkey`; requires `require`, `verify-ca` or `verify-full`) | `?sslcert=~/.ssl/client.crt` |
   | `sslkey` | PostgreSQL | Unencrypted PEM private key for `sslcert` | `?sslkey=~/.ssl/client.key` |
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
@@ -276,6 +276,10 @@ This page covers command-line flags and environment variables. For TOML configur
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
   - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
   - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL and Oracle.** On PostgreSQL use `sslrootcert` to specify the CA certificate path; on Oracle the server certificate is validated against the system trust store.
+
+  <Note>
+  Unlike libpq, DBHub does not upgrade `sslmode=require` to `verify-ca` when `sslrootcert` is present: that combination is rejected at startup, so set `sslmode=verify-ca` explicitly. libpq's `allow` and `prefer` modes are not supported for PostgreSQL either; use `require` (or a verify mode) instead.
+  </Note>
 
   ```bash
   # Examples
