@@ -1025,7 +1025,8 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
  * PostgreSQL SSL file parameters (sslrootcert/sslcert/sslkey) to append to a
  * DSN query string, with `~/` expanded and the path percent-encoded. Only the
  * parameters the connector would actually honour are emitted: sslrootcert for
- * verify-* modes, sslcert/sslkey for any TLS mode.
+ * verify-* modes, sslcert/sslkey for require/verify-ca/verify-full
+ * (disable or an unset sslmode is rejected by validation).
  */
 function postgresSslFileParams(source: SourceConfig): Array<{ key: string; param: string }> {
   if (source.type !== "postgres") {
