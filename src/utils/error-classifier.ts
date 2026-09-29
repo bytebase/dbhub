@@ -43,6 +43,7 @@ const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   // ORA-01017: invalid username/password; ORA-28000: account locked
   oracle: ["ORA-01017", "ORA-28000"],
   sqlite: [], // no network/auth layer
+  duckdb: [], // no network/auth layer
 };
 
 function unreachableMessage(sourceId: string): string {

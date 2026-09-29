@@ -11,6 +11,7 @@ const connectorModules = [
   { load: () => import("./connectors/mysql/index.js"), name: "MySQL", driver: "mysql2" },
   { load: () => import("./connectors/mariadb/index.js"), name: "MariaDB", driver: "mariadb" },
   { load: () => import("./connectors/oracle/index.js"), name: "Oracle", driver: "oracledb" },
+  { load: () => import("./connectors/duckdb/index.js"), name: "DuckDB", driver: "@duckdb/node-api" },
 ];
 
 loadConnectors(connectorModules)

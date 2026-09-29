@@ -1,6 +1,7 @@
 import type { SSHTunnelConfig } from '../types/ssh.js';
 import type { ConnectorType } from '../connectors/interface.js';
 import { SafeURL } from './safe-url.js';
+import duckdb from '@duckdb/node-api';
 
 /**
  * Parsed connection information from a DSN string
@@ -51,6 +52,10 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
           database: isSpecialPath ? rawPath : '/' + rawPath,
         };
       }
+      return { type };
+    }
+
+    if (type === 'duckdb') {
       return { type };
     }
 
@@ -168,19 +173,19 @@ export function obfuscateSSHConfig(config: SSHTunnelConfig): Partial<SSHTunnelCo
     port: config.port,
     username: config.username,
   };
-  
+
   if (config.password) {
     obfuscated.password = '*'.repeat(8);
   }
-  
+
   if (config.privateKey) {
     obfuscated.privateKey = config.privateKey; // Keep path as-is
   }
-  
+
   if (config.passphrase) {
     obfuscated.passphrase = '*'.repeat(8);
   }
-  
+
   return obfuscated;
 }
 
@@ -209,7 +214,8 @@ function protocolToConnectorType(protocol: string): ConnectorType | undefined {
     'mariadb': 'mariadb',
     'sqlserver': 'sqlserver',
     'sqlite': 'sqlite',
-    'oracle': 'oracle'
+    'oracle': 'oracle',
+    'duckdb': 'duckdb'
   };
   return mapping[protocol];
 }
@@ -227,6 +233,7 @@ export function getDefaultPortForType(type: ConnectorType): number | undefined {
     'sqlserver': 1433,
     'oracle': 1521,
     'sqlite': undefined,
+    'duckdb': undefined
   };
   return ports[type];
 }

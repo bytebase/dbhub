@@ -19,6 +19,7 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // DBMS_XPLAN (see OracleConnector.explainQuery). EXPLAIN PLAN only parses
   // the statement, it never executes it.
   oracle: ["select", "with", "explain"],
+  duckdb: ["select", "with", "explain", "pragma"]
 };
 
 /**
@@ -219,6 +220,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPatternSqlServer,
   oracle: mutatingPattern,
+  duckdb: /^\s*(insert|update|delete|merge|create|drop|alter|truncate|replace|attach|detach|copy|export|import|install|load|pragma)\b/i,
 };
 
 /**
