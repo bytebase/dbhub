@@ -115,6 +115,24 @@ describe("SQLRowLimiter", () => {
       expect(result).toBe("SELECT * FROM users LIMIT 100");
     });
 
+    it("tightens the row count of LIMIT offset, count and keeps the offset", () => {
+      expect(SQLRowLimiter.applyMaxRows("SELECT * FROM users LIMIT 10, 200", 100, "mysql")).toBe(
+        "SELECT * FROM users LIMIT 10, 100"
+      );
+      expect(SQLRowLimiter.applyMaxRows("SELECT * FROM users LIMIT 500, 20", 100, "sqlite")).toBe(
+        "SELECT * FROM users LIMIT 500, 20"
+      );
+      expect(SQLRowLimiter.applyMaxRows("SELECT * FROM users LIMIT ?, 200", 100, "mysql")).toBe(
+        "SELECT * FROM users LIMIT ?, 100"
+      );
+    });
+
+    it("wraps LIMIT offset, count when the row count is a parameter", () => {
+      expect(SQLRowLimiter.applyMaxRows("SELECT * FROM users LIMIT 10, ?", 100, "mysql")).toBe(
+        "SELECT * FROM (SELECT * FROM users LIMIT 10, ?\n) AS subq LIMIT 100"
+      );
+    });
+
     it("should handle complex query with parameterized LIMIT", () => {
       const sql = "SELECT emp_no, first_name, last_name, hire_date FROM employee WHERE first_name ILIKE '%' || $1 || '%' OR last_name ILIKE '%' || $1 || '%' LIMIT $2";
       const result = SQLRowLimiter.applyMaxRows(sql, 1000);
@@ -428,6 +446,18 @@ describe("SQLRowLimiter", () => {
       expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual({
         sql: `${sql}\nLIMIT 101`,
         probeApplied: true,
+      });
+    });
+
+    it("judges LIMIT offset, count by its row count, not its offset", () => {
+      // The offset 2 is within the cap, but the query asks for 200 rows
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe("SELECT * FROM t LIMIT 2, 200", 100, "mysql")).toEqual({
+        sql: "SELECT * FROM t LIMIT 2, 101",
+        probeApplied: true,
+      });
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe("SELECT * FROM t LIMIT 500, 20", 100, "mysql")).toEqual({
+        sql: "SELECT * FROM t LIMIT 500, 20",
+        probeApplied: false,
       });
     });
 

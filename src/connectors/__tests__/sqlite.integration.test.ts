@@ -348,6 +348,20 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBe(true);
     });
 
+    it('should cap the row count of LIMIT offset, count without moving the offset', async () => {
+      const numbers =
+        'SELECT n FROM (WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 30) SELECT n FROM c)';
+
+      const capped = await sqliteTest.connector.executeSQL(`${numbers} ORDER BY n LIMIT 10, 5`, { maxRows: 3 });
+      expect(capped.resultSets[0].rows.map(row => Number(row.n))).toEqual([11, 12, 13]);
+      expect(capped.resultSets[0].truncated).toBe(true);
+
+      // A small offset must not be mistaken for a row count within the cap
+      const smallOffset = await sqliteTest.connector.executeSQL(`${numbers} ORDER BY n LIMIT 2, 10`, { maxRows: 5 });
+      expect(smallOffset.resultSets[0].rows.map(row => Number(row.n))).toEqual([3, 4, 5, 6, 7]);
+      expect(smallOffset.resultSets[0].truncated).toBe(true);
+    });
+
     it('should flag truncated when maxRows cuts off rows', async () => {
       // users has 3+ rows; the cap of 2 provably cuts rows off
       const result = await sqliteTest.connector.executeSQL(
