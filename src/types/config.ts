@@ -37,8 +37,8 @@ export interface ConnectionParams {
   aws_region?: string; // AWS region required when aws_iam_auth is enabled
   aws_profile?: string; // Named AWS shared-config profile for RDS IAM auth
   instanceName?: string; // SQL Server named instance support
-  sslmode?: "disable" | "require" | "verify-ca" | "verify-full"; // SSL mode for network databases (not applicable to SQLite, verify-* only applicable for PostgreSQL)
-  sslrootcert?: string; // CA certificate path (requires verify-ca or verify-full)
+  sslmode?: "disable" | "require" | "verify-ca" | "verify-full"; // SSL mode for network databases (not SQLite; verify-ca: PostgreSQL only; verify-full: PostgreSQL, SQL Server, Oracle)
+  sslrootcert?: string; // CA certificate path (PostgreSQL only; requires verify-ca or verify-full)
   sslcert?: string; // PEM client certificate path for client certificate authentication (PostgreSQL only; requires sslkey and sslmode require/verify-ca/verify-full)
   sslkey?: string; // PEM private key path for sslcert (PostgreSQL only; unencrypted)
   // SQL Server authentication options

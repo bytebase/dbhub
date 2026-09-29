@@ -524,6 +524,28 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
     });
 
     describe('sslmode validation', () => {
+      it('should accept and propagate sslmode=verify-full for SQL Server', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "localhost"
+database = "db"
+user = "user"
+password = "pass"
+sslmode = "verify-full"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result).toBeTruthy();
+        expect(result?.sources[0].sslmode).toBe('verify-full');
+        expect(buildDSNFromSource(result!.sources[0])).toBe(
+          'sqlserver://user:pass@localhost:1433/db?sslmode=verify-full'
+        );
+      });
+
       it.each(['disable', 'require', 'verify-ca', 'verify-full'])(
         'should accept sslmode = %j for PostgreSQL',
         (sslmode) => {

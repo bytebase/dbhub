@@ -363,9 +363,11 @@ Sources define database connections. Each source represents a database that DBHu
   - `disable` - No SSL/TLS encryption. Data is transmitted in plaintext.
   - `require` - SSL/TLS encryption enabled, but server certificate is not verified.
   - `verify-ca` - SSL with CA certificate verification (no hostname check). **PostgreSQL only.**
-  - `verify-full` - SSL with CA certificate and hostname verification. **PostgreSQL and Oracle.**
+  - `verify-full` - SSL with CA certificate and hostname verification. **PostgreSQL, SQL Server, and Oracle.**
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite). `verify-ca` is PostgreSQL only; `verify-full` is supported on PostgreSQL and Oracle (Oracle validates the server certificate against the system trust store, and `sslrootcert` is PostgreSQL only).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite). `verify-ca` is PostgreSQL only; `verify-full` is supported on PostgreSQL, SQL Server and Oracle (Oracle validates the server certificate against the system trust store, and `sslrootcert` is PostgreSQL only).
+
+  SQL Server `verify-full` uses Node's trust roots. Set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed.
 
   ```toml
   # Basic SSL (all network databases)

@@ -384,6 +384,14 @@ describe('DSN Parser - SQL Server SSL/TLS Configuration', () => {
     expect(config.options?.encrypt).toBe(false);
     expect(config.options?.trustServerCertificate).toBe(false);
   });
+
+  it('should parse sslmode=verify-full correctly', async () => {
+    const parser = new SQLServerConnector().dsnParser;
+    const config = await parser.parse('sqlserver://user:pass@localhost:1433/db?sslmode=verify-full');
+
+    expect(config.options?.encrypt).toBe(true);
+    expect(config.options?.trustServerCertificate).toBe(false);
+  });
 });
 
 describe('DSN Parser - SQL Server NTLM Authentication', () => {

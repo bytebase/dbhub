@@ -190,7 +190,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # user = "sa"
 # password = "YourStrong@Passw0rd"
 # instanceName = "SQLEXPRESS"  # Optional: for named instances
-# sslmode = "disable"          # Optional: "disable" or "require"
+# sslmode = "disable"          # Optional: "disable", "require" or "verify-full"
 
 # SQL Server with Windows/NTLM authentication (DSN format)
 # [[sources]]
@@ -423,10 +423,12 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   sslmode = "disable"      # No SSL
 #   sslmode = "require"      # SSL without certificate verification
 #   sslmode = "verify-ca"    # SSL with CA certificate verification (PostgreSQL only)
-#   sslmode = "verify-full"  # SSL with CA + hostname verification (PostgreSQL only)
-#   sslrootcert = "~/.ssl/ca.pem"  # CA certificate path (requires verify-ca or verify-full)
+#   sslmode = "verify-full"  # SSL with CA + hostname verification (PostgreSQL, SQL Server, Oracle)
+#   sslrootcert = "~/.ssl/ca.pem"  # CA certificate path (PostgreSQL only; requires verify-ca or verify-full)
 #   sslcert = "~/.ssl/client.crt"  # PEM client certificate (PostgreSQL only; set with sslkey, needs sslmode require/verify-*)
 #   sslkey = "~/.ssl/client.key"   # Unencrypted PEM private key for sslcert (PostgreSQL only)
+#   SQL Server verify-full uses Node's trust roots; set NODE_EXTRA_CA_CERTS
+#   to a PEM CA bundle before process startup if an additional CA is needed.
 #
 # SQL Server Authentication:
 #   authentication = "ntlm"                              # Windows/NTLM auth (requires domain)

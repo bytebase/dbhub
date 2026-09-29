@@ -577,10 +577,11 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    // verify-ca is PostgreSQL-only; Oracle's TCPS also offers verify-full
-    // (server certificate DN matched against the host).
+    // verify-ca is PostgreSQL-only; SQL Server and Oracle also support
+    // verify-full for server certificate and hostname verification.
     const verifyModesByType: Record<string, string[]> = {
       postgres: ["verify-ca", "verify-full"],
+      sqlserver: ["verify-full"],
       oracle: ["verify-full"],
     };
     if (
