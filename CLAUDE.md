@@ -165,7 +165,7 @@ outside TOML and follow the same order:
 ## Database Connectors
 
 - Add new connectors in `src/connectors/{db-type}/index.ts`
-- Implement the `Connector` and `DSNParser` interfaces from `src/interfaces/connector.ts`
+- Implement the `Connector` and `DSNParser` interfaces from `src/connectors/interface.ts`
 - Register connector with `ConnectorRegistry.register(connector)`
 - DSN Examples:
   - PostgreSQL: `postgres://user:password@localhost:5432/dbname?sslmode=disable`
