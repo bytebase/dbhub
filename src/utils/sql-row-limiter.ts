@@ -22,6 +22,8 @@ interface TopLevelClause {
   length: number;
   /** Null when the clause holds a parameter placeholder instead of a literal. */
   value: number | null;
+  /** The offset of a MySQL/SQLite `LIMIT offset, count` clause, as written. */
+  offset?: string;
 }
 
 /**
@@ -119,7 +121,8 @@ export class SQLRowLimiter {
       // LIMIT found textually, which on a CTE would rewrite the CTE's cap and
       // leave the statement itself uncapped.
       const effectiveLimit = Math.min(limit.value, maxRows);
-      return `${sql.slice(0, limit.index)}LIMIT ${effectiveLimit}${sql.slice(limit.index + limit.length)}`;
+      const offset = limit.offset !== undefined ? `${limit.offset}, ` : "";
+      return `${sql.slice(0, limit.index)}LIMIT ${offset}${effectiveLimit}${sql.slice(limit.index + limit.length)}`;
     }
 
     // Add LIMIT clause to the end of the query
@@ -173,21 +176,27 @@ export class SQLRowLimiter {
     return found;
   }
 
-  /** The statement's own LIMIT clause, literal or parameterized ($1, ?, @p1). */
+  /**
+   * The statement's own LIMIT clause, literal or parameterized ($1, ?, @p1).
+   * In the MySQL/SQLite `LIMIT offset, count` form the row count is the
+   * second operand, so that is the value reported and tightened.
+   */
   private static findTopLevelLimit(sql: string, dialect?: ConnectorType): TopLevelClause | null {
     const match = this.findTopLevelMatch(
       sql,
-      /\(|\)|\blimit\s+(?:(\d+)|\$\d+|\?|@p\d+)/gi,
+      /\(|\)|\blimit\s+(\d+|\$\d+|\?|@p\d+)(?:\s*,\s*(\d+|\$\d+|\?|@p\d+))?/gi,
       "last",
       dialect
     );
     if (match === null) {
       return null;
     }
+    const count = match[2] ?? match[1];
     return {
       index: match.index,
       length: match[0].length,
-      value: match[1] !== undefined ? parseInt(match[1], 10) : null,
+      value: /^\d+$/.test(count) ? parseInt(count, 10) : null,
+      offset: match[2] !== undefined ? match[1] : undefined,
     };
   }
 
