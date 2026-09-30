@@ -82,9 +82,126 @@ paths:
               example:
                 error: Source not found
                 source_id: unknown-id
+    put:
+      summary: Add or replace a data source at runtime
+      description: |
+        Creates the source, or replaces the source with the same id, and enables its
+        built-in tools. Only this source is (re)connected; other sources are untouched.
+        Requires bearer authentication to be configured on the server; sources defined
+        by the startup configuration cannot be changed here.
+      operationId: putSource
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          description: Source id; also the tool-name suffix
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceUpsert'
+      responses:
+        '200':
+          description: The source as stored (credentials excluded)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+        '400':
+          description: Invalid body or unsupported DSN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Runtime source changes are disabled (no bearer token configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The id belongs to a source from the startup configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '502':
+          description: The database could not be connected (eager sources only)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Remove a runtime data source
+      description: Disconnects and forgets the source and its tools. Other sources are untouched.
+      operationId: deleteSource
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Removed
+        '403':
+          description: Runtime source changes are disabled (no bearer token configured)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown source
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The id belongs to a source from the startup configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
 components:
   schemas:
+    SourceUpsert:
+      type: object
+      required:
+        - dsn
+      properties:
+        dsn:
+          type: string
+          description: Connection string; never returned by any response
+          example: postgres://reader:secret@db.example.com:5432/app?sslmode=require
+        description:
+          type: string
+          description: Human-readable description surfaced in tool descriptions
+        lazy:
+          type: boolean
+          default: true
+          description: Connect on first use instead of during this request
+        readonly:
+          type: boolean
+          default: true
+          description: Restrict execute_sql to read-only statements
+        max_rows:
+          type: integer
+          minimum: 1
+          description: Row cap for execute_sql SELECT results
+        query_timeout:
+          type: integer
+          minimum: 1
+          description: Per-query timeout in seconds
+        connection_timeout:
+          type: integer
+          minimum: 1
+          description: Connection timeout in seconds
+
     DataSource:
       type: object
       required:

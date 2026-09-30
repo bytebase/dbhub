@@ -923,6 +923,16 @@ function processSourceConfigs(
  * Unresolved variables are left as-is (no error thrown).
  */
 const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
+/**
+ * Validate a single source supplied at runtime (sources API). Same rules as a
+ * TOML [[sources]] entry; the "file" in messages is the API origin.
+ */
+export function validateRuntimeSourceConfig(source: SourceConfig): void {
+  const origin = "sources API";
+  validateSourceConfig(source, origin);
+  validateDSNFieldConflicts(source, origin);
+}
+
 export function interpolateEnvVars(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replace(ENV_VAR_PATTERN, (match, varName) => {

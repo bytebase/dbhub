@@ -36,9 +36,20 @@ export interface paths {
          * @description Returns details of a single data source by ID
          */
         get: operations["getSource"];
-        put?: never;
+        /**
+         * Add or replace a data source at runtime
+         * @description Creates the source, or replaces the source with the same id, and enables its
+         *     built-in tools. Only this source is (re)connected; other sources are untouched.
+         *     Requires bearer authentication to be configured on the server; sources defined
+         *     by the startup configuration cannot be changed here.
+         */
+        put: operations["putSource"];
         post?: never;
-        delete?: never;
+        /**
+         * Remove a runtime data source
+         * @description Disconnects and forgets the source and its tools. Other sources are untouched.
+         */
+        delete: operations["deleteSource"];
         options?: never;
         head?: never;
         patch?: never;
@@ -48,6 +59,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SourceUpsert: {
+            /**
+             * @description Connection string; never returned by any response
+             * @example postgres://reader:secret@db.example.com:5432/app?sslmode=require
+             */
+            dsn: string;
+            /** @description Human-readable description surfaced in tool descriptions */
+            description?: string;
+            /**
+             * @description Connect on first use instead of during this request
+             * @default true
+             */
+            lazy: boolean;
+            /**
+             * @description Restrict execute_sql to read-only statements
+             * @default true
+             */
+            readonly: boolean;
+            /** @description Row cap for execute_sql SELECT results */
+            max_rows?: number;
+            /** @description Per-query timeout in seconds */
+            query_timeout?: number;
+            /** @description Connection timeout in seconds */
+            connection_timeout?: number;
+        };
         DataSource: {
             /**
              * @description Unique identifier for the data source
@@ -252,6 +288,116 @@ export interface operations {
                      *       "source_id": "unknown-id"
                      *     }
                      */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Source id; also the tool-name suffix */
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceUpsert"];
+            };
+        };
+        responses: {
+            /** @description The source as stored (credentials excluded) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataSource"];
+                };
+            };
+            /** @description Invalid body or unsupported DSN */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Runtime source changes are disabled (no bearer token configured) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The id belongs to a source from the startup configuration */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The database could not be connected (eager sources only) */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Runtime source changes are disabled (no bearer token configured) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unknown source */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The id belongs to a source from the startup configuration */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["Error"];
                 };
             };
