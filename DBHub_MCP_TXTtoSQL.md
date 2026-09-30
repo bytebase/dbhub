@@ -258,47 +258,135 @@ Expected: `ollama/qwen2.5-coder:7b`, `ollama/qwen3:8b`, etc.
 Due to `qwen2.5-coder:7b` not emitting native `tool_calls`, use this **4-step manual pattern**:
 
 ```powershell
+# ============================================================
+# Bifrost + Ollama + DBHub MCP — end-to-end tool-call pipeline
+# ============================================================
+
 $headers = @{
-  "Authorization"            = "Bearer <token>"
+  "Authorization"            = "Bearer RGlnaUJ1bGw6RGlnaUJ1bGxAMjAyNg=="
   "Content-Type"             = "application/json"
-  "x-bf-mcp-include-clients" = "DBHub_MCP"   # scopes tools to DBHub only
+  "x-bf-mcp-include-clients" = "DBHub_MCP"
 }
 
+$BaseUrl = "http://192.168.1.18:8010"
+$Model   = "ollama/qwen2.5-coder:7b"
+$CallId  = "call_auto_1"
+$UserMsg = "Show me 10 rows from gerber_checklist"
+
+# ------------------------------------------------------------
 # 1. Ask the model
-$chat = Invoke-RestMethod -Uri "http://localhost:8010/v1/chat/completions" `
+# ------------------------------------------------------------
+Write-Host "`n=== [1] Asking the model ===" -ForegroundColor Cyan
+
+$chat = Invoke-RestMethod -Uri "$BaseUrl/v1/chat/completions" `
   -Method Post -Headers $headers -Body (@{
-    model    = "ollama/qwen2.5-coder:7b"
-    messages = @( @{ role = "user"; content = "Show me 3 rows from gerber_checklist" } )
+    model    = $Model
+    messages = @( @{ role = "user"; content = $UserMsg } )
   } | ConvertTo-Json -Depth 5)
 
-# 2. Parse the model's JSON output (emitted as content, not tool_calls)
-$call = $chat.choices[0].message.content | ConvertFrom-Json
+$raw = [string]$chat.choices[0].message.content
 
-# 3. Execute through Bifrost
-$result = Invoke-RestMethod -Uri "http://localhost:8010/v1/mcp/tool/execute" `
-  -Method Post -Headers $headers -Body (@{
-    id       = "call_auto_1"
+# ------------------------------------------------------------
+# 2. Parse the tool call (defensive)
+# ------------------------------------------------------------
+Write-Host "`n=== [2] Parsing tool call ===" -ForegroundColor Cyan
+
+$raw = $raw.Trim()
+$raw = $raw -replace '^\s*```(?:json)?\s*', '' -replace '\s*```\s*$', ''
+if ($raw.StartsWith('{') -and -not $raw.EndsWith('}')) { $raw += '}' }
+
+try { $call = $raw | ConvertFrom-Json } catch { throw "Bad JSON:`n$raw" }
+if (-not $call.name) { throw "No 'name' field:`n$raw" }
+
+$toolName = $call.name
+$toolArgs = $call.arguments
+Write-Host "Tool name : $toolName"
+Write-Host "Tool args : $($toolArgs | ConvertTo-Json -Compress)"
+
+# ------------------------------------------------------------
+# 3. Execute through Bifrost (OpenAI function-call envelope)
+# ------------------------------------------------------------
+Write-Host "`n=== [3] Executing tool via Bifrost ===" -ForegroundColor Cyan
+
+$execBody = @{
+    id       = $CallId
     type     = "function"
     function = @{
-      name      = $call.name
-      arguments = ($call.arguments | ConvertTo-Json -Compress)
+        name      = $toolName
+        arguments = ($toolArgs | ConvertTo-Json -Compress)
     }
-  } | ConvertTo-Json -Depth 5)
+} | ConvertTo-Json -Depth 10 -Compress
 
-# 4. Feed result back to model for natural-language answer (optional)
-$answer = Invoke-RestMethod -Uri "http://localhost:8010/v1/chat/completions" `
+$result = Invoke-RestMethod -Uri "$BaseUrl/v1/mcp/tool/execute" `
+  -Method Post -Headers $headers -Body $execBody
+
+# ------------------------------------------------------------
+# 3b. Extract the tool payload — FIXED (block form, not if/elseif expr)
+#     Bifrost returns: { role, content: "<json string>", tool_call_id }
+#     We parse the inner JSON and pull just the rows for a cleaner prompt.
+# ------------------------------------------------------------
+if ($result -is [string]) {
+    $toolJsonStr = $result
+} elseif ($null -ne $result.content) {
+    $toolJsonStr = if ($result.content -is [string]) { $result.content } else { $result.content | ConvertTo-Json -Depth 10 -Compress }
+} else {
+    $toolJsonStr = $result | ConvertTo-Json -Depth 10 -Compress
+}
+
+# Try to unwrap the DBHub envelope: { success, data: { statements: [ { rows: [...] } ] } }
+$rowsPayload = $null
+try {
+    $inner = $toolJsonStr | ConvertFrom-Json
+    if ($inner.data.statements[0].rows) {
+        $rowsPayload = $inner.data.statements[0].rows
+    }
+} catch { }
+
+if ($rowsPayload) {
+    # Compact rows-only payload for the model
+    $toolContent = @{
+        rows  = $rowsPayload
+        count = $rowsPayload.Count
+    } | ConvertTo-Json -Depth 10 -Compress
+    Write-Host "Extracted $($rowsPayload.Count) rows for the model." -ForegroundColor Green
+} else {
+    # Fall back to raw tool string
+    $toolContent = $toolJsonStr
+    Write-Host "Could not unwrap rows; passing raw tool output." -ForegroundColor Yellow
+}
+
+# ------------------------------------------------------------
+# 4. Feed result back — with a system prompt so it summarizes
+#    instead of echoing raw JSON.
+# ------------------------------------------------------------
+Write-Host "`n=== [4] Asking model to summarize tool result ===" -ForegroundColor Cyan
+
+$systemPrompt = @"
+You are a helpful assistant. You will be given tool results as JSON.
+Answer the user's question in plain, natural English.
+Do NOT output raw JSON. Do NOT repeat the tool result verbatim.
+Summarize the key fields and values.
+"@
+
+$answer = Invoke-RestMethod -Uri "$BaseUrl/v1/chat/completions" `
   -Method Post -Headers $headers -Body (@{
-    model = "ollama/qwen2.5-coder:7b"
+    model = $Model
     messages = @(
-      @{ role = "user"; content = "Show me 3 rows from gerber_checklist" }
-      @{ role = "assistant"; content = $null; tool_calls = @(@{
-          id = "call_auto_1"; type = "function"
-          function = @{ name = $call.name; arguments = ($call.arguments | ConvertTo-Json -Compress) }
+      @{ role = "system"; content = $systemPrompt }
+      @{ role = "user"; content = $UserMsg }
+      @{ role = "assistant"; content = ""; tool_calls = @(@{
+          id       = $CallId
+          type     = "function"
+          function = @{
+            name      = $toolName
+            arguments = ($toolArgs | ConvertTo-Json -Compress)
+          }
         })}
-      @{ role = "tool"; tool_call_id = "call_auto_1"; content = $result.content }
+      @{ role = "tool"; tool_call_id = $CallId; content = $toolContent }
     )
   } | ConvertTo-Json -Depth 10)
 
+Write-Host "`n=== Final answer ===" -ForegroundColor Yellow
 $answer.choices[0].message.content
 ```
 
