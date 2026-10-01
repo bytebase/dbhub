@@ -899,7 +899,7 @@ function processSourceConfigs(
       try {
         const url = new SafeURL(processed.dsn);
         const dsnSslmode = url.getSearchParam("sslmode");
-        if (!processed.sslmode && dsnSslmode) {
+        if (processed.sslmode === undefined && dsnSslmode) {
           processed.sslmode = dsnSslmode as SourceConfig["sslmode"];
         }
         for (const field of ["sslrootcert", "sslcert", "sslkey"] as const) {

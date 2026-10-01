@@ -29,6 +29,7 @@ describe('TOML Configuration Tests', () => {
       // Ignore cleanup errors
     }
     process.argv = originalArgv;
+    vi.unstubAllEnvs();
   });
 
   describe('loadTomlConfig', () => {
@@ -560,6 +561,22 @@ sslmode = "invalid"
         fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
 
         expect(() => loadTomlConfig()).toThrow("invalid sslmode 'invalid'");
+      });
+
+      it.each([
+        ['literal', '', 'disable'],
+        ['environment', '${TEST_SSLMODE}', 'require'],
+      ])('should reject an empty %s sslmode before DSN fallback', (_name, sslmode, dsnSslmode) => {
+        vi.stubEnv('TEST_SSLMODE', '');
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://fakeuser:fakepass@localhost:5432/testdb?sslmode=${dsnSslmode}"
+sslmode = "${sslmode}"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("invalid sslmode ''");
       });
 
       it('should throw error when DSN sslmode conflicts with sslmode field', () => {
