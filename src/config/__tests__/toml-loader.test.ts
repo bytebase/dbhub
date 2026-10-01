@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
+import { SQLServerConnector } from '../../connectors/sqlserver/index.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -524,6 +525,58 @@ dsn = "postgres://user:pass@localhost:5432/testdb"
     });
 
     describe('sslmode validation', () => {
+      it('should preserve a matching encoded SQL Server sslmode', async () => {
+        const dsn = 'sqlserver://user:pass@localhost:1433/db?%73slmode=verify%2Dfull';
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), `
+[[sources]]
+id = "test_db"
+dsn = "${dsn}"
+sslmode = "verify-full"
+`);
+
+        const result = loadTomlConfig();
+        const builtDSN = buildDSNFromSource(result!.sources[0]);
+        expect(builtDSN).toBe(dsn);
+        const config = await new SQLServerConnector().dsnParser.parse(builtDSN);
+        expect(config.options?.encrypt).toBe(true);
+        expect(config.options?.trustServerCertificate).toBe(false);
+      });
+
+      it('should reject a conflicting encoded SQL Server sslmode without reflecting the input', () => {
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), `
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/db?%73slmode=disable"
+sslmode = "verify-full"
+`);
+
+        expect(() => loadTomlConfig()).toThrow(new Error(
+          `Failed to load TOML configuration from ${path.join(tempDir, 'dbhub.toml')}: ` +
+          'Conflicting SQL Server sslmode. Set sslmode in only one place, or make the two values match.'
+        ));
+      });
+
+      it.each(['disable', 'verify-full', ''])(
+        'should reject duplicate SQL Server modes after TOML processing (%j)',
+        async (trailingMode) => {
+          const dsn = `sqlserver://user:pass@localhost:1433/db?sslmode=verify-full&sslmode=${trailingMode}`;
+          fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), `
+[[sources]]
+id = "test_db"
+dsn = "${dsn}"
+sslmode = "verify-full"
+`);
+
+          const result = loadTomlConfig();
+          const builtDSN = buildDSNFromSource(result!.sources[0]);
+          expect(result?.sources[0].sslmode).toBe('verify-full');
+          expect(builtDSN).toBe(dsn);
+          await expect(new SQLServerConnector().dsnParser.parse(builtDSN)).rejects.toMatchObject({
+            message: 'Failed to parse SQL Server DSN: Invalid sslmode. Specify exactly one value: disable, require, verify-full',
+          });
+        }
+      );
+
       it('should accept and propagate sslmode=verify-full for SQL Server', () => {
         const tomlContent = `
 [[sources]]
