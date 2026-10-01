@@ -53,12 +53,17 @@ export function isClientSideTimeout(error: unknown): boolean {
  * @param readonly Whether read-only enforcement is active for this execution.
  * @param supportsReadOnlyTransaction False for TiDB, which rejects READ ONLY.
  * @param execute Driver-specific query + result parsing.
+ * @param sessionStatements Per-source `readonly_session_sql`, run right after the
+ *   transaction opens (see src/utils/readonly-session-sql.ts). These are SET SESSION
+ *   statements, so they stay on the pooled connection afterwards; that is why
+ *   they are re-run on every read-only execution rather than once.
  */
 export async function withReadOnlyTransaction<T>(
   conn: ReadOnlyTransactionConnection,
   readonly: boolean | undefined,
   supportsReadOnlyTransaction: boolean,
-  execute: () => Promise<T>
+  execute: () => Promise<T>,
+  sessionStatements: readonly string[] = []
 ): Promise<T> {
   if (!readonly) {
     return execute();
@@ -72,6 +77,9 @@ export async function withReadOnlyTransaction<T>(
     await conn.query(
       supportsReadOnlyTransaction ? "START TRANSACTION READ ONLY" : "START TRANSACTION"
     );
+    for (const statement of sessionStatements) {
+      await conn.query(statement);
+    }
     const result = await execute();
     await conn.query(supportsReadOnlyTransaction ? "COMMIT" : "ROLLBACK");
     return result;

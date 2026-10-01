@@ -6,6 +6,8 @@ import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { parseReadonlySessionSQL } from "../utils/readonly-session-sql.js";
+import type { ConnectorType } from "../connectors/interface.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
 
 /**
@@ -717,6 +719,26 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
+  }
+
+  // Validate readonly_session_sql up front so a bad statement fails at startup rather
+  // than on the first read-only query. source.type is populated from the DSN
+  // by processSourceConfigs before validation runs.
+  if (source.readonly_session_sql !== undefined) {
+    if (typeof source.readonly_session_sql !== "string") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid readonly_session_sql. ` +
+          `Must be a string of session-setting statements.`
+      );
+    }
+    try {
+      parseReadonlySessionSQL(source.readonly_session_sql, source.type as ConnectorType);
+    } catch (error) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid readonly_session_sql: ` +
+          (error as Error).message
+      );
+    }
   }
 
   // Validate timezone (MySQL/MariaDB only)

@@ -331,6 +331,32 @@ Sources define database connections. Each source represents a database that DBHu
   </Note>
 </ParamField>
 
+### readonly_session_sql
+
+<ParamField path="readonly_session_sql" type="string">
+  Session-setting statements that DBHub runs at the start of every read-only execution on this source, inside the read-only transaction it already opens. Use it for limits the database enforces itself, such as `max_execution_time` or `lock_wait_timeout`.
+
+  Supported databases: MySQL, MariaDB.
+
+  ```toml
+  [[sources]]
+  id = "production"
+  dsn = "mysql://user:pass@localhost:3306/mydb"
+  readonly_session_sql = """
+  SET SESSION max_execution_time = 30000;
+  SET SESSION lock_wait_timeout = 5;
+  """
+  ```
+
+  Only `SET SESSION name = value` statements are accepted, one assignment each. Any other statement fails at startup, as does a setting that controls the transaction they run in (`transaction_read_only`, `tx_read_only`, `autocommit`, `completion_type`).
+
+  The statements run on every read-only execution rather than once at connect time, so a value changed on the pooled connection in the meantime is put back before the next read-only statement.
+
+  <Note>
+  Every read-only execution runs it, including `explain_sql` and read-only custom tools. Writable executions do not. The settings stay on the connection after the execution, so a writable tool sharing the same source may see them.
+  </Note>
+</ParamField>
+
 ### lazy
 
 <ParamField path="lazy" type="boolean" default="false">
@@ -894,6 +920,7 @@ default = 10
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
 | `query_timeout` | number | ❌ | Query timeout (seconds) |
 | `pool_max_connections` | integer | ❌ | PostgreSQL pool size per process and source (default: `10`, range: `1`-`1000`) |
+| `readonly_session_sql` | string | ❌ | MySQL/MariaDB: session-setting statements run before every read-only execution |
 | `sslmode` | string | ❌ | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` |
 | `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
 | `sslcert` | string | ❌ | PEM client certificate path for client certificate authentication (PostgreSQL only, requires `sslkey` and TLS enabled) |
