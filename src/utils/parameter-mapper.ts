@@ -17,6 +17,7 @@ export const PARAMETER_STYLES = {
   sqlserver: "named", // @p1, @p2, @p3
   sqlite: "positional", // ?, ?, ?
   oracle: "colon", // :1, :2, :3
+  duckdb: "?",   // DuckDB uses ? positional placeholders, same as SQLite
 } as const;
 
 /**
@@ -86,8 +87,8 @@ export function validateParameterStyle(
 
     throw new Error(
       `Invalid parameter syntax for ${connectorType}. ` +
-        `Expected ${expectedStyle} style (${examples[expectedStyle]}), ` +
-        `but found ${detectedStyle} style in statement.`
+      `Expected ${expectedStyle} style (${examples[expectedStyle]}), ` +
+      `but found ${detectedStyle} style in statement.`
     );
   }
 }
@@ -171,7 +172,7 @@ export function validateParameters(
   if (paramCount !== definedCount) {
     throw new Error(
       `Parameter count mismatch: SQL statement has ${paramCount} parameter(s), ` +
-        `but ${definedCount} parameter(s) defined in tool configuration.`
+      `but ${definedCount} parameter(s) defined in tool configuration.`
     );
   }
 }

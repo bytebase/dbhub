@@ -1,0 +1,12 @@
+# dbhub.toml
+[[sources]]
+id = "postgres_logic"
+description = "Production PostgreSQL database"
+dsn = "postgresql://postgres:DigiBull@192.168.1.18:5432/logic_db_2?sslmode=disable"
+
+[[sources]]
+id = "duckdb_local"
+description = "Local DuckDB analytical database"
+# Use an absolute path or a path relative to where you run DBHub.
+# For an in-memory database, use: dsn = "duckdb://:memory:"
+dsn = "duckdb:///C:/SRIM-DB-SETUP/Databases/Bom_storage.duckdb"

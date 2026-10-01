@@ -27,7 +27,7 @@ export interface SSHConfig {
  * Database connection parameters (alternative to DSN)
  */
 export interface ConnectionParams {
-  type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "oracle";
+  type: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "oracle" | "duckdb";
   host?: string;
   port?: number;
   database?: string;

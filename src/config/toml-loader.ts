@@ -29,7 +29,7 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     if (!Array.isArray(parsedToml.sources)) {
       throw new Error(
         `Configuration file ${configPath}: must contain a [[sources]] array. ` +
-          `Use [[sources]] syntax for array of tables in TOML.`
+        `Use [[sources]] syntax for array of tables in TOML.`
       );
     }
 
@@ -89,7 +89,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
   if (!config.sources) {
     throw new Error(
       `Configuration file ${configPath} must contain a [[sources]] array. ` +
-        `Example:\n\n[[sources]]\nid = "my_db"\ndsn = "postgres://..."`
+      `Example:\n\n[[sources]]\nid = "my_db"\ndsn = "postgres://..."`
     );
   }
 
@@ -98,7 +98,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
   if (config.sources.length === 0) {
     throw new Error(
       `Configuration file ${configPath}: sources array cannot be empty. ` +
-        `Please define at least one source with [[sources]].`
+      `Please define at least one source with [[sources]].`
     );
   }
 
@@ -110,7 +110,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
     if (!source.id) {
       throw new Error(
         `Configuration file ${configPath}: each source must have an 'id' field. ` +
-          `Example: [[sources]]\nid = "my_db"`
+        `Example: [[sources]]\nid = "my_db"`
       );
     }
 
@@ -124,7 +124,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
   if (duplicates.length > 0) {
     throw new Error(
       `Configuration file ${configPath}: duplicate source IDs found: ${duplicates.join(", ")}. ` +
-        `Each source must have a unique 'id' field.`
+      `Each source must have a unique 'id' field.`
     );
   }
 
@@ -195,7 +195,7 @@ function validateToolsConfig(
       if (!isExecuteSql && (tool.readonly !== undefined || tool.max_rows !== undefined)) {
         throw new Error(
           `Configuration file ${configPath}: tool '${tool.name}' cannot have readonly or max_rows fields ` +
-            `(these are only valid for ${BUILTIN_TOOL_EXECUTE_SQL} tool)`
+          `(these are only valid for ${BUILTIN_TOOL_EXECUTE_SQL} tool)`
         );
       }
     } else {
@@ -311,8 +311,8 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   const conflict = (field: string, fieldValue: string, dsnValue: string): never => {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has conflicting ${field}: ` +
-        `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
-        `Set ${field} in only one place, or make the two values match.`
+      `the DSN specifies '${dsnValue}' but the ${field} field is '${fieldValue}'. ` +
+      `Set ${field} in only one place, or make the two values match.`
     );
   };
 
@@ -358,7 +358,7 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     if (source.database && !info.database) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has a 'database' field but the DSN names no database. ` +
-          `The field is ignored at connection time — add the database to the DSN, or use individual connection parameters instead of a DSN.`
+        `The field is ignored at connection time — add the database to the DSN, or use individual connection parameters instead of a DSN.`
       );
     }
     if (source.user && info.user && source.user !== info.user) {
@@ -372,12 +372,12 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
     if (!url.password) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has a 'password' field but the DSN has no password. ` +
-          `The field is ignored at connection time — add the password to the DSN, or use individual connection parameters instead of a DSN.`
+        `The field is ignored at connection time — add the password to the DSN, or use individual connection parameters instead of a DSN.`
       );
     }
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has a 'password' field that conflicts ` +
-        `with the password in the DSN. Set the password in only one place.`
+      `with the password in the DSN. Set the password in only one place.`
     );
   }
 
@@ -433,19 +433,19 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
   if (!source.dsn && !hasConnectionParams) {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' must have either:\n` +
-        `  - 'dsn' field (e.g., dsn = "postgres://user:pass@host:5432/dbname")\n` +
-        `  - OR connection parameters (type, host, database, user, password)\n` +
-        `  - For SQLite: type = "sqlite" and database path`
+      `  - 'dsn' field (e.g., dsn = "postgres://user:pass@host:5432/dbname")\n` +
+      `  - OR connection parameters (type, host, database, user, password)\n` +
+      `  - For SQLite: type = "sqlite" and database path`
     );
   }
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "oracle"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "oracle", "duckdb"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
-          `Valid types: ${validTypes.join(", ")}`
+        `Valid types: ${validTypes.join(", ")}`
       );
     }
   }
@@ -457,7 +457,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
   ) {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has invalid aws_iam_auth. ` +
-        `Must be a boolean (true or false).`
+      `Must be a boolean (true or false).`
     );
   }
 
@@ -468,7 +468,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid aws_region. ` +
-          `Must be a non-empty string (e.g., "eu-west-1").`
+        `Must be a non-empty string (e.g., "eu-west-1").`
       );
     }
   }
@@ -480,13 +480,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid aws_profile. ` +
-          `Must be a non-empty string.`
+        `Must be a non-empty string.`
       );
     }
     if (source.aws_iam_auth !== true) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' aws_profile requires ` +
-          `aws_iam_auth = true.`
+        `aws_iam_auth = true.`
       );
     }
   }
@@ -496,13 +496,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (!source.type || !validIamTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has aws_iam_auth enabled, ` +
-          `but this is only supported for postgres, mysql, and mariadb sources.`
+        `but this is only supported for postgres, mysql, and mariadb sources.`
       );
     }
     if (!source.aws_region) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has aws_iam_auth enabled ` +
-          `but aws_region is not specified.`
+        `but aws_region is not specified.`
       );
     }
   }
@@ -512,7 +512,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (typeof source.connection_timeout !== "number" || source.connection_timeout <= 0) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid connection_timeout. ` +
-          `Must be a positive number (in seconds).`
+        `Must be a positive number (in seconds).`
       );
     }
   }
@@ -522,7 +522,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (typeof source.query_timeout !== "number" || source.query_timeout <= 0) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid query_timeout. ` +
-          `Must be a positive number (in seconds).`
+        `Must be a positive number (in seconds).`
       );
     }
   }
@@ -540,7 +540,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid pool_max_connections. ` +
-          `Must be an integer between 1 and 1000.`
+        `Must be an integer between 1 and 1000.`
       );
     }
   }
@@ -554,7 +554,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid ssh_port. ` +
-          `Must be between 1 and 65535.`
+        `Must be between 1 and 65535.`
       );
     }
   }
@@ -565,7 +565,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (source.type === "sqlite") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslmode but SQLite does not support SSL. ` +
-          `Remove the sslmode field for SQLite sources.`
+        `Remove the sslmode field for SQLite sources.`
       );
     }
 
@@ -573,7 +573,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (!validSslModes.includes(source.sslmode)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid sslmode '${source.sslmode}'. ` +
-          `Valid values: ${validSslModes.join(", ")}`
+        `Valid values: ${validSslModes.join(", ")}`
       );
     }
 
@@ -590,7 +590,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       const supported = ["disable", "require", ...(verifyModesByType[source.type] ?? [])];
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslmode '${source.sslmode}' which is not supported for ${source.type}. ` +
-          `Valid values for ${source.type}: ${supported.join(", ")}`
+        `Valid values for ${source.type}: ${supported.join(", ")}`
       );
     }
   }
@@ -617,7 +617,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (source.sslmode !== "verify-ca" && source.sslmode !== "verify-full") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslrootcert but sslmode is '${source.sslmode ?? "not set"}'. ` +
-          `sslrootcert requires sslmode 'verify-ca' or 'verify-full'`
+        `sslrootcert requires sslmode 'verify-ca' or 'verify-full'`
       );
     }
 
@@ -636,8 +636,8 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (source.sslcert === undefined || source.sslkey === undefined) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has ${source.sslcert !== undefined ? "sslcert" : "sslkey"} ` +
-          `without ${source.sslcert !== undefined ? "sslkey" : "sslcert"}. ` +
-          `sslcert and sslkey must be set together for client certificate authentication`
+        `without ${source.sslcert !== undefined ? "sslkey" : "sslcert"}. ` +
+        `sslcert and sslkey must be set together for client certificate authentication`
       );
     }
     // libpq sends the client certificate in every SSL mode, but node-postgres
@@ -646,7 +646,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (!CLIENT_CERT_SSL_MODES.includes(source.sslmode ?? "")) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has sslcert/sslkey but sslmode is '${source.sslmode ?? "not set"}'. ` +
-          `sslcert/sslkey require sslmode 'require', 'verify-ca' or 'verify-full'`
+        `sslcert/sslkey require sslmode 'require', 'verify-ca' or 'verify-full'`
       );
     }
     validateReadableFile(source, "sslcert", source.sslcert, configPath);
@@ -667,7 +667,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (!validAuthMethods.includes(source.authentication)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid authentication '${source.authentication}'. ` +
-          `Valid values: ${validAuthMethods.join(", ")}`
+        `Valid values: ${validAuthMethods.join(", ")}`
       );
     }
 
@@ -692,13 +692,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (source.authentication === undefined) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has domain but authentication is not set. ` +
-          `Add authentication = "ntlm" to use Windows domain authentication.`
+        `Add authentication = "ntlm" to use Windows domain authentication.`
       );
     }
     if (source.authentication !== "ntlm") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has domain but authentication is set to '${source.authentication}'. ` +
-          `Domain is only valid with authentication = "ntlm".`
+        `Domain is only valid with authentication = "ntlm".`
       );
     }
   }
@@ -713,7 +713,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (typeof source.search_path !== "string" || source.search_path.trim().length === 0) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid search_path. ` +
-          `Must be a non-empty string of comma-separated schema names (e.g., "myschema,public").`
+        `Must be a non-empty string of comma-separated schema names (e.g., "myschema,public").`
       );
     }
 
@@ -736,7 +736,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid timezone '${source.timezone}'. ` +
-          `Must be "local", "Z" (UTC), or an offset like "+09:00".`
+        `Must be "local", "Z" (UTC), or an offset like "+09:00".`
       );
     }
   }
@@ -755,7 +755,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (typeof source.charset !== "string" || source.charset.trim() === "") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid charset '${source.charset}'. ` +
-          `Must be a non-empty string naming a character set (e.g. "utf8mb4").`
+        `Must be a non-empty string naming a character set (e.g. "utf8mb4").`
       );
     }
   }
@@ -772,7 +772,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     if (typeof source.collation !== "string" || source.collation.trim() === "") {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid collation '${source.collation}'. ` +
-          `Must be a non-empty string naming a collation (e.g. "utf8mb4_0900_ai_ci").`
+        `Must be a non-empty string naming a collation (e.g. "utf8mb4_0900_ai_ci").`
       );
     }
   }
@@ -781,13 +781,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
   if ((source as any).readonly !== undefined) {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has 'readonly' field, but readonly must be configured per-tool, not per-source. ` +
-        `Move 'readonly' to [[tools]] configuration instead.`
+      `Move 'readonly' to [[tools]] configuration instead.`
     );
   }
   if ((source as any).max_rows !== undefined) {
     throw new Error(
       `Configuration file ${configPath}: source '${source.id}' has 'max_rows' field, but max_rows must be configured per-tool, not per-source. ` +
-        `Move 'max_rows' to [[tools]] configuration instead.`
+      `Move 'max_rows' to [[tools]] configuration instead.`
     );
   }
 }
@@ -1088,14 +1088,14 @@ export function buildDSNFromSource(source: SourceConfig): string {
   if (!source.host || !source.user || !source.database) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +
-        `Required: type, host, user, database`
+      `Required: type, host, user, database`
     );
   }
   if (passwordRequired && !source.password) {
     throw new Error(
       `Source '${source.id}': password is required. ` +
-        `(Password is optional for azure-active-directory-access-token authentication ` +
-        `or when aws_iam_auth=true)`
+      `(Password is optional for azure-active-directory-access-token authentication ` +
+      `or when aws_iam_auth=true)`
     );
   }
 

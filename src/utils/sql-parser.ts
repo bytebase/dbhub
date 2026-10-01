@@ -217,6 +217,7 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
   mysql: scanTokenMySQL,
   mariadb: scanTokenMySQL,
   sqlite: scanTokenSQLite,
+  duckdb: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
   oracle: scanTokenOracle,
 };
