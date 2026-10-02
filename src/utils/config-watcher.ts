@@ -1,7 +1,8 @@
 import fs from "fs";
 import { loadTomlConfig, resolveTomlConfigPath } from "../config/toml-loader.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { initializeToolRegistry } from "../tools/registry.js";
+import { getToolRegistry } from "../tools/registry.js";
+import { setFileSourceIds, withSourceLock } from "./source-mutation.js";
 import type { SourceConfig, ToolConfig } from "../types/config.js";
 
 const DEBOUNCE_MS = 500;
@@ -14,6 +15,11 @@ interface ConfigWatcherOptions {
 /**
  * Watch the TOML configuration file for changes and reload sources automatically.
  * Only applicable when using TOML-based configuration.
+ *
+ * A reload is a diff against the last known-good file: sources that are unchanged
+ * keep their connections and in-flight queries; only added, removed, or edited
+ * sources (or sources whose tools changed) are touched. Sources added through the
+ * sources API are not part of the file and are never affected by a reload.
  *
  * NOTE: In STDIO transport mode, the MCP server's tool list is registered once at
  * startup. Hot reload updates the underlying database connections and tool registry,
@@ -33,7 +39,7 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
 
   // Track last known-good config for rollback (sources + tools)
   let lastGoodSources: SourceConfig[] = connectorManager.getAllSourceConfigs();
-  let lastGoodTools: ToolConfig[] | undefined = initialTools;
+  let lastGoodTools: ToolConfig[] = initialTools ?? [];
 
   const scheduleReload = () => {
     if (debounceTimer) {
@@ -60,40 +66,18 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
         return;
       }
 
-      // Save current config for rollback
-      const oldSources = lastGoodSources;
-      const oldTools = lastGoodTools;
+      await withSourceLock(async () => {
+        const result = await applySourceDiff(
+          connectorManager,
+          { sources: lastGoodSources, tools: lastGoodTools },
+          { sources: newConfig.sources, tools: newConfig.tools ?? [] }
+        );
+        lastGoodSources = result.sources;
+        lastGoodTools = result.tools;
+        setFileSourceIds(lastGoodSources.map((s) => s.id));
+      });
 
-      // Disconnect all existing sources
-      await connectorManager.disconnect();
-
-      try {
-        // Reconnect with new sources
-        await connectorManager.connectWithSources(newConfig.sources);
-
-        // Re-initialize tool registry with new config
-        initializeToolRegistry({
-          sources: newConfig.sources,
-          tools: newConfig.tools,
-        });
-
-        // Update last known-good config
-        lastGoodSources = newConfig.sources;
-        lastGoodTools = newConfig.tools;
-
-        console.error("Configuration reloaded successfully.");
-      } catch (connectError) {
-        console.error("Failed to connect with new config, rolling back:", connectError);
-        // Clean up any partial connections before rollback
-        try { await connectorManager.disconnect(); } catch { /* best effort */ }
-        try {
-          await connectorManager.connectWithSources(oldSources);
-          initializeToolRegistry({ sources: oldSources, tools: oldTools });
-          console.error("Rolled back to previous configuration.");
-        } catch (rollbackError) {
-          console.error("Rollback also failed, server has no active connections:", rollbackError);
-        }
-      }
+      console.error("Configuration reloaded successfully.");
     } catch (error) {
       console.error("Config reload failed, keeping existing connections:", error);
     } finally {
@@ -123,5 +107,74 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
       clearTimeout(debounceTimer);
     }
     watcher.close();
+  };
+}
+
+interface FileConfig {
+  sources: SourceConfig[];
+  tools: ToolConfig[];
+}
+
+/**
+ * Apply `next` on top of `current` one source at a time. Returns the config that
+ * is actually in effect afterwards: a source whose new definition fails to connect
+ * is rolled back to its previous definition (or dropped, if it had none).
+ */
+async function applySourceDiff(
+  connectorManager: ConnectorManager,
+  current: FileConfig,
+  next: FileConfig
+): Promise<FileConfig> {
+  const registry = getToolRegistry();
+  const currentById = new Map(current.sources.map((s) => [s.id, s]));
+  const nextById = new Map(next.sources.map((s) => [s.id, s]));
+  const toolsFor = (id: string, tools: ToolConfig[]) => tools.filter((t) => t.source === id);
+  const unchanged = (id: string) =>
+    JSON.stringify(currentById.get(id)) === JSON.stringify(nextById.get(id)) &&
+    JSON.stringify(toolsFor(id, current.tools)) === JSON.stringify(toolsFor(id, next.tools));
+
+  const effective = new Map<string, { source: SourceConfig; tools: ToolConfig[] }>();
+  for (const source of current.sources) {
+    effective.set(source.id, { source, tools: toolsFor(source.id, current.tools) });
+  }
+
+  for (const id of currentById.keys()) {
+    if (nextById.has(id)) continue;
+    await connectorManager.removeSource(id);
+    registry.removeSource(id);
+    effective.delete(id);
+    console.error(`Source '${id}' removed`);
+  }
+
+  for (const [id, source] of nextById) {
+    if (currentById.has(id) && unchanged(id)) continue;
+    const tools = toolsFor(id, next.tools);
+    try {
+      await connectorManager.addSource(source);
+      registry.setSourceTools(id, tools);
+      effective.set(id, { source, tools });
+      console.error(`Source '${id}' ${currentById.has(id) ? "updated" : "added"}`);
+    } catch (error) {
+      console.error(`Source '${id}': failed to apply new config, rolling back:`, error);
+      const previous = effective.get(id);
+      if (!previous) {
+        registry.removeSource(id);
+        continue;
+      }
+      try {
+        await connectorManager.addSource(previous.source);
+        registry.setSourceTools(id, previous.tools);
+        console.error(`Source '${id}' rolled back to previous configuration.`);
+      } catch (rollbackError) {
+        console.error(`Source '${id}': rollback also failed, source is unavailable:`, rollbackError);
+        registry.removeSource(id);
+        effective.delete(id);
+      }
+    }
+  }
+
+  return {
+    sources: [...effective.values()].map((e) => e.source),
+    tools: [...effective.values()].flatMap((e) => e.tools),
   };
 }

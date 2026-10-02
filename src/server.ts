@@ -11,11 +11,12 @@ import { ConnectorManager } from "./connectors/manager.js";
 import { ConnectorRegistry } from "./connectors/interface.js";
 import { resolveTransport, resolvePort, resolveHost, resolveAllowedHosts, resolveAuthTokens, resolveSourceConfigs, isDemoMode } from "./config/env.js";
 import { registerTools } from "./tools/index.js";
-import { listSources, getSource } from "./api/sources.js";
+import { listSources, getSource, createSourceMutationHandlers } from "./api/sources.js";
 import { listRequests } from "./api/requests.js";
 import { generateStartupTable, buildSourceDisplayInfo } from "./utils/startup-table.js";
 import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
+import { setFileSourceIds } from "./utils/source-mutation.js";
 import { validateOrigin, buildAllowedHosts, getSelfHosts, ALLOW_ANY_HOST } from "./utils/cross-origin.js";
 import { validateAuthToken } from "./utils/auth-token.js";
 
@@ -105,6 +106,8 @@ See documentation for more details on configuring database connections.
 
     // Connect to database(s) - works uniformly for all modes (demo, single DSN, multi-source TOML)
     await connectorManager.connectWithSources(sources);
+    // Startup sources are owned by the configuration; the sources API may not alter them.
+    setFileSourceIds(sources.map((s) => s.id));
 
     // Initialize tool registry (manages both built-in and custom tools)
     // This must happen AFTER ConnectorManager is initialized so source validation works
@@ -230,7 +233,7 @@ See documentation for more details on configuring database connections.
         // named and cannot be statically allow-listed — browser clients skip
         // mirroring them for exactly this reason.)
         res.header('Access-Control-Allow-Origin', origin || 'http://localhost');
-        res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name');
         res.header('Access-Control-Allow-Credentials', 'true');
 
@@ -264,9 +267,12 @@ See documentation for more details on configuring database connections.
       const frontendPath = path.join(__dirname, "public");
       app.use(express.static(frontendPath));
 
-      // Data sources API endpoints
+      // Data sources API endpoints. Mutations are enabled only behind bearer auth.
+      const { putSource, deleteSource } = createSourceMutationHandlers({ mutable: authTokens.length > 0 });
       app.get("/api/sources", listSources);
       app.get("/api/sources/:sourceId", getSource);
+      app.put("/api/sources/:sourceId", (req, res) => { void putSource(req, res); });
+      app.delete("/api/sources/:sourceId", (req, res) => { void deleteSource(req, res); });
       app.get("/api/requests", listRequests);
 
       // Main MCP endpoint. createMcpHandler serves both protocol eras from

@@ -361,6 +361,108 @@ export class ConnectorManager {
   }
 
   /**
+   * Add a source at runtime, or replace the source with the same id.
+   * Only this source is touched: other sources keep their pools and tunnels.
+   * A lazy source is registered without connecting; an eager one connects now
+   * and the error propagates (nothing is registered on failure).
+   */
+  async addSource(source: SourceConfig): Promise<void> {
+    if (this.hasSource(source.id)) {
+      await this.removeSource(source.id);
+    }
+    if (source.lazy) {
+      this.registerLazySource(source);
+      return;
+    }
+    await this.connectSource(source);
+  }
+
+  /**
+   * Remove one source at runtime: stop its IAM refresh, wait for any in-flight
+   * lazy connect, close its connector and tunnel, and drop it from every map.
+   * Returns false when the id is unknown. Other sources are untouched.
+   */
+  async removeSource(sourceId: string): Promise<boolean> {
+    if (!this.hasSource(sourceId)) {
+      return false;
+    }
+
+    const timer = this.iamRefreshTimers.get(sourceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.iamRefreshTimers.delete(sourceId);
+    }
+
+    // A lazy connect in progress would otherwise re-register the connector after removal.
+    const pending = this.pendingConnections.get(sourceId);
+    if (pending) {
+      try {
+        await pending;
+      } catch {
+        // The connect failed on its own; there is nothing left to close.
+      }
+    }
+
+    const connector = this.connectors.get(sourceId);
+    if (connector) {
+      try {
+        await connector.disconnect();
+        console.error(`Disconnected from source '${sourceId}'`);
+      } catch (error) {
+        console.error(`Error disconnecting from source '${sourceId}':`, error);
+      }
+    }
+
+    const tunnel = this.sshTunnels.get(sourceId);
+    if (tunnel) {
+      try {
+        await tunnel.close();
+      } catch (error) {
+        console.error(`Error closing SSH tunnel for source '${sourceId}':`, error);
+      }
+    }
+
+    this.connectors.delete(sourceId);
+    this.sshTunnels.delete(sourceId);
+    this.sourceConfigs.delete(sourceId);
+    this.lazySources.delete(sourceId);
+    this.pendingConnections.delete(sourceId);
+    this.sourceIds = this.sourceIds.filter((id) => id !== sourceId);
+    return true;
+  }
+
+  /**
+   * Whether a source id is registered (connected or pending lazy connection)
+   */
+  hasSource(sourceId: string): boolean {
+    return this.sourceConfigs.has(sourceId);
+  }
+
+  /** Runtime add/replace of a source (static access for API handlers) */
+  static async addSource(source: SourceConfig): Promise<void> {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.addSource(source);
+  }
+
+  /** Runtime removal of a source (static access for API handlers) */
+  static async removeSource(sourceId: string): Promise<boolean> {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.removeSource(sourceId);
+  }
+
+  /** Whether a source id is registered (static access for API handlers) */
+  static hasSource(sourceId: string): boolean {
+    if (!managerInstance) {
+      throw new Error("ConnectorManager not initialized");
+    }
+    return managerInstance.hasSource(sourceId);
+  }
+
+  /**
    * Get a connector by source ID
    * If sourceId is not provided, returns the default (first) connector
    */

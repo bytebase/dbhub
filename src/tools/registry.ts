@@ -183,19 +183,57 @@ export class ToolRegistry {
     // Backward compatibility: sources without tools get default built-ins
     for (const source of config.sources) {
       if (!registry.has(source.id)) {
-        const defaultTools: ToolConfig[] = BUILTIN_TOOLS.map((name) => {
-          // Create properly typed tool configs based on the tool name
-          if (name === 'execute_sql') {
-            return { name: 'execute_sql', source: source.id } satisfies ExecuteSqlToolConfig;
-          } else {
-            return { name: 'search_objects', source: source.id } satisfies SearchObjectsToolConfig;
-          }
-        });
-        registry.set(source.id, defaultTools);
+        registry.set(source.id, this.defaultToolsFor(source.id));
       }
     }
 
     return registry;
+  }
+
+  /**
+   * Set the enabled tools for one source at runtime (added or replaced source).
+   * An empty list enables the default built-ins, matching TOML behavior.
+   * Custom tools are validated against the sources currently registered.
+   */
+  setSourceTools(sourceId: string, tools: ToolConfig[]): void {
+    const availableSources = [...new Set([...this.toolsBySource.keys(), sourceId])];
+    const otherCustomNames = new Set(
+      [...this.toolsBySource.entries()]
+        .filter(([id]) => id !== sourceId)
+        .flatMap(([, list]) => list)
+        .filter((t) => !this.isBuiltinTool(t.name))
+        .map((t) => t.name)
+    );
+    for (const tool of tools) {
+      if (tool.source !== sourceId) {
+        throw new Error(`Tool '${tool.name}' targets source '${tool.source}', expected '${sourceId}'`);
+      }
+      if (!this.isBuiltinTool(tool.name)) {
+        this.validateCustomTool(tool, availableSources);
+        if (otherCustomNames.has(tool.name)) {
+          throw new Error(`Duplicate tool name '${tool.name}'. Tool names must be unique.`);
+        }
+      }
+    }
+    this.toolsBySource.set(sourceId, tools.length > 0 ? [...tools] : this.defaultToolsFor(sourceId));
+  }
+
+  /**
+   * Forget one source's tools (removed source). No-op for unknown ids.
+   */
+  removeSource(sourceId: string): void {
+    this.toolsBySource.delete(sourceId);
+  }
+
+  /**
+   * Default built-in tool configs for a source that declares none
+   */
+  private defaultToolsFor(sourceId: string): ToolConfig[] {
+    return BUILTIN_TOOLS.map((name) =>
+      name === "execute_sql"
+        ? ({ name: "execute_sql", source: sourceId } satisfies ExecuteSqlToolConfig)
+        : ({ name: "search_objects", source: sourceId } satisfies SearchObjectsToolConfig)
+    );
   }
 
   /**
