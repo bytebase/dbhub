@@ -176,7 +176,7 @@ outside TOML and follow the same order:
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name; `?sid=ORCL` for a SID; `sslmode=require`/`verify-full` switch to TCPS)
   - SQLite: `sqlite:///path/to/database.db` or `sqlite:///:memory:`
-- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL and Oracle, CA + hostname verification). Use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
+- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL, SQL Server and Oracle, CA + hostname verification). On PostgreSQL, use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
 
 ## Testing Approach
 

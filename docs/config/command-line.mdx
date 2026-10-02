@@ -268,14 +268,14 @@ This page covers command-line flags and environment variables. For TOML configur
   | PostgreSQL |     ✅    |     ✅    |      ✅     |      ✅      | Certificate verification |
   | MySQL      |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
   | MariaDB    |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
-  | SQL Server |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
+  | SQL Server |     ✅    |     ✅    |      ❌     |      ✅      | Certificate verification |
   | Oracle     |     ✅    |     ✅    |      ❌     |      ✅      | Plain TCP (`tcps://` only with `require`/`verify-full`) |
   | SQLite     |     ❌    |     ❌    |      ❌     |      ❌      | N/A (file-based) |
 
   - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
   - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
-  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL and Oracle.** On PostgreSQL use `sslrootcert` to specify the CA certificate path; on Oracle the server certificate is validated against the system trust store.
+  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL, SQL Server, and Oracle.** On PostgreSQL use `sslrootcert` to specify the CA certificate path. SQL Server uses Node's configured trust roots; set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed. Oracle uses the system trust store.
 
   <Note>
   Unlike libpq, DBHub does not upgrade `sslmode=require` to `verify-ca` when `sslrootcert` is present: that combination is rejected at startup, so set `sslmode=verify-ca` explicitly. libpq's `allow` and `prefer` modes are not supported for PostgreSQL either; use `require` (or a verify mode) instead.

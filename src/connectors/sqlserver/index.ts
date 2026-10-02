@@ -46,18 +46,24 @@ export class SQLServerDSNParser implements DSNParser {
     }
 
     try {
+      // Inspect the same raw query as SafeURL before it drops empty/malformed
+      // pairs or collapses duplicates. Decode query keys as well as values.
+      const queryStart = dsn.indexOf("?");
+      const sslmodes = new URLSearchParams(queryStart === -1 ? "" : dsn.substring(queryStart + 1)).getAll("sslmode");
+      if (sslmodes.length > 1 || (sslmodes.length === 1 && !["disable", "require", "verify-full"].includes(sslmodes[0]))) {
+        throw new Error("Invalid sslmode. Specify exactly one value: disable, require, verify-full");
+      }
+
       // Use the SafeURL helper to parse DSNs with special characters
       const url = new SafeURL(dsn);
       
       // Parse additional options from query parameters
-      const options: Record<string, any> = {};
+      const options: Record<string, any> = { sslmode: sslmodes[0] };
       
       // Process query parameters
       url.forEachSearchParam((value, key) => {
         if (key === "authentication") {
           options.authentication = value;
-        } else if (key === "sslmode") {
-          options.sslmode = value;
         } else if (key === "instanceName") {
           options.instanceName = value;
         } else if (key === "domain") {
@@ -81,6 +87,9 @@ export class SQLServerDSNParser implements DSNParser {
         } else if (options.sslmode === "require") {
           options.encrypt = true;
           options.trustServerCertificate = true;
+        } else if (options.sslmode === "verify-full") {
+          options.encrypt = true;
+          options.trustServerCertificate = false;
         }
         // Default behavior (certificate verification) is handled by the default values below
       }

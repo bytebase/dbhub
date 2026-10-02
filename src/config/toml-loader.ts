@@ -239,6 +239,10 @@ function getRawDSNQueryParam(dsn: string, key: string): string | null {
   if (queryStart === -1) {
     return null;
   }
+  // Match SQL Server's decoded sslmode keys so merging cannot invent a duplicate.
+  if (key === "sslmode" && dsn.startsWith("sqlserver://")) {
+    return new URLSearchParams(dsn.substring(queryStart + 1)).get(key);
+  }
   for (const pair of dsn.substring(queryStart + 1).split("&")) {
     if (pair === "") {
       continue;
@@ -386,6 +390,9 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   // still treated as present and a conflicting field is rejected.
   const dsnSslmode = getRawDSNQueryParam(source.dsn!, "sslmode");
   if (source.sslmode && dsnSslmode !== null && dsnSslmode !== source.sslmode) {
+    if (source.type === "sqlserver") {
+      throw new Error("Conflicting SQL Server sslmode. Set sslmode in only one place, or make the two values match.");
+    }
     conflict("sslmode", source.sslmode, dsnSslmode);
   }
 
@@ -577,10 +584,11 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    // verify-ca is PostgreSQL-only; Oracle's TCPS also offers verify-full
-    // (server certificate DN matched against the host).
+    // verify-ca is PostgreSQL-only; SQL Server and Oracle also support
+    // verify-full for server certificate and hostname verification.
     const verifyModesByType: Record<string, string[]> = {
       postgres: ["verify-ca", "verify-full"],
+      sqlserver: ["verify-full"],
       oracle: ["verify-full"],
     };
     if (

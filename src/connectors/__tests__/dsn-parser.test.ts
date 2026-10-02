@@ -384,6 +384,69 @@ describe('DSN Parser - SQL Server SSL/TLS Configuration', () => {
     expect(config.options?.encrypt).toBe(false);
     expect(config.options?.trustServerCertificate).toBe(false);
   });
+
+  it('should parse sslmode=verify-full correctly', async () => {
+    const parser = new SQLServerConnector().dsnParser;
+    const config = await parser.parse('sqlserver://user:pass@localhost:1433/db?sslmode=verify-full');
+
+    expect(config.options?.encrypt).toBe(true);
+    expect(config.options?.trustServerCertificate).toBe(false);
+  });
+
+  it.each([
+    'sslmode=verify_ful',
+    'sslmode=verify-ca',
+    'sslmode=%20',
+    'sslmode',
+    'sslmode=',
+    'sslmode=verify-full=extra',
+    'sslmode=verify%3Dfull',
+    'sslmode=%',
+    'sslmode=%C3%28',
+    '%73slmode=',
+    '%73slmode=verify_ful',
+    'sslmode=verify-full&sslmode=verify-full',
+    'sslmode=verify-full&sslmode=disable',
+    'sslmode=verify_ful&sslmode=disable',
+    'sslmode=verify-full&sslmode=',
+    'sslmode=&sslmode=verify-full',
+    'sslmode=verify-full&%73slmode=disable',
+    '%73slmode=verify%2Dfull&sslmode=disable',
+  ])('should reject invalid sslmode query %s with a fixed error', async (query) => {
+    const parser = new SQLServerConnector().dsnParser;
+
+    await expect(
+      parser.parse(`sqlserver://user:pass@localhost:1433/db?${query}`)
+    ).rejects.toMatchObject({
+      message: 'Failed to parse SQL Server DSN: Invalid sslmode. Specify exactly one value: disable, require, verify-full',
+    });
+  });
+
+  it.each([
+    ['p@ss#word:&=+', 'p@ss#word:&=+'],
+    ['p%3Fsslmode%3Ddisable%26sslmode%3Dverify_ful', 'p?sslmode=disable&sslmode=verify_ful'],
+  ])('should preserve password %s with an encoded sslmode', async (password, decodedPassword) => {
+    const parser = new SQLServerConnector().dsnParser;
+    const config = await parser.parse(
+      `sqlserver://user%40domain:${password}@localhost:1433/db?%73slmode=verify%2Dfull&instanceName=ENV1`,
+      { connectionTimeoutSeconds: 15, queryTimeoutSeconds: 30 }
+    );
+
+    expect(config).toMatchObject({
+      user: 'user@domain',
+      password: decodedPassword,
+      server: 'localhost',
+      port: 1433,
+      database: 'db',
+      options: {
+        encrypt: true,
+        trustServerCertificate: false,
+        instanceName: 'ENV1',
+        connectTimeout: 15000,
+        requestTimeout: 30000,
+      },
+    });
+  });
 });
 
 describe('DSN Parser - SQL Server NTLM Authentication', () => {
