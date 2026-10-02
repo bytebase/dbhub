@@ -138,6 +138,8 @@ export interface ExecuteOptions {
  * Different databases may use different subset of these options
  */
 export interface ConnectorConfig {
+  /** Password resolved for each new physical connection (PostgreSQL). */
+  password?: () => Promise<string>;
   /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
   connectionTimeoutSeconds?: number;
   /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
