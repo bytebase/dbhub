@@ -1523,6 +1523,61 @@ pool_max_connections = 5
       });
     });
 
+    describe('readonly_session_sql validation', () => {
+      it('should accept SET SESSION statements for MySQL', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+readonly_session_sql = """
+SET SESSION max_execution_time = 30000;
+SET SESSION lock_wait_timeout = 5;
+"""
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        const result = loadTomlConfig();
+
+        expect(result?.sources[0].readonly_session_sql).toContain('SET SESSION lock_wait_timeout');
+      });
+
+      it('should reject a statement that is not a session setting', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+readonly_session_sql = "SET SESSION lock_wait_timeout = 5; DELETE FROM users"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow("source 'test_db' has invalid readonly_session_sql");
+      });
+
+      it('should reject readonly_session_sql for unsupported source types', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+readonly_session_sql = "SET LOCAL lock_timeout = '5s'"
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('not supported for postgres');
+      });
+
+      it('should reject a non-string value', () => {
+        const tomlContent = `
+[[sources]]
+id = "test_db"
+dsn = "mysql://user:pass@localhost:3306/testdb"
+readonly_session_sql = ["SET SESSION lock_wait_timeout = 5"]
+`;
+        fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+        expect(() => loadTomlConfig()).toThrow('invalid readonly_session_sql');
+      });
+    });
+
     describe('search_path validation', () => {
       it('should accept search_path for PostgreSQL source', () => {
         const tomlContent = `

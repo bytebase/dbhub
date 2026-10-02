@@ -284,6 +284,10 @@ export class ConnectorManager {
     if (source.collation) {
       config.collation = source.collation;
     }
+    // Pass readonly_session_sql (MySQL, MariaDB)
+    if (source.readonly_session_sql) {
+      config.readonlySessionSql = source.readonly_session_sql;
+    }
 
     // Connect to the database with config and optional init script. If this fails,
     // close the tunnel established for this attempt: the source may be retried (lazy

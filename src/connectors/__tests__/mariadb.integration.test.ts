@@ -597,4 +597,24 @@ describe('MariaDB Connector Integration Tests', () => {
       }
     });
   });
+
+  describe('readonly_session_sql', () => {
+    it('should apply the settings to read-only executions', async () => {
+      const connector = new MariaDBConnector();
+      try {
+        await connector.connect(mariadbTest.connectionString, undefined, {
+          readonlySessionSql: 'SET SESSION lock_wait_timeout = 7',
+        });
+
+        const result = await connector.executeSQL(
+          'SELECT @@session.lock_wait_timeout AS lwt',
+          { readonly: true }
+        );
+
+        expect(Number(result.resultSets[0].rows[0].lwt)).toBe(7);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
 });

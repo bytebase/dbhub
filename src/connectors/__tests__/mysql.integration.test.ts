@@ -606,4 +606,63 @@ describe('MySQL Connector Integration Tests', () => {
       }
     });
   });
+
+  describe('readonly_session_sql', () => {
+    it('should apply the settings to read-only executions', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          readonlySessionSql: 'SET SESSION max_execution_time = 1234',
+        });
+
+        const result = await connector.executeSQL(
+          'SELECT @@session.max_execution_time AS met',
+          { readonly: true }
+        );
+
+        expect(Number(result.resultSets[0].rows[0].met)).toBe(1234);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should put a value back after it was changed on the pooled connection', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          readonlySessionSql: 'SET SESSION max_execution_time = 1234',
+        });
+
+        await connector.executeSQL('SET SESSION max_execution_time = 0', {});
+        const result = await connector.executeSQL(
+          'SELECT @@session.max_execution_time AS met',
+          { readonly: true }
+        );
+
+        expect(Number(result.resultSets[0].rows[0].met)).toBe(1234);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should let the server stop a read-only SELECT at max_execution_time', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          readonlySessionSql: 'SET SESSION max_execution_time = 500',
+        });
+
+        const started = Date.now();
+        const result = await connector.executeSQL('SELECT SLEEP(5) AS interrupted', {
+          readonly: true,
+        });
+
+        // SLEEP returns 1 when the server interrupts it.
+        expect(Number(result.resultSets[0].rows[0].interrupted)).toBe(1);
+        expect(Date.now() - started).toBeLessThan(4000);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
 });

@@ -19,6 +19,7 @@ import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-data
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { parseReadonlySessionSQL } from "../../utils/readonly-session-sql.js";
 import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { isTiDBVersion } from "../../utils/server-flavor.js";
@@ -147,6 +148,8 @@ export class MariaDBConnector implements Connector {
   // TiDB speaks the MySQL protocol but rejects `START TRANSACTION READ ONLY`
   // unless tidb_enable_noop_functions is on. Detected once at connect time.
   private supportsReadOnlyTransaction: boolean = true;
+  // Per-source readonly_session_sql, re-run inside every read-only transaction
+  private sessionStatements: string[] = [];
 
   getId(): string {
     return this.sourceId;
@@ -159,6 +162,7 @@ export class MariaDBConnector implements Connector {
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionConfig = await this.dsnParser.parse(dsn, config);
+      this.sessionStatements = config?.readonlySessionSql ? parseReadonlySessionSQL(config.readonlySessionSql, "mariadb") : [];
 
       this.pool = mariadb.createPool(connectionConfig);
 
@@ -703,7 +707,8 @@ export class MariaDBConnector implements Connector {
           }
 
           return { resultSets };
-        }
+        },
+        this.sessionStatements
       );
     } finally {
       // Always release the connection back to the pool

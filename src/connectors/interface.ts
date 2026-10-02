@@ -177,6 +177,12 @@ export interface ConnectorConfig {
    * set, the driver falls back to its built-in default (mysql2: `utf8mb4_unicode_ci`).
    */
   collation?: string;
+  /**
+   * Session-setting statements re-run at the start of every read-only execution
+   * (MySQL, MariaDB). Validated by parseReadonlySessionSQL; see
+   * src/utils/readonly-session-sql.ts for why they run per execution.
+   */
+  readonlySessionSql?: string;
 }
 
 /**

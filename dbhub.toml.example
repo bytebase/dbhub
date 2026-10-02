@@ -135,6 +135,15 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # charset = "utf8mb4"               # Connection character set (uses its default collation)
 # collation = "utf8mb4_0900_ai_ci"  # Connection collation
 
+# MySQL with guardrails re-applied before every read-only execution (MySQL/MariaDB only)
+# [[sources]]
+# id = "local_mysql_guarded"
+# dsn = "mysql://root:mysql@localhost:3306/myapp"
+# readonly_session_sql = """
+# SET SESSION max_execution_time = 30000;
+# SET SESSION lock_wait_timeout = 5;
+# """
+
 # MySQL on AWS RDS with IAM authentication (no password in config)
 # [[sources]]
 # id = "rds_mysql_iam"
