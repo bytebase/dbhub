@@ -601,7 +601,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### SSH Tunnel Options
 
 <ParamField path="ssh_*" type="group">
-  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_proxy_jump`.
+  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_agent`, `ssh_proxy_jump`.
 
   ```toml
   [[sources]]
@@ -614,10 +614,13 @@ Sources define database connections. Each source represents a database that DBHu
   ssh_user = "ubuntu"
   ssh_key = "~/.ssh/id_rsa"  # File path or base64-encoded key
   ssh_passphrase = "my_key_passphrase"  # Optional
+  # ssh_agent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"  # SSH agent socket (instead of ssh_key)
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
   ```
 
   `ssh_key` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format.
+
+  `ssh_agent` is the path to an SSH agent socket (ssh-agent, the 1Password SSH agent, etc.). When it is unset, DBHub falls back to the `SSH_AUTH_SOCK` environment variable. With an agent available, `ssh_key` and `ssh_password` are optional; if they are set, they are tried before the agent. The agent is offered to every host in a `ssh_proxy_jump` chain. A configured socket that does not exist fails the connection.
 
   See [Command-Line Options - SSH Tunnel](/config/command-line#ssh-tunnel-options) for complete documentation and examples.
 </ParamField>
@@ -913,6 +916,7 @@ default = 10
 | `ssh_password` | string | ❌ | SSH password |
 | `ssh_key` | string | ❌ | SSH private key path or base64-encoded key |
 | `ssh_passphrase` | string | ❌ | SSH key passphrase |
+| `ssh_agent` | string | ❌ | SSH agent socket path (default: `SSH_AUTH_SOCK`) |
 | `ssh_proxy_jump` | string | ❌ | ProxyJump hosts |
 
 ### Tool Options

@@ -1,9 +1,21 @@
-import { Client, ConnectConfig } from 'ssh2';
-import { readFileSync } from 'fs';
+// `utils` is not detectable as a named export of the CommonJS ssh2 module under ESM,
+// so it is read off the default export.
+import ssh2, { Client, ConnectConfig } from 'ssh2';
+import { existsSync, readFileSync } from 'fs';
 import { Server, createServer } from 'net';
 import type { Duplex } from 'stream';
 import type { SSHTunnelConfig, SSHTunnelOptions, SSHTunnelInfo, JumpHost } from '../types/ssh.js';
 import { resolveSymlink, parseJumpHosts } from './ssh-config-parser.js';
+
+/** Credentials offered to a single SSH host. */
+interface SSHHostAuth {
+  password?: string;
+  privateKey?: Buffer;
+  passphrase?: string;
+  /** The key came from ~/.ssh/config rather than explicit DBHub configuration */
+  privateKeyDiscovered?: boolean;
+  agent?: string;
+}
 
 /**
  * SSH Tunnel implementation for secure database connections.
@@ -41,13 +53,15 @@ export class SSHTunnel {
       // Read the target's private key once.
       const privateKeyBuffer = config.privateKey ? this.loadPrivateKey(config.privateKey) : undefined;
 
-      // Validate authentication
-      if (!config.password && !privateKeyBuffer) {
-        throw new Error('Either password or privateKey must be provided for SSH authentication');
+      const agent = this.resolveAgent(config.agent);
+
+      // Validate authentication (an SSH agent counts as an auth method)
+      if (!config.password && !privateKeyBuffer && !agent) {
+        throw new Error('Either password, privateKey, or an SSH agent (agent or SSH_AUTH_SOCK) must be provided for SSH authentication');
       }
 
       // Establish the SSH connection chain
-      const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer);
+      const finalClient = await this.establishChain(jumpHosts, config, privateKeyBuffer, agent);
 
       // Create local server for the tunnel
       return await this.createLocalTunnel(finalClient, options);
@@ -55,6 +69,38 @@ export class SSHTunnel {
       this.cleanup();
       throw error;
     }
+  }
+
+  /**
+   * Pick the SSH agent socket: an explicitly configured one wins over the ambient
+   * SSH_AUTH_SOCK. A configured socket that does not exist is an error; a stale
+   * SSH_AUTH_SOCK is ignored, since the user never asked DBHub to use it.
+   */
+  private resolveAgent(configuredAgent: string | undefined): string | undefined {
+    if (configuredAgent) {
+      if (!this.agentSocketExists(configuredAgent)) {
+        throw new Error(`SSH agent socket not found: ${configuredAgent}`);
+      }
+      return configuredAgent;
+    }
+
+    const ambientAgent = process.env.SSH_AUTH_SOCK;
+    if (!ambientAgent) {
+      return undefined;
+    }
+    if (!this.agentSocketExists(ambientAgent)) {
+      console.warn(`Ignoring SSH_AUTH_SOCK: no SSH agent socket at ${ambientAgent}`);
+      return undefined;
+    }
+    return ambientAgent;
+  }
+
+  /**
+   * Windows agents are named pipes or Pageant rather than files, so only Unix
+   * socket paths are checked.
+   */
+  private agentSocketExists(agent: string): boolean {
+    return process.platform === 'win32' || existsSync(agent);
   }
 
   /**
@@ -90,7 +136,8 @@ export class SSHTunnel {
   private async establishChain(
     jumpHosts: JumpHost[],
     targetConfig: SSHTunnelConfig,
-    privateKey: Buffer | undefined
+    privateKey: Buffer | undefined,
+    agent: string | undefined
   ): Promise<Client> {
     let previousStream: Duplex | undefined;
 
@@ -105,9 +152,14 @@ export class SSHTunnel {
       // back to the target's key otherwise. The target password is always offered as
       // a fallback (as before) — a hop may carry only a default-discovered key, so
       // suppressing the password on "has a key" would break password auth.
-      const hopPrivateKey = jumpHost.privateKey ? this.loadPrivateKey(jumpHost.privateKey) : privateKey;
-      const hopPassword = targetConfig.password;
-      const hopPassphrase = jumpHost.passphrase ?? targetConfig.passphrase;
+      // A hop's own key always comes from ~/.ssh/config.
+      const hopAuth: SSHHostAuth = {
+        password: targetConfig.password,
+        privateKey: jumpHost.privateKey ? this.loadPrivateKey(jumpHost.privateKey) : privateKey,
+        passphrase: jumpHost.passphrase ?? targetConfig.passphrase,
+        privateKeyDiscovered: jumpHost.privateKey ? true : targetConfig.privateKeyDiscovered,
+        agent,
+      };
 
       let client: Client | null = null;
       let forwardStream: Duplex;
@@ -118,9 +170,7 @@ export class SSHTunnel {
             port: jumpHost.port,
             username: jumpHost.username || targetConfig.username,
           },
-          hopPassword,
-          hopPrivateKey,
-          hopPassphrase,
+          hopAuth,
           previousStream,
           `jump host ${i + 1}`,
           targetConfig.keepaliveInterval,
@@ -152,9 +202,13 @@ export class SSHTunnel {
         port: targetConfig.port || 22,
         username: targetConfig.username,
       },
-      targetConfig.password,
-      privateKey,
-      targetConfig.passphrase,
+      {
+        password: targetConfig.password,
+        privateKey,
+        passphrase: targetConfig.passphrase,
+        privateKeyDiscovered: targetConfig.privateKeyDiscovered,
+        agent,
+      },
       previousStream,
       jumpHosts.length > 0 ? 'target host' : undefined,
       targetConfig.keepaliveInterval,
@@ -170,9 +224,7 @@ export class SSHTunnel {
    */
   private connectToHost(
     hostInfo: { host: string; port: number; username: string },
-    password: string | undefined,
-    privateKey: Buffer | undefined,
-    passphrase: string | undefined,
+    auth: SSHHostAuth,
     sock: Duplex | undefined,
     label: string | undefined,
     keepaliveInterval?: number,
@@ -187,14 +239,34 @@ export class SSHTunnel {
         username: hostInfo.username,
       };
 
+      const { password, privateKey, passphrase, agent } = auth;
+
       if (password) {
         sshConfig.password = password;
       }
       if (privateKey) {
-        sshConfig.privateKey = privateKey;
-        if (passphrase) {
-          sshConfig.passphrase = passphrase;
+        // ssh2 throws on a key it cannot parse (e.g. an encrypted key without a
+        // passphrase) before trying any other method. A key picked up from
+        // ~/.ssh/config is skipped in that case when another method is available,
+        // like ssh does. An explicitly configured key still fails loudly.
+        const canSkip = auth.privateKeyDiscovered && Boolean(password || agent);
+        const parsedKey = canSkip ? ssh2.utils.parseKey(privateKey, passphrase) : undefined;
+        if (parsedKey instanceof Error) {
+          const desc = label || `${hostInfo.host}:${hostInfo.port}`;
+          console.warn(
+            `Skipping unusable SSH private key from ~/.ssh/config for ${desc} (${parsedKey.message}).`
+          );
+        } else {
+          sshConfig.privateKey = privateKey;
+          if (passphrase) {
+            sshConfig.passphrase = passphrase;
+          }
         }
+      }
+      // Offer the SSH agent (ssh-agent, 1Password, etc.) when one is available.
+      // ssh2 tries it after any explicit password/key.
+      if (agent) {
+        sshConfig.agent = agent;
       }
       if (sock) {
         sshConfig.sock = sock;

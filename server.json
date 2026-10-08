@@ -128,6 +128,13 @@
           "isRequired": false,
           "format": "string",
           "isSecret": true
+        },
+        {
+          "name": "SSH_AUTH_SOCK",
+          "description": "Path to SSH agent socket",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
         }
       ]
     }

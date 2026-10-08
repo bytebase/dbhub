@@ -433,6 +433,55 @@ max_rows = -100
       expect(() => loadTomlConfig()).toThrow('invalid max_rows');
     });
 
+    it('should expand tilde in ssh_agent paths', () => {
+      const tomlContent = `
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_agent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].ssh_agent).toBe(
+        path.join(os.homedir(), 'Library', 'Group Containers', '2BUA8C4S2C.com.1password', 't', 'agent.sock')
+      );
+    });
+
+    it('should not accept the internal ssh_key_discovered marker from TOML', () => {
+      const tomlContent = `
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_key = "~/.ssh/id_rsa"
+ssh_key_discovered = true
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      const result = loadTomlConfig();
+
+      expect(result?.sources[0].ssh_key_discovered).toBeUndefined();
+    });
+
+    it('should throw error for empty ssh_agent', () => {
+      const tomlContent = `
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_agent = ""
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid ssh_agent');
+    });
+
     it('should throw error for invalid ssh_port', () => {
       const tomlContent = `
 [[sources]]

@@ -13,6 +13,13 @@ export interface SSHConfig {
   ssh_key?: string;
   ssh_passphrase?: string;
   /**
+   * Internal, not a TOML option: set when `ssh_key` was picked up from `~/.ssh/config`
+   * while resolving `--ssh-host`, so it is not mistaken for an explicitly configured key.
+   */
+  ssh_key_discovered?: boolean;
+  /** Path to an SSH agent socket (overrides SSH_AUTH_SOCK for this source) */
+  ssh_agent?: string;
+  /**
    * ProxyJump configuration for multi-hop SSH connections.
    * Comma-separated list of jump hosts: "jump1.example.com,user@jump2.example.com:2222"
    */

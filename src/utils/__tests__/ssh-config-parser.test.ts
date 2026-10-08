@@ -105,7 +105,9 @@ Host dev-server
         host: 'dev.example.com',
         username: 'developer',
         // Path is resolved to real path (e.g., on macOS /var -> /private/var)
-        privateKey: realpathSync(identityPath)
+        privateKey: realpathSync(identityPath),
+        // Marked so the tunnel can tell it from an explicitly configured key
+        privateKeyDiscovered: true
       });
     });
 

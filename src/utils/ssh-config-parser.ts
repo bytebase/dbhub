@@ -184,6 +184,9 @@ export function parseSSHConfig(
         sshConfig.privateKey = defaultKey;
       }
     }
+    if (sshConfig.privateKey) {
+      sshConfig.privateKeyDiscovered = true;
+    }
 
     // ProxyJump support for multi-hop SSH connections
     if (hostConfig.ProxyJump) {
