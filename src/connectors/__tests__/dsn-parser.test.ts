@@ -221,6 +221,131 @@ describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {
   });
 });
 
+describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslkey)', () => {
+  const parser = new PostgresConnector().dsnParser;
+  let tempDir: string;
+  let caPath: string;
+  let certPath: string;
+  let keyPath: string;
+  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
+  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
+  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
+  const NEW_CA = '-----BEGIN CERTIFICATE-----\nca-rotated\n-----END CERTIFICATE-----\n';
+  const NEW_CERT = '-----BEGIN CERTIFICATE-----\nclient-rotated\n-----END CERTIFICATE-----\n';
+  const NEW_KEY = '-----BEGIN PRIVATE KEY-----\nclient-rotated\n-----END PRIVATE KEY-----\n';
+  const ENCRYPTED_KEY =
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n';
+
+  const dsn = () =>
+    'postgres://user:pass@localhost:5432/db?sslmode=verify-full' +
+    `&sslrootcert=${encodeURIComponent(caPath)}` +
+    `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
+
+  type SslObject = { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
+
+  /** Mirror what node-postgres does with the ssl object on every new connection. */
+  function tlsOptionsLikePg(ssl: SslObject): SslObject {
+    // client.js / connection-parameters.js hide the key from logs...
+    Object.defineProperty(ssl, 'key', { enumerable: false });
+    // ...and connection.js copies the rest, then reads the key explicitly.
+    const options: SslObject = Object.assign({}, ssl);
+    options.key = ssl.key;
+    return options;
+  }
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-certrotation-test-'));
+    caPath = writeTempPem(tempDir, 'ca.pem', CA);
+    certPath = writeTempPem(tempDir, 'client.crt', CERT);
+    keyPath = writeTempPem(tempDir, 'client.key', KEY);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('serves rotated PEM files to new connections without re-parsing the DSN', async () => {
+    const config = await parser.parse(dsn());
+    const ssl = config.ssl as SslObject;
+    expect(tlsOptionsLikePg(ssl)).toEqual({
+      rejectUnauthorized: true,
+      ca: CA,
+      cert: CERT,
+      key: KEY,
+    });
+
+    fs.writeFileSync(caPath, NEW_CA);
+    fs.writeFileSync(certPath, NEW_CERT);
+    fs.writeFileSync(keyPath, NEW_KEY);
+
+    expect(tlsOptionsLikePg(ssl)).toEqual({
+      rejectUnauthorized: true,
+      ca: NEW_CA,
+      cert: NEW_CERT,
+      key: NEW_KEY,
+    });
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps the last good contents when a PEM file disappears mid-rotation', async () => {
+    const config = await parser.parse(dsn());
+    const ssl = config.ssl as SslObject;
+
+    fs.rmSync(certPath);
+    fs.rmSync(keyPath);
+
+    expect(tlsOptionsLikePg(ssl)).toEqual({
+      rejectUnauthorized: true,
+      ca: CA,
+      cert: CERT,
+      key: KEY,
+    });
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to re-read SSL client certificate at '${certPath}'`)
+    );
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to re-read SSL client key at '${keyPath}'`)
+    );
+
+    // The same problem is reported once, not on every connection.
+    tlsOptionsLikePg(ssl);
+    tlsOptionsLikePg(ssl);
+    expect(console.error).toHaveBeenCalledTimes(2);
+
+    // Once the files are back, re-reading resumes.
+    writeTempPem(tempDir, 'client.crt', NEW_CERT);
+    writeTempPem(tempDir, 'client.key', NEW_KEY);
+    expect(ssl.cert).toBe(NEW_CERT);
+    expect(ssl.key).toBe(NEW_KEY);
+  });
+
+  it('keeps the previous key when a rotated key is encrypted', async () => {
+    const config = await parser.parse(dsn());
+    const ssl = config.ssl as SslObject;
+
+    fs.writeFileSync(keyPath, ENCRYPTED_KEY);
+    fs.writeFileSync(certPath, NEW_CERT);
+
+    expect(ssl.key).toBe(KEY);
+    expect(ssl.cert).toBe(NEW_CERT);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('encrypted private keys are not supported')
+    );
+  });
+
+  it('still rejects a missing or encrypted key up front at parse time', async () => {
+    fs.writeFileSync(keyPath, ENCRYPTED_KEY);
+    await expect(parser.parse(dsn())).rejects.toThrow('encrypted private keys are not supported');
+
+    fs.rmSync(keyPath);
+    await expect(parser.parse(dsn())).rejects.toThrow(
+      `Failed to read SSL client key at '${keyPath}'`
+    );
+  });
+});
+
 describe('DSN Parser - PostgreSQL query timeout', () => {
   it('configures a server-side statement timeout before the client fallback', async () => {
     const parser = new PostgresConnector().dsnParser;

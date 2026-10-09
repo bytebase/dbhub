@@ -441,7 +441,9 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="sslkey" type="string">
   Path to the PEM private key for `sslcert`. The key must be **unencrypted** (an encrypted key is rejected at startup; `sslpassword` is not supported). DER-encoded keys are not accepted.
 
-  Keep the key file private (`chmod 0600`); DBHub reads it once at startup and never logs its contents.
+  Keep the key file private (`chmod 0600`); DBHub never logs its contents.
+
+  Both files are validated at startup and then re-read from disk each time a new connection is opened, matching libpq. Short-lived client certificates that are reissued on a timer are picked up without a restart: replace the files in place (an atomic rename is safest) and the next connection presents the new pair. If a re-read fails, or a rotated key turns out to be encrypted, the previously loaded contents are kept and a warning is logged.
 
   Supports `~/` path expansion.
 

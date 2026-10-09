@@ -35,15 +35,18 @@ const CLIENT_CERT_SSL_MODES = ["require", "verify-ca", "verify-full"];
 /** SSL modes this parser maps to a node-postgres `ssl` setting. */
 const SUPPORTED_SSL_MODES = ["disable", ...CLIENT_CERT_SSL_MODES];
 
+/** Expand a leading `~/` in a PEM path referenced by an SSL DSN parameter. */
+function resolvePemPath(filePath: string): string {
+  return filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath;
+}
+
 /**
  * Read a PEM file referenced by an SSL DSN parameter, expanding a leading `~/`.
  * Wraps any read failure in FailedToReadCertificate so callers can tell a
  * misconfigured cert path apart from a malformed DSN.
  */
 async function readPemFile(filePath: string, label: string): Promise<string> {
-  const resolved = filePath.startsWith("~/")
-    ? path.join(os.homedir(), filePath.slice(2))
-    : filePath;
+  const resolved = resolvePemPath(filePath);
   try {
     return await fs.promises.readFile(resolved, "utf-8");
   } catch (err) {
@@ -54,12 +57,83 @@ async function readPemFile(filePath: string, label: string): Promise<string> {
 }
 
 /**
+ * A PEM file that is re-read from disk every time it is used, so a certificate
+ * rotated on disk reaches new connections without a restart (libpq likewise
+ * opens sslcert/sslkey/sslrootcert per connection). The contents read at
+ * parse time are kept as a fallback: if a later read fails, or a rotated key
+ * turns out to be encrypted, the last good contents are served and a warning
+ * is logged once per distinct problem. That keeps the atomic-rename window of
+ * a rotation, or a transiently missing file, from failing connections outright.
+ */
+class RotatingPemFile {
+  private contents: string;
+  private lastProblem: string | undefined;
+
+  constructor(
+    private readonly resolved: string,
+    private readonly label: string,
+    initialContents: string,
+    private readonly validate?: (pem: string) => string | undefined
+  ) {
+    this.contents = initialContents;
+  }
+
+  /** Return the current contents, re-reading from disk when possible. */
+  current(): string {
+    let problem: string;
+    try {
+      const fresh = fs.readFileSync(this.resolved, "utf-8");
+      const invalid = this.validate?.(fresh);
+      if (invalid === undefined) {
+        this.contents = fresh;
+        this.lastProblem = undefined;
+        return this.contents;
+      }
+      problem = invalid;
+    } catch (err) {
+      problem = err instanceof Error ? err.message : String(err);
+    }
+    if (problem !== this.lastProblem) {
+      this.lastProblem = problem;
+      console.error(
+        `Failed to re-read ${this.label} at '${this.resolved}', keeping the previously loaded contents: ${problem}`
+      );
+    }
+    return this.contents;
+  }
+}
+
+/**
+ * Expose a RotatingPemFile as an enumerable, configurable getter on the pg
+ * `ssl` object. node-postgres copies that object into the TLS options on every
+ * new connection (`Object.assign(options, ssl)`, plus `options.key = ssl.key`),
+ * which invokes the getter, so each connection sees the file as it is on disk.
+ * The property must stay configurable because pg redefines `key` as
+ * non-enumerable to keep it out of logs; that only toggles enumerability and
+ * leaves the getter in place.
+ */
+function defineRotatingPem(target: object, property: "ca" | "cert" | "key", pem: RotatingPemFile): void {
+  Object.defineProperty(target, property, {
+    get: () => pem.current(),
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/**
  * Node's TLS layer needs a passphrase to open an encrypted PEM key and fails
  * with an opaque decoder error otherwise. Detect the common PEM markers and
  * fail with a clear message instead (sslpassword is not supported yet).
  */
 function isEncryptedPemKey(pem: string): boolean {
   return pem.includes("ENCRYPTED PRIVATE KEY") || pem.includes("Proc-Type: 4,ENCRYPTED");
+}
+
+function encryptedKeyMessage(keyPath: string): string {
+  return (
+    `SSL client key at '${keyPath}' is encrypted; encrypted private keys are not supported. ` +
+    `Decrypt it first, e.g. 'openssl pkey -in client.key -out client-plain.key'`
+  );
 }
 
 /**
@@ -176,24 +250,34 @@ class PostgresDSNParser implements DSNParser {
           sslConfig.checkServerIdentity = () => undefined;
         }
         if (sslrootcert) {
-          sslConfig.ca = await readPemFile(sslrootcert, "SSL root certificate");
+          const label = "SSL root certificate";
+          const ca = await readPemFile(sslrootcert, label);
+          defineRotatingPem(sslConfig, "ca", new RotatingPemFile(resolvePemPath(sslrootcert), label, ca));
         }
         poolConfig.ssl = sslConfig;
       }
 
       if (sslcert !== undefined && sslkey !== undefined) {
-        const key = await readPemFile(sslkey, "SSL client key");
+        const keyLabel = "SSL client key";
+        const certLabel = "SSL client certificate";
+        const keyPath = sslkey;
+        const key = await readPemFile(keyPath, keyLabel);
         if (isEncryptedPemKey(key)) {
-          throw new FailedToReadCertificate(
-            `SSL client key at '${sslkey}' is encrypted; encrypted private keys are not supported. ` +
-              `Decrypt it first, e.g. 'openssl pkey -in client.key -out client-plain.key'`
-          );
+          throw new FailedToReadCertificate(encryptedKeyMessage(keyPath));
         }
-        // sslmode is validated above, so poolConfig.ssl is an object here
-        Object.assign(poolConfig.ssl as object, {
-          cert: await readPemFile(sslcert, "SSL client certificate"),
-          key,
-        });
+        const cert = await readPemFile(sslcert, certLabel);
+        // sslmode is validated above, so poolConfig.ssl is an object here.
+        // Both files are re-read per connection so short-lived client
+        // certificates rotated on disk are picked up without a restart.
+        const ssl = poolConfig.ssl as object;
+        defineRotatingPem(ssl, "cert", new RotatingPemFile(resolvePemPath(sslcert), certLabel, cert));
+        defineRotatingPem(
+          ssl,
+          "key",
+          new RotatingPemFile(resolvePemPath(keyPath), keyLabel, key, (pem) =>
+            isEncryptedPemKey(pem) ? encryptedKeyMessage(keyPath) : undefined
+          )
+        );
       }
 
       // Apply connection timeout if specified
