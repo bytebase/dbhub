@@ -558,6 +558,35 @@ describe("SQLRowLimiter", () => {
       );
     });
 
+    it("should recognise a TOP expression with nested parentheses as the statement's own TOP", () => {
+      const sql = "SELECT TOP (COALESCE(NULLIF(@p, 0), 10)) x FROM t";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should wrap rather than append when the FETCH count is in an unparsed form", () => {
+      const sql = "SELECT x FROM t ORDER BY x OFFSET 0 ROWS FETCH NEXT (@p1) ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should cap a set-operator query with OFFSET ... FETCH through its FETCH count", () => {
+      // The OFFSET applies to the combined output, and hoisting it next to
+      // an outer TOP would be rejected (TOP and OFFSET on the same query).
+      const sql = "SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY"
+      );
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+          "SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id OFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY",
+          100
+        ).probeApplied
+      ).toBe(false);
+    });
+
     it("should not treat 'top (3)' inside a string literal as a TOP clause", () => {
       expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT 'top (3)' AS s FROM t", 100)).toBe(
         "SELECT TOP 100 'top (3)' AS s FROM t"

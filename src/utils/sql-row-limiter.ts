@@ -205,20 +205,68 @@ export class SQLRowLimiter {
   private static findTopLevelTop(sql: string): TopLevelClause | null {
     const match = this.findTopLevelMatch(
       sql,
-      // The expression alternative allows one level of nested parentheses so
-      // `TOP ((@p1))` is consumed whole and never unbalances the depth scan.
-      /\(|\)|\bselect\s+(?:(?:distinct|all)\s+)?(top\s*(?:\(\s*(\d+)\s*\)|(\d+)\b|\((?:[^()]|\([^()]*\))*\))(?:\s+percent\b)?(?:\s+with\s+ties\b)?)/gi,
+      /\(|\)|\bselect\s+(?:(?:distinct|all)\s+)?(top)\b/gi,
       "first",
       "sqlserver"
     );
     if (match === null) {
       return null;
     }
-    const clause = match[1];
-    const index = match.index + match[0].length - clause.length;
-    const literal = match[2] ?? match[3];
-    const bounded = literal !== undefined && !/\b(?:percent|ties)\s*$/i.test(clause);
-    return { index, length: clause.length, value: bounded ? parseInt(literal, 10) : null };
+    const blanked = blankCommentsAndStrings(sql, "sqlserver");
+    const index = match.index + match[0].length - match[1].length;
+    let end = match.index + match[0].length;
+    let literal: string | undefined;
+
+    const operand = /\s*(?:(\()|(\d+)\b)/y;
+    operand.lastIndex = end;
+    const operandMatch = operand.exec(blanked);
+    if (operandMatch === null) {
+      return null;
+    }
+    end = operand.lastIndex;
+    if (operandMatch[1] !== undefined) {
+      // A parenthesised operand is an arbitrary expression (`TOP (@p1)`,
+      // `TOP (COALESCE(NULLIF(@p, 0), 10))`): take it whole by balancing
+      // parentheses rather than guessing a nesting depth.
+      const close = this.findClosingParen(blanked, end - 1);
+      if (close === -1) {
+        return null;
+      }
+      const inner = blanked.slice(end, close);
+      literal = /^\s*(\d+)\s*$/.exec(inner)?.[1];
+      end = close + 1;
+    } else {
+      literal = operandMatch[2];
+    }
+
+    const modifiers = /(?:\s+percent\b)?(?:\s+with\s+ties\b)?/iy;
+    modifiers.lastIndex = end;
+    const modifierMatch = modifiers.exec(blanked);
+    const unbounded = modifierMatch !== null && modifierMatch[0].length > 0;
+    end = modifiers.lastIndex;
+
+    return {
+      index,
+      length: end - index,
+      value: literal !== undefined && !unbounded ? parseInt(literal, 10) : null,
+    };
+  }
+
+  /** Index of the `)` matching the `(` at `openIndex` in blanked SQL, or -1. */
+  private static findClosingParen(blankedSQL: string, openIndex: number): number {
+    let depth = 0;
+    for (let i = openIndex; i < blankedSQL.length; i++) {
+      const ch = blankedSQL[i];
+      if (ch === "(") {
+        depth++;
+      } else if (ch === ")") {
+        depth--;
+        if (depth === 0) {
+          return i;
+        }
+      }
+    }
+    return -1;
   }
 
   /**
@@ -248,15 +296,25 @@ export class SQLRowLimiter {
     if (offset === null) {
       return null;
     }
+    const blanked = blankCommentsAndStrings(sql, "sqlserver");
     const clause =
       /(offset\s+(?:\d+|@\w+|\?)\s+rows?\b)(?:(\s+fetch\s+(?:first|next)\s+)((\d+)|@\w+|\?)\s+rows?\s+only\b)?/iy;
     clause.lastIndex = offset.index;
-    const match = clause.exec(blankCommentsAndStrings(sql, "sqlserver"));
+    const match = clause.exec(blanked);
     if (match === null) {
       return { fetch: null, fetchInsertIndex: -1 };
     }
     if (match[2] === undefined) {
-      return { fetch: null, fetchInsertIndex: match.index + match[0].length };
+      const end = match.index + match[0].length;
+      // A FETCH in a form the pattern above does not parse (`FETCH NEXT (@p1)
+      // ROWS ONLY`, say) must not be taken for a missing one, or a second
+      // FETCH would be appended.
+      const unparsedFetch = /\s*fetch\b/iy;
+      unparsedFetch.lastIndex = end;
+      if (unparsedFetch.test(blanked)) {
+        return { fetch: null, fetchInsertIndex: -1 };
+      }
+      return { fetch: null, fetchInsertIndex: end };
     }
     return {
       fetch: {
@@ -293,19 +351,14 @@ export class SQLRowLimiter {
    * Add or modify TOP clause in a SQL statement (SQL Server)
    */
   static applyTopToQuery(sql: string, maxRows: number): string {
-    if (this.hasSetOperator(sql)) {
-      // TOP applied anywhere inside the statement (e.g. on the first SELECT,
-      // or on one branch) only caps that branch's rows, not the combined
-      // UNION/INTERSECT/EXCEPT output, so wrap the whole statement and cap
-      // the outer result set instead, regardless of any TOP already present
-      // on an individual branch.
-      return this.wrapWithTop(sql, maxRows, true);
-    }
-
     // T-SQL rejects TOP in a query that has OFFSET, so cap through the
     // FETCH count instead: tighten a literal one, append one when missing,
     // and wrap when the count is a parameter or the clause has an unusual
     // shape (the derived table's own OFFSET keeps its ORDER BY legal).
+    // This comes before the set-operator check: a top-level OFFSET on a
+    // UNION applies to the combined output, so its FETCH count caps the
+    // whole statement, and hoisting ORDER BY ... OFFSET next to an outer TOP
+    // would be rejected.
     const offset = this.findTopLevelOffset(sql);
     if (offset !== null) {
       if (offset.fetch !== null && offset.fetch.value !== null) {
@@ -316,6 +369,15 @@ export class SQLRowLimiter {
         return `${sql.slice(0, offset.fetchInsertIndex)} FETCH NEXT ${maxRows} ROWS ONLY${sql.slice(offset.fetchInsertIndex)}`;
       }
       return this.wrapWithTop(sql, maxRows, false);
+    }
+
+    if (this.hasSetOperator(sql)) {
+      // TOP applied anywhere inside the statement (e.g. on the first SELECT,
+      // or on one branch) only caps that branch's rows, not the combined
+      // UNION/INTERSECT/EXCEPT output, so wrap the whole statement and cap
+      // the outer result set instead, regardless of any TOP already present
+      // on an individual branch.
+      return this.wrapWithTop(sql, maxRows, true);
     }
 
     const existingTop = this.findTopLevelTop(sql);
@@ -505,14 +567,15 @@ export class SQLRowLimiter {
     if (!maxRows || !this.isSelectQuery(sql, "sqlserver")) {
       return { sql, probeApplied: false };
     }
-    if (!this.hasSetOperator(sql)) {
-      // The statement's own literal cap: a plain `TOP n` or the FETCH count
-      // of an OFFSET clause. A TOP whose number is not a row bound (PERCENT,
-      // WITH TIES, an expression) reads as null here and is always probed.
-      const ownCap = this.extractTopValue(sql) ?? this.findTopLevelOffset(sql)?.fetch?.value ?? null;
-      if (ownCap !== null && ownCap <= maxRows) {
-        return { sql, probeApplied: false };
-      }
+    // The statement's own literal cap: the FETCH count of a top-level OFFSET
+    // clause (which on a set operation caps the combined output), or, on a
+    // plain query, its `TOP n`. A TOP whose number is not a row bound
+    // (PERCENT, WITH TIES, an expression) reads as null and is always probed.
+    const ownCap =
+      this.findTopLevelOffset(sql)?.fetch?.value ??
+      (this.hasSetOperator(sql) ? null : this.extractTopValue(sql));
+    if (ownCap !== null && ownCap <= maxRows) {
+      return { sql, probeApplied: false };
     }
     return { sql: this.applyMaxRowsForSQLServer(sql, maxRows + 1), probeApplied: true };
   }

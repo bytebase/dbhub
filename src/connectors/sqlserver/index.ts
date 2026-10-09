@@ -766,14 +766,20 @@ export class SQLServerConnector implements Connector {
       // statement of the batch, so a SELECT after the leading statement is capped
       // too. A single statement is rewritten in place so its text (trailing
       // semicolon, surrounding whitespace) reaches the server as written.
+      // The splitter drops the batch's final semicolon, which a trailing MERGE
+      // requires, so it is put back when the source had one.
       let processedSQL = sqlQuery;
       if (options.maxRows) {
         const maxRows = options.maxRows;
-        processedSQL = isSingleStatement
-          ? SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sqlQuery, maxRows).sql
-          : statements
+        if (isSingleStatement) {
+          processedSQL = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sqlQuery, maxRows).sql;
+        } else {
+          const terminator = sqlQuery.trimEnd().endsWith(";") ? ";" : "";
+          processedSQL =
+            statements
               .map((statement) => SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(statement, maxRows).sql)
-              .join(";\n");
+              .join(";\n") + terminator;
+        }
       }
 
       // Engine-level read-only enforcement: SQL Server has no
