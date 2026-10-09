@@ -771,6 +771,8 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
+      // The dropped probe row must not surface as a spurious extra result set.
+      expect(result.resultSets).toHaveLength(1);
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       expect(result.resultSets[0].rows[1]).toHaveProperty('name');

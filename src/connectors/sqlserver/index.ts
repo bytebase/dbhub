@@ -866,14 +866,19 @@ export class SQLServerConnector implements Connector {
   ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
       const rows = recordset ?? [];
-      const set: SQLResultSet = { rows, rowCount: rows.length };
-      SQLRowLimiter.flagTruncation(set, maxRows, true);
-      return set;
+      return { rows, rowCount: rows.length };
     });
 
+    // Rows the SELECTs returned are counted before any probe row is dropped
+    // below: rowsAffected counts that row too, so trimming first would make it
+    // look like a write and append a spurious empty result set.
     const totalAffected = (rowsAffected ?? []).reduce((total, count) => total + (count ?? 0), 0);
     const accountedFor = sets.reduce((total, set) => total + set.rowCount, 0);
     const writesOnly = totalAffected - accountedFor;
+
+    for (const set of sets) {
+      SQLRowLimiter.flagTruncation(set, maxRows, true);
+    }
 
     if (sets.length === 0) {
       sets.push({ rows: [], rowCount: totalAffected });
