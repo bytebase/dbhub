@@ -587,6 +587,29 @@ describe("SQLRowLimiter", () => {
       ).toBe(false);
     });
 
+    it.each(["SELECT TOP(1)PERCENT x FROM t", "SELECT TOP(1)WITH TIES x FROM t ORDER BY x"])(
+      "should recognise a modifier with no whitespace after a parenthesised operand: %s",
+      (sql) => {
+        expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+          sql: `SELECT TOP 101 * FROM (${sql}\n) AS subq`,
+          probeApplied: true,
+        });
+      }
+    );
+
+    it("should keep a statement-level OPTION hint outside the wrap", () => {
+      // OPTION is only allowed on the outermost statement.
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServer("SELECT TOP (@p1) x FROM t ORDER BY x OPTION (RECOMPILE);", 100)
+      ).toBe("SELECT TOP 100 * FROM (SELECT TOP (@p1) x FROM t ORDER BY x\n) AS subq OPTION (RECOMPILE);");
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServer("SELECT id FROM a UNION ALL SELECT id FROM b OPTION (MAXDOP 1)", 100)
+      ).toBe("SELECT TOP 100 * FROM (SELECT id FROM a UNION ALL SELECT id FROM b\n) AS subq OPTION (MAXDOP 1)");
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServer("SELECT id FROM a UNION ALL SELECT id FROM b ORDER BY id OPTION (MAXDOP 1)", 100)
+      ).toBe("SELECT TOP 100 * FROM (SELECT id FROM a UNION ALL SELECT id FROM b\n) AS subq ORDER BY id OPTION (MAXDOP 1)");
+    });
+
     it("should not treat 'top (3)' inside a string literal as a TOP clause", () => {
       expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT 'top (3)' AS s FROM t", 100)).toBe(
         "SELECT TOP 100 'top (3)' AS s FROM t"

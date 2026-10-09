@@ -774,7 +774,10 @@ export class SQLServerConnector implements Connector {
         if (isSingleStatement) {
           processedSQL = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sqlQuery, maxRows).sql;
         } else {
-          const terminator = sqlQuery.trimEnd().endsWith(";") ? ";" : "";
+          // Reconstructed semicolons go on their own line: the splitter trims
+          // each segment, so one that ends in a `--` line comment would
+          // otherwise swallow a semicolon placed on the same line.
+          const terminator = sqlQuery.trimEnd().endsWith(";") ? "\n;" : "";
           // The splitter cannot tell a batch statement from a semicolon-
           // terminated statement inside a module body (T-SQL has no body
           // quoting), and a CREATE/ALTER PROCEDURE/FUNCTION/TRIGGER body runs
@@ -792,7 +795,7 @@ export class SQLServerConnector implements Connector {
                   ? SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(statement, maxRows).sql
                   : statement
               )
-              .join(";\n") + terminator;
+              .join("\n;\n") + terminator;
         }
       }
 

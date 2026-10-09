@@ -239,7 +239,12 @@ export class SQLRowLimiter {
       literal = operandMatch[2];
     }
 
-    const modifiers = /(?:\s+percent\b)?(?:\s+with\s+ties\b)?/iy;
+    // A parenthesised operand already delimits the token, so T-SQL accepts
+    // `TOP(1)PERCENT`; after a bare number the whitespace is required.
+    const modifiers =
+      operandMatch[1] !== undefined
+        ? /(?:\s*percent\b)?(?:\s*with\s+ties\b)?/iy
+        : /(?:\s+percent\b)?(?:\s+with\s+ties\b)?/iy;
     modifiers.lastIndex = end;
     const modifierMatch = modifiers.exec(blanked);
     const unbounded = modifierMatch !== null && modifierMatch[0].length > 0;
@@ -423,16 +428,29 @@ export class SQLRowLimiter {
 
     const cteIndex = this.findTopLevelSelect(sqlWithoutSemicolon)?.index ?? 0;
     const ctePrefix = sqlWithoutSemicolon.slice(0, cteIndex);
-    const body = sqlWithoutSemicolon.slice(cteIndex);
+    let body = sqlWithoutSemicolon.slice(cteIndex);
+
+    // A query hint (`OPTION (RECOMPILE)`) is only allowed on the outermost
+    // statement and always comes last, so it moves outside the derived table.
+    const optionIndex = this.findTopLevelOptionIndex(body);
+    const optionClause = optionIndex === -1 ? "" : ` ${body.slice(optionIndex).trim()}`;
+    if (optionIndex !== -1) {
+      body = body.slice(0, optionIndex).trimEnd();
+    }
 
     const orderByIndex = hoistOrderBy ? this.findTopLevelOrderByIndex(body) : -1;
     if (orderByIndex !== -1) {
       const innerSql = body.slice(0, orderByIndex).trimEnd();
       const orderByClause = body.slice(orderByIndex).trim();
-      return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${innerSql}\n) AS subq ${orderByClause}${semicolon}`;
+      return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${innerSql}\n) AS subq ${orderByClause}${optionClause}${semicolon}`;
     }
 
-    return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${body}\n) AS subq${semicolon}`;
+    return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${body}\n) AS subq${optionClause}${semicolon}`;
+  }
+
+  /** Start index of the statement's own trailing `OPTION (...)` query hint, or -1. */
+  private static findTopLevelOptionIndex(sql: string): number {
+    return this.findTopLevelMatch(sql, /\(|\)|\boption\s*(?=\()/gi, "last", "sqlserver")?.index ?? -1;
   }
 
   /**

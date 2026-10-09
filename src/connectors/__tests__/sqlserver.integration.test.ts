@@ -885,6 +885,19 @@ describe('SQL Server Connector Integration Tests', () => {
       }
     );
 
+    it('should keep a batch delimiter out of a trailing line comment', async () => {
+      // The splitter trims each segment, so the rejoined semicolon must not
+      // land on the same line as a trailing `--` comment.
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 AS a -- note\n; SELECT name FROM users ORDER BY id;',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets).toHaveLength(2);
+      expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+      expect(result.resultSets[1].rows).toHaveLength(2);
+      expect(result.resultSets[1].truncated).toBe(true);
+    });
+
     it('should not rewrite statements inside a stored procedure body', async () => {
       // Semicolons inside the body split like batch statements; the
       // rewrite must not reach them, or TOP would be stored in the
