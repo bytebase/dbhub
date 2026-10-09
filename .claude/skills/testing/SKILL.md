@@ -145,6 +145,16 @@ docker ps -a | grep testcontainers  # Find leaked containers
 docker container prune               # Clean up stopped containers
 ```
 
+### "Hook timed out in 10000ms" in `afterAll`
+All tests pass but the suite is marked failed at its `afterAll` (seen on MariaDB and
+postgres-ssh in CI). Teardown is `container.stop()`, which runs `docker stop -t 0`
+followed by `docker rm -v` (removing the data volume). On a shared Docker daemon that
+is simultaneously pulling/extracting the Oracle or SQL Server image, that removal can
+exceed Vitest's 10s default hook timeout. The integration project sets
+`hookTimeout: 60_000` in `vitest.config.ts` for this reason — do not pass a shorter
+timeout to `afterAll`, and if you add a suite with its own teardown, let it use the
+project default rather than the Vitest default.
+
 ### CI Failures
 The CI workflow (`.github/workflows/run-tests.yml`) runs unit and integration tests as separate parallel jobs on PR events. Unit tests don't need Docker; integration tests verify Docker availability first. Check the specific job that failed.
 
