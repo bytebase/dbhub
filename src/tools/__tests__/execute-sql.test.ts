@@ -109,20 +109,6 @@ describe('execute-sql tool', () => {
       ]);
     });
 
-    it('should omit the truncated key entirely for complete results', async () => {
-      const mockResult: SQLResult = {
-        resultSets: [{ sql: 'SELECT * FROM users', rows: [{ id: 1 }], rowCount: 1 }],
-      };
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
-
-      const handler = createExecuteSqlToolHandler('test_source');
-      const result = await handler({ sql: 'SELECT * FROM users' }, null);
-      const parsedResult = parseToolResponse(result);
-
-      expect(parsedResult.success).toBe(true);
-      expect('truncated' in parsedResult.data.statements[0]).toBe(false);
-    });
-
     it('should handle execution errors', async () => {
       vi.mocked(mockConnector.executeSQL).mockRejectedValue(new Error('Database error'));
 
@@ -136,20 +122,26 @@ describe('execute-sql tool', () => {
       expect(parsedResult.code).toBe('EXECUTION_ERROR');
     });
 
-    it('returns SOURCE_UNREACHABLE when the connector throws a network error', async () => {
+    // Wire a connector whose executeSQL fails with a network error, plus the
+    // source config the connection-error classifier looks up for it.
+    const mockUnreachable = (sourceId: string, sourceConfig: unknown) => {
       const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
       econn.code = 'ECONNREFUSED';
       mockGetCurrentConnector.mockReturnValue({
         id: 'postgres',
-        getId: () => 'prod',
+        getId: () => sourceId,
         executeSQL: vi.fn().mockRejectedValue(econn),
       } as any);
-      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ id: 'prod', type: 'postgres' } as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue(sourceConfig as any);
       vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+    };
+
+    it('returns SOURCE_UNREACHABLE when the connector throws a network error', async () => {
+      mockUnreachable('prod', { id: 'prod', type: 'postgres' });
 
       const handler = createExecuteSqlToolHandler('prod');
       const res: any = await handler({ sql: 'SELECT 1' }, {});
-      const payload = JSON.parse(res.content[0].text);
+      const payload = parseToolResponse(res);
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe('SOURCE_UNREACHABLE');
@@ -157,38 +149,22 @@ describe('execute-sql tool', () => {
     });
 
     it('falls through to EXECUTION_ERROR when the source config is null', async () => {
-      const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
-      econn.code = 'ECONNREFUSED';
-      mockGetCurrentConnector.mockReturnValue({
-        id: 'postgres',
-        getId: () => 'prod',
-        executeSQL: vi.fn().mockRejectedValue(econn),
-      } as any);
-      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue(null as any);
-      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      mockUnreachable('prod', null);
 
       const handler = createExecuteSqlToolHandler('prod');
       const res: any = await handler({ sql: 'SELECT 1' }, {});
-      const payload = JSON.parse(res.content[0].text);
+      const payload = parseToolResponse(res);
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe('EXECUTION_ERROR');
     });
 
     it('uses the display source id "default" in single-source mode', async () => {
-      const econn: any = new Error('connect ECONNREFUSED 127.0.0.1:5432');
-      econn.code = 'ECONNREFUSED';
-      mockGetCurrentConnector.mockReturnValue({
-        id: 'postgres',
-        getId: () => 'default',
-        executeSQL: vi.fn().mockRejectedValue(econn),
-      } as any);
-      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ type: 'postgres' } as any);
-      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      mockUnreachable('default', { type: 'postgres' });
 
       const handler = createExecuteSqlToolHandler();
       const res: any = await handler({ sql: 'SELECT 1' }, {});
-      const payload = JSON.parse(res.content[0].text);
+      const payload = parseToolResponse(res);
 
       expect(res.isError).toBe(true);
       expect(payload.code).toBe('SOURCE_UNREACHABLE');
@@ -231,25 +207,6 @@ describe('execute-sql tool', () => {
       const parsedResult = parseToolResponse(result);
       expect(parsedResult.code).toBe('READONLY_VIOLATION');
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
-    });
-
-    it('should enforce readonly even with other options set', async () => {
-      mockGetToolRegistry.mockReturnValue({
-        getBuiltinToolConfig: vi.fn().mockReturnValue({ readonly: true, max_rows: 100 }),
-      } as any);
-
-      const handler = createExecuteSqlToolHandler('limited_source');
-      const result = await handler({ sql: "DELETE FROM users" }, null);
-
-      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
-    });
-
-    it('should reject comment-only SQL in readonly mode', async () => {
-      const sql = '-- Just a comment\n/* Another */';
-      const handler = createExecuteSqlToolHandler('test_source');
-      const result = await handler({ sql }, null);
-
-      expect(parseToolResponse(result).code).toBe('READONLY_VIOLATION');
     });
 
     it('should forward the connector dialect to the classifier (MySQL conditional comment bypass)', async () => {

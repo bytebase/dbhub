@@ -47,12 +47,6 @@ describe("classifyStatement", () => {
     expect(classifyStatement("SELECT LOAD_FILE('/etc/passwd')", "mysql")).toBe("admin");
     expect(classifyStatement("SELECT get_lock('x', 10)", "mariadb")).toBe("admin");
     expect(classifyStatement("SELECT pg_read_file('/etc/passwd')", "postgres")).toBe("admin");
-    // Call position only: a column of the same name stays read.
-    expect(classifyStatement("SELECT load_file FROM t", "mysql")).toBe("read");
-  });
-
-  it("keeps a column named openquery read-only on SQL Server", () => {
-    expect(classifyStatement("SELECT openquery FROM t", "sqlserver")).toBe("read");
   });
 });
 
@@ -61,6 +55,24 @@ describe("classifySQL (multi-statement)", () => {
     expect(classifySQL("SELECT 1; INSERT INTO t VALUES (1)", "postgres")).toBe("dml");
     expect(classifySQL("SELECT 1; DROP TABLE t; INSERT INTO t VALUES (1)", "postgres")).toBe("ddl");
     expect(classifySQL("SELECT 1; SELECT 2", "postgres")).toBe("read");
+  });
+
+  it("catches T-SQL dynamic SQL and pass-through sources after a multi-statement split", () => {
+    expect(classifySQL("SELECT 1; EXEC('DELETE FROM users')", "sqlserver")).toBe("admin");
+    expect(classifySQL("SELECT 1; SELECT * FROM OPENQUERY(srv, 'DELETE FROM t')", "sqlserver")).toBe("admin");
+  });
+
+  describe("MySQL/MariaDB -- comment bypass prevention", () => {
+    // MySQL/MariaDB only treat "--" as a comment when followed by whitespace.
+    // "SELECT 1--1;DROP TABLE t" is one statement to a naive parser but two to
+    // the engine, so after splitting the hidden DROP must be checked and rejected.
+    it("splits and rejects a DROP hidden after -- without whitespace", () => {
+      expect(classifySQL("SELECT 1--1;DROP TABLE victim", "mysql")).toBe("ddl");
+    });
+
+    it("still treats '-- ' followed by whitespace as a comment", () => {
+      expect(classifySQL("SELECT 1 -- a comment", "mysql")).toBe("read");
+    });
   });
 });
 

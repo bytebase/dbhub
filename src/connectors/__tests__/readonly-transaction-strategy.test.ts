@@ -35,14 +35,23 @@ const MYSQL_VERSION = "8.0.36";
 const MARIADB_VERSION = "11.4.2-MariaDB-ubu2404";
 const TIDB_VERSION = "8.0.11-TiDB-v7.5.0";
 
-/** Records every statement issued on the dedicated connection. */
-function makeFakePool(version: string, wrapResults: (rows: any[]) => any) {
+/**
+ * Records every statement issued on the dedicated connection. `failOn` lets a
+ * test make a specific statement throw instead of returning rows.
+ */
+function makeFakePool(
+  version: string,
+  wrapResults: (rows: any[]) => any,
+  failOn?: (sql: string) => Error | undefined
+) {
   const statements: string[] = [];
   const conn = {
     threadId: 42,
     query: vi.fn(async (arg: any) => {
       const sql = typeof arg === "string" ? arg : arg.sql;
       statements.push(sql);
+      const failure = failOn?.(sql);
+      if (failure) throw failure;
       return wrapResults([{ id: 1 }]);
     }),
     release: vi.fn(),
@@ -63,6 +72,20 @@ function makeFakePool(version: string, wrapResults: (rows: any[]) => any) {
 const asMysql = (rows: any[]) => [rows, []];
 const asMariadb = (rows: any[]) => rows;
 
+async function connectMysql(pool: any) {
+  mysqlCreatePool.mockReturnValue(pool);
+  const connector = new MySQLConnector();
+  await connector.connect("mysql://user:pass@localhost:3306/db");
+  return connector;
+}
+
+async function connectMariadb(pool: any) {
+  mariadbCreatePool.mockReturnValue(pool);
+  const connector = new MariaDBConnector();
+  await connector.connect("mariadb://user:pass@localhost:3306/db");
+  return connector;
+}
+
 describe("readonly transaction strategy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -71,10 +94,7 @@ describe("readonly transaction strategy", () => {
   describe("MySQL connector", () => {
     it("uses READ ONLY transaction + COMMIT on stock MySQL", async () => {
       const { pool, statements } = makeFakePool(MYSQL_VERSION, asMysql);
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       expect(statements[0]).toBe("START TRANSACTION READ ONLY");
@@ -83,10 +103,7 @@ describe("readonly transaction strategy", () => {
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
       const { pool, statements } = makeFakePool(TIDB_VERSION, asMysql);
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       // TiDB rejects the READ ONLY modifier, so it must never be sent...
@@ -98,10 +115,7 @@ describe("readonly transaction strategy", () => {
 
     it("opens no transaction when readonly is off", async () => {
       const { pool, statements } = makeFakePool(TIDB_VERSION, asMysql);
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", {});
 
       expect(statements).toEqual(["SELECT 1"]);
@@ -110,18 +124,10 @@ describe("readonly transaction strategy", () => {
 
   describe("error handling", () => {
     it("rolls back and rethrows when the query fails", async () => {
-      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql);
-      const failure = new Error("syntax error");
-      conn.query.mockImplementation(async (arg: any) => {
-        const sql = typeof arg === "string" ? arg : arg.sql;
-        statements.push(sql);
-        if (sql === "SELECT bad") throw failure;
-        return asMysql([{ id: 1 }]);
-      });
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, (sql) =>
+        sql === "SELECT bad" ? new Error("syntax error") : undefined
+      );
+      const connector = await connectMysql(pool);
 
       await expect(connector.executeSQL("SELECT bad", { readonly: true })).rejects.toThrow(
         "syntax error"
@@ -135,17 +141,10 @@ describe("readonly transaction strategy", () => {
     });
 
     it("attempts a rollback when the transaction fails to open", async () => {
-      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql);
-      conn.query.mockImplementation(async (arg: any) => {
-        const sql = typeof arg === "string" ? arg : arg.sql;
-        statements.push(sql);
-        if (sql === "START TRANSACTION READ ONLY") throw new Error("server gone");
-        return asMysql([{ id: 1 }]);
-      });
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, (sql) =>
+        sql === "START TRANSACTION READ ONLY" ? new Error("server gone") : undefined
+      );
+      const connector = await connectMysql(pool);
 
       await expect(connector.executeSQL("SELECT 1", { readonly: true })).rejects.toThrow(
         "server gone"
@@ -160,17 +159,12 @@ describe("readonly transaction strategy", () => {
     });
 
     it("surfaces the original error even if the rollback also fails", async () => {
-      const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql);
-      conn.query.mockImplementation(async (arg: any) => {
-        const sql = typeof arg === "string" ? arg : arg.sql;
-        if (sql === "SELECT bad") throw new Error("syntax error");
-        if (sql === "ROLLBACK") throw new Error("connection lost");
-        return asMysql([{ id: 1 }]);
+      const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql, (sql) => {
+        if (sql === "SELECT bad") return new Error("syntax error");
+        if (sql === "ROLLBACK") return new Error("connection lost");
+        return undefined;
       });
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const connector = await connectMysql(pool);
 
       // The rollback failure must not mask the more useful original error.
       await expect(connector.executeSQL("SELECT bad", { readonly: true })).rejects.toThrow(
@@ -180,16 +174,12 @@ describe("readonly transaction strategy", () => {
     });
 
     it("kills the query and destroys the connection on a client-side timeout, skipping rollback", async () => {
-      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql);
       const timeoutError = Object.assign(new Error("Query inactivity timeout"), {
         code: "PROTOCOL_SEQUENCE_TIMEOUT",
       });
-      conn.query.mockImplementation(async (arg: any) => {
-        const sql = typeof arg === "string" ? arg : arg.sql;
-        statements.push(sql);
-        if (sql === "SELECT SLEEP(8)") throw timeoutError;
-        return asMysql([{ id: 1 }]);
-      });
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, (sql) =>
+        sql === "SELECT SLEEP(8)" ? timeoutError : undefined
+      );
 
       // First getConnection() returns the dedicated connection used for the
       // query; the connector must request a second, separate connection to
@@ -203,10 +193,7 @@ describe("readonly transaction strategy", () => {
         .fn()
         .mockResolvedValueOnce(conn)
         .mockResolvedValueOnce(killerConn);
-      mysqlCreatePool.mockReturnValue(pool);
-
-      const connector = new MySQLConnector();
-      await connector.connect("mysql://user:pass@localhost:3306/db");
+      const connector = await connectMysql(pool);
 
       await expect(
         connector.executeSQL("SELECT SLEEP(8)", { readonly: true })
@@ -232,10 +219,7 @@ describe("readonly transaction strategy", () => {
   describe("MariaDB connector", () => {
     it("uses READ ONLY transaction + COMMIT on stock MariaDB", async () => {
       const { pool, statements } = makeFakePool(MARIADB_VERSION, asMariadb);
-      mariadbCreatePool.mockReturnValue(pool);
-
-      const connector = new MariaDBConnector();
-      await connector.connect("mariadb://user:pass@localhost:3306/db");
+      const connector = await connectMariadb(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       expect(statements[0]).toBe("START TRANSACTION READ ONLY");
@@ -244,10 +228,7 @@ describe("readonly transaction strategy", () => {
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
       const { pool, statements } = makeFakePool(TIDB_VERSION, asMariadb);
-      mariadbCreatePool.mockReturnValue(pool);
-
-      const connector = new MariaDBConnector();
-      await connector.connect("mariadb://user:pass@localhost:3306/db");
+      const connector = await connectMariadb(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       expect(statements).not.toContain("START TRANSACTION READ ONLY");
