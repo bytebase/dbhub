@@ -1,7 +1,7 @@
 import fs from "fs";
 import { loadTomlConfig, resolveTomlConfigPath } from "../config/toml-loader.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import { initializeToolRegistry } from "../tools/registry.js";
+import { initializeToolRegistry, ToolRegistry } from "../tools/registry.js";
 import type { SourceConfig, ToolConfig } from "../types/config.js";
 
 const DEBOUNCE_MS = 500;
@@ -177,26 +177,57 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
         return;
       }
 
+      // The registry validates more than the loader (custom tool parameters, duplicate
+      // tool names). Run that validation on the new file before touching any
+      // connection, so a bad file is rejected whole and nothing is left half-applied.
+      new ToolRegistry({ sources: newConfig.sources, tools: newConfig.tools });
+
       const { sources: applied, rolledBack } = await applySourceDiff(
         connectorManager,
         lastGoodSources,
         newConfig.sources
       );
-      const tools = selectTools(applied, rolledBack, newConfig.tools, lastGoodTools);
-
-      initializeToolRegistry({ sources: applied, tools });
+      // The manager now holds `applied`, whatever happens to the registry below.
       lastGoodSources = applied;
+
+      let live = applied;
+      let tools = selectTools(applied, rolledBack, newConfig.tools, lastGoodTools);
+      try {
+        initializeToolRegistry({ sources: live, tools });
+      } catch (error) {
+        // The new file validated on its own, so the only possible conflict is between
+        // a rolled-back source's previous tools and the new file's tools (e.g. a custom
+        // tool name moved to another source). Take the rolled-back sources offline
+        // rather than serve them with the wrong tools.
+        if (rolledBack.size === 0) {
+          throw error;
+        }
+        console.error(
+          `Config reload: previous tools of rolled-back source(s) ${[...rolledBack].join(", ")} ` +
+            `conflict with the new configuration; taking them offline:`,
+          error
+        );
+        for (const id of rolledBack) {
+          await connectorManager.removeSource(id);
+        }
+        live = applied.filter(s => !rolledBack.has(s.id));
+        lastGoodSources = live;
+        tools = selectTools(live, new Set(), newConfig.tools, undefined);
+        initializeToolRegistry({ sources: live, tools });
+      }
       lastGoodTools = tools;
 
-      if (applied.length === newConfig.sources.length) {
+      const unavailable = newConfig.sources.length - live.length;
+      if (unavailable === 0 && rolledBack.size === 0) {
         console.error("Configuration reloaded successfully.");
       } else {
         console.error(
-          `Configuration reloaded with ${newConfig.sources.length - applied.length} source(s) unavailable.`
+          `Configuration reloaded with ${unavailable} source(s) unavailable and ` +
+            `${rolledBack.size} source(s) rolled back to their previous configuration.`
         );
       }
     } catch (error) {
-      console.error("Config reload failed, keeping existing connections:", error);
+      console.error("Config reload failed:", error);
     } finally {
       isReloading = false;
       if (reloadPending) {

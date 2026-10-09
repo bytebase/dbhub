@@ -390,6 +390,31 @@ describe("ConnectorManager IAM refresh recovery", () => {
     expect(instances).toHaveLength(2);
   });
 
+  it("should close the SSH tunnel when no connector accepts the DSN after the tunnel is up", async () => {
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockResolvedValue({ localPort: 55555, targetHost: "db.internal", targetPort: 5432 });
+    const closeSpy = vi.spyOn(SSHTunnel.prototype, "close").mockResolvedValue(undefined);
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(null);
+
+    const manager = new ConnectorManager();
+    const source: SourceConfig = {
+      id: "pg_ssh",
+      type: "postgres",
+      dsn: "postgres://user:pass@db.internal:5432/mydb",
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_password: "secret",
+    };
+
+    await expect(manager.addSource(source)).rejects.toThrow("No connector found");
+    expect(establishSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect((manager as any).sshTunnels.size).toBe(0);
+    expect(manager.getSourceIds()).toEqual([]);
+  });
+
   it("should not list a source as available when it can neither serve nor reconnect", () => {
     const manager = new ConnectorManager();
     (manager as any).sourceIds = ["alive", "dead"];

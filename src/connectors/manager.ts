@@ -245,59 +245,62 @@ export class ConnectorManager {
       );
     }
 
-    // Find connector prototype for this DSN
-    const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
-    if (!connectorPrototype) {
-      throw new Error(
-        `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
-      );
-    }
-
-    // Create a new instance of the connector (clone) to avoid sharing state between sources
-    // All connectors support cloning for multi-source configurations
-    const connector = connectorPrototype.clone();
-
-    // Attach source ID to connector instance for tool handlers
-    (connector as any).sourceId = sourceId;
-
-    // Build config for database-specific options
-    if (source.connection_timeout !== undefined) {
-      config.connectionTimeoutSeconds = source.connection_timeout;
-    }
-    // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
-    if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
-      config.queryTimeoutSeconds = source.query_timeout;
-    }
-    if (source.pool_max_connections !== undefined) {
-      config.poolMaxConnections = source.pool_max_connections;
-    }
-    // Note: read-only enforcement is per-tool, not per-source. It is applied at
-    // execution time via ExecuteOptions.readonly. Some connectors also add an
-    // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),
-    // because a single source connection may be shared by both read-only and
-    // writable tools. ConnectorConfig.readonly (connection-level) remains supported
-    // for direct connector use but is intentionally not wired from source config.
-    // Pass search_path for PostgreSQL
-    if (source.search_path) {
-      config.searchPath = source.search_path;
-    }
-    // Pass timezone for MySQL/MariaDB
-    if (source.timezone) {
-      config.timezone = source.timezone;
-    }
-    // Pass charset / collation for MySQL/MariaDB (either, or both together)
-    if (source.charset) {
-      config.charset = source.charset;
-    }
-    if (source.collation) {
-      config.collation = source.collation;
-    }
-
-    // Connect to the database with config and optional init script. If this fails,
-    // close the tunnel established for this attempt: the source may be retried (lazy
-    // connection or a failed IAM refresh), and each retry would otherwise open a new
-    // tunnel and orphan this one's SSH clients and local listener.
+    // Everything from here until the connector is stored can fail (no connector for
+    // the DSN, connect rejected). If it does, close the tunnel established for this
+    // attempt: the source may be retried (lazy connection, failed IAM refresh, next
+    // config reload), and each retry would otherwise open a new tunnel and orphan this
+    // one's SSH clients and local listener.
+    let connector: Connector;
     try {
+      // Find connector prototype for this DSN
+      const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
+      if (!connectorPrototype) {
+        throw new Error(
+          `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
+        );
+      }
+
+      // Create a new instance of the connector (clone) to avoid sharing state between sources
+      // All connectors support cloning for multi-source configurations
+      connector = connectorPrototype.clone();
+
+      // Attach source ID to connector instance for tool handlers
+      (connector as any).sourceId = sourceId;
+
+      // Build config for database-specific options
+      if (source.connection_timeout !== undefined) {
+        config.connectionTimeoutSeconds = source.connection_timeout;
+      }
+      // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
+      if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
+        config.queryTimeoutSeconds = source.query_timeout;
+      }
+      if (source.pool_max_connections !== undefined) {
+        config.poolMaxConnections = source.pool_max_connections;
+      }
+      // Note: read-only enforcement is per-tool, not per-source. It is applied at
+      // execution time via ExecuteOptions.readonly. Some connectors also add an
+      // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),
+      // because a single source connection may be shared by both read-only and
+      // writable tools. ConnectorConfig.readonly (connection-level) remains supported
+      // for direct connector use but is intentionally not wired from source config.
+      // Pass search_path for PostgreSQL
+      if (source.search_path) {
+        config.searchPath = source.search_path;
+      }
+      // Pass timezone for MySQL/MariaDB
+      if (source.timezone) {
+        config.timezone = source.timezone;
+      }
+      // Pass charset / collation for MySQL/MariaDB (either, or both together)
+      if (source.charset) {
+        config.charset = source.charset;
+      }
+      if (source.collation) {
+        config.collation = source.collation;
+      }
+
+      // Connect to the database with config and optional init script
       await connector.connect(actualDSN, source.init_script, config);
     } catch (error) {
       if (tunnel) {

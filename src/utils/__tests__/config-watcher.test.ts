@@ -11,10 +11,11 @@ vi.mock("../../config/toml-loader.js", () => ({
 }));
 vi.mock("../../tools/registry.js", () => ({
   initializeToolRegistry: vi.fn(),
+  ToolRegistry: vi.fn(),
 }));
 
 import { resolveTomlConfigPath, loadTomlConfig } from "../../config/toml-loader.js";
-import { initializeToolRegistry } from "../../tools/registry.js";
+import { initializeToolRegistry, ToolRegistry } from "../../tools/registry.js";
 
 function createMockManager(overrides: Partial<Record<string, any>> = {}) {
   return {
@@ -286,6 +287,62 @@ describe("startConfigWatcher", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(initializeToolRegistry).toHaveBeenCalledWith({ sources: [dbA, dbB], tools: oldTools });
+  });
+
+  it("should touch nothing when the new file fails registry validation", async () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+    vi.mocked(loadTomlConfig).mockReturnValue({
+      sources: [dbA, dbB],
+      tools: [{ name: "bad_tool", source: "b", description: "x", statement: "SELECT 1", parameters: [{} as any] }],
+      source: "dbhub.toml",
+    });
+    vi.mocked(ToolRegistry).mockImplementationOnce(() => {
+      throw new Error("Tool 'bad_tool' has parameter missing 'name' field");
+    });
+    const mockManager = createMockManager({
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA]),
+    });
+
+    startConfigWatcher(createOptions(mockManager));
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(ToolRegistry).toHaveBeenCalledTimes(1);
+    expect(mockManager.addSource).not.toHaveBeenCalled();
+    expect(mockManager.removeSource).not.toHaveBeenCalled();
+    expect(initializeToolRegistry).not.toHaveBeenCalled();
+  });
+
+  it("should take a rolled-back source offline when its previous tools conflict with the new file", async () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+    const changedB = { ...dbB, dsn: "postgres://unreachable/b" };
+    const oldTools = [{ name: "report", source: "b", description: "x", statement: "SELECT 1" }];
+    const newTools = [{ name: "report", source: "a", description: "x", statement: "SELECT 2" }];
+    vi.mocked(loadTomlConfig).mockReturnValue({ sources: [dbA, changedB], tools: newTools, source: "dbhub.toml" });
+    vi.mocked(initializeToolRegistry)
+      .mockImplementationOnce(() => { throw new Error("Duplicate tool name 'report'"); })
+      .mockImplementationOnce(() => undefined);
+    const mockManager = createMockManager({
+      addSource: vi.fn()
+        .mockRejectedValueOnce(new Error("Connection refused"))
+        .mockResolvedValueOnce(undefined),
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA, dbB]),
+    });
+
+    startConfigWatcher(createOptions(mockManager, oldTools));
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    // First attempt mixed b's old tool with a's new one and failed; b was then removed.
+    expect(initializeToolRegistry).toHaveBeenNthCalledWith(1, { sources: [dbA, dbB], tools: [...newTools, ...oldTools] });
+    expect(mockManager.removeSource).toHaveBeenLastCalledWith("b");
+    expect(initializeToolRegistry).toHaveBeenNthCalledWith(2, { sources: [dbA], tools: newTools });
+
+    // The next reload diffs against the state actually committed: only a is live.
+    vi.mocked(loadTomlConfig).mockReturnValue({ sources: [dbA, dbB], tools: [], source: "dbhub.toml" });
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mockManager.addSource).toHaveBeenLastCalledWith(dbB);
   });
 
   it("should debounce rapid file changes", async () => {
