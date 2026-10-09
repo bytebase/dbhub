@@ -757,20 +757,47 @@ export class SQLServerConnector implements Connector {
     }
 
     try {
-      // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
-      let processedSQL = sqlQuery;
-      let probeApplied = false;
-      if (options.maxRows) {
-        const rewrite = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
-          sqlQuery,
-          options.maxRows
-        );
-        processedSQL = rewrite.sql;
-        probeApplied = rewrite.probeApplied;
-      }
       // Computed once and threaded into buildResultSets below (directly, or via
       // executeReadOnly) rather than re-derived from SQL text on every call.
-      const isSingleStatement = splitSQLStatements(processedSQL, "sqlserver").length === 1;
+      const statements = splitSQLStatements(sqlQuery, "sqlserver");
+      const isSingleStatement = statements.length === 1;
+
+      // Apply maxRows limit (with a truncation probe row) to every row-returning
+      // statement of the batch, so a SELECT after the leading statement is capped
+      // too. A single statement is rewritten in place so its text (trailing
+      // semicolon, surrounding whitespace) reaches the server as written.
+      // The splitter drops the batch's final semicolon, which a trailing MERGE
+      // requires, so it is put back when the source had one.
+      let processedSQL = sqlQuery;
+      if (options.maxRows) {
+        const maxRows = options.maxRows;
+        if (isSingleStatement) {
+          processedSQL = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sqlQuery, maxRows).sql;
+        } else {
+          // Reconstructed semicolons go on their own line: the splitter trims
+          // each segment, so one that ends in a `--` line comment would
+          // otherwise swallow a semicolon placed on the same line.
+          const terminator = sqlQuery.trimEnd().endsWith(";") ? "\n;" : "";
+          // The splitter cannot tell a batch statement from a semicolon-
+          // terminated statement inside a module body (T-SQL has no body
+          // quoting), and a CREATE/ALTER PROCEDURE/FUNCTION/TRIGGER body runs
+          // to the end of the batch. Rewriting from there on would bake TOP
+          // into the stored definition, so segments from the first module
+          // definition onward are sent as written.
+          const moduleStart = statements.findIndex((statement) =>
+            SQLServerConnector.MODULE_DEFINITION.test(stripCommentsAndStrings(statement, "sqlserver"))
+          );
+          const rewritable = moduleStart === -1 ? statements.length : moduleStart;
+          processedSQL =
+            statements
+              .map((statement, i) =>
+                i < rewritable
+                  ? SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(statement, maxRows).sql
+                  : statement
+              )
+              .join("\n;\n") + terminator;
+        }
+      }
 
       // Engine-level read-only enforcement: SQL Server has no
       // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
@@ -782,7 +809,6 @@ export class SQLServerConnector implements Connector {
           parameters,
           isSingleStatement ? sqlQuery : undefined,
           options.maxRows,
-          probeApplied
         );
       }
 
@@ -810,12 +836,8 @@ export class SQLServerConnector implements Connector {
         result.recordsets,
         result.rowsAffected,
         isSingleStatement ? sqlQuery : undefined,
+        options.maxRows,
       );
-      // The TOP probe rewrite applies to the batch's leading SELECT, whose
-      // rows land in the first result set.
-      if (resultSets.length > 0) {
-        SQLRowLimiter.flagTruncation(resultSets[0], options.maxRows, probeApplied);
-      }
       return {
         resultSets,
         ...(messages.length > 0 ? { messages } : {}),
@@ -847,19 +869,43 @@ export class SQLServerConnector implements Connector {
    * multi-statement batch there's no reliable way to say which source
    * statement a given recordset (or the trailing writes set) came from.
    */
+  /** A segment that opens a module whose body extends to the end of the batch. */
+  private static readonly MODULE_DEFINITION =
+    /^\s*(?:create|alter)\s+(?:or\s+alter\s+)?(?:proc|procedure|function|trigger)\b/i;
+
+  /**
+   * Builds one result set per recordset. With `maxRows`, every set is capped:
+   * a statement the TOP/FETCH probe rewrite reached returns at most
+   * maxRows + 1 rows, and more than maxRows rows means the cap fired, so the
+   * probe row is dropped and the set flagged truncated. The same check also
+   * bounds result sets the rewrite could not reach (a stored procedure's
+   * output, say): those are trimmed to maxRows and flagged the same way. A
+   * statement whose own TOP/FETCH is within the cap never exceeds maxRows
+   * rows, so it is never flagged. Recordsets do not map 1:1 onto statements
+   * (a SELECT ... INTO returns none, an EXEC may return several), which is
+   * why the check is per result set rather than per rewritten statement.
+   */
   private static buildResultSets(
     recordsets: any,
     rowsAffected: number[] | undefined,
     sourceSql: string | undefined,
+    maxRows?: number,
   ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
       const rows = recordset ?? [];
       return { rows, rowCount: rows.length };
     });
 
+    // Rows the SELECTs returned are counted before any probe row is dropped
+    // below: rowsAffected counts that row too, so trimming first would make it
+    // look like a write and append a spurious empty result set.
     const totalAffected = (rowsAffected ?? []).reduce((total, count) => total + (count ?? 0), 0);
     const accountedFor = sets.reduce((total, set) => total + set.rowCount, 0);
     const writesOnly = totalAffected - accountedFor;
+
+    for (const set of sets) {
+      SQLRowLimiter.flagTruncation(set, maxRows, true);
+    }
 
     if (sets.length === 0) {
       sets.push({ rows: [], rowCount: totalAffected });
@@ -978,7 +1024,6 @@ export class SQLServerConnector implements Connector {
     // multi-statement batches, where attribution would be a guess.
     sourceSql: string | undefined,
     maxRows: number | undefined,
-    probeApplied: boolean,
   ): Promise<SQLResult> {
     this.assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
 
@@ -1023,12 +1068,8 @@ export class SQLServerConnector implements Connector {
       result.recordsets,
       result.rowsAffected,
       sourceSql,
+      maxRows,
     );
-    // The TOP probe rewrite applies to the batch's leading SELECT, whose rows
-    // land in the first result set.
-    if (resultSets.length > 0) {
-      SQLRowLimiter.flagTruncation(resultSets[0], maxRows, probeApplied);
-    }
     return {
       resultSets,
       ...(messages.length > 0 ? { messages } : {}),

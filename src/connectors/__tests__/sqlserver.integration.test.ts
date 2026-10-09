@@ -771,6 +771,8 @@ describe('SQL Server Connector Integration Tests', () => {
         { maxRows: 2 }
       );
       
+      // The dropped probe row must not surface as a spurious extra result set.
+      expect(result.resultSets).toHaveLength(1);
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       expect(result.resultSets[0].rows[1]).toHaveProperty('name');
@@ -789,6 +791,136 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0]).toHaveProperty('name');
       // The user's own TOP fired, not the cap — no truncation flag
       expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    // Query shapes from issue #453: each used to be rewritten into a syntax
+    // error, or to slip past max_rows entirely.
+    it('should cap SELECT DISTINCT with maxRows', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT DISTINCT name FROM users ORDER BY name',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should cap SELECT ALL with maxRows', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT ALL name FROM users ORDER BY name',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should respect a parenthesised TOP (n) when lower than maxRows', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT TOP (1) name FROM users ORDER BY id',
+        { maxRows: 3 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    it('should respect an OFFSET ... FETCH that is within maxRows', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY id OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY',
+        { maxRows: 3 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      expect(result.resultSets[0].rows[0].name).toBe('Jane Smith');
+      expect(result.resultSets[0].truncated).toBeUndefined();
+    });
+
+    it('should cap an OFFSET ... FETCH that exceeds maxRows', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY id OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should cap an OFFSET without FETCH', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY id OFFSET 0 ROWS',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should cap TOP n WITH TIES by the rows it really returns', async () => {
+      // Integer division ties every age (all well below 1000) at 0, so
+      // TOP 1 WITH TIES returns the whole table.
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT TOP 1 WITH TIES name FROM users ORDER BY ISNULL(age, 0) / 1000',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should cap TOP n PERCENT by the rows it really returns', async () => {
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT TOP 100 PERCENT name FROM users',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it.each([{ readonly: false }, { readonly: true }])(
+      'should cap every statement of a multi-statement batch (readonly: $readonly)',
+      async ({ readonly }) => {
+        const result = await sqlServerTest.connector.executeSQL(
+          'SELECT 1 AS a; SELECT name FROM users ORDER BY id;',
+          { maxRows: 2, readonly }
+        );
+        expect(result.resultSets).toHaveLength(2);
+        expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+        expect(result.resultSets[0].truncated).toBeUndefined();
+        expect(result.resultSets[1].rows).toHaveLength(2);
+        expect(result.resultSets[1].truncated).toBe(true);
+      }
+    );
+
+    it('should keep a batch delimiter out of a trailing line comment', async () => {
+      // The splitter trims each segment, so the rejoined semicolon must not
+      // land on the same line as a trailing `--` comment.
+      const result = await sqlServerTest.connector.executeSQL(
+        'SELECT 1 AS a -- note\n; SELECT name FROM users ORDER BY id;',
+        { maxRows: 2 }
+      );
+      expect(result.resultSets).toHaveLength(2);
+      expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+      expect(result.resultSets[1].rows).toHaveLength(2);
+      expect(result.resultSets[1].truncated).toBe(true);
+    });
+
+    it('should not rewrite statements inside a stored procedure body', async () => {
+      // Semicolons inside the body split like batch statements; the
+      // rewrite must not reach them, or TOP would be stored in the
+      // procedure's definition.
+      await sqlServerTest.connector.executeSQL(
+        'CREATE PROCEDURE dbo.max_rows_probe AS BEGIN SELECT 1 AS a; SELECT name FROM users ORDER BY id; END;',
+        { maxRows: 2 }
+      );
+      try {
+        const definition = await sqlServerTest.connector.executeSQL(
+          "SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.max_rows_probe')) AS body",
+          {}
+        );
+        expect(definition.resultSets[0].rows[0].body).not.toMatch(/\bTOP\b/i);
+
+        // The procedure's output is still capped when it is executed.
+        const result = await sqlServerTest.connector.executeSQL('EXEC dbo.max_rows_probe', { maxRows: 2 });
+        expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+        expect(result.resultSets[1].rows).toHaveLength(2);
+        expect(result.resultSets[1].truncated).toBe(true);
+      } finally {
+        await sqlServerTest.connector.executeSQL('DROP PROCEDURE dbo.max_rows_probe', {});
+      }
     });
 
     it('should not affect non-SELECT queries', async () => {
