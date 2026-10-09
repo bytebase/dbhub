@@ -28,6 +28,7 @@ describe('SSH Config Integration', () => {
     delete process.env.SSH_PORT;
     delete process.env.SSH_KEY;
     delete process.env.SSH_PASSWORD;
+    delete process.env.SSH_AUTH_SOCK;
   });
 
   afterEach(() => {
@@ -40,6 +41,7 @@ describe('SSH Config Integration', () => {
     delete process.env.SSH_PORT;
     delete process.env.SSH_KEY;
     delete process.env.SSH_PASSWORD;
+    delete process.env.SSH_AUTH_SOCK;
   });
   
   it('should resolve SSH config from host alias', () => {
@@ -140,5 +142,60 @@ describe('SSH Config Integration', () => {
     process.argv = ['node', 'index.js', '--ssh-host=unknown-host'];
     
     expect(() => resolveSSHConfig()).toThrow('SSH tunnel configuration requires at least --ssh-host and --ssh-user');
+  });
+
+  it('should require an auth method when no password, key, or agent is available', () => {
+    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
+
+    process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser'];
+
+    expect(() => resolveSSHConfig()).toThrow(
+      'SSH tunnel configuration requires either --ssh-password or --ssh-key (or an SSH agent via --ssh-agent or SSH_AUTH_SOCK) for authentication'
+    );
+  });
+
+  it('should accept an SSH agent as the only auth method', () => {
+    process.env.SSH_AUTH_SOCK = '/tmp/agent.sock';
+    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
+
+    process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser'];
+
+    const result = resolveSSHConfig();
+
+    expect(result?.config).toMatchObject({ host: 'direct.example.com', username: 'myuser' });
+    expect(result?.config.password).toBeUndefined();
+    expect(result?.config.privateKey).toBeUndefined();
+  });
+
+  it('should accept --ssh-agent as the only auth method', () => {
+    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
+
+    process.argv = [
+      'node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser', '--ssh-agent=~/agent.sock'
+    ];
+
+    const result = resolveSSHConfig();
+
+    expect(result?.config.agent).toBe(join(process.env.HOME || '', 'agent.sock'));
+    expect(result?.source).toContain('ssh-agent from command line');
+  });
+
+  it('should treat --ssh-key as explicit even when the host resolves from SSH config', () => {
+    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
+    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation(() => ({
+      host: 'bastion.example.com',
+      username: 'ubuntu',
+      privateKey: '/home/user/.ssh/id_rsa',
+      privateKeyDiscovered: true
+    }));
+
+    process.argv = ['node', 'index.js', '--ssh-host=mybastion'];
+    expect(resolveSSHConfig()?.config.privateKeyDiscovered).toBe(true);
+
+    process.argv = ['node', 'index.js', '--ssh-host=mybastion', '--ssh-key=/explicit/key'];
+    expect(resolveSSHConfig()?.config).toMatchObject({
+      privateKey: '/explicit/key',
+      privateKeyDiscovered: false
+    });
   });
 });

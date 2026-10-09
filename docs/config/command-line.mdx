@@ -374,6 +374,7 @@ SSH tunnel configuration for connecting to databases through bastion/jump hosts.
 | `--ssh-password` | `SSH_PASSWORD` | string | SSH password (for password auth) |
 | `--ssh-key` | `SSH_KEY` | string | Path to SSH private key file, or a base64-encoded private key. Auto-detects `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc. if not specified |
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | Passphrase for encrypted SSH key |
+| `--ssh-agent` | `SSH_AUTH_SOCK` | string | Path to an SSH agent socket (ssh-agent, 1Password, etc.). Makes `--ssh-password` / `--ssh-key` optional |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts for multi-hop SSH. Format: `[user@]host[:port]` (comma-separated for chains) |
 
 **Examples:**
@@ -402,10 +403,17 @@ npx @bytebase/dbhub@latest --dsn "..." --ssh-host mybastion
 export SSH_KEY=$(base64 < ~/.ssh/id_rsa)
 npx @bytebase/dbhub@latest --dsn "..." \
   --ssh-host bastion.example.com --ssh-user ubuntu
+
+# SSH agent (ssh-agent, 1Password, etc.) — no key or password needed
+export SSH_AUTH_SOCK="$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+npx @bytebase/dbhub@latest --dsn "..." \
+  --ssh-host bastion.example.com --ssh-user ubuntu
 ```
 
 <Note>
 - `--ssh-key` / `SSH_KEY` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format: it first tries to read the value as a file path, and if that fails, decodes it as base64.
+- When an SSH agent is available (`--ssh-agent`, or the standard `SSH_AUTH_SOCK` environment variable), DBHub offers it to every host in the chain, after any password or key. With an agent, `--ssh-password` / `--ssh-key` are optional. In TOML, `ssh_agent` sets the socket per source. An explicitly configured socket that does not exist is an error; a stale `SSH_AUTH_SOCK` is ignored with a warning. MCP clients launched from a GUI often don't inherit your shell's `SSH_AUTH_SOCK` — set it in the client's `env` block or use `--ssh-agent` / `ssh_agent`. The `IdentityAgent` directive in `~/.ssh/config` is not read.
+- A key picked up from `~/.ssh/config` (an `IdentityFile` or a default `~/.ssh/id_*` key) that cannot be used — for example an encrypted key with no passphrase — is skipped with a warning when a password or agent is available, as `ssh` does. A key given explicitly (`--ssh-key`, `SSH_KEY`, `ssh_key`) is never skipped.
 - When `--ssh-host` is a plain alias (no dots, not an IP address), DBHub automatically resolves it from `~/.ssh/config`, reading the `HostName`, `User`, `IdentityFile`, and `ProxyJump` directives. Explicit flags always override values from the config file.
 - `ProxyJump` hops that are themselves `~/.ssh/config` aliases are resolved recursively — each hop uses its own `HostName`/`User`/`Port`/`IdentityFile` (and its own nested `ProxyJump`), matching how `ssh` connects. Cyclic `ProxyJump` chains are rejected with an error.
 - ProxyCommand is not supported (requires shell execution). Use ProxyJump instead.
@@ -437,4 +445,5 @@ npx @bytebase/dbhub@latest --dsn "..." \
 | `--ssh-password` | `SSH_PASSWORD` | string | SSH password |
 | `--ssh-key` | `SSH_KEY` | string | Path to SSH private key or base64-encoded key |
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | SSH key passphrase |
+| `--ssh-agent` | `SSH_AUTH_SOCK` | string | SSH agent socket path |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts |

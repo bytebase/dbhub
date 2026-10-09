@@ -566,6 +566,16 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
+  // Validate SSH agent socket path if provided
+  if (source.ssh_agent !== undefined) {
+    if (typeof source.ssh_agent !== "string" || source.ssh_agent.trim() === "") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid ssh_agent. ` +
+          `Must be a path to an SSH agent socket.`
+      );
+    }
+  }
+
   // Validate sslmode if provided
   if (source.sslmode !== undefined) {
     // SQLite doesn't support SSL (local file-based database)
@@ -862,6 +872,14 @@ function processSourceConfigs(
     // Expand ~ in SSH key path
     if (processed.ssh_key) {
       processed.ssh_key = expandHomeDir(processed.ssh_key);
+    }
+
+    // Internal marker set by the CLI/env path; never taken from TOML
+    delete processed.ssh_key_discovered;
+
+    // Expand ~ in SSH agent socket path
+    if (processed.ssh_agent) {
+      processed.ssh_agent = expandHomeDir(processed.ssh_agent);
     }
 
     // Expand ~ in SSL file paths

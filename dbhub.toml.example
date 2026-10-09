@@ -96,6 +96,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # ssh_user = "deploy"
 # ssh_key = "~/.ssh/id_ed25519"
 # # ssh_passphrase = "your_key_passphrase"  # If key is encrypted
+# # ssh_agent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"  # SSH agent socket instead of ssh_key (default: $SSH_AUTH_SOCK)
 # # ssh_keepalive_interval = 60  # Send keepalive every 60 seconds to prevent idle disconnects
 # # ssh_keepalive_count_max = 3  # Disconnect after 3 missed responses
 
@@ -415,6 +416,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   ssh_host, ssh_port (default: 22), ssh_user
 #   ssh_key (path to private key) OR ssh_password
 #   ssh_passphrase (if key is encrypted)
+#   ssh_agent (SSH agent socket path; defaults to $SSH_AUTH_SOCK)
 #   ssh_proxy_jump (ProxyJump for multi-hop: "jump1.com,user@jump2.com:2222")
 #   ssh_keepalive_interval (seconds between keepalive packets, default: 0 = disabled)
 #   ssh_keepalive_count_max (max missed keepalive responses, default: 3)

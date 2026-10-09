@@ -617,6 +617,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   // SSH Private Key (optional)
   if (args["ssh-key"]) {
     config.privateKey = args["ssh-key"];
+    config.privateKeyDiscovered = false;
     // Expand ~ to home directory
     if (config.privateKey.startsWith("~/")) {
       config.privateKey = path.join(process.env.HOME || "", config.privateKey.substring(2));
@@ -624,6 +625,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
     sources.push("ssh-key from command line");
   } else if (process.env.SSH_KEY) {
     config.privateKey = process.env.SSH_KEY;
+    config.privateKeyDiscovered = false;
     // Expand ~ to home directory
     if (config.privateKey.startsWith("~/")) {
       config.privateKey = path.join(process.env.HOME || "", config.privateKey.substring(2));
@@ -638,6 +640,17 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   } else if (process.env.SSH_PASSPHRASE) {
     config.passphrase = process.env.SSH_PASSPHRASE;
     sources.push("SSH_PASSPHRASE from environment");
+  }
+
+  // SSH Agent socket (optional) - SSH_AUTH_SOCK is the standard environment
+  // variable and is read by the tunnel itself when no socket is configured
+  if (args["ssh-agent"]) {
+    config.agent = args["ssh-agent"];
+    // Expand ~ to home directory
+    if (config.agent.startsWith("~/")) {
+      config.agent = path.join(process.env.HOME || "", config.agent.substring(2));
+    }
+    sources.push("ssh-agent from command line");
   }
 
   // SSH ProxyJump (optional) - for multi-hop SSH connections
@@ -681,8 +694,8 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   }
 
   // Validate authentication method
-  if (!config.password && !config.privateKey) {
-    throw new Error("SSH tunnel configuration requires either --ssh-password or --ssh-key for authentication");
+  if (!config.password && !config.privateKey && !config.agent && !process.env.SSH_AUTH_SOCK) {
+    throw new Error("SSH tunnel configuration requires either --ssh-password or --ssh-key (or an SSH agent via --ssh-agent or SSH_AUTH_SOCK) for authentication");
   }
 
   return {
@@ -814,7 +827,9 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.ssh_user = sshResult.config.username;
       source.ssh_password = sshResult.config.password;
       source.ssh_key = sshResult.config.privateKey;
+      source.ssh_key_discovered = sshResult.config.privateKeyDiscovered;
       source.ssh_passphrase = sshResult.config.passphrase;
+      source.ssh_agent = sshResult.config.agent;
       source.ssh_keepalive_interval = sshResult.config.keepaliveInterval;
       source.ssh_keepalive_count_max = sshResult.config.keepaliveCountMax;
     }

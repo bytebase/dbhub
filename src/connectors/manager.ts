@@ -182,7 +182,11 @@ export class ConnectorManager {
         username: username || '',
         password: source.ssh_password,
         privateKey: source.ssh_key || resolvedSSHConfig?.privateKey,
+        privateKeyDiscovered: source.ssh_key
+          ? source.ssh_key_discovered
+          : resolvedSSHConfig?.privateKeyDiscovered,
         passphrase: source.ssh_passphrase,
+        agent: source.ssh_agent,
         proxyJump,
         resolvedJumpHosts,
         keepaliveInterval: source.ssh_keepalive_interval,
@@ -197,9 +201,9 @@ export class ConnectorManager {
       }
 
       // Validate SSH auth
-      if (!sshConfig.password && !sshConfig.privateKey) {
+      if (!sshConfig.password && !sshConfig.privateKey && !sshConfig.agent && !process.env.SSH_AUTH_SOCK) {
         throw new Error(
-          `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)`
+          `Source '${sourceId}': SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile, or an SSH agent via ssh_agent or SSH_AUTH_SOCK)`
         );
       }
 

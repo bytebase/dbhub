@@ -26,6 +26,12 @@ vi.mock("../../utils/ssh-config-parser.js", () => ({
 describe("ConnectorManager SSH config resolution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // An agent socket exported in the developer's shell would satisfy SSH auth
+    vi.stubEnv("SSH_AUTH_SOCK", "");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("should resolve SSH config from ~/.ssh/config for alias hosts", async () => {
@@ -133,8 +139,100 @@ describe("ConnectorManager SSH config resolution", () => {
     };
 
     await expect(manager.connectWithSources([source])).rejects.toThrow(
-      "SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile)"
+      "SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile, or an SSH agent via ssh_agent or SSH_AUTH_SOCK)"
     );
+  });
+
+  it("should mark a key resolved from ~/.ssh/config as discovered, but not an explicit ssh_key", async () => {
+    mocks.looksLikeSSHAlias.mockReturnValue(true);
+    mocks.parseSSHConfig.mockReturnValue({
+      host: "bastion.example.com",
+      username: "ubuntu",
+      privateKey: "/home/user/.ssh/id_rsa",
+      privateKeyDiscovered: true,
+    });
+
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockRejectedValue(new Error("stop after config resolution"));
+
+    try {
+      const source: SourceConfig = {
+        id: "test",
+        type: "postgres",
+        dsn: "postgres://user:pass@db.internal:5432/mydb",
+        ssh_host: "mybastion",
+      };
+
+      await expect(new ConnectorManager().connectWithSources([source])).rejects.toThrow();
+      expect(establishSpy.mock.calls[0][0]).toMatchObject({
+        privateKey: "/home/user/.ssh/id_rsa",
+        privateKeyDiscovered: true,
+      });
+
+      await expect(
+        new ConnectorManager().connectWithSources([{ ...source, ssh_key: "/custom/key" }])
+      ).rejects.toThrow();
+      expect(establishSpy.mock.calls[1][0]).toMatchObject({ privateKey: "/custom/key" });
+      expect(establishSpy.mock.calls[1][0].privateKeyDiscovered).toBeFalsy();
+    } finally {
+      establishSpy.mockRestore();
+    }
+  });
+
+  it("should pass ssh_agent to the tunnel as the only auth method", async () => {
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockRejectedValue(new Error("stop after config resolution"));
+
+    try {
+      const manager = new ConnectorManager();
+      const source: SourceConfig = {
+        id: "test",
+        type: "postgres",
+        dsn: "postgres://user:pass@db.internal:5432/mydb",
+        ssh_host: "bastion.example.com",
+        ssh_user: "ubuntu",
+        ssh_agent: "/tmp/configured.sock",
+      };
+
+      await expect(manager.connectWithSources([source])).rejects.toThrow("stop after config resolution");
+      expect(establishSpy).toHaveBeenCalledTimes(1);
+      expect(establishSpy.mock.calls[0][0]).toMatchObject({ agent: "/tmp/configured.sock" });
+    } finally {
+      establishSpy.mockRestore();
+    }
+  });
+
+  it("should accept an SSH agent as the only auth method", async () => {
+    vi.stubEnv("SSH_AUTH_SOCK", "/tmp/agent.sock");
+    mocks.looksLikeSSHAlias.mockReturnValue(true);
+    mocks.parseSSHConfig.mockReturnValue({
+      host: "bastion.example.com",
+      username: "ubuntu",
+      // No privateKey, no password
+    });
+
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockRejectedValue(new Error("stop after config resolution"));
+
+    try {
+      const manager = new ConnectorManager();
+      const source: SourceConfig = {
+        id: "test",
+        type: "postgres",
+        dsn: "postgres://user:pass@db.internal:5432/mydb",
+        ssh_host: "mybastion",
+      };
+
+      await expect(manager.connectWithSources([source])).rejects.toThrow("stop after config resolution");
+      expect(establishSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      establishSpy.mockRestore();
+    }
   });
 
   it("should skip SSH config resolution for direct hostnames", async () => {

@@ -22,6 +22,16 @@ export interface SSHTunnelConfig {
   passphrase?: string;
 
   /**
+   * True when `privateKey` was picked up from `~/.ssh/config` (an `IdentityFile` or a
+   * default key) rather than given to DBHub explicitly. Such a key is skipped, like
+   * `ssh` does, when it cannot be used and another auth method is available.
+   */
+  privateKeyDiscovered?: boolean;
+
+  /** Path to an SSH agent socket (default: the SSH_AUTH_SOCK environment variable) */
+  agent?: string;
+
+  /**
    * ProxyJump configuration for multi-hop SSH connections.
    * Accepts a comma-separated string of hosts (e.g., "jump1.example.com,jump2.example.com"),
    * which is parsed internally into an array of JumpHost objects.

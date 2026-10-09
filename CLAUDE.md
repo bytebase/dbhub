@@ -136,7 +136,7 @@ DBHub supports three configuration methods:
 - `--demo`: Use bundled SQLite employee database
 - `--readonly`: Restrict to read-only SQL operations (deprecated - use TOML configuration instead)
 - `--max-rows`: Limit rows returned from SELECT queries (deprecated - use TOML configuration instead)
-- SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
+- SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`, `--ssh-agent`
 - Documentation: https://dbhub.ai/config/command-line
 
 ### Configuration Priority Order
@@ -196,13 +196,14 @@ Key points:
 
 DBHub supports SSH tunnels for secure database connections through bastion hosts:
 
-- Configuration via command-line options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`
-- Configuration via environment variables: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD`, `SSH_KEY`, `SSH_PASSPHRASE`
+- Configuration via command-line options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`, `--ssh-agent`
+- Configuration via environment variables: `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `SSH_PASSWORD`, `SSH_KEY`, `SSH_PASSPHRASE`, `SSH_AUTH_SOCK`
 - SSH config file support: Automatically reads from `~/.ssh/config` when using host aliases
 - Implementation in `src/utils/ssh-tunnel.ts` using the `ssh2` library
 - SSH config parsing in `src/utils/ssh-config-parser.ts` using the `ssh-config` library
 - Automatic tunnel establishment when SSH config is detected
-- Support for both password and key-based authentication
+- Support for password, key-based, and SSH agent authentication (agent via `--ssh-agent`, TOML `ssh_agent`, or `SSH_AUTH_SOCK`, offered to every hop after any explicit password/key; makes `ssh_password`/`ssh_key` optional)
+- A key picked up from `~/.ssh/config` that ssh2 cannot parse (e.g. encrypted, no passphrase) is skipped when a password or agent is available (`privateKeyDiscovered` in `SSHTunnelConfig`); an explicitly configured key never is
 - Default SSH key detection (tries `~/.ssh/id_rsa`, `~/.ssh/id_ed25519`, etc.)
 - Tunnel lifecycle managed by `ConnectorManager`
 
