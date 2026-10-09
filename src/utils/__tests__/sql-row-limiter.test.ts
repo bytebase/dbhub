@@ -448,6 +448,123 @@ describe("SQLRowLimiter", () => {
     });
   });
 
+  describe("applyMaxRowsForSQLServer - DISTINCT, TOP (n), OFFSET, PERCENT, WITH TIES (issue #453)", () => {
+    it.each(["DISTINCT", "ALL"])("should insert TOP after SELECT %s", (modifier) => {
+      // T-SQL requires `SELECT DISTINCT TOP n`; `SELECT TOP n DISTINCT` is a syntax error.
+      const result = SQLRowLimiter.applyMaxRowsForSQLServer(`SELECT ${modifier} status FROM orders`, 100);
+      expect(result).toBe(`SELECT ${modifier} TOP 100 status FROM orders`);
+    });
+
+    it("should insert TOP after the final SELECT DISTINCT of a CTE", () => {
+      const sql = "WITH q AS (SELECT DISTINCT a FROM t) SELECT DISTINCT * FROM q";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH q AS (SELECT DISTINCT a FROM t) SELECT DISTINCT TOP 100 * FROM q"
+      );
+    });
+
+    it("should not mistake a column starting with 'all' for the ALL modifier", () => {
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT all_users FROM t", 100)).toBe(
+        "SELECT TOP 100 all_users FROM t"
+      );
+    });
+
+    it.each(["TOP (3)", "TOP(3)", "TOP ( 3 )"])("should recognise a parenthesised %s as the statement's own TOP", (top) => {
+      const sql = `SELECT ${top} name FROM users ORDER BY name`;
+      expect(SQLRowLimiter.extractTopValue(sql)).toBe(3);
+      // Tightened to min(3, 100) = 3, i.e. the user's own cap, not a second TOP.
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe("SELECT TOP 3 name FROM users ORDER BY name");
+    });
+
+    it("should tighten a parenthesised TOP that exceeds the cap", () => {
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT TOP (3000) name FROM users", 100)).toBe(
+        "SELECT TOP 100 name FROM users"
+      );
+    });
+
+    it("should tighten a TOP that follows DISTINCT without disturbing DISTINCT", () => {
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT DISTINCT TOP 3000 name FROM users", 100)).toBe(
+        "SELECT DISTINCT TOP 100 name FROM users"
+      );
+    });
+
+    it("should cap an OFFSET ... FETCH query through its FETCH count, never with TOP", () => {
+      // T-SQL: "A TOP can not be used in the same query or sub-query as a OFFSET."
+      const sql = "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT 3000 ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY"
+      );
+    });
+
+    it("should leave an OFFSET ... FETCH query alone when its FETCH count is within the cap", () => {
+      const sql = "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH FIRST 3 ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(sql);
+    });
+
+    it("should append a FETCH to an OFFSET query that has none", () => {
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServer("SELECT name FROM users ORDER BY name OFFSET 10 ROWS;", 100)
+      ).toBe("SELECT name FROM users ORDER BY name OFFSET 10 ROWS FETCH NEXT 100 ROWS ONLY;");
+    });
+
+    it("should wrap an OFFSET query whose FETCH count is a parameter, keeping ORDER BY inside", () => {
+      // The derived table's own OFFSET makes an inner ORDER BY legal, and the
+      // ORDER BY has to stay inside because OFFSET/FETCH is defined by it.
+      const sql = "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT @p1 ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should wrap an OFFSET query with an expression offset", () => {
+      const sql = "SELECT name FROM users ORDER BY name OFFSET @p1 * 2 ROWS";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should not treat an OFFSET inside a subquery as the statement's own", () => {
+      const sql = "SELECT * FROM (SELECT name FROM users ORDER BY name OFFSET 5 ROWS) AS t";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "SELECT TOP 100 * FROM (SELECT name FROM users ORDER BY name OFFSET 5 ROWS) AS t"
+      );
+    });
+
+    it("should wrap a TOP n WITH TIES query, keeping its ORDER BY inside", () => {
+      // WITH TIES can return far more than n rows, so n is not a bound.
+      const sql = "SELECT TOP 1 WITH TIES id FROM orders ORDER BY discount";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should wrap a TOP n PERCENT query", () => {
+      const sql = "SELECT TOP 1 PERCENT id FROM orders";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
+      );
+    });
+
+    it("should wrap a TOP whose count is a parameter or expression", () => {
+      const sql = "SELECT TOP (@p1) id FROM orders ORDER BY id;";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "SELECT TOP 100 * FROM (SELECT TOP (@p1) id FROM orders ORDER BY id\n) AS subq;"
+      );
+    });
+
+    it("should keep a leading CTE outside the wrap of a PERCENT query", () => {
+      const sql = "WITH q AS (SELECT id FROM orders) SELECT TOP 10 PERCENT id FROM q";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
+        "WITH q AS (SELECT id FROM orders) SELECT TOP 100 * FROM (SELECT TOP 10 PERCENT id FROM q\n) AS subq"
+      );
+    });
+
+    it("should not treat 'top (3)' inside a string literal as a TOP clause", () => {
+      expect(SQLRowLimiter.applyMaxRowsForSQLServer("SELECT 'top (3)' AS s FROM t", 100)).toBe(
+        "SELECT TOP 100 'top (3)' AS s FROM t"
+      );
+    });
+  });
+
   describe("applyMaxRowsWithTruncationProbe", () => {
     it("should add a probe LIMIT of maxRows + 1 when no LIMIT exists", () => {
       const result = SQLRowLimiter.applyMaxRowsWithTruncationProbe("SELECT * FROM users", 100);
@@ -528,6 +645,53 @@ describe("SQLRowLimiter", () => {
         sql: "SELECT TOP 6 * FROM (SELECT TOP 2 id FROM a UNION ALL SELECT id FROM b\n) AS subq",
         probeApplied: true,
       });
+    });
+
+    it("should not probe when the query's own parenthesised TOP is within the cap", () => {
+      const sql = "SELECT TOP (3) name FROM users ORDER BY name";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should not probe when the query's own FETCH count is within the cap", () => {
+      const sql = "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT 3 ROWS ONLY";
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+        sql,
+        probeApplied: false,
+      });
+    });
+
+    it("should probe through the FETCH count when it exceeds the cap", () => {
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(
+          "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT 3000 ROWS ONLY",
+          100
+        )
+      ).toEqual({
+        sql: "SELECT name FROM users ORDER BY name OFFSET 0 ROWS FETCH NEXT 101 ROWS ONLY",
+        probeApplied: true,
+      });
+    });
+
+    it.each([
+      "SELECT TOP 1 WITH TIES id FROM orders ORDER BY discount",
+      "SELECT TOP 1 PERCENT id FROM orders",
+      "SELECT TOP (@p1) id FROM orders",
+    ])("should always probe a TOP that is not a row bound: %s", (sql) => {
+      // TOP 1 WITH TIES / TOP 1 PERCENT can return thousands of rows, so a
+      // literal within the cap must not be taken as the user's own limit.
+      expect(SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sql, 100)).toEqual({
+        sql: `SELECT TOP 101 * FROM (${sql}\n) AS subq`,
+        probeApplied: true,
+      });
+    });
+
+    it("should probe a SELECT DISTINCT by inserting TOP after DISTINCT", () => {
+      expect(
+        SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe("SELECT DISTINCT status FROM orders", 100)
+      ).toEqual({ sql: "SELECT DISTINCT TOP 101 status FROM orders", probeApplied: true });
     });
   });
 

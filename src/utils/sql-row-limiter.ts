@@ -191,21 +191,81 @@ export class SQLRowLimiter {
     };
   }
 
-  /** The statement's own `SELECT TOP n` clause (SQL Server). */
-  private static findTopLevelTop(sql: string): (TopLevelClause & { value: number }) | null {
-    const match = this.findTopLevelMatch(sql, /\(|\)|\bselect\s+top\s+(\d+)/gi, "first", "sqlserver");
+  /**
+   * The statement's own TOP clause (SQL Server), located on its own SELECT
+   * (after an optional DISTINCT/ALL). `index`/`length` span the `TOP ...`
+   * text only, so it can be spliced without disturbing `SELECT DISTINCT`.
+   *
+   * `value` is the clause's literal row count (`TOP 3`, `TOP (3)`), or null
+   * when that number is not an upper bound on the rows returned: a
+   * parenthesised expression or parameter (`TOP (@p1)`), `PERCENT`, or
+   * `WITH TIES`. Such a TOP cannot simply be tightened; the statement has to
+   * be wrapped and capped from the outside.
+   */
+  private static findTopLevelTop(sql: string): TopLevelClause | null {
+    const match = this.findTopLevelMatch(
+      sql,
+      // The expression alternative allows one level of nested parentheses so
+      // `TOP ((@p1))` is consumed whole and never unbalances the depth scan.
+      /\(|\)|\bselect\s+(?:(?:distinct|all)\s+)?(top\s*(?:\(\s*(\d+)\s*\)|(\d+)\b|\((?:[^()]|\([^()]*\))*\))(?:\s+percent\b)?(?:\s+with\s+ties\b)?)/gi,
+      "first",
+      "sqlserver"
+    );
     if (match === null) {
       return null;
     }
-    return { index: match.index, length: match[0].length, value: parseInt(match[1], 10) };
+    const clause = match[1];
+    const index = match.index + match[0].length - clause.length;
+    const literal = match[2] ?? match[3];
+    const bounded = literal !== undefined && !/\b(?:percent|ties)\s*$/i.test(clause);
+    return { index, length: clause.length, value: bounded ? parseInt(literal, 10) : null };
   }
 
   /**
-   * The statement's own SELECT keyword (SQL Server). For a CTE this is the
-   * final SELECT, not the one inside a CTE body.
+   * The statement's own SELECT keyword (SQL Server), together with a
+   * DISTINCT/ALL that follows it: T-SQL places TOP after those
+   * (`SELECT DISTINCT TOP n`), so that is where a TOP gets inserted. For a
+   * CTE this is the final SELECT, not the one inside a CTE body.
    */
   private static findTopLevelSelect(sql: string): RegExpExecArray | null {
-    return this.findTopLevelMatch(sql, /\(|\)|\bselect\b/gi, "first", "sqlserver");
+    return this.findTopLevelMatch(sql, /\(|\)|\bselect\b(?:\s+(?:distinct|all)\b)?/gi, "first", "sqlserver");
+  }
+
+  /**
+   * The statement's own `OFFSET ... ROWS [FETCH NEXT n ROWS ONLY]` clause
+   * (SQL Server). T-SQL forbids TOP in a query that has OFFSET, so such a
+   * statement is capped through its FETCH count instead.
+   *
+   * `fetch` is the FETCH count (null when the clause has no FETCH);
+   * `fetchInsertIndex` is where a FETCH can be appended, or -1 when the
+   * OFFSET clause has a shape this scanner does not parse (an arithmetic
+   * expression, say), in which case the statement is wrapped.
+   */
+  private static findTopLevelOffset(
+    sql: string
+  ): { fetch: TopLevelClause | null; fetchInsertIndex: number } | null {
+    const offset = this.findTopLevelMatch(sql, /\(|\)|\boffset\b/gi, "first", "sqlserver");
+    if (offset === null) {
+      return null;
+    }
+    const clause =
+      /(offset\s+(?:\d+|@\w+|\?)\s+rows?\b)(?:(\s+fetch\s+(?:first|next)\s+)((\d+)|@\w+|\?)\s+rows?\s+only\b)?/iy;
+    clause.lastIndex = offset.index;
+    const match = clause.exec(blankCommentsAndStrings(sql, "sqlserver"));
+    if (match === null) {
+      return { fetch: null, fetchInsertIndex: -1 };
+    }
+    if (match[2] === undefined) {
+      return { fetch: null, fetchInsertIndex: match.index + match[0].length };
+    }
+    return {
+      fetch: {
+        index: match.index + match[1].length + match[2].length,
+        length: match[3].length,
+        value: match[4] !== undefined ? parseInt(match[4], 10) : null,
+      },
+      fetchInsertIndex: -1,
+    };
   }
 
   /**
@@ -239,42 +299,78 @@ export class SQLRowLimiter {
       // UNION/INTERSECT/EXCEPT output, so wrap the whole statement and cap
       // the outer result set instead, regardless of any TOP already present
       // on an individual branch.
-      const { sql: sqlWithoutSemicolon, semicolon } = trimSemicolon(sql);
+      return this.wrapWithTop(sql, maxRows, true);
+    }
 
-      // A leading CTE stays outside the derived table: T-SQL has no
-      // `SELECT ... FROM (WITH ...) AS subq` form, but a CTE declared before
-      // the SELECT is still in scope inside that derived table.
-      const cteIndex = this.findTopLevelSelect(sqlWithoutSemicolon)?.index ?? 0;
-      const ctePrefix = sqlWithoutSemicolon.slice(0, cteIndex);
-      const body = sqlWithoutSemicolon.slice(cteIndex);
-
-      // A top-level ORDER BY must move outside the derived table: T-SQL
-      // disallows ORDER BY inside a subquery unless that subquery itself has
-      // TOP/OFFSET/FOR XML, so leaving it inside would break the query.
-      const orderByIndex = this.findTopLevelOrderByIndex(body);
-      if (orderByIndex !== -1) {
-        const innerSql = body.slice(0, orderByIndex).trimEnd();
-        const orderByClause = body.slice(orderByIndex).trim();
-        return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${innerSql}\n) AS subq ${orderByClause}${semicolon}`;
+    // T-SQL rejects TOP in a query that has OFFSET, so cap through the
+    // FETCH count instead: tighten a literal one, append one when missing,
+    // and wrap when the count is a parameter or the clause has an unusual
+    // shape (the derived table's own OFFSET keeps its ORDER BY legal).
+    const offset = this.findTopLevelOffset(sql);
+    if (offset !== null) {
+      if (offset.fetch !== null && offset.fetch.value !== null) {
+        const effectiveFetch = Math.min(offset.fetch.value, maxRows);
+        return `${sql.slice(0, offset.fetch.index)}${effectiveFetch}${sql.slice(offset.fetch.index + offset.fetch.length)}`;
       }
-
-      return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${body}\n) AS subq${semicolon}`;
+      if (offset.fetch === null && offset.fetchInsertIndex !== -1) {
+        return `${sql.slice(0, offset.fetchInsertIndex)} FETCH NEXT ${maxRows} ROWS ONLY${sql.slice(offset.fetchInsertIndex)}`;
+      }
+      return this.wrapWithTop(sql, maxRows, false);
     }
 
     const existingTop = this.findTopLevelTop(sql);
     if (existingTop !== null) {
+      if (existingTop.value === null) {
+        // TOP (expr), TOP n PERCENT or TOP n WITH TIES: the number is not a
+        // row bound, so cap the statement from outside. The derived table's
+        // own TOP keeps a trailing ORDER BY legal inside it, and that ORDER
+        // BY must stay there because it defines which rows the TOP picks.
+        return this.wrapWithTop(sql, maxRows, false);
+      }
       // Use the minimum of existing top and maxRows
       const effectiveTop = Math.min(existingTop.value, maxRows);
-      return `${sql.slice(0, existingTop.index)}SELECT TOP ${effectiveTop}${sql.slice(existingTop.index + existingTop.length)}`;
+      return `${sql.slice(0, existingTop.index)}TOP ${effectiveTop}${sql.slice(existingTop.index + existingTop.length)}`;
     }
 
-    // Add TOP to the statement's own SELECT: for a CTE that is the final
-    // SELECT, not the one inside a CTE body.
+    // Add TOP to the statement's own SELECT (after DISTINCT/ALL): for a CTE
+    // that is the final SELECT, not the one inside a CTE body.
     const selectMatch = this.findTopLevelSelect(sql);
     if (selectMatch === null) {
       return sql;
     }
-    return `${sql.slice(0, selectMatch.index)}SELECT TOP ${maxRows}${sql.slice(selectMatch.index + selectMatch[0].length)}`;
+    const insertAt = selectMatch.index + selectMatch[0].length;
+    return `${sql.slice(0, insertAt)} TOP ${maxRows}${sql.slice(insertAt)}`;
+  }
+
+  /**
+   * Cap a statement from the outside: `SELECT TOP n * FROM (<body>) AS subq`.
+   *
+   * A leading CTE stays outside the derived table: T-SQL has no
+   * `SELECT ... FROM (WITH ...) AS subq` form, but a CTE declared before the
+   * SELECT is still in scope inside that derived table.
+   *
+   * T-SQL disallows ORDER BY inside a derived table unless that derived table
+   * itself has TOP/OFFSET/FOR XML. With `hoistOrderBy` a top-level trailing
+   * ORDER BY moves outside the wrap (the set-operator case, where no TOP
+   * belongs to the body as a whole); without it the ORDER BY stays inside,
+   * which callers use when the body's own TOP/OFFSET both legalises it and
+   * depends on it.
+   */
+  private static wrapWithTop(sql: string, maxRows: number, hoistOrderBy: boolean): string {
+    const { sql: sqlWithoutSemicolon, semicolon } = trimSemicolon(sql);
+
+    const cteIndex = this.findTopLevelSelect(sqlWithoutSemicolon)?.index ?? 0;
+    const ctePrefix = sqlWithoutSemicolon.slice(0, cteIndex);
+    const body = sqlWithoutSemicolon.slice(cteIndex);
+
+    const orderByIndex = hoistOrderBy ? this.findTopLevelOrderByIndex(body) : -1;
+    if (orderByIndex !== -1) {
+      const innerSql = body.slice(0, orderByIndex).trimEnd();
+      const orderByClause = body.slice(orderByIndex).trim();
+      return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${innerSql}\n) AS subq ${orderByClause}${semicolon}`;
+    }
+
+    return `${ctePrefix}SELECT TOP ${maxRows} * FROM (${body}\n) AS subq${semicolon}`;
   }
 
   /**
@@ -410,8 +506,11 @@ export class SQLRowLimiter {
       return { sql, probeApplied: false };
     }
     if (!this.hasSetOperator(sql)) {
-      const existingTop = this.extractTopValue(sql);
-      if (existingTop !== null && existingTop <= maxRows) {
+      // The statement's own literal cap: a plain `TOP n` or the FETCH count
+      // of an OFFSET clause. A TOP whose number is not a row bound (PERCENT,
+      // WITH TIES, an expression) reads as null here and is always probed.
+      const ownCap = this.extractTopValue(sql) ?? this.findTopLevelOffset(sql)?.fetch?.value ?? null;
+      if (ownCap !== null && ownCap <= maxRows) {
         return { sql, probeApplied: false };
       }
     }
