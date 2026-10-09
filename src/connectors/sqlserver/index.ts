@@ -775,9 +775,23 @@ export class SQLServerConnector implements Connector {
           processedSQL = SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(sqlQuery, maxRows).sql;
         } else {
           const terminator = sqlQuery.trimEnd().endsWith(";") ? ";" : "";
+          // The splitter cannot tell a batch statement from a semicolon-
+          // terminated statement inside a module body (T-SQL has no body
+          // quoting), and a CREATE/ALTER PROCEDURE/FUNCTION/TRIGGER body runs
+          // to the end of the batch. Rewriting from there on would bake TOP
+          // into the stored definition, so segments from the first module
+          // definition onward are sent as written.
+          const moduleStart = statements.findIndex((statement) =>
+            SQLServerConnector.MODULE_DEFINITION.test(stripCommentsAndStrings(statement, "sqlserver"))
+          );
+          const rewritable = moduleStart === -1 ? statements.length : moduleStart;
           processedSQL =
             statements
-              .map((statement) => SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(statement, maxRows).sql)
+              .map((statement, i) =>
+                i < rewritable
+                  ? SQLRowLimiter.applyMaxRowsForSQLServerWithTruncationProbe(statement, maxRows).sql
+                  : statement
+              )
               .join(";\n") + terminator;
         }
       }
@@ -852,6 +866,10 @@ export class SQLServerConnector implements Connector {
    * multi-statement batch there's no reliable way to say which source
    * statement a given recordset (or the trailing writes set) came from.
    */
+  /** A segment that opens a module whose body extends to the end of the batch. */
+  private static readonly MODULE_DEFINITION =
+    /^\s*(?:create|alter)\s+(?:or\s+alter\s+)?(?:proc|procedure|function|trigger)\b/i;
+
   /**
    * Builds one result set per recordset. With `maxRows`, every set is capped:
    * a statement the TOP/FETCH probe rewrite reached returns at most

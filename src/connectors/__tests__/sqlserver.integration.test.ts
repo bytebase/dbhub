@@ -885,6 +885,31 @@ describe('SQL Server Connector Integration Tests', () => {
       }
     );
 
+    it('should not rewrite statements inside a stored procedure body', async () => {
+      // Semicolons inside the body split like batch statements; the
+      // rewrite must not reach them, or TOP would be stored in the
+      // procedure's definition.
+      await sqlServerTest.connector.executeSQL(
+        'CREATE PROCEDURE dbo.max_rows_probe AS BEGIN SELECT 1 AS a; SELECT name FROM users ORDER BY id; END;',
+        { maxRows: 2 }
+      );
+      try {
+        const definition = await sqlServerTest.connector.executeSQL(
+          "SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.max_rows_probe')) AS body",
+          {}
+        );
+        expect(definition.resultSets[0].rows[0].body).not.toMatch(/\bTOP\b/i);
+
+        // The procedure's output is still capped when it is executed.
+        const result = await sqlServerTest.connector.executeSQL('EXEC dbo.max_rows_probe', { maxRows: 2 });
+        expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+        expect(result.resultSets[1].rows).toHaveLength(2);
+        expect(result.resultSets[1].truncated).toBe(true);
+      } finally {
+        await sqlServerTest.connector.executeSQL('DROP PROCEDURE dbo.max_rows_probe', {});
+      }
+    });
+
     it('should not affect non-SELECT queries', async () => {
       // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
       const insertResult = await sqlServerTest.connector.executeSQL(
