@@ -877,8 +877,8 @@ function processSourceConfigs(
     // Internal marker set by the CLI/env path; never taken from TOML
     delete processed.ssh_key_discovered;
 
-    // Expand ~ in SSH agent socket path
-    if (processed.ssh_agent) {
+    // Expand ~ in SSH agent socket path (other types are rejected by validation)
+    if (typeof processed.ssh_agent === "string" && processed.ssh_agent) {
       processed.ssh_agent = expandHomeDir(processed.ssh_agent);
     }
 

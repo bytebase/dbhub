@@ -482,6 +482,20 @@ ssh_agent = ""
       expect(() => loadTomlConfig()).toThrow('invalid ssh_agent');
     });
 
+    it('should throw error for non-string ssh_agent', () => {
+      const tomlContent = `
+[[sources]]
+id = "remote_db"
+dsn = "postgres://user:pass@10.0.0.5:5432/db"
+ssh_host = "bastion.example.com"
+ssh_user = "ubuntu"
+ssh_agent = 123
+`;
+      fs.writeFileSync(path.join(tempDir, 'dbhub.toml'), tomlContent);
+
+      expect(() => loadTomlConfig()).toThrow('invalid ssh_agent');
+    });
+
     it('should throw error for invalid ssh_port', () => {
       const tomlContent = `
 [[sources]]

@@ -180,6 +180,24 @@ describe('SSH Config Integration', () => {
     expect(result?.source).toContain('ssh-agent from command line');
   });
 
+  it('should exit when --ssh-agent is given without a value', () => {
+    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit: ${code}`);
+    }) as never);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser', '--ssh-agent'];
+
+      expect(() => resolveSSHConfig()).toThrow('process.exit: 1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--ssh-agent requires a value'));
+    } finally {
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
   it('should treat --ssh-key as explicit even when the host resolves from SSH config', () => {
     vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
     vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation(() => ({

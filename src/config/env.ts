@@ -644,8 +644,9 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
 
   // SSH Agent socket (optional) - SSH_AUTH_SOCK is the standard environment
   // variable and is read by the tunnel itself when no socket is configured
-  if (args["ssh-agent"]) {
-    config.agent = args["ssh-agent"];
+  const cliAgent = requireFlagValue("ssh-agent", args, "~/.ssh/agent.sock");
+  if (cliAgent) {
+    config.agent = cliAgent;
     // Expand ~ to home directory
     if (config.agent.startsWith("~/")) {
       config.agent = path.join(process.env.HOME || "", config.agent.substring(2));
