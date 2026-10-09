@@ -1,6 +1,6 @@
 // `utils` is not detectable as a named export of the CommonJS ssh2 module under ESM,
 // so it is read off the default export.
-import ssh2, { Client, ConnectConfig } from 'ssh2';
+import ssh2, { Client, ConnectConfig, ParsedKey } from 'ssh2';
 import { existsSync, readFileSync } from 'fs';
 import { Server, createServer } from 'net';
 import type { Duplex } from 'stream';
@@ -101,6 +101,24 @@ export class SSHTunnel {
    */
   private agentSocketExists(agent: string): boolean {
     return process.platform === 'win32' || existsSync(agent);
+  }
+
+  /**
+   * Why ssh2 would refuse this key, mirroring the checks its connect() runs before
+   * trying any auth method, or undefined when the key is usable.
+   */
+  private unusableKeyReason(privateKey: Buffer, passphrase: string | undefined): string | undefined {
+    const parsed: unknown = ssh2.utils.parseKey(privateKey, passphrase);
+    if (parsed instanceof Error) {
+      return parsed.message;
+    }
+    const key = (Array.isArray(parsed) ? parsed[0] : parsed) as ParsedKey;
+    // Typed as string, but null for a public key, e.g. an IdentityFile pointing at a
+    // .pub file (the 1Password way to pick which agent key to offer).
+    if ((key.getPrivatePEM() as string | null) === null) {
+      return 'not a private key';
+    }
+    return undefined;
   }
 
   /**
@@ -250,11 +268,11 @@ export class SSHTunnel {
         // ~/.ssh/config is skipped in that case when another method is available,
         // like ssh does. An explicitly configured key still fails loudly.
         const canSkip = auth.privateKeyDiscovered && Boolean(password || agent);
-        const parsedKey = canSkip ? ssh2.utils.parseKey(privateKey, passphrase) : undefined;
-        if (parsedKey instanceof Error) {
+        const unusableReason = canSkip ? this.unusableKeyReason(privateKey, passphrase) : undefined;
+        if (unusableReason) {
           const desc = label || `${hostInfo.host}:${hostInfo.port}`;
           console.warn(
-            `Skipping unusable SSH private key from ~/.ssh/config for ${desc} (${parsedKey.message}).`
+            `Skipping unusable SSH private key from ~/.ssh/config for ${desc} (${unusableReason}).`
           );
         } else {
           sshConfig.privateKey = privateKey;

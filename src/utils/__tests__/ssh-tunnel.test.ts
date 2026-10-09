@@ -284,7 +284,8 @@ describe('SSHTunnel', () => {
       expect(connectCalls[0].agent).toBe(configuredSock);
     });
 
-    it('should reject a configured agent socket that does not exist', async () => {
+    // Windows agents are named pipes, so socket paths are not checked there
+    it.skipIf(process.platform === 'win32')('should reject a configured agent socket that does not exist', async () => {
       const tunnel = new SSHTunnel();
 
       await expect(
@@ -297,7 +298,8 @@ describe('SSHTunnel', () => {
       expect(connectCalls).toHaveLength(0);
     });
 
-    it('should ignore a stale SSH_AUTH_SOCK', async () => {
+    // Windows agents are named pipes, so socket paths are not checked there
+    it.skipIf(process.platform === 'win32')('should ignore a stale SSH_AUTH_SOCK', async () => {
       vi.stubEnv('SSH_AUTH_SOCK', missingSock);
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -410,6 +412,47 @@ describe('SSHTunnel', () => {
 
           expect(connectCalls[0]).toMatchObject({ host: 'jump.example.com', agent: configuredSock });
           expect(connectCalls[0].privateKey).toBeUndefined();
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should skip a public key from ~/.ssh/config and use the agent', async () => {
+        // e.g. `IdentityFile ~/.ssh/id_ed25519.pub`, which 1Password uses to pick an agent key
+        const { publicKey } = generateKeyPairSync('ed25519');
+        const sshPublicKey = Buffer.concat([
+          Buffer.from('ssh-ed25519 '),
+          Buffer.from(
+            Buffer.concat([
+              Buffer.from([0, 0, 0, 11]),
+              Buffer.from('ssh-ed25519'),
+              Buffer.from([0, 0, 0, 32]),
+              publicKey.export({ format: 'der', type: 'spki' }).subarray(-32),
+            ]).toString('base64')
+          ),
+        ]);
+        const publicKeyPath = join(sockDir, 'id_ed25519.pub');
+        writeFileSync(publicKeyPath, sshPublicKey);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const tunnel = new SSHTunnel();
+
+        try {
+          await expect(
+            tunnel.establish(
+              {
+                host: 'ssh.example.com',
+                username: 'testuser',
+                privateKey: publicKeyPath,
+                privateKeyDiscovered: true,
+                agent: configuredSock,
+              },
+              options
+            )
+          ).rejects.toThrow('SSH connection error: mock connect failure');
+
+          expect(connectCalls[0].privateKey).toBeUndefined();
+          expect(connectCalls[0].agent).toBe(configuredSock);
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not a private key'));
         } finally {
           warnSpy.mockRestore();
         }
