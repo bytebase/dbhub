@@ -305,6 +305,16 @@ Sources define database connections. Each source represents a database that DBHu
 
   Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
 
+  On PostgreSQL, MySQL and MariaDB the limit is applied on the database server, so a timed-out statement stops running there and the connection stays usable:
+
+  | Database | Server-side setting | Covers |
+  |----------|---------------------|--------|
+  | PostgreSQL | `statement_timeout` | All statements |
+  | MySQL | `max_execution_time` | Read-only `SELECT` statements |
+  | MariaDB | `max_statement_time` | All statements |
+
+  A client-side fallback fires 5 seconds after `query_timeout` for statements the server did not stop, such as a MySQL write or a statement on a connection whose session setting was changed. DBHub then cancels the statement on the server and discards that connection.
+
   ```toml
   [[sources]]
   id = "production"

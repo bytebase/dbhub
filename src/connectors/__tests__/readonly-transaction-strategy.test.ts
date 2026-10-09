@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
 
 /**
  * Unit coverage for the readonly transaction strategy in the MySQL/MariaDB
@@ -72,17 +73,17 @@ function makeFakePool(
 const asMysql = (rows: any[]) => [rows, []];
 const asMariadb = (rows: any[]) => rows;
 
-async function connectMysql(pool: any) {
+async function connectMysql(pool: any, config?: { queryTimeoutSeconds?: number }) {
   mysqlCreatePool.mockReturnValue(pool);
   const connector = new MySQLConnector();
-  await connector.connect("mysql://user:pass@localhost:3306/db");
+  await connector.connect("mysql://user:pass@localhost:3306/db", undefined, config);
   return connector;
 }
 
-async function connectMariadb(pool: any) {
+async function connectMariadb(pool: any, config?: { queryTimeoutSeconds?: number }) {
   mariadbCreatePool.mockReturnValue(pool);
   const connector = new MariaDBConnector();
-  await connector.connect("mariadb://user:pass@localhost:3306/db");
+  await connector.connect("mariadb://user:pass@localhost:3306/db", undefined, config);
   return connector;
 }
 
@@ -213,6 +214,50 @@ describe("readonly transaction strategy", () => {
       // ...and the poisoned connection is destroyed, never returned to the pool.
       expect(conn.destroy).toHaveBeenCalled();
       expect(conn.release).not.toHaveBeenCalled();
+      // It is destroyed before the kill, so its pool slot is free for the
+      // connection the kill needs.
+      expect(conn.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+        pool.getConnection.mock.invocationCallOrder[1]
+      );
+    });
+  });
+
+  describe("MySQL query_timeout", () => {
+    it("sets max_execution_time on every new pool connection", async () => {
+      const { pool } = makeFakePool(MYSQL_VERSION, asMysql);
+      await connectMysql(pool, { queryTimeoutSeconds: 30 });
+
+      const listener = pool.on.mock.calls.find(([event]) => event === "connection")?.[1];
+      expect(listener).toBeTypeOf("function");
+
+      // mysql2 hands the listener its callback-style connection.
+      const rawConnection = { query: vi.fn() };
+      listener(rawConnection);
+      expect(rawConnection.query).toHaveBeenCalledWith(
+        "SET SESSION max_execution_time = 30000",
+        expect.any(Function)
+      );
+      // A server that rejects the variable must not break the connection.
+      const callback = rawConnection.query.mock.calls[0][1];
+      expect(() => callback(new Error("Unknown system variable 'max_execution_time'"))).not.toThrow();
+    });
+
+    it("leaves the session alone when query_timeout is not configured", async () => {
+      const { pool } = makeFakePool(MYSQL_VERSION, asMysql);
+      await connectMysql(pool);
+
+      expect(pool.on.mock.calls.some(([event]) => event === "connection")).toBe(false);
+    });
+
+    it("delays the client-side timeout by the grace period", async () => {
+      const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql);
+      const connector = await connectMysql(pool, { queryTimeoutSeconds: 30 });
+      await connector.executeSQL("SELECT 1", {});
+
+      expect(conn.query).toHaveBeenCalledWith({
+        sql: "SELECT 1",
+        timeout: 30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS,
+      });
     });
   });
 
@@ -234,6 +279,67 @@ describe("readonly transaction strategy", () => {
       expect(statements).not.toContain("START TRANSACTION READ ONLY");
       expect(statements[0]).toBe("START TRANSACTION");
       expect(statements[statements.length - 1]).toBe("ROLLBACK");
+    });
+  });
+
+  describe("MariaDB query_timeout", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("passes the server-side limit to the driver", async () => {
+      const { pool } = makeFakePool(MARIADB_VERSION, asMariadb);
+      await connectMariadb(pool, { queryTimeoutSeconds: 30 });
+
+      // The driver applies queryTimeout as max_statement_time on each connection.
+      expect(mariadbCreatePool).toHaveBeenCalledWith(
+        expect.objectContaining({ queryTimeout: 30_000 })
+      );
+    });
+
+    it("abandons a statement the server did not stop and destroys the connection, skipping rollback", async () => {
+      const { pool, conn, statements } = makeFakePool(MARIADB_VERSION, asMariadb);
+      const connector = await connectMariadb(pool, { queryTimeoutSeconds: 30 });
+      vi.useFakeTimers();
+
+      // The statement never answers, as when max_statement_time was cleared
+      // on the pooled connection.
+      const answer = conn.query.getMockImplementation()!;
+      conn.query.mockImplementation((arg: any) =>
+        arg === "SELECT SLEEP(600)" ? new Promise(() => {}) : answer(arg)
+      );
+
+      const settled = connector
+        .executeSQL("SELECT SLEEP(600)", { readonly: true })
+        .catch((error) => error);
+
+      // Still waiting right up to the grace period after the configured limit...
+      await vi.advanceTimersByTimeAsync(30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS - 1);
+      expect(conn.destroy).not.toHaveBeenCalled();
+      // ...then the client-side fallback fires.
+      await vi.advanceTimersByTimeAsync(1);
+
+      const error = await settled;
+      expect(error.code).toBe("DBHUB_CLIENT_QUERY_TIMEOUT");
+      // The connection is still waiting on the abandoned statement, so a
+      // ROLLBACK would queue behind it.
+      expect(statements).not.toContain("ROLLBACK");
+      // destroy() also kills the server-side thread (the driver does this
+      // itself when a command is in flight); the connection never returns to
+      // the pool.
+      expect(conn.destroy).toHaveBeenCalled();
+      expect(conn.release).not.toHaveBeenCalled();
+    });
+
+    it("applies no client-side deadline when query_timeout is not configured", async () => {
+      const { pool, conn } = makeFakePool(MARIADB_VERSION, asMariadb);
+      const connector = await connectMariadb(pool);
+      vi.useFakeTimers();
+
+      await connector.executeSQL("SELECT 1", {});
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(conn.release).toHaveBeenCalled();
     });
   });
 });

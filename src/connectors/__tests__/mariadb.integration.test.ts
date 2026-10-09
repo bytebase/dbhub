@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MariaDbContainer, StartedMariaDbContainer } from '@testcontainers/mariadb';
 import { MariaDBConnector } from '../mariadb/index.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
+import { settle, waitFor } from './shared/query-timeout-helpers.js';
+import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from '../../utils/query-timeout.js';
 import type { Connector } from '../interface.js';
 
 class MariaDBTestContainer implements TestContainer {
@@ -558,5 +560,74 @@ describe('MariaDB Connector Integration Tests', () => {
         await connector.disconnect();
       }
     });
+  });
+
+  describe('query_timeout', () => {
+    it('should let the server stop a statement and keep the connection usable', async () => {
+      const connector = new MariaDBConnector();
+      try {
+        await connector.connect(mariadbTest.connectionString, undefined, { queryTimeoutSeconds: 1 });
+
+        const result = await settle(
+          connector.executeSQL('SELECT SLEEP(30) AS slept', { readonly: true })
+        );
+
+        // The server ends the statement at max_statement_time (ER_STATEMENT_TIMEOUT,
+        // or SLEEP() returning early), well before the client-side fallback.
+        if (result.error) {
+          expect(result.error.errno).toBe(1969);
+        }
+        expect(result.elapsedMs).toBeLessThan(CLIENT_QUERY_TIMEOUT_GRACE_MS);
+
+        const after = await connector.executeSQL('SELECT 1 AS ok', { readonly: true });
+        expect(Number(after.resultSets[0].rows[0].ok)).toBe(1);
+      } finally {
+        await connector.disconnect();
+      }
+    }, 20_000);
+
+    it('should fall back to the client-side timeout and kill the statement when the server limit is cleared', async () => {
+      const connector = new MariaDBConnector();
+      const observer = new MariaDBConnector();
+      const probe = 'dbhub_client_timeout_probe';
+
+      const runningProbeCount = async (): Promise<number> => {
+        const result = await observer.executeSQL(
+          `SELECT COUNT(*) AS count FROM information_schema.processlist
+           WHERE info LIKE '%${probe}%' AND info NOT LIKE '%processlist%'`,
+          {}
+        );
+        return Number(result.resultSets[0].rows[0].count);
+      };
+
+      try {
+        await connector.connect(mariadbTest.connectionString, undefined, { queryTimeoutSeconds: 1 });
+        await observer.connect(mariadbTest.connectionString);
+
+        // The batch clears the session limit first, so only the client-side
+        // fallback is left to bound the SELECT.
+        const result = await settle(
+          connector.executeSQL(
+            `SET SESSION max_statement_time = 0; SELECT SLEEP(30), '${probe}'`,
+            {}
+          )
+        );
+
+        expect(result.error?.code).toBe('DBHUB_CLIENT_QUERY_TIMEOUT');
+        expect(result.elapsedMs).toBeGreaterThanOrEqual(1000 + CLIENT_QUERY_TIMEOUT_GRACE_MS - 100);
+        expect(result.elapsedMs).toBeLessThan(10_000);
+        expect(await waitFor(async () => (await runningProbeCount()) === 0, 2_000)).toBe(true);
+
+        // The abandoned connection was discarded; a fresh one carries the limit again.
+        const after = await connector.executeSQL(
+          'SELECT @@session.max_statement_time AS mst',
+          { readonly: true }
+        );
+        expect(Number(after.resultSets[0].rows[0].mst)).toBe(1);
+      } finally {
+        await connector.disconnect();
+        await observer.disconnect();
+      }
+    }, 30_000);
   });
 });

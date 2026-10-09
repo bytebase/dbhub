@@ -26,8 +26,11 @@ import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
 import { postgresTypeParsers } from "./type-parsers.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
-
-const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
+import {
+  CANCEL_QUERY_TIMEOUT_MS,
+  clientQueryTimeoutMs,
+  isClientSideTimeout,
+} from "../../utils/query-timeout.js";
 
 /** SSL modes in which a client certificate is presented to the server. */
 const CLIENT_CERT_SSL_MODES = ["require", "verify-ca", "verify-full"];
@@ -313,11 +316,11 @@ class PostgresDSNParser implements DSNParser {
       // Apply the configured limit on the server so a timed-out statement does
       // not keep running after DBHub stops waiting for it. Retain the client-side
       // timeout as a fallback, with enough grace for PostgreSQL's cancellation
-      // response to arrive first.
+      // response to arrive first (see query-timeout.ts).
       if (queryTimeoutSeconds !== undefined) {
         const queryTimeoutMs = queryTimeoutSeconds * 1000;
         poolConfig.statement_timeout = queryTimeoutMs;
-        poolConfig.query_timeout = queryTimeoutMs + POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS;
+        poolConfig.query_timeout = clientQueryTimeoutMs(queryTimeoutMs);
       }
 
       if (poolMaxConnections !== undefined) {
@@ -900,6 +903,9 @@ export class PostgresConnector implements Connector {
     }
 
     const client = await this.pool.connect();
+    // Captured up front, before a timeout can lead to the client being discarded.
+    const backendPid = (client as unknown as { processID: number | null }).processID;
+    let isClientDiscarded = false;
     try {
       // Check if this is a multi-statement query
       const statements = splitSQLStatements(sql, "postgres");
@@ -930,13 +936,7 @@ export class PostgresConnector implements Connector {
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             return { resultSets: [resultSet] };
           } catch (error) {
-            // Best-effort rollback so a failed ROLLBACK (e.g. dropped connection)
-            // can't mask the original query error.
-            try {
-              await client.query('ROLLBACK');
-            } catch {
-              // ignore; the original error is more useful
-            }
+            await this.rollbackQuietly(client, error);
             throw error;
           }
         }
@@ -992,20 +992,78 @@ export class PostgresConnector implements Connector {
           }
           await client.query('COMMIT');
         } catch (error) {
-          // Best-effort rollback so a failed ROLLBACK can't mask the original
-          // error (read-only violations mid-batch are expected under BEGIN READ ONLY).
-          try {
-            await client.query('ROLLBACK');
-          } catch {
-            // ignore; the original error is more useful
-          }
+          // Read-only violations mid-batch are expected under BEGIN READ ONLY.
+          await this.rollbackQuietly(client, error);
           throw error;
         }
 
         return { resultSets };
       }
+    } catch (error) {
+      if (isClientSideTimeout(error)) {
+        // node-postgres's query_timeout only aborts client-side: the statement
+        // keeps running on the server and this client is still waiting for its
+        // response, so returning it to the pool would block whichever caller
+        // draws it next. Discard it first (release with a truthy argument
+        // closes the socket and frees the pool slot, which the cancel below
+        // needs when the pool is at its limit), then best-effort cancel the
+        // server-side statement.
+        isClientDiscarded = true;
+        client.release(true);
+        await this.cancelBackend(backendPid);
+      }
+      throw error;
     } finally {
-      client.release();
+      if (!isClientDiscarded) {
+        client.release();
+      }
+    }
+  }
+
+  /**
+   * Best-effort rollback after a failed statement, so a failed ROLLBACK (e.g.
+   * a dropped connection) cannot mask the original error. Skipped for a
+   * client-side timeout: the client is still busy with the abandoned
+   * statement, so the ROLLBACK would queue behind it (see isClientSideTimeout).
+   * executeSQL discards that client instead.
+   */
+  private async rollbackQuietly(client: pg.PoolClient, error: unknown): Promise<void> {
+    if (isClientSideTimeout(error)) {
+      return;
+    }
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore; the original error is more useful
+    }
+  }
+
+  /**
+   * Best-effort server-side cancel for a statement abandoned by the
+   * client-side timeout, sent over a separate pooled connection. Closing the
+   * abandoned client's socket is not enough: PostgreSQL only notices a
+   * vanished client when it next writes to it, so a statement that is
+   * sleeping or computing would run to completion.
+   *
+   * Bounded by its own short timeout (CANCEL_QUERY_TIMEOUT_MS), independent
+   * of the user's query_timeout. pool.query discards its client on error, so
+   * a cancel that itself times out does not leak a stuck client.
+   */
+  private async cancelBackend(backendPid: number | null): Promise<void> {
+    if (!this.pool || backendPid === null) return;
+    try {
+      // node-postgres reads a per-query `query_timeout` from the query config;
+      // its typings only declare the pool-level option.
+      const cancel: pg.QueryConfig & { query_timeout: number } = {
+        text: 'SELECT pg_cancel_backend($1)',
+        values: [backendPid],
+        query_timeout: CANCEL_QUERY_TIMEOUT_MS,
+      };
+      await this.pool.query(cancel);
+    } catch {
+      // Unconfirmed cancellation: the statement may still be running on the
+      // server. Nothing more to do from here; the caller already sees the
+      // timeout error.
     }
   }
 }
