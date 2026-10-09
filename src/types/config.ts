@@ -61,7 +61,7 @@ export interface SourceConfig extends ConnectionParams, SSHConfig {
   description?: string; // Human-readable description of this data source
   dsn?: string;
   connection_timeout?: number; // Connection timeout in seconds
-  query_timeout?: number; // Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server)
+  query_timeout?: number; // Query timeout in seconds (all but SQLite). PostgreSQL/MySQL/MariaDB enforce it on the server, with a client-side fallback (see utils/query-timeout.ts)
   pool_max_connections?: number; // Maximum PostgreSQL connections per source (1-1000)
   init_script?: string; // Optional SQL script to run on connection (for demo mode or initialization)
   lazy?: boolean; // Defer connection until first query (default: false)

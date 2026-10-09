@@ -6,6 +6,7 @@ import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
 
 /**
@@ -524,12 +525,19 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
-  // Validate query_timeout if provided
+  // Validate query_timeout if provided. TOML accepts `inf`, and Node timers
+  // cannot represent delays above ~24.8 days (see utils/query-timeout.ts), so
+  // the value is bounded here instead of silently clamping to an immediate
+  // client-side timeout.
   if (source.query_timeout !== undefined) {
-    if (typeof source.query_timeout !== "number" || source.query_timeout <= 0) {
+    if (
+      !Number.isFinite(source.query_timeout) ||
+      source.query_timeout <= 0 ||
+      source.query_timeout > MAX_QUERY_TIMEOUT_SECONDS
+    ) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid query_timeout. ` +
-          `Must be a positive number (in seconds).`
+          `Must be a positive number of seconds, at most ${MAX_QUERY_TIMEOUT_SECONDS}.`
       );
     }
   }

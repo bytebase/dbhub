@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
+import { MAX_QUERY_TIMEOUT_SECONDS } from '../../utils/query-timeout.js';
 import { SQLServerConnector } from '../../connectors/sqlserver/index.js';
 import fs from 'fs';
 import path from 'path';
@@ -374,6 +375,32 @@ id = "test_db"
 dsn = "postgres://user:pass@localhost:5432/testdb"
 query_timeout = ${value}
 `)).toThrow('invalid query_timeout');
+      });
+
+      // Node's setTimeout clamps delays above 2^31-1 ms (and non-finite ones)
+      // to 1ms, which would turn the client-side fallback into an immediate
+      // timeout on every query.
+      it.each([
+        ['infinite', 'inf'],
+        ['NaN', 'nan'],
+        ['beyond the timer range', String(MAX_QUERY_TIMEOUT_SECONDS + 1)],
+      ])('should reject a query_timeout that is %s', (_label, value) => {
+        expect(() => loadToml(`
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+query_timeout = ${value}
+`)).toThrow('invalid query_timeout');
+      });
+
+      it('should accept a query_timeout at the timer-range limit', () => {
+        const result = loadToml(`
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:pass@localhost:5432/testdb"
+query_timeout = ${MAX_QUERY_TIMEOUT_SECONDS}
+`);
+        expect(result?.sources[0].query_timeout).toBe(MAX_QUERY_TIMEOUT_SECONDS);
       });
 
       it.each([

@@ -20,6 +20,11 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
+import {
+  clientQueryTimeoutMs,
+  isClientSideTimeout,
+  withClientQueryDeadline,
+} from "../../utils/query-timeout.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { isTiDBVersion } from "../../utils/server-flavor.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
@@ -63,6 +68,8 @@ class MariadbDSNParser implements DSNParser {
         ...(connectionTimeoutSeconds !== undefined && {
           connectTimeout: connectionTimeoutSeconds * 1000
         }),
+        // Server-side limit: the driver applies `queryTimeout` on each new
+        // connection as the session variable max_statement_time.
         ...(queryTimeoutSeconds !== undefined && {
           queryTimeout: queryTimeoutSeconds * 1000
         }),
@@ -144,6 +151,9 @@ export class MariaDBConnector implements Connector {
   private pool: mariadb.Pool | null = null;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
+  // Client-side fallback deadline; the mariadb driver has no client-side
+  // timer of its own (see query-timeout.ts).
+  private clientQueryTimeoutMs?: number;
   // TiDB speaks the MySQL protocol but rejects `START TRANSACTION READ ONLY`
   // unless tidb_enable_noop_functions is on. Detected once at connect time.
   private supportsReadOnlyTransaction: boolean = true;
@@ -159,6 +169,10 @@ export class MariaDBConnector implements Connector {
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionConfig = await this.dsnParser.parse(dsn, config);
+      this.clientQueryTimeoutMs =
+        config?.queryTimeoutSeconds !== undefined
+          ? clientQueryTimeoutMs(config.queryTimeoutSeconds * 1000)
+          : undefined;
 
       this.pool = mariadb.createPool(connectionConfig);
 
@@ -655,6 +669,7 @@ export class MariaDBConnector implements Connector {
     // Get a dedicated connection from the pool to ensure session consistency
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await this.pool.getConnection();
+    let isConnectionDiscarded = false;
     try {
       // Engine-level read-only backstop (shared with MySQL); see
       // withReadOnlyTransaction for the semantics and the TiDB caveat.
@@ -683,12 +698,14 @@ export class MariaDBConnector implements Connector {
 
           // Use dedicated connection - MariaDB driver returns rows directly for single statements
           // Pass parameters if provided
-          let results: any;
-          if (parameters && parameters.length > 0) {
-            results = await conn.query(processedSQL, parameters);
-          } else {
-            results = await conn.query(processedSQL);
-          }
+          // Bounded by the client-side fallback deadline, which trails the
+          // server-side max_statement_time (see query-timeout.ts).
+          const results: any = await withClientQueryDeadline(
+            parameters && parameters.length > 0
+              ? conn.query(processedSQL, parameters)
+              : conn.query(processedSQL),
+            this.clientQueryTimeoutMs
+          );
 
           // Parse results using shared utility that handles both single and multi-statement queries
           const resultSets = parseQueryResultSets(results, statements);
@@ -705,9 +722,22 @@ export class MariaDBConnector implements Connector {
           return { resultSets };
         }
       );
+    } catch (error) {
+      if (isClientSideTimeout(error)) {
+        // The statement is still running on the server and this connection is
+        // still waiting for its response, so it must not go back to the pool.
+        // The driver's destroy() closes the socket and, because a command is
+        // in flight, also issues `KILL <thread id>` over a fresh connection of
+        // its own, which ends the statement on the server. That covers both
+        // halves of the shared cleanup (discard + server-side cancel).
+        isConnectionDiscarded = true;
+        conn.destroy();
+      }
+      throw error;
     } finally {
-      // Always release the connection back to the pool
-      conn.release();
+      if (!isConnectionDiscarded) {
+        conn.release();
+      }
     }
   }
 }
