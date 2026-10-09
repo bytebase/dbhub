@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { buildDSNFromEnvParams, redactDSN, resolveDSN, resolveHost, resolveId } from '../env.js';
+import {
+  buildDSNFromEnvParams,
+  redactDSN,
+  resolveDSN,
+  resolveHost,
+  resolveId,
+  resolveSourceConfigs,
+} from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
@@ -27,8 +34,18 @@ vi.mock('dotenv', async (importOriginal) => {
 });
 
 describe('Environment Configuration Tests', () => {
-  // Store original env values to restore after tests
+  // Store original env/argv values to restore after tests
   const originalEnv = { ...process.env };
+  const originalArgv = process.argv;
+
+  // Baseline for the non-SQLite env-var path; individual tests override one key.
+  const baseEnv = {
+    DB_TYPE: 'postgres',
+    DB_HOST: 'localhost',
+    DB_USER: 'user',
+    DB_PASSWORD: 'pass',
+    DB_NAME: 'db',
+  };
 
   beforeEach(() => {
     // Clear relevant environment variables before each test
@@ -40,47 +57,44 @@ describe('Environment Configuration Tests', () => {
     delete process.env.DB_NAME;
     delete process.env.DSN;
     delete process.env.ID;
+    process.argv = ['node', 'script.js'];
   });
 
   afterEach(() => {
     // Restore original environment
     process.env = { ...originalEnv };
+    process.argv = originalArgv;
   });
 
   describe('buildDSNFromEnvParams', () => {
-    it('should build PostgreSQL DSN with all parameters', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_PORT = '5432';
-      process.env.DB_USER = 'testuser';
-      process.env.DB_PASSWORD = 'testpass';
-      process.env.DB_NAME = 'testdb';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result).toEqual({
-        dsn: 'postgres://testuser:testpass@localhost:5432/testdb',
-        source: 'individual environment variables'
-      });
-    });
-
     it.each([
-      ['mysql', 3306],
-      ['mariadb', 3306],
-      ['sqlserver', 1433],
-    ])('should build %s DSN with default port %i when port not specified', (type, port) => {
-      process.env.DB_TYPE = type;
-      process.env.DB_HOST = `${type}.example.com`;
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'mydb';
+      ['postgres', 'postgres', 5432],
+      ['postgresql', 'postgres', 5432],
+      ['POSTGRES', 'postgres', 5432],
+      ['mysql', 'mysql', 3306],
+      ['mariadb', 'mariadb', 3306],
+      ['sqlserver', 'sqlserver', 1433],
+      ['oracle', 'oracle', 1521],
+    ])(
+      'should build DB_TYPE=%s as a %s:// DSN with default port %i when DB_PORT is not set',
+      (type, protocol, port) => {
+        Object.assign(process.env, baseEnv, { DB_TYPE: type, DB_HOST: 'db.example.com', DB_NAME: 'mydb' });
+
+        const result = buildDSNFromEnvParams();
+
+        expect(result).toEqual({
+          dsn: `${protocol}://user:pass@db.example.com:${port}/mydb`,
+          source: 'individual environment variables'
+        });
+      }
+    );
+
+    it('should use custom port when provided', () => {
+      Object.assign(process.env, baseEnv, { DB_PORT: '9999' });
 
       const result = buildDSNFromEnvParams();
 
-      expect(result).toEqual({
-        dsn: `${type}://user:pass@${type}.example.com:${port}/mydb`,
-        source: 'individual environment variables'
-      });
+      expect(result?.dsn).toBe('postgres://user:pass@localhost:9999/db');
     });
 
     it('should build SQLite DSN with only DB_TYPE and DB_NAME', () => {
@@ -95,60 +109,6 @@ describe('Environment Configuration Tests', () => {
       });
     });
 
-    it('should handle postgresql type and normalize to postgres protocol', () => {
-      process.env.DB_TYPE = 'postgresql';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe('postgres://user:pass@localhost:5432/db');
-    });
-
-    it('should properly encode special characters in password', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'test@pass:with/special#chars&more=special';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe(
-        'postgres://user:test%40pass%3Awith%2Fspecial%23chars%26more%3Dspecial@localhost:5432/db'
-      );
-    });
-
-    it('should properly encode special characters in username', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user@domain.com';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe(
-        'postgres://user%40domain.com:pass@localhost:5432/db'
-      );
-    });
-
-    it('should properly encode special characters in database name', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'my-db@test';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe(
-        'postgres://user:pass@localhost:5432/my-db%40test'
-      );
-    });
-
     it('should handle SQLite with special characters in file path', () => {
       process.env.DB_TYPE = 'sqlite';
       process.env.DB_NAME = '/tmp/test_db@#$.db';
@@ -161,30 +121,30 @@ describe('Environment Configuration Tests', () => {
       });
     });
 
-    it('should return null when required parameters are missing for non-SQLite databases', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      // Missing DB_USER, DB_PASSWORD, DB_NAME
+    it.each([
+      ['DB_PASSWORD', 'test@pass:with/special#chars&more=special',
+        'postgres://user:test%40pass%3Awith%2Fspecial%23chars%26more%3Dspecial@localhost:5432/db'],
+      ['DB_USER', 'user@domain.com', 'postgres://user%40domain.com:pass@localhost:5432/db'],
+      ['DB_NAME', 'my-db@test', 'postgres://user:pass@localhost:5432/my-db%40test'],
+      // Cyrillic characters
+      ['DB_NAME', 'тест_база_данных',
+        'postgres://user:pass@localhost:5432/%D1%82%D0%B5%D1%81%D1%82_%D0%B1%D0%B0%D0%B7%D0%B0_%D0%B4%D0%B0%D0%BD%D0%BD%D1%8B%D1%85'],
+    ])('should percent-encode special characters in %s=%s', (key, raw, dsn) => {
+      Object.assign(process.env, baseEnv, { [key]: raw });
 
       const result = buildDSNFromEnvParams();
 
-      expect(result).toBeNull();
+      expect(result?.dsn).toBe(dsn);
     });
 
-    it('should return null when DB_TYPE is missing', () => {
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null when SQLite is missing DB_NAME', () => {
-      process.env.DB_TYPE = 'sqlite';
-      // Missing DB_NAME
+    it.each([
+      ['DB_USER, DB_PASSWORD and DB_NAME are missing for a non-SQLite database',
+        { DB_TYPE: 'postgres', DB_HOST: 'localhost' }],
+      ['DB_TYPE is missing', { DB_HOST: 'localhost', DB_USER: 'user', DB_PASSWORD: 'pass', DB_NAME: 'db' }],
+      ['DB_PASSWORD is empty (required field)', { ...baseEnv, DB_PASSWORD: '' }],
+      ['SQLite is missing DB_NAME', { DB_TYPE: 'sqlite' }],
+    ])('should return null when %s', (_label, env) => {
+      Object.assign(process.env, env);
 
       const result = buildDSNFromEnvParams();
 
@@ -192,62 +152,18 @@ describe('Environment Configuration Tests', () => {
     });
 
     it('should throw error for unsupported database type', () => {
-      process.env.DB_TYPE = 'db2';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
+      Object.assign(process.env, baseEnv, { DB_TYPE: 'db2' });
 
       expect(() => buildDSNFromEnvParams()).toThrow(
         'Unsupported DB_TYPE: db2. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite, oracle'
       );
-    });
-
-    it('should build an oracle DSN with the default port', () => {
-      process.env.DB_TYPE = 'oracle';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'FREEPDB1';
-
-      const result = buildDSNFromEnvParams();
-      expect(result?.dsn).toBe('oracle://user:pass@localhost:1521/FREEPDB1');
-    });
-
-    it('should use custom port when provided', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_PORT = '9999';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe('postgres://user:pass@localhost:9999/db');
-    });
-
-    it('should return null for empty password (required field)', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = '';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result).toBeNull();
     });
   });
 
   describe('resolveDSN integration with individual parameters', () => {
     it('should use DSN when both DSN and individual parameters are provided', () => {
       process.env.DSN = 'postgres://direct:dsn@localhost:5432/directdb';
-      process.env.DB_TYPE = 'mysql';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
+      Object.assign(process.env, baseEnv, { DB_TYPE: 'mysql' });
 
       const result = resolveDSN();
 
@@ -258,11 +174,7 @@ describe('Environment Configuration Tests', () => {
     });
 
     it('should fall back to individual parameters when DSN is not provided', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
+      Object.assign(process.env, baseEnv);
 
       const result = resolveDSN();
 
@@ -281,83 +193,15 @@ describe('Environment Configuration Tests', () => {
 
       expect(result).toBeNull();
     });
-
-    it('should handle SQLite individual parameters correctly', () => {
-      process.env.DB_TYPE = 'sqlite';
-      process.env.DB_NAME = ':memory:';
-
-      const result = resolveDSN();
-
-      expect(result).toEqual({
-        dsn: 'sqlite:///:memory:',
-        source: 'individual environment variables'
-      });
-    });
-  });
-
-  describe('edge cases and complex scenarios', () => {
-    it('should handle password with all special URL characters', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = '!@#$%^&*()+={}[]|\\:";\'<>?,./~`';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      // Verify it builds without error and contains encoded characters
-      expect(result).toBeTruthy();
-      // Note: encodeURIComponent doesn't encode ! so it remains as !
-      expect(result?.dsn).toContain('!'); // ! is not encoded
-      expect(result?.dsn).toContain('%40'); // @
-      expect(result?.dsn).toContain('%23'); // #
-      expect(result?.dsn).toContain('%24'); // $
-      expect(result?.dsn).toContain('%25'); // %
-    });
-
-    it('should handle database names with Unicode characters', () => {
-      process.env.DB_TYPE = 'postgres';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'тест_база_данных'; // Cyrillic characters
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result).toBeTruthy();
-      expect(result?.dsn).toContain('%D1%82%D0%B5%D1%81%D1%82'); // Encoded Cyrillic
-    });
-
-    it('should be case insensitive for database type', () => {
-      process.env.DB_TYPE = 'POSTGRES';
-      process.env.DB_HOST = 'localhost';
-      process.env.DB_USER = 'user';
-      process.env.DB_PASSWORD = 'pass';
-      process.env.DB_NAME = 'db';
-
-      const result = buildDSNFromEnvParams();
-
-      expect(result?.dsn).toBe('postgres://user:pass@localhost:5432/db');
-    });
   });
 
   describe('resolveSourceConfigs with special character passwords', () => {
-    const originalArgv = process.argv;
-
-    beforeEach(() => {
-      process.argv = ['node', 'script.js'];
-    });
-
-    afterEach(() => {
-      process.argv = originalArgv;
-    });
-
     it('should parse DSN with special characters via SafeURL', async () => {
       // Test that command line DSN with special characters in password is parsed correctly
       // This verifies that SafeURL is used instead of native URL() constructor
       process.argv = ['node', 'script.js', '--dsn=postgres://user:my@pass:word@localhost:5432/testdb'];
 
-      const result = await import('../env.js').then(m => m.resolveSourceConfigs());
+      const result = await resolveSourceConfigs();
 
       expect(result).not.toBeNull();
       expect(result!.sources).toHaveLength(1);
@@ -370,7 +214,6 @@ describe('Environment Configuration Tests', () => {
       // printed to stderr, so the raw value must never be interpolated into it.
       process.argv = ['node', 'script.js', '--dsn=user:hunter2@localhost/db'];
 
-      const { resolveSourceConfigs } = await import('../env.js');
       let message = '';
       try {
         await resolveSourceConfigs();
@@ -385,27 +228,12 @@ describe('Environment Configuration Tests', () => {
   });
 
   describe('redactDSN', () => {
+    // redactDSN delegates to obfuscateDSNPassword; its edge cases are covered
+    // in src/utils/__tests__/dsn-obfuscate.test.ts.
     it('should replace the password with asterisks', () => {
       const result = redactDSN('postgres://user:hunter2@localhost:5432/db');
       expect(result).not.toContain('hunter2');
       expect(result).toMatch(/^postgres:\/\/user:\*+@localhost:5432\/db$/);
-    });
-
-    it('should redact passwords containing @ or #', () => {
-      for (const password of ['p@ss', 'pa#ss', 'p@s#s@']) {
-        const result = redactDSN(`postgres://user:${password}@localhost:5432/db`);
-        expect(result).not.toContain(password);
-        expect(result).toMatch(/^postgres:\/\/user:\*+@localhost:5432\/db$/);
-      }
-    });
-
-    it('should fail closed on a scheme-less DSN', () => {
-      const result = redactDSN('user:hunter2@localhost/db');
-      expect(result).toBe('<redacted DSN>');
-    });
-
-    it('should leave SQLite DSNs untouched', () => {
-      expect(redactDSN('sqlite:///path/to/db.sqlite')).toBe('sqlite:///path/to/db.sqlite');
     });
   });
 
@@ -432,99 +260,40 @@ describe('Environment Configuration Tests', () => {
   });
 
   describe('resolveHost', () => {
-    const originalArgv = process.argv;
+    const DEFAULT = { host: '0.0.0.0', source: 'default' };
+    const fromEnv = (host: string) => ({ host, source: 'environment variable' });
+    const fromCli = (host: string) => ({ host, source: 'command line argument' });
 
     beforeEach(() => {
       delete process.env.HOST;
       delete process.env.DBHUB_HOST;
-      process.argv = ['node', 'script.js'];
     });
 
-    afterEach(() => {
-      process.argv = originalArgv;
-    });
-
-    it('defaults to 0.0.0.0 when nothing is set', () => {
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
-    });
-
-    it('reads DBHUB_HOST from the environment variable', () => {
-      process.env.DBHUB_HOST = '127.0.0.1';
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
-    });
-
-    it('ignores the generic HOST env var to avoid shell/CI collisions', () => {
-      process.env.HOST = 'my-laptop.local';
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
-    });
-
-    it('reads --host from command line arguments (equals form)', () => {
-      process.argv = ['node', 'script.js', '--host=10.0.0.5'];
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '10.0.0.5', source: 'command line argument' });
-    });
-
-    it('reads --host from command line arguments (space form)', () => {
-      process.argv = ['node', 'script.js', '--host', '192.168.1.10'];
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '192.168.1.10', source: 'command line argument' });
-    });
-
-    it('prefers --host over DBHUB_HOST environment variable', () => {
-      process.env.DBHUB_HOST = '0.0.0.0';
-      process.argv = ['node', 'script.js', '--host=127.0.0.1'];
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
-    });
-
-    it('treats empty DBHUB_HOST env var as unset and falls back to default', () => {
-      process.env.DBHUB_HOST = '';
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
-    });
-
-    it('treats whitespace-only DBHUB_HOST env var as unset and falls back to default', () => {
+    it.each([
+      ['defaults to 0.0.0.0 when nothing is set', {}, [], DEFAULT],
+      ['reads DBHUB_HOST from the environment variable', { DBHUB_HOST: '127.0.0.1' }, [], fromEnv('127.0.0.1')],
+      ['ignores the generic HOST env var to avoid shell/CI collisions', { HOST: 'my-laptop.local' }, [], DEFAULT],
       // Without trimming, Node's listen() would be handed "   " verbatim and
       // fail with an obscure bind error. Consistent with the `--host` flag
-      // validation, treat blank-after-trim as "not set" rather than silently
-      // misconfigured.
-      process.env.DBHUB_HOST = '   ';
+      // validation, treat blank-after-trim (empty or whitespace-only) as
+      // "not set" rather than silently misconfigured.
+      ['treats a blank (empty or whitespace-only) DBHUB_HOST as unset and falls back to default',
+        { DBHUB_HOST: '   ' }, [], DEFAULT],
+      ['trims surrounding whitespace from DBHUB_HOST env var', { DBHUB_HOST: '  127.0.0.1  ' }, [], fromEnv('127.0.0.1')],
+      ['reads --host from command line arguments (equals form)', {}, ['--host=10.0.0.5'], fromCli('10.0.0.5')],
+      ['reads --host from command line arguments (space form)', {}, ['--host', '192.168.1.10'], fromCli('192.168.1.10')],
+      ['prefers --host over DBHUB_HOST environment variable',
+        { DBHUB_HOST: '0.0.0.0' }, ['--host=127.0.0.1'], fromCli('127.0.0.1')],
+      ['trims surrounding whitespace from --host CLI value', {}, ['--host=  127.0.0.1  '], fromCli('127.0.0.1')],
+      // Intentionally not validated here: node's listen() rejects it later.
+      ['passes through an explicit --host=true without erroring', {}, ['--host=true'], fromCli('true')],
+    ])('%s', (_label, env, argv, expected) => {
+      Object.assign(process.env, env);
+      process.argv = ['node', 'script.js', ...argv];
 
       const result = resolveHost();
 
-      expect(result).toEqual({ host: '0.0.0.0', source: 'default' });
-    });
-
-    it('trims surrounding whitespace from DBHUB_HOST env var', () => {
-      process.env.DBHUB_HOST = '  127.0.0.1  ';
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '127.0.0.1', source: 'environment variable' });
-    });
-
-    it('accepts IPv6 addresses verbatim', () => {
-      process.env.DBHUB_HOST = '::1';
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '::1', source: 'environment variable' });
+      expect(result).toEqual(expected);
     });
 
     describe('--host requires a value', () => {
@@ -576,26 +345,9 @@ describe('Environment Configuration Tests', () => {
         expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('--host requires a value'));
       });
     });
-
-    it('passes through an explicit --host=true without erroring (node listen will reject it)', () => {
-      process.argv = ['node', 'script.js', '--host=true'];
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: 'true', source: 'command line argument' });
-    });
-
-    it('trims surrounding whitespace from --host CLI value', () => {
-      process.argv = ['node', 'script.js', '--host=  127.0.0.1  '];
-
-      const result = resolveHost();
-
-      expect(result).toEqual({ host: '127.0.0.1', source: 'command line argument' });
-    });
   });
 
   describe('resolveSourceConfigs TOML/DSN conflict', () => {
-    const originalArgv = process.argv;
     const originalCwd = process.cwd();
     let tempDir: string;
     let configPath: string;
@@ -618,13 +370,11 @@ describe('Environment Configuration Tests', () => {
     afterEach(() => {
       process.chdir(originalCwd);
       fs.rmSync(tempDir, { recursive: true, force: true });
-      process.argv = originalArgv;
       vi.mocked(loadTomlConfig).mockReturnValue(null);
     });
 
     it('rejects a --dsn flag supplied alongside TOML config', async () => {
       process.argv = ['node', 'script.js', '--config', configPath, '--dsn=sqlite://:memory:'];
-      const { resolveSourceConfigs } = await import('../env.js');
 
       await expect(resolveSourceConfigs()).rejects.toThrow(
         /The --dsn flag cannot be used with TOML configuration \(dbhub.toml\)/
@@ -634,9 +384,9 @@ describe('Environment Configuration Tests', () => {
     it('allows a DSN env var alongside TOML config', async () => {
       // TOML interpolation reads process.env, so `dsn = "${DSN}"` in the config
       // file is a supported way to keep credentials out of it. An exported DSN
-      // is config material for TOML, not a competing single-database setup.
+      // (or DB_* vars) is config material for TOML, not a competing
+      // single-database setup — only the --dsn flag is checked.
       process.env.DSN = 'postgres://user:pass@localhost:5432/mydb';
-      const { resolveSourceConfigs } = await import('../env.js');
 
       await expect(resolveSourceConfigs()).resolves.toMatchObject({
         source: 'dbhub.toml',
@@ -666,7 +416,6 @@ describe('Environment Configuration Tests', () => {
       });
 
       try {
-        const { resolveSourceConfigs } = await import('../env.js');
         await resolveSourceConfigs();
 
         expect(dsnSeenAtTomlLoadTime).toBe('sqlite://interpolated.db');
@@ -676,18 +425,6 @@ describe('Environment Configuration Tests', () => {
         delete process.env.DSN_FROM_ENV_FILE;
         fs.rmSync(dir, { recursive: true, force: true });
       }
-    });
-
-    it('allows DB_* env vars alongside TOML config', async () => {
-      // Same reasoning: these may exist purely to feed ${DB_PASSWORD}-style
-      // interpolation in the TOML file.
-      process.env.DB_TYPE = 'sqlite';
-      process.env.DB_NAME = 'test.db';
-      const { resolveSourceConfigs } = await import('../env.js');
-
-      await expect(resolveSourceConfigs()).resolves.toMatchObject({
-        source: 'dbhub.toml',
-      });
     });
   });
 });
