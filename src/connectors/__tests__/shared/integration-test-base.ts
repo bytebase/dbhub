@@ -79,9 +79,10 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
    * Cleanup method to be called in afterAll
    */
   async cleanup(): Promise<void> {
-    // Always stop the container, even if disconnecting fails or hangs: a
-    // connector error here must not leak a running container into the next
-    // suite (or onto the CI runner).
+    // Stop the container even if disconnecting throws: a connector error
+    // here must not leak a running container into the next suite (or onto
+    // the CI runner). A disconnect that never settles is bounded only by the
+    // integration project's hookTimeout, not by this block.
     try {
       if (this.connector) {
         await this.connector.disconnect();
