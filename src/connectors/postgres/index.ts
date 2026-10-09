@@ -107,8 +107,11 @@ interface PemContents {
 /**
  * Read every configured PEM file. The client key is rejected when encrypted.
  * Throws FailedToReadCertificate naming the file on any problem, so nothing is
- * returned unless the whole set is usable: a half-rotated cert/key pair never
- * reaches TLS.
+ * returned unless the whole set is readable. The files are read back to back
+ * rather than as an atomic snapshot: a rotation that renames cert and key
+ * separately can, in the microseconds between the two reads, yield one file
+ * from each generation. libpq has the same window. TLS then rejects that one
+ * connection attempt with a key mismatch error and the next attempt re-reads.
  */
 function loadPems(paths: PemPaths): PemContents {
   const pems: PemContents = {};
