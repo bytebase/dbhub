@@ -20,6 +20,15 @@ describe("isDriverNotInstalled", () => {
     expect(isDriverNotInstalled(err, "mysql2")).toBe(false);
   });
 
+  it("should match scoped packages", () => {
+    const err = new Error(
+      "Cannot find package '@aws-sdk/rds-signer' imported from /fake/path"
+    );
+    (err as NodeJS.ErrnoException).code = "ERR_MODULE_NOT_FOUND";
+
+    expect(isDriverNotInstalled(err, "@aws-sdk/rds-signer")).toBe(true);
+  });
+
   it("should return true for driver subpath imports", () => {
     const err = new Error(
       "Cannot find package 'mysql2/promise' imported from /fake/path"

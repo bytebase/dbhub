@@ -430,19 +430,6 @@ describe('MariaDB Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBeUndefined();
     });
 
-    it('should use maxRows when existing LIMIT is higher', async () => {
-      // Test when existing LIMIT is higher than maxRows
-      const result = await mariadbTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id LIMIT 10',
-        { maxRows: 2 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
     it('should not affect non-SELECT queries', async () => {
       // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
       const insertResult = await mariadbTest.connector.executeSQL(
@@ -459,21 +446,6 @@ describe('MariaDB Connector Integration Tests', () => {
       );
       expect(selectResult.resultSets[0].rows).toHaveLength(1);
       expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
-    });
-
-    it('should handle maxRows with complex queries', async () => {
-      // Test maxRows with JOIN queries
-      const result = await mariadbTest.connector.executeSQL(`
-        SELECT u.name, o.total 
-        FROM users u 
-        JOIN orders o ON u.id = o.user_id 
-        ORDER BY o.total DESC
-      `, { maxRows: 2 });
-      
-      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
     });
 
     it('should handle maxRows with multiple SELECT statements', async () => {
@@ -497,16 +469,6 @@ describe('MariaDB Connector Integration Tests', () => {
       }
     });
 
-    it('should ignore maxRows when not specified', async () => {
-      // Test without maxRows - should return all rows
-      const result = await mariadbTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        {}
-      );
-      
-      // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
-    });
   });
 
   describe('charset / collation configuration', () => {

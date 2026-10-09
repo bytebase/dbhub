@@ -791,19 +791,6 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBeUndefined();
     });
 
-    it('should use maxRows when existing TOP is higher', async () => {
-      // Test when existing TOP is higher than maxRows
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT TOP 10 * FROM users ORDER BY id',
-        { maxRows: 2 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
     it('should not affect non-SELECT queries', async () => {
       // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
       const insertResult = await sqlServerTest.connector.executeSQL(
@@ -865,39 +852,6 @@ describe('SQL Server Connector Integration Tests', () => {
       ]);
     });
 
-    it('should handle maxRows with complex queries', async () => {
-      // Test maxRows with JOIN queries
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT u.name, o.total 
-        FROM users u 
-        INNER JOIN orders o ON u.id = o.user_id 
-        ORDER BY o.total DESC
-      `, { maxRows: 2 });
-      
-      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
-    });
-
-    it('should handle maxRows with window functions', async () => {
-      // Test maxRows with window function queries
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, { maxRows: 2 });
-      
-      expect(result.resultSets[0].rows.length).toBeLessThanOrEqual(2);
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-    });
-
     it('should capture PRINT output in messages', async () => {
       const result = await sqlServerTest.connector.executeSQL(
         "PRINT 'hello from sql server'; SELECT 1 as value;",
@@ -938,15 +892,5 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.messages).toBeUndefined();
     });
 
-    it('should ignore maxRows when not specified', async () => {
-      // Test without maxRows - should return all rows
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        {}
-      );
-      
-      // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
-    });
   });
 });

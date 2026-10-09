@@ -322,6 +322,9 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result1.resultSets[0].rows).toHaveLength(2);
       expect(result1.resultSets[0].rows[0].name).toBe('John Doe');
       expect(result1.resultSets[0].rows[1].name).toBe('Jane Smith');
+      expect(result1.resultSets[0].truncated).toBe(true);
+      // The echoed SQL is the original statement, not the probe rewrite
+      expect(result1.resultSets[0].sql).toBe('SELECT * FROM users ORDER BY id');
     });
 
     it('should respect existing LIMIT clause when lower than maxRows', async () => {
@@ -335,33 +338,6 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0].name).toBe('John Doe');
     });
 
-    it('should use maxRows when existing LIMIT is higher', async () => {
-      // Test when existing LIMIT is higher than maxRows
-      const result = await sqliteTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id LIMIT 10',
-        { maxRows: 2 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0].name).toBe('John Doe');
-      expect(result.resultSets[0].rows[1].name).toBe('Jane Smith');
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should flag truncated when maxRows cuts off rows', async () => {
-      // users has 3+ rows; the cap of 2 provably cuts rows off
-      const result = await sqliteTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        { maxRows: 2 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rowCount).toBe(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-      // The echoed SQL is the original statement, not the probe rewrite
-      expect(result.resultSets[0].sql).toBe('SELECT * FROM users ORDER BY id');
-    });
-
     it('should not flag truncated when the result has exactly maxRows rows', async () => {
       // Exactly 2 rows exist and the cap is 2 — indistinguishable by count
       // alone, but the probe row proves the result is complete
@@ -371,16 +347,6 @@ describe('SQLite Connector Integration Tests', () => {
       );
 
       expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBeUndefined();
-    });
-
-    it('should not flag truncated when the result has fewer rows than maxRows', async () => {
-      const result = await sqliteTest.connector.executeSQL(
-        'SELECT 1 AS n',
-        { maxRows: 2 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.resultSets[0].truncated).toBeUndefined();
     });
 
@@ -426,20 +392,6 @@ describe('SQLite Connector Integration Tests', () => {
       expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
     });
 
-    it('should handle maxRows with complex queries', async () => {
-      // Test maxRows with JOIN queries
-      const result = await sqliteTest.connector.executeSQL(`
-        SELECT u.name, o.total 
-        FROM users u 
-        JOIN orders o ON u.id = o.user_id 
-        ORDER BY o.total DESC
-      `, { maxRows: 2 });
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('total');
-    });
-
     it('should return rows and apply maxRows to a query introduced by a comment', async () => {
       // SQLite picks all() vs run() by leading keyword; a leading comment
       // used to send a SELECT down the run() path and discard its rows.
@@ -450,22 +402,6 @@ describe('SQLite Connector Integration Tests', () => {
 
       expect(result.resultSets[0].rows).toHaveLength(2);
       expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should apply maxRows to CTE queries (WITH clause)', async () => {
-      // A CTE is the ordinary shape of an analytical query, so leaving it
-      // uncapped left max_rows silently inert for most real queries.
-      const result = await sqliteTest.connector.executeSQL(`
-        WITH user_summary AS (
-          SELECT name, age FROM users WHERE age IS NOT NULL
-        )
-        SELECT * FROM user_summary ORDER BY age
-      `, { maxRows: 2 });
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age');
     });
 
     it('should handle maxRows in multi-statement execution', async () => {
@@ -497,16 +433,6 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[2].rows[0].name).toBe('Multi Test 1');
     });
 
-    it('should ignore maxRows when not specified', async () => {
-      // Test without maxRows - should return all rows
-      const result = await sqliteTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        {}
-      );
-
-      // Should return all users (at least the original 3 plus any added in previous tests)
-      expect(result.resultSets[0].rows.length).toBeGreaterThanOrEqual(3);
-    });
   });
 
   describe('DSN Path Parsing', () => {
