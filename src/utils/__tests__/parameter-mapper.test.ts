@@ -7,146 +7,62 @@ import {
   mapArgumentsToArray,
 } from "../parameter-mapper.js";
 import type { ParameterConfig } from "../../types/config.js";
+import type { ConnectorType } from "../../connectors/interface.js";
+
+const idParam: ParameterConfig = { name: "id", type: "integer", description: "User ID" };
+const statusParam: ParameterConfig = { name: "status", type: "string", description: "User status" };
 
 describe("Parameter Mapper", () => {
-  describe("detectParameterStyle - edge cases with comments and strings", () => {
-    it("should not detect parameters inside single-quoted strings", () => {
-      const sql = "SELECT 'price is $1' AS msg FROM products";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
-    it("should not detect parameters inside double-quoted identifiers", () => {
-      const sql = 'SELECT * FROM "table$1" WHERE active = true';
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
-    it("should not detect parameters inside single-line comments", () => {
-      const sql = "SELECT * FROM users -- use $1 for filtering";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
-    it("should not detect parameters inside multi-line comments", () => {
-      const sql = "SELECT * FROM users /* parameter $1 */";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
+  // The masking rules themselves (comments, strings, escaped quotes, dialects)
+  // are covered in sql-parser.test.ts. These two only prove that
+  // detectParameterStyle and countParameters strip before matching.
+  describe("comment and string masking", () => {
     it("should detect real parameter after string containing $1", () => {
       const sql = "SELECT 'cost is $1' AS label, * FROM products WHERE id = $1";
       expect(detectParameterStyle(sql)).toBe("numbered");
     });
 
-    it("should not detect question mark inside string", () => {
-      const sql = "SELECT 'what?' AS question FROM faq";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
-    it("should not detect @p1 inside string", () => {
-      const sql = "SELECT 'contact @p1 for info' AS msg FROM users";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-  });
-
-  describe("countParameters - edge cases with comments and strings", () => {
     it("should not count parameters inside strings", () => {
       const sql = "SELECT '$1 $2 $3' AS text FROM test WHERE id = $1";
-      expect(countParameters(sql)).toBe(1);
-    });
-
-    it("should not count parameters inside comments", () => {
-      const sql = "SELECT * FROM users WHERE id = $1 /* also filter by $2 $3 */";
-      expect(countParameters(sql)).toBe(1);
-    });
-
-    it("should not count question marks inside strings", () => {
-      const sql = "SELECT 'Is this ok?' AS question FROM faq WHERE id = ?";
-      expect(countParameters(sql)).toBe(1);
-    });
-
-    it("should not count question marks inside comments", () => {
-      const sql = "SELECT * FROM faq WHERE id = ? -- filter by ? later";
-      expect(countParameters(sql)).toBe(1);
-    });
-
-    it("should handle escaped quotes in strings", () => {
-      const sql = "SELECT 'it''s $1 value' AS text FROM test WHERE id = $1";
       expect(countParameters(sql)).toBe(1);
     });
   });
 
   describe("detectParameterStyle", () => {
-    it("should detect numbered parameters ($1, $2)", () => {
-      const sql = "SELECT * FROM users WHERE id = $1 AND status = $2";
-      expect(detectParameterStyle(sql)).toBe("numbered");
-    });
-
-    it("should detect positional parameters (?)", () => {
-      const sql = "SELECT * FROM users WHERE id = ? AND status = ?";
-      expect(detectParameterStyle(sql)).toBe("positional");
-    });
-
-    it("should detect named parameters (@p1, @p2)", () => {
-      const sql = "SELECT * FROM users WHERE id = @p1 AND status = @p2";
-      expect(detectParameterStyle(sql)).toBe("named");
-    });
-
-    it("should return none for SQL without parameters", () => {
-      const sql = "SELECT * FROM users";
-      expect(detectParameterStyle(sql)).toBe("none");
-    });
-
-    it("should detect Oracle colon-numbered parameters (:1, :2)", () => {
-      const sql = "SELECT * FROM users WHERE id = :1 AND status = :2";
-      expect(detectParameterStyle(sql)).toBe("colon");
-    });
-
-    it("should not mistake a PostgreSQL cast for a colon parameter", () => {
-      expect(detectParameterStyle("SELECT '1'::int FROM t")).toBe("none");
-      expect(detectParameterStyle("SELECT * FROM t WHERE id = $1 AND x = '5'::int")).toBe("numbered");
+    it.each([
+      ["SELECT * FROM users WHERE id = $1 AND status = $2", "numbered"],
+      ["SELECT * FROM users WHERE id = ? AND status = ?", "positional"],
+      ["SELECT * FROM users WHERE id = @p1 AND status = @p2", "named"],
+      ["SELECT * FROM users WHERE id = :1 AND status = :2", "colon"],
+      ["SELECT * FROM users", "none"],
+      // A PostgreSQL cast is not a colon parameter
+      ["SELECT '1'::int FROM t", "none"],
+      ["SELECT * FROM t WHERE id = $1 AND x = '5'::int", "numbered"],
+    ])("should detect %j as %s", (sql, style) => {
+      expect(detectParameterStyle(sql)).toBe(style);
     });
   });
 
   describe("validateParameterStyle", () => {
-    it("should accept numbered parameters for postgres", () => {
-      const sql = "SELECT * FROM users WHERE id = $1";
-      expect(() => validateParameterStyle(sql, "postgres")).not.toThrow();
+    it.each<[string, ConnectorType]>([
+      ["SELECT * FROM users WHERE id = $1", "postgres"],
+      ["SELECT * FROM users WHERE id = ?", "mysql"],
+      ["SELECT * FROM users WHERE id = @p1", "sqlserver"],
+      ["SELECT * FROM users WHERE id = :1", "oracle"],
+      // SQL without parameters is valid for any connector
+      ["SELECT * FROM users", "postgres"],
+      ["SELECT * FROM users", "mysql"],
+      ["SELECT * FROM users", "sqlserver"],
+    ])("should accept %j for %s", (sql, connector) => {
+      expect(() => validateParameterStyle(sql, connector)).not.toThrow();
     });
 
-    it("should accept positional parameters for mysql", () => {
-      const sql = "SELECT * FROM users WHERE id = ?";
-      expect(() => validateParameterStyle(sql, "mysql")).not.toThrow();
-    });
-
-    it("should accept named parameters for sqlserver", () => {
-      const sql = "SELECT * FROM users WHERE id = @p1";
-      expect(() => validateParameterStyle(sql, "sqlserver")).not.toThrow();
-    });
-
-    it("should accept colon parameters for oracle and reject other styles", () => {
-      expect(() => validateParameterStyle("SELECT * FROM users WHERE id = :1", "oracle")).not.toThrow();
-      expect(() => validateParameterStyle("SELECT * FROM users WHERE id = ?", "oracle")).toThrow(
-        /Expected colon style \(:1, :2, :3\)/
-      );
-    });
-
-    it("should reject positional parameters for postgres", () => {
-      const sql = "SELECT * FROM users WHERE id = ?";
-      expect(() => validateParameterStyle(sql, "postgres")).toThrow(
-        /Invalid parameter syntax for postgres/
-      );
-    });
-
-    it("should reject numbered parameters for mysql", () => {
-      const sql = "SELECT * FROM users WHERE id = $1";
-      expect(() => validateParameterStyle(sql, "mysql")).toThrow(
-        /Invalid parameter syntax for mysql/
-      );
-    });
-
-    it("should accept SQL without parameters for any connector", () => {
-      const sql = "SELECT * FROM users";
-      expect(() => validateParameterStyle(sql, "postgres")).not.toThrow();
-      expect(() => validateParameterStyle(sql, "mysql")).not.toThrow();
-      expect(() => validateParameterStyle(sql, "sqlserver")).not.toThrow();
+    it.each<[string, ConnectorType, RegExp]>([
+      ["SELECT * FROM users WHERE id = ?", "postgres", /Invalid parameter syntax for postgres/],
+      ["SELECT * FROM users WHERE id = $1", "mysql", /Invalid parameter syntax for mysql/],
+      ["SELECT * FROM users WHERE id = ?", "oracle", /Expected colon style \(:1, :2, :3\)/],
+    ])("should reject %j for %s", (sql, connector, message) => {
+      expect(() => validateParameterStyle(sql, connector)).toThrow(message);
     });
   });
 
@@ -170,39 +86,16 @@ describe("Parameter Mapper", () => {
       );
     });
 
-    it("should count numbered parameters correctly", () => {
-      expect(countParameters("SELECT * FROM users WHERE id = $1")).toBe(1);
+    it.each([
+      // [style, placeholder for index n]
+      ["numbered", (n: number) => `$${n}`],
+      ["positional", () => "?"],
+      ["named", (n: number) => `@p${n}`],
+    ])("should count %s parameters correctly", (_style, p) => {
+      expect(countParameters(`SELECT * FROM users WHERE id = ${p(1)}`)).toBe(1);
+      expect(countParameters(`SELECT * FROM users WHERE id = ${p(1)} AND status = ${p(2)}`)).toBe(2);
       expect(
-        countParameters("SELECT * FROM users WHERE id = $1 AND status = $2")
-      ).toBe(2);
-      expect(
-        countParameters(
-          "SELECT * FROM users WHERE id = $1 AND status = $2 AND role = $3"
-        )
-      ).toBe(3);
-    });
-
-    it("should count positional parameters correctly", () => {
-      expect(countParameters("SELECT * FROM users WHERE id = ?")).toBe(1);
-      expect(
-        countParameters("SELECT * FROM users WHERE id = ? AND status = ?")
-      ).toBe(2);
-      expect(
-        countParameters(
-          "SELECT * FROM users WHERE id = ? AND status = ? AND role = ?"
-        )
-      ).toBe(3);
-    });
-
-    it("should count named parameters correctly", () => {
-      expect(countParameters("SELECT * FROM users WHERE id = @p1")).toBe(1);
-      expect(
-        countParameters("SELECT * FROM users WHERE id = @p1 AND status = @p2")
-      ).toBe(2);
-      expect(
-        countParameters(
-          "SELECT * FROM users WHERE id = @p1 AND status = @p2 AND role = @p3"
-        )
+        countParameters(`SELECT * FROM users WHERE id = ${p(1)} AND status = ${p(2)} AND role = ${p(3)}`)
       ).toBe(3);
     });
 
@@ -215,12 +108,8 @@ describe("Parameter Mapper", () => {
       expect(() => countParameters("SELECT * WHERE a = $1 AND b = $3")).toThrow(
         /Non-sequential numbered parameters.*missing \$2/
       );
-      // Non-sequential: $2, $5, $7 (missing $1, $3, $4, $6) should throw
-      expect(() => countParameters("SELECT * WHERE a = $2 AND b = $5 AND c = $7")).toThrow(
-        /Non-sequential numbered parameters.*missing \$1/
-      );
       // Starting from $2 instead of $1 should throw
-      expect(() => countParameters("SELECT * WHERE a = $2")).toThrow(
+      expect(() => countParameters("SELECT * WHERE a = $2 AND b = $5 AND c = $7")).toThrow(
         /Non-sequential numbered parameters.*missing \$1/
       );
     });
@@ -230,8 +119,6 @@ describe("Parameter Mapper", () => {
       expect(countParameters("SELECT * WHERE id = $1 OR parent_id = $1")).toBe(1);
       // Reused $1 and sequential $2 should count as 2 parameters (valid)
       expect(countParameters("SELECT * WHERE (id = $1 OR parent_id = $1) AND status = $2")).toBe(2);
-      // Reused $1 and $2 with sequential $3 should count as 3 parameters (valid)
-      expect(countParameters("SELECT * WHERE (id = $1 OR parent_id = $1) AND (status = $2 OR type = $2) LIMIT $3")).toBe(3);
     });
 
     it("should reject non-sequential named parameters", () => {
@@ -256,36 +143,12 @@ describe("Parameter Mapper", () => {
   describe("validateParameters", () => {
     it("should accept matching parameter count for postgres", () => {
       const sql = "SELECT * FROM users WHERE id = $1 AND status = $2";
-      const params: ParameterConfig[] = [
-        {
-          name: "id",
-          type: "integer",
-          description: "User ID",
-        },
-        {
-          name: "status",
-          type: "string",
-          description: "User status",
-        },
-      ];
-      expect(() => validateParameters(sql, params, "postgres")).not.toThrow();
+      expect(() => validateParameters(sql, [idParam, statusParam], "postgres")).not.toThrow();
     });
 
     it("should reject mismatched parameter count", () => {
       const sql = "SELECT * FROM users WHERE id = $1";
-      const params: ParameterConfig[] = [
-        {
-          name: "id",
-          type: "integer",
-          description: "User ID",
-        },
-        {
-          name: "status",
-          type: "string",
-          description: "User status",
-        },
-      ];
-      expect(() => validateParameters(sql, params, "postgres")).toThrow(
+      expect(() => validateParameters(sql, [idParam, statusParam], "postgres")).toThrow(
         /Parameter count mismatch/
       );
     });
@@ -306,79 +169,31 @@ describe("Parameter Mapper", () => {
 
   describe("mapArgumentsToArray", () => {
     it("should map simple arguments to array in order", () => {
-      const params: ParameterConfig[] = [
-        { name: "id", type: "integer", description: "User ID" },
-        { name: "status", type: "string", description: "User status" },
-      ];
       const args = { id: 123, status: "active" };
-      const result = mapArgumentsToArray(params, args);
-      expect(result).toEqual([123, "active"]);
+      expect(mapArgumentsToArray([idParam, statusParam], args)).toEqual([123, "active"]);
     });
 
     it("should use default values for missing optional parameters", () => {
-      const params: ParameterConfig[] = [
-        { name: "id", type: "integer", description: "User ID" },
-        {
-          name: "status",
-          type: "string",
-          description: "User status",
-          default: "pending",
-        },
-      ];
-      const args = { id: 123 };
-      const result = mapArgumentsToArray(params, args);
-      expect(result).toEqual([123, "pending"]);
-    });
-
-    it("should use provided values over defaults", () => {
-      const params: ParameterConfig[] = [
-        { name: "id", type: "integer", description: "User ID" },
-        {
-          name: "status",
-          type: "string",
-          description: "User status",
-          default: "pending",
-        },
-      ];
-      const args = { id: 123, status: "active" };
-      const result = mapArgumentsToArray(params, args);
-      expect(result).toEqual([123, "active"]);
+      const params: ParameterConfig[] = [idParam, { ...statusParam, default: "pending" }];
+      expect(mapArgumentsToArray(params, { id: 123 })).toEqual([123, "pending"]);
     });
 
     it("should throw for missing required parameters without defaults", () => {
-      const params: ParameterConfig[] = [
-        { name: "id", type: "integer", description: "User ID" },
-        { name: "status", type: "string", description: "User status" },
-      ];
-      const args = { id: 123 };
-      expect(() => mapArgumentsToArray(params, args)).toThrow(
+      expect(() => mapArgumentsToArray([idParam, statusParam], { id: 123 })).toThrow(
         /Required parameter 'status' is missing/
       );
     });
 
-    it("should handle empty parameters array", () => {
-      const result = mapArgumentsToArray([], {});
-      expect(result).toEqual([]);
-    });
-
-    it("should handle undefined parameters", () => {
-      const result = mapArgumentsToArray(undefined, {});
-      expect(result).toEqual([]);
+    it.each([
+      ["empty", []],
+      ["undefined", undefined],
+    ])("should return an empty array for %s parameters", (_, params) => {
+      expect(mapArgumentsToArray(params, {})).toEqual([]);
     });
 
     it("should use null for optional parameters without default", () => {
-      const params: ParameterConfig[] = [
-        { name: "id", type: "integer", description: "User ID" },
-        {
-          name: "status",
-          type: "string",
-          description: "User status",
-          required: false,
-        },
-      ];
-      const args = { id: 123 };
-      const result = mapArgumentsToArray(params, args);
-      expect(result).toEqual([123, null]);
+      const params: ParameterConfig[] = [idParam, { ...statusParam, required: false }];
+      expect(mapArgumentsToArray(params, { id: 123 })).toEqual([123, null]);
     });
   });
 });

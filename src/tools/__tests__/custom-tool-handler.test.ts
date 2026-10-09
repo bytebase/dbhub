@@ -11,34 +11,21 @@ import type { ToolConfig, ParameterConfig } from "../../types/config.js";
 // Auto-mock the connector manager so we control connection/execution behavior
 vi.mock("../../connectors/manager.js");
 
+const param = (
+  name: string,
+  type: ParameterConfig["type"],
+  extra: Partial<ParameterConfig> = {}
+): ParameterConfig => ({ name, type, description: `${name} value`, ...extra });
+
+const zodSchemaFor = (params: ParameterConfig[] | undefined) =>
+  z.object(buildZodSchemaFromParameters(params));
+
 describe("Custom Tool Handler", () => {
   describe("buildZodSchemaFromParameters", () => {
-    it("should build schema with required string parameter", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "email",
-          type: "string",
-          description: "User email address",
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
-      const result = schema.safeParse({ email: "test@example.com" });
-      expect(result.success).toBe(true);
-    });
-
-    it("should reject missing required parameter", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "email",
-          type: "string",
-          description: "User email address",
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
-      const result = schema.safeParse({});
-      expect(result.success).toBe(false);
+    it("should require a parameter without default or required=false", () => {
+      const schema = zodSchemaFor([param("email", "string")]);
+      expect(schema.safeParse({ email: "test@example.com" }).success).toBe(true);
+      expect(schema.safeParse({}).success).toBe(false);
     });
 
     it.each([
@@ -52,15 +39,7 @@ describe("Custom Tool Handler", () => {
         ["not-array"],
       ],
     ] as const)("should build schema with %s parameter", (type, validValues, invalidValues) => {
-      const params: ParameterConfig[] = [
-        {
-          name: "value",
-          type,
-          description: "Value",
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
+      const schema = zodSchemaFor([param("value", type)]);
 
       for (const value of validValues) {
         expect(schema.safeParse({ value }).success).toBe(true);
@@ -70,49 +49,20 @@ describe("Custom Tool Handler", () => {
       }
     });
 
-    it("should build schema with optional parameter (has default)", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          default: "pending",
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
+    it.each([
+      ["has default", { default: "pending" }],
+      ["required=false", { required: false }],
+    ])("should build schema with optional parameter (%s)", (_, extra) => {
+      const schema = zodSchemaFor([param("status", "string", extra)]);
 
       expect(schema.safeParse({}).success).toBe(true); // Optional, so missing is ok
       expect(schema.safeParse({ status: "active" }).success).toBe(true);
     });
 
-    it("should build schema with optional parameter (required=false)", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          required: false,
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
-
-      expect(schema.safeParse({}).success).toBe(true);
-      expect(schema.safeParse({ status: "active" }).success).toBe(true);
-    });
-
     it("should build schema with allowed_values for string", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          allowed_values: ["pending", "active", "completed"],
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
+      const schema = zodSchemaFor([
+        param("status", "string", { allowed_values: ["pending", "active", "completed"] }),
+      ]);
 
       expect(schema.safeParse({ status: "pending" }).success).toBe(true);
       expect(schema.safeParse({ status: "active" }).success).toBe(true);
@@ -120,90 +70,25 @@ describe("Custom Tool Handler", () => {
     });
 
     it("should build schema with allowed_values for integer", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "priority",
-          type: "integer",
-          description: "Priority level",
-          allowed_values: [1, 2, 3],
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
+      const schema = zodSchemaFor([param("priority", "integer", { allowed_values: [1, 2, 3] })]);
 
       expect(schema.safeParse({ priority: 1 }).success).toBe(true);
       expect(schema.safeParse({ priority: 2 }).success).toBe(true);
       expect(schema.safeParse({ priority: 4 }).success).toBe(false);
     });
 
-    it("should build schema with multiple parameters", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "id",
-          type: "integer",
-          description: "User ID",
-        },
-        {
-          name: "email",
-          type: "string",
-          description: "Email",
-        },
-        {
-          name: "active",
-          type: "boolean",
-          description: "Is active",
-          default: true,
-        },
-      ];
-      const schemaShape = buildZodSchemaFromParameters(params);
-      const schema = z.object(schemaShape);
-
-      expect(
-        schema.safeParse({
-          id: 123,
-          email: "test@example.com",
-        }).success
-      ).toBe(true);
-
-      expect(
-        schema.safeParse({
-          id: 123,
-          email: "test@example.com",
-          active: false,
-        }).success
-      ).toBe(true);
-
-      expect(
-        schema.safeParse({
-          id: 123,
-          // missing required email
-        }).success
-      ).toBe(false);
-    });
-
-    it("should build empty schema for undefined parameters", () => {
-      const schemaShape = buildZodSchemaFromParameters(undefined);
-      const schema = z.object(schemaShape);
-      expect(schema.safeParse({}).success).toBe(true);
-    });
-
-    it("should build empty schema for empty parameters array", () => {
-      const schemaShape = buildZodSchemaFromParameters([]);
-      const schema = z.object(schemaShape);
+    it.each([
+      ["undefined parameters", undefined],
+      ["empty parameters array", []],
+    ])("should build empty schema for %s", (_, params) => {
+      const schema = zodSchemaFor(params);
       expect(schema.safeParse({}).success).toBe(true);
     });
   });
 
   describe("buildInputSchema", () => {
     it("should build JSON Schema for string parameter", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "email",
-          type: "string",
-          description: "User email",
-        },
-      ];
-      const schema = buildInputSchema(params);
+      const schema = buildInputSchema([param("email", "string", { description: "User email" })]);
 
       expect(schema.type).toBe("object");
       expect(schema.properties.email).toEqual({
@@ -220,67 +105,31 @@ describe("Custom Tool Handler", () => {
       ["boolean", "boolean"],
       ["array", "array"],
     ] as const)("should build JSON Schema for %s parameter", (paramType, jsonType) => {
-      const params: ParameterConfig[] = [
-        {
-          name: "value",
-          type: paramType,
-          description: "Value",
-        },
-      ];
-      const schema = buildInputSchema(params);
+      const schema = buildInputSchema([param("value", paramType)]);
 
       expect(schema.properties.value.type).toBe(jsonType);
     });
 
     it("should include enum for allowed_values", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          allowed_values: ["pending", "active"],
-        },
-      ];
-      const schema = buildInputSchema(params);
+      const schema = buildInputSchema([
+        param("status", "string", { allowed_values: ["pending", "active"] }),
+      ]);
 
       expect(schema.properties.status.enum).toEqual(["pending", "active"]);
     });
 
     it("should not include optional params in required array", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "id",
-          type: "integer",
-          description: "ID",
-        },
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          required: false,
-        },
-        {
-          name: "priority",
-          type: "integer",
-          description: "Priority",
-          default: 1,
-        },
-      ];
-      const schema = buildInputSchema(params);
+      const schema = buildInputSchema([
+        param("id", "integer"),
+        param("status", "string", { required: false }),
+        param("priority", "integer", { default: 1 }),
+      ]);
 
       expect(schema.required).toEqual(["id"]);
     });
 
     it("should omit required field when all params are optional", () => {
-      const params: ParameterConfig[] = [
-        {
-          name: "status",
-          type: "string",
-          description: "Status",
-          default: "pending",
-        },
-      ];
-      const schema = buildInputSchema(params);
+      const schema = buildInputSchema([param("status", "string", { default: "pending" })]);
 
       expect(schema.required).toBeUndefined();
     });
