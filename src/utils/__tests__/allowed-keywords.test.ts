@@ -311,6 +311,10 @@ describe("isReadOnlySQL", () => {
       ["postgres", "SELECT pg_read_file('/etc/passwd')"],
       ["postgres", "SELECT pg_read_binary_file('server.key')"],
       ["postgres", "SELECT pg_ls_dir('/var/lib/postgresql')"],
+      // set_config is SET in function form; the session-scoped variant undoes
+      // the statement_timeout / search_path applied at connect (issue #448).
+      ["postgres", "SELECT set_config('statement_timeout', '0', false)"],
+      ["postgres", "SELECT pg_catalog.set_config('search_path', 'pg_catalog,public', false)"],
       // SQL Server pass-through sources share the same call-position guard:
       // OPENQUERY's payload runs on the remote server, OPENROWSET(BULK) reads
       // server-side files, OPENDATASOURCE opens ad-hoc connections.
@@ -344,6 +348,11 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("SELECT load_file FROM documents", "mysql")).toBe(true);
       expect(isReadOnlySQL("SELECT count(*) AS get_lock FROM t", "mysql")).toBe(true);
       expect(isReadOnlySQL("SELECT pg_read_file FROM audit", "postgres")).toBe(true);
+      expect(isReadOnlySQL("SELECT set_config FROM audit", "postgres")).toBe(true);
+    });
+
+    it("still allows reading settings through current_setting (issue #448)", () => {
+      expect(isReadOnlySQL("SELECT current_setting('statement_timeout')", "postgres")).toBe(true);
     });
 
     it("does not apply another dialect's escape-hatch list", () => {
