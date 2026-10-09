@@ -48,6 +48,15 @@ describe("classifyStatement", () => {
     expect(classifyStatement("SELECT get_lock('x', 10)", "mariadb")).toBe("admin");
     expect(classifyStatement("SELECT pg_read_file('/etc/passwd')", "postgres")).toBe("admin");
   });
+
+  it("classifies set_config as admin so readonly denies it like SET (issue #448)", () => {
+    expect(classifyStatement("SELECT set_config('statement_timeout', '0', false)", "postgres")).toBe("admin");
+    expect(classifyStatement("SELECT current_setting('statement_timeout')", "postgres")).toBe("read");
+    const readonly = policyFromReadonly(true);
+    expect(sqlVerdict(readonly, "SET statement_timeout = 0", "postgres")).toBe("deny");
+    expect(sqlVerdict(readonly, "SELECT set_config('statement_timeout', '0', false)", "postgres")).toBe("deny");
+    expect(sqlVerdict(readonly, "SELECT current_setting('statement_timeout')", "postgres")).toBe("allow");
+  });
 });
 
 describe("classifySQL (multi-statement)", () => {

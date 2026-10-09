@@ -125,7 +125,11 @@ export const sqlServerPassThroughPattern = new RegExp(
  *   advisory locks (a session side effect).
  * - PostgreSQL: pg_read_file / pg_read_binary_file / pg_ls_dir read the
  *   server filesystem (pg_read_server_files role; default_transaction_read_only
- *   does not apply).
+ *   does not apply). set_config is SET in function form: it rewrites session
+ *   state such as the statement_timeout DBHub applies from query_timeout or
+ *   the configured search_path, and the change outlives the statement on the
+ *   pooled connection (issue #448). current_setting is read-only and stays
+ *   allowed.
  * - SQL Server: OPENQUERY / OPENROWSET / OPENDATASOURCE run on a
  *   remote/ad-hoc source outside the local read-only transaction
  *   (sqlServerPassThroughKeywords, reused here as the single source of truth).
@@ -148,7 +152,7 @@ export const sqlServerPassThroughPattern = new RegExp(
 export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly string[]>> = {
   mysql: ["load_file", "get_lock", "release_lock", "release_all_locks"],
   mariadb: ["load_file", "get_lock", "release_lock", "release_all_locks"],
-  postgres: ["pg_read_file", "pg_read_binary_file", "pg_ls_dir"],
+  postgres: ["pg_read_file", "pg_read_binary_file", "pg_ls_dir", "set_config"],
   sqlserver: sqlServerPassThroughKeywords,
   // Oracle packages a SELECT can call to reach outside the database, matched
   // as `package.member(` (see escapeHatchCallSuffix).
