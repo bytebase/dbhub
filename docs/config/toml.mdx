@@ -313,7 +313,9 @@ Sources define database connections. Each source represents a database that DBHu
   | MySQL | `max_execution_time` | Read-only `SELECT` statements |
   | MariaDB | `max_statement_time` | All statements |
 
-  A client-side fallback fires 5 seconds after `query_timeout` for statements the server did not stop, such as a MySQL write or a statement on a connection whose session setting was changed. DBHub then cancels the statement on the server and discards that connection.
+  A client-side fallback fires 5 seconds after `query_timeout` for statements the server did not stop, such as a MySQL write or a statement on a connection whose session setting was changed. DBHub then discards that connection and attempts to cancel the statement on the server over a separate connection. The cancellation is best-effort: if it fails or the server does not honor it, the statement may keep running until the server finishes it.
+
+  The largest accepted value is 2147478 seconds (about 24 days), the longest fallback deadline a Node.js timer can represent.
 
   ```toml
   [[sources]]

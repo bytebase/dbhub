@@ -31,9 +31,33 @@ export const CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
  */
 export const CANCEL_QUERY_TIMEOUT_MS = 5_000;
 
-/** Client-side deadline for a statement whose server-side limit is `queryTimeoutMs`. */
+/** Largest delay Node's setTimeout honours; anything above it fires after 1ms. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * Largest `query_timeout` (seconds) whose client-side deadline still fits a
+ * Node timer. Enforced when the config is loaded; clientQueryTimeoutMs guards
+ * the direct ConnectorConfig path.
+ */
+export const MAX_QUERY_TIMEOUT_SECONDS = Math.floor(
+  (MAX_TIMER_MS - CLIENT_QUERY_TIMEOUT_GRACE_MS) / 1000
+);
+
+/**
+ * Client-side deadline for a statement whose server-side limit is
+ * `queryTimeoutMs`. Throws rather than schedule a deadline Node cannot
+ * represent: setTimeout silently clamps NaN, Infinity and delays above
+ * MAX_TIMER_MS to 1ms, which would abandon every statement immediately.
+ */
 export function clientQueryTimeoutMs(queryTimeoutMs: number): number {
-  return queryTimeoutMs + CLIENT_QUERY_TIMEOUT_GRACE_MS;
+  const deadlineMs = queryTimeoutMs + CLIENT_QUERY_TIMEOUT_GRACE_MS;
+  if (!Number.isFinite(deadlineMs) || deadlineMs > MAX_TIMER_MS) {
+    throw new RangeError(
+      `query_timeout of ${queryTimeoutMs}ms exceeds the client-side deadline range ` +
+        `(at most ${MAX_QUERY_TIMEOUT_SECONDS} seconds)`
+    );
+  }
+  return deadlineMs;
 }
 
 /** `code` of the error raised by withClientQueryDeadline. */

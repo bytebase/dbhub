@@ -3,6 +3,7 @@ import {
   CLIENT_QUERY_TIMEOUT_CODE,
   CLIENT_QUERY_TIMEOUT_GRACE_MS,
   ClientQueryTimeoutError,
+  MAX_QUERY_TIMEOUT_SECONDS,
   clientQueryTimeoutMs,
   isClientSideTimeout,
   withClientQueryDeadline,
@@ -11,6 +12,20 @@ import {
 describe("clientQueryTimeoutMs", () => {
   it("trails the server-side limit by the grace period", () => {
     expect(clientQueryTimeoutMs(30_000)).toBe(30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS);
+  });
+
+  it("accepts the largest limit the config loader allows", () => {
+    expect(clientQueryTimeoutMs(MAX_QUERY_TIMEOUT_SECONDS * 1000)).toBeLessThanOrEqual(2_147_483_647);
+  });
+
+  // setTimeout clamps these to 1ms, so a deadline built from them would
+  // abandon every statement immediately instead of after query_timeout.
+  it.each([
+    ["Infinity", Infinity],
+    ["NaN", NaN],
+    ["beyond Node's timer range", (MAX_QUERY_TIMEOUT_SECONDS + 1) * 1000],
+  ])("rejects a limit of %s instead of scheduling an unrepresentable deadline", (_label, ms) => {
+    expect(() => clientQueryTimeoutMs(ms)).toThrow(RangeError);
   });
 });
 
