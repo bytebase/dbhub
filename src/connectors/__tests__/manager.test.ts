@@ -510,3 +510,101 @@ describe("PostgreSQL IAM authentication on demand", () => {
     expect(manager.getConnector(source.id)).toBeDefined();
   });
 });
+
+describe("ConnectorManager per-source add/remove", () => {
+  function stubConnectorRegistry() {
+    const instances: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+    const prototype = {
+      id: "postgres",
+      clone: () => {
+        const instance = {
+          id: "postgres",
+          connect: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn().mockResolvedValue(undefined),
+        };
+        instances.push(instance);
+        return instance;
+      },
+    };
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(prototype as any);
+    return instances;
+  }
+
+  const srcA: SourceConfig = { id: "a", type: "postgres", dsn: "postgres://u:p@h/a" };
+  const srcB: SourceConfig = { id: "b", type: "postgres", dsn: "postgres://u:p@h/b" };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("adds an eager source without touching the existing one", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await manager.addSource(srcB);
+
+    expect(instances).toHaveLength(2);
+    expect(instances[0].disconnect).not.toHaveBeenCalled();
+    expect(manager.getConnector("a")).toBe(instances[0]);
+    expect(manager.getConnector("b")).toBe(instances[1]);
+    expect(manager.getSourceIds()).toEqual(["a", "b"]);
+    expect(manager.getAllSourceConfigs()).toEqual([srcA, srcB]);
+  });
+
+  it("registers a lazy source and connects it on first use", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await manager.addSource({ ...srcB, lazy: true });
+    expect(instances).toHaveLength(1);
+    expect(manager.getSourceIds()).toEqual(["a", "b"]);
+
+    await manager.ensureConnected("b");
+    expect(instances).toHaveLength(2);
+    expect(manager.getConnector("b")).toBe(instances[1]);
+  });
+
+  it("rejects a duplicate source id", async () => {
+    stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await expect(manager.addSource(srcA)).rejects.toThrow("already exists");
+  });
+
+  it("removes one source and leaves the other connected", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA, srcB]);
+
+    await manager.removeSource("a");
+
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(instances[1].disconnect).not.toHaveBeenCalled();
+    expect(manager.getSourceIds()).toEqual(["b"]);
+    expect(manager.getConnector()).toBe(instances[1]);
+    expect(() => manager.getConnector("a")).toThrow("Source 'a' not found");
+  });
+
+  it("removing an unknown source is a no-op", async () => {
+    stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await expect(manager.removeSource("nope")).resolves.toBeUndefined();
+    expect(manager.getSourceIds()).toEqual(["a"]);
+  });
+
+  it("reorders sources so the requested first id becomes the default", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA, srcB]);
+
+    manager.reorderSources(["b", "unknown", "a"]);
+
+    expect(manager.getSourceIds()).toEqual(["b", "a"]);
+    expect(manager.getConnector()).toBe(instances[1]);
+  });
+});

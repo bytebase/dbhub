@@ -326,6 +326,78 @@ export class ConnectorManager {
   }
 
   /**
+   * Add a single source without touching the others. Eager sources connect now;
+   * lazy ones are registered and connect on first use. Used by the TOML hot reload
+   * to apply only the entries that changed.
+   */
+  async addSource(source: SourceConfig): Promise<void> {
+    if (this.sourceIds.includes(source.id)) {
+      throw new Error(`Source '${source.id}' already exists`);
+    }
+    if (source.lazy) {
+      this.registerLazySource(source);
+    } else {
+      await this.connectSource(source);
+    }
+  }
+
+  /**
+   * Disconnect and forget a single source, leaving every other source's pool and
+   * tunnel untouched. Resolves silently for an unknown id.
+   */
+  async removeSource(sourceId: string): Promise<void> {
+    // Let an in-flight lazy connection settle so its connector/tunnel are not orphaned.
+    const pending = this.pendingConnections.get(sourceId);
+    if (pending) {
+      try { await pending; } catch { /* the failure already cleaned up after itself */ }
+    }
+
+    const timer = this.iamRefreshTimers.get(sourceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.iamRefreshTimers.delete(sourceId);
+    }
+
+    const connector = this.connectors.get(sourceId);
+    this.connectors.delete(sourceId);
+    if (connector) {
+      try {
+        await connector.disconnect();
+        console.error(`Disconnected from source '${sourceId}'`);
+      } catch (error) {
+        console.error(`Error disconnecting from source '${sourceId}':`, error);
+      }
+    }
+
+    const tunnel = this.sshTunnels.get(sourceId);
+    this.sshTunnels.delete(sourceId);
+    if (tunnel) {
+      try {
+        await tunnel.close();
+      } catch (error) {
+        console.error(`Error closing SSH tunnel for source '${sourceId}':`, error);
+      }
+    }
+
+    this.sourceConfigs.delete(sourceId);
+    this.lazySources.delete(sourceId);
+    this.pendingConnections.delete(sourceId);
+    this.sourceIds = this.sourceIds.filter(id => id !== sourceId);
+  }
+
+  /**
+   * Reorder known sources to match `orderedIds` (the first entry is the default
+   * source). Unknown ids are ignored; known ids missing from the list keep their
+   * relative order after the listed ones.
+   */
+  reorderSources(orderedIds: string[]): void {
+    const known = new Set(this.sourceIds);
+    const ordered = orderedIds.filter(id => known.has(id));
+    const listed = new Set(ordered);
+    this.sourceIds = [...ordered, ...this.sourceIds.filter(id => !listed.has(id))];
+  }
+
+  /**
    * Close all database connections
    */
   async disconnect(): Promise<void> {

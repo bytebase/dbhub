@@ -120,10 +120,7 @@ See documentation for more details on configuring database connections.
     // tool registry, but STDIO clients won't see added/removed tools without restart.
     // HTTP transport creates a new server per request, so tool changes apply immediately
     // (2026-07-28 clients may serve a cached tool list for up to TOOLS_LIST_CACHE_TTL_MS).
-    const stopConfigWatcher = startConfigWatcher({
-      connectorManager,
-      initialTools: sourceConfigsData.tools,
-    });
+    const stopConfigWatcher = startConfigWatcher({ connectorManager });
 
     // Create MCP server factory function (used per HTTP request and per stdio connection)
     // Note: This must be created AFTER ConnectorManager is initialized

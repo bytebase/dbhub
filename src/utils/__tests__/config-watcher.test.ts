@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
-import { startConfigWatcher } from "../config-watcher.js";
+import { startConfigWatcher, applySourceDiff, sourceConfigEquals } from "../config-watcher.js";
 import type { ConnectorManager } from "../../connectors/manager.js";
 
 // Mock dependencies
@@ -18,22 +18,110 @@ import { initializeToolRegistry } from "../../tools/registry.js";
 
 function createMockManager(overrides: Partial<Record<string, any>> = {}) {
   return {
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    connectWithSources: vi.fn().mockResolvedValue(undefined),
+    addSource: vi.fn().mockResolvedValue(undefined),
+    removeSource: vi.fn().mockResolvedValue(undefined),
+    reorderSources: vi.fn(),
     getAllSourceConfigs: vi.fn().mockReturnValue([]),
     ...overrides,
   } as unknown as ConnectorManager;
 }
 
-function createOptions(connectorManager: ConnectorManager, initialTools?: any[]) {
-  return { connectorManager, initialTools };
+function createOptions(connectorManager: ConnectorManager) {
+  return { connectorManager };
 }
+
+const dbA = { id: "a", type: "sqlite" as const, dsn: "sqlite:///:memory:" };
+const dbB = { id: "b", type: "postgres" as const, dsn: "postgres://localhost/b" };
+
+describe("sourceConfigEquals", () => {
+  it("ignores key order and undefined fields", () => {
+    expect(sourceConfigEquals(
+      { id: "x", type: "postgres", dsn: "postgres://h/d", lazy: undefined },
+      { type: "postgres", id: "x", dsn: "postgres://h/d" },
+    )).toBe(true);
+  });
+
+  it("detects a changed field", () => {
+    expect(sourceConfigEquals(
+      { id: "x", type: "postgres", dsn: "postgres://h/d" },
+      { id: "x", type: "postgres", dsn: "postgres://h/d", query_timeout: 5 },
+    )).toBe(false);
+  });
+});
+
+describe("applySourceDiff", () => {
+  it("leaves unchanged sources alone, adds new ones and removes dropped ones", async () => {
+    const manager = createMockManager();
+    const dbC = { id: "c", type: "mysql" as const, dsn: "mysql://localhost/c" };
+
+    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, dbC]);
+
+    expect(manager.removeSource).toHaveBeenCalledTimes(1);
+    expect(manager.removeSource).toHaveBeenCalledWith("b");
+    expect(manager.addSource).toHaveBeenCalledTimes(1);
+    expect(manager.addSource).toHaveBeenCalledWith(dbC);
+    expect(manager.reorderSources).toHaveBeenCalledWith(["a", "c"]);
+    expect(applied).toEqual([dbA, dbC]);
+  });
+
+  it("reconnects only a source whose config changed", async () => {
+    const manager = createMockManager();
+    const changedB = { ...dbB, query_timeout: 10 };
+
+    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
+
+    expect(manager.removeSource).toHaveBeenCalledTimes(1);
+    expect(manager.removeSource).toHaveBeenCalledWith("b");
+    expect(manager.addSource).toHaveBeenCalledTimes(1);
+    expect(manager.addSource).toHaveBeenCalledWith(changedB);
+    expect(applied).toEqual([dbA, changedB]);
+  });
+
+  it("rolls back only the changed source when its new config fails to connect", async () => {
+    const changedB = { ...dbB, dsn: "postgres://unreachable/b" };
+    const manager = createMockManager({
+      addSource: vi.fn()
+        .mockRejectedValueOnce(new Error("Connection refused"))
+        .mockResolvedValueOnce(undefined),
+    });
+
+    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
+
+    expect(manager.removeSource).toHaveBeenCalledTimes(1);
+    expect(manager.addSource).toHaveBeenNthCalledWith(1, changedB);
+    expect(manager.addSource).toHaveBeenNthCalledWith(2, dbB);
+    expect(applied).toEqual([dbA, dbB]);
+  });
+
+  it("skips a new source that fails to connect and keeps the rest", async () => {
+    const manager = createMockManager({
+      addSource: vi.fn().mockRejectedValue(new Error("Connection refused")),
+    });
+
+    const applied = await applySourceDiff(manager, [dbA], [dbA, dbB]);
+
+    expect(manager.removeSource).not.toHaveBeenCalled();
+    expect(applied).toEqual([dbA]);
+  });
+
+  it("reorders sources so the file's first entry stays the default", async () => {
+    const manager = createMockManager();
+
+    const applied = await applySourceDiff(manager, [dbA, dbB], [dbB, dbA]);
+
+    expect(manager.removeSource).not.toHaveBeenCalled();
+    expect(manager.addSource).not.toHaveBeenCalled();
+    expect(manager.reorderSources).toHaveBeenCalledWith(["b", "a"]);
+    expect(applied).toEqual([dbB, dbA]);
+  });
+});
 
 describe("startConfigWatcher", () => {
   let mockWatcher: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn>; unref: ReturnType<typeof vi.fn> };
   let watchCallback: (eventType: string) => void;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
     mockWatcher = {
       on: vi.fn().mockReturnThis(),
@@ -68,41 +156,86 @@ describe("startConfigWatcher", () => {
     expect(mockWatcher.unref).toHaveBeenCalled();
   });
 
-  it("should reload config on file change after debounce", async () => {
+  it("should apply the diff and rebuild the tool registry after debounce", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
     const newConfig = {
-      sources: [{ id: "new_db", type: "postgres" as const, dsn: "postgres://localhost/new" }],
-      tools: [],
+      sources: [dbA, dbB],
+      tools: [{ name: "execute_sql" as const, source: "b", readonly: true }],
       source: "dbhub.toml",
     };
     vi.mocked(loadTomlConfig).mockReturnValue(newConfig);
-    const mockManager = createMockManager();
+    const mockManager = createMockManager({
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA]),
+    });
 
     startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
 
     // Before debounce, nothing should happen
-    expect(mockManager.disconnect).not.toHaveBeenCalled();
+    expect(mockManager.addSource).not.toHaveBeenCalled();
 
     // After debounce
     await vi.advanceTimersByTimeAsync(500);
 
     expect(loadTomlConfig).toHaveBeenCalled();
-    expect(mockManager.disconnect).toHaveBeenCalled();
-    expect(mockManager.connectWithSources).toHaveBeenCalledWith(newConfig.sources);
+    expect(mockManager.removeSource).not.toHaveBeenCalled();
+    expect(mockManager.addSource).toHaveBeenCalledTimes(1);
+    expect(mockManager.addSource).toHaveBeenCalledWith(dbB);
     expect(initializeToolRegistry).toHaveBeenCalledWith({
       sources: newConfig.sources,
       tools: newConfig.tools,
     });
   });
 
-  it("should debounce rapid file changes", async () => {
+  it("should diff successive reloads against the last applied config", async () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+    const mockManager = createMockManager({
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA]),
+    });
+    startConfigWatcher(createOptions(mockManager));
+
+    vi.mocked(loadTomlConfig).mockReturnValue({ sources: [dbA, dbB], tools: [], source: "dbhub.toml" });
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    vi.mocked(loadTomlConfig).mockReturnValue({ sources: [dbB], tools: [], source: "dbhub.toml" });
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(mockManager.addSource).toHaveBeenCalledTimes(1);
+    expect(mockManager.addSource).toHaveBeenCalledWith(dbB);
+    expect(mockManager.removeSource).toHaveBeenCalledTimes(1);
+    expect(mockManager.removeSource).toHaveBeenCalledWith("a");
+  });
+
+  it("should drop tools that reference a source that failed to connect", async () => {
     vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
     vi.mocked(loadTomlConfig).mockReturnValue({
-      sources: [{ id: "db", type: "sqlite" as const, dsn: "sqlite:///:memory:" }],
-      tools: [],
+      sources: [dbA, dbB],
+      tools: [
+        { name: "execute_sql" as const, source: "a" },
+        { name: "execute_sql" as const, source: "b", readonly: true },
+      ],
       source: "dbhub.toml",
     });
+    const mockManager = createMockManager({
+      addSource: vi.fn().mockRejectedValue(new Error("Connection refused")),
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA]),
+    });
+
+    startConfigWatcher(createOptions(mockManager));
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(initializeToolRegistry).toHaveBeenCalledWith({
+      sources: [dbA],
+      tools: [{ name: "execute_sql", source: "a" }],
+    });
+  });
+
+  it("should debounce rapid file changes", async () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+    vi.mocked(loadTomlConfig).mockReturnValue({ sources: [dbA], tools: [], source: "dbhub.toml" });
     const mockManager = createMockManager();
 
     startConfigWatcher(createOptions(mockManager));
@@ -111,7 +244,8 @@ describe("startConfigWatcher", () => {
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(mockManager.disconnect).toHaveBeenCalledTimes(1);
+    expect(loadTomlConfig).toHaveBeenCalledTimes(1);
+    expect(mockManager.addSource).toHaveBeenCalledTimes(1);
   });
 
   it("should keep existing connections when new config is invalid", async () => {
@@ -119,13 +253,17 @@ describe("startConfigWatcher", () => {
     vi.mocked(loadTomlConfig).mockImplementation(() => {
       throw new Error("Invalid TOML");
     });
-    const mockManager = createMockManager();
+    const mockManager = createMockManager({
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA]),
+    });
 
     startConfigWatcher(createOptions(mockManager));
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(mockManager.disconnect).not.toHaveBeenCalled();
+    expect(mockManager.removeSource).not.toHaveBeenCalled();
+    expect(mockManager.addSource).not.toHaveBeenCalled();
+    expect(initializeToolRegistry).not.toHaveBeenCalled();
   });
 
   it("should keep existing connections when loadTomlConfig returns null", async () => {
@@ -137,56 +275,8 @@ describe("startConfigWatcher", () => {
     watchCallback("change");
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(mockManager.disconnect).not.toHaveBeenCalled();
-  });
-
-  it("should rollback with initial tools when connectWithSources fails", async () => {
-    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-    const newConfig = {
-      sources: [{ id: "bad_db", type: "postgres" as const, dsn: "postgres://localhost/bad" }],
-      tools: [{ name: "execute_sql" as const, source: "bad_db", readonly: true }],
-      source: "dbhub.toml",
-    };
-    vi.mocked(loadTomlConfig).mockReturnValue(newConfig);
-
-    const oldSources = [{ id: "old_db", type: "sqlite" as const, dsn: "sqlite:///:memory:" }];
-    const oldTools = [{ name: "execute_sql" as const, source: "old_db" }];
-    const mockManager = createMockManager({
-      connectWithSources: vi.fn()
-        .mockRejectedValueOnce(new Error("Connection refused"))
-        .mockResolvedValueOnce(undefined),
-      getAllSourceConfigs: vi.fn().mockReturnValue(oldSources),
-    });
-
-    startConfigWatcher(createOptions(mockManager, oldTools));
-    watchCallback("change");
-    await vi.advanceTimersByTimeAsync(500);
-
-    expect(mockManager.connectWithSources).toHaveBeenNthCalledWith(1, newConfig.sources);
-    expect(mockManager.connectWithSources).toHaveBeenLastCalledWith(oldSources);
-    expect(initializeToolRegistry).toHaveBeenLastCalledWith({ sources: oldSources, tools: oldTools });
-  });
-
-  it("should disconnect partial state before rollback", async () => {
-    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
-    vi.mocked(loadTomlConfig).mockReturnValue({
-      sources: [{ id: "bad", type: "postgres" as const, dsn: "postgres://localhost/bad" }],
-      tools: [],
-      source: "dbhub.toml",
-    });
-
-    const mockManager = createMockManager({
-      connectWithSources: vi.fn()
-        .mockRejectedValueOnce(new Error("Partial failure"))
-        .mockResolvedValueOnce(undefined),
-    });
-
-    startConfigWatcher(createOptions(mockManager));
-    watchCallback("change");
-    await vi.advanceTimersByTimeAsync(500);
-
-    // disconnect called twice: once for initial teardown, once to clean up partial state before rollback
-    expect(mockManager.disconnect).toHaveBeenCalledTimes(2);
+    expect(mockManager.removeSource).not.toHaveBeenCalled();
+    expect(mockManager.addSource).not.toHaveBeenCalled();
   });
 
   it("should clean up watcher on cleanup call", () => {
