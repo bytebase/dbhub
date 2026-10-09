@@ -443,7 +443,7 @@ Sources define database connections. Each source represents a database that DBHu
 
   Keep the key file private (`chmod 0600`); DBHub never logs its contents.
 
-  Both files are validated at startup and then re-read from disk each time a new connection is opened, matching libpq. Short-lived client certificates that are reissued on a timer are picked up without a restart: replace the files in place (an atomic rename is safest) and the next connection presents the new pair. If a re-read fails, or a rotated key turns out to be encrypted, the previously loaded contents are kept and a warning is logged.
+  Both files are read at startup (a missing file or an encrypted key fails startup) and then re-read each time a new connection is opened, matching libpq. Short-lived client certificates that are reissued on a timer are picked up without a restart: replace the files in place (an atomic rename is safest) and the next connection presents the new pair. If a file cannot be read when a connection is opened, that connection fails with an error naming the file, and the next one retries. The same applies to `sslrootcert`.
 
   Supports `~/` path expansion.
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import pg from 'pg';
 import { PostgresConnector } from '../postgres/index.js';
 import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
@@ -241,24 +242,31 @@ describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslk
     `&sslrootcert=${encodeURIComponent(caPath)}` +
     `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
 
-  type SslObject = { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
-
-  /** Mirror what node-postgres does with the ssl object on every new connection. */
-  function tlsOptionsLikePg(ssl: SslObject): SslObject {
-    // client.js / connection-parameters.js hide the key from logs...
-    Object.defineProperty(ssl, 'key', { enumerable: false });
-    // ...and connection.js copies the rest, then reads the key explicitly.
-    const options: SslObject = Object.assign({}, ssl);
-    options.key = ssl.key;
-    return options;
-  }
+  type ClientCtor = new (config: pg.PoolConfig) => pg.Client;
+  /** The pool constructs one client per physical connection from config.Client. */
+  const newPoolClient = (config: pg.PoolConfig): pg.Client =>
+    new (config.Client as unknown as ClientCtor)(config);
+  const pems = (config: pg.PoolConfig) => {
+    const ssl = config.ssl as { ca?: string; cert?: string; key?: string };
+    return { ca: ssl.ca, cert: ssl.cert, key: ssl.key };
+  };
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-certrotation-test-'));
     caPath = writeTempPem(tempDir, 'ca.pem', CA);
     certPath = writeTempPem(tempDir, 'client.crt', CERT);
     keyPath = writeTempPem(tempDir, 'client.key', KEY);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Stop at the point where pg would open a socket; the PEM reload happens before it.
+    vi.spyOn(pg.Client.prototype, 'connect').mockImplementation(function (
+      this: pg.Client,
+      callback?: (err: Error) => void
+    ) {
+      if (callback) {
+        callback(undefined as unknown as Error);
+        return;
+      }
+      return Promise.resolve();
+    } as typeof pg.Client.prototype.connect);
   });
 
   afterEach(() => {
@@ -266,83 +274,65 @@ describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslk
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('serves rotated PEM files to new connections without re-parsing the DSN', async () => {
+  it('installs a custom pool Client only when PEM files are configured', async () => {
+    const withPems = await parser.parse(dsn());
+    expect(withPems.Client).toBeDefined();
+    const withoutPems = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=require');
+    expect(withoutPems.Client).toBeUndefined();
+  });
+
+  it('re-reads rotated PEM files when a new connection is opened', async () => {
     const config = await parser.parse(dsn());
-    const ssl = config.ssl as SslObject;
-    expect(tlsOptionsLikePg(ssl)).toEqual({
-      rejectUnauthorized: true,
-      ca: CA,
-      cert: CERT,
-      key: KEY,
-    });
+    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
 
     fs.writeFileSync(caPath, NEW_CA);
     fs.writeFileSync(certPath, NEW_CERT);
     fs.writeFileSync(keyPath, NEW_KEY);
 
-    expect(tlsOptionsLikePg(ssl)).toEqual({
-      rejectUnauthorized: true,
-      ca: NEW_CA,
-      cert: NEW_CERT,
-      key: NEW_KEY,
-    });
-    expect(console.error).not.toHaveBeenCalled();
+    await newPoolClient(config).connect();
+    // pg marks ssl.key non-enumerable when a Client is constructed, so
+    // compare the fields explicitly rather than with toEqual.
+    expect(pems(config)).toEqual({ ca: NEW_CA, cert: NEW_CERT, key: NEW_KEY });
+    expect(pg.Client.prototype.connect).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the last good contents when a PEM file disappears mid-rotation', async () => {
+  it('fails the new connection, naming the file, when a PEM file cannot be read', async () => {
     const config = await parser.parse(dsn());
-    const ssl = config.ssl as SslObject;
+    fs.rmSync(keyPath);
 
+    const err = await newPoolClient(config).connect().catch((e: unknown) => e as Error);
+    expect((err as Error).name).toBe('FailedToReadCertificate');
+    expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+  });
+
+  it('reports the failure through the callback form of connect as well', async () => {
+    const config = await parser.parse(dsn());
     fs.rmSync(certPath);
-    fs.rmSync(keyPath);
 
-    expect(tlsOptionsLikePg(ssl)).toEqual({
-      rejectUnauthorized: true,
-      ca: CA,
-      cert: CERT,
-      key: KEY,
-    });
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining(`Failed to re-read SSL client certificate at '${certPath}'`)
-    );
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining(`Failed to re-read SSL client key at '${keyPath}'`)
-    );
-
-    // The same problem is reported once, not on every connection.
-    tlsOptionsLikePg(ssl);
-    tlsOptionsLikePg(ssl);
-    expect(console.error).toHaveBeenCalledTimes(2);
-
-    // Once the files are back, re-reading resumes.
-    writeTempPem(tempDir, 'client.crt', NEW_CERT);
-    writeTempPem(tempDir, 'client.key', NEW_KEY);
-    expect(ssl.cert).toBe(NEW_CERT);
-    expect(ssl.key).toBe(NEW_KEY);
+    const err = await new Promise<Error>((resolve) => newPoolClient(config).connect(resolve));
+    expect(err.message).toContain(`Failed to read SSL client certificate at '${certPath}'`);
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
   });
 
-  it('keeps the previous key when a rotated key is encrypted', async () => {
+  it('never publishes a half-rotated cert/key pair', async () => {
     const config = await parser.parse(dsn());
-    const ssl = config.ssl as SslObject;
-
-    fs.writeFileSync(keyPath, ENCRYPTED_KEY);
     fs.writeFileSync(certPath, NEW_CERT);
+    fs.rmSync(keyPath);
 
-    expect(ssl.key).toBe(KEY);
-    expect(ssl.cert).toBe(NEW_CERT);
-    expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('encrypted private keys are not supported')
-    );
+    await expect(newPoolClient(config).connect()).rejects.toThrow('Failed to read SSL client key');
+    // The pair in the pool config is still the one that was read together.
+    expect(pems(config)).toEqual({ ca: CA, cert: CERT, key: KEY });
   });
 
-  it('still rejects a missing or encrypted key up front at parse time', async () => {
+  it('rejects a rotated key that is encrypted', async () => {
+    const config = await parser.parse(dsn());
     fs.writeFileSync(keyPath, ENCRYPTED_KEY);
-    await expect(parser.parse(dsn())).rejects.toThrow('encrypted private keys are not supported');
 
-    fs.rmSync(keyPath);
-    await expect(parser.parse(dsn())).rejects.toThrow(
-      `Failed to read SSL client key at '${keyPath}'`
+    await expect(newPoolClient(config).connect()).rejects.toThrow(
+      'encrypted private keys are not supported'
     );
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
   });
 });
 
