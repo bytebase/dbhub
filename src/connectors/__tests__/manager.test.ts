@@ -390,6 +390,31 @@ describe("ConnectorManager IAM refresh recovery", () => {
     expect(instances).toHaveLength(2);
   });
 
+  it("should close the SSH tunnel when no connector accepts the DSN after the tunnel is up", async () => {
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockResolvedValue({ localPort: 55555, targetHost: "db.internal", targetPort: 5432 });
+    const closeSpy = vi.spyOn(SSHTunnel.prototype, "close").mockResolvedValue(undefined);
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(null);
+
+    const manager = new ConnectorManager();
+    const source: SourceConfig = {
+      id: "pg_ssh",
+      type: "postgres",
+      dsn: "postgres://user:pass@db.internal:5432/mydb",
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_password: "secret",
+    };
+
+    await expect(manager.addSource(source)).rejects.toThrow("No connector found");
+    expect(establishSpy).toHaveBeenCalledTimes(1);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    expect((manager as any).sshTunnels.size).toBe(0);
+    expect(manager.getSourceIds()).toEqual([]);
+  });
+
   it("should not list a source as available when it can neither serve nor reconnect", () => {
     const manager = new ConnectorManager();
     (manager as any).sourceIds = ["alive", "dead"];
@@ -508,5 +533,203 @@ describe("PostgreSQL IAM authentication on demand", () => {
     finishLogin("token");
     await retry;
     expect(manager.getConnector(source.id)).toBeDefined();
+  });
+});
+
+describe("ConnectorManager per-source add/remove", () => {
+  function stubConnectorRegistry() {
+    const instances: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> }> = [];
+    const prototype = {
+      id: "postgres",
+      clone: () => {
+        const instance = {
+          id: "postgres",
+          connect: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn().mockResolvedValue(undefined),
+        };
+        instances.push(instance);
+        return instance;
+      },
+    };
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(prototype as any);
+    return instances;
+  }
+
+  const srcA: SourceConfig = { id: "a", type: "postgres", dsn: "postgres://u:p@h/a" };
+  const srcB: SourceConfig = { id: "b", type: "postgres", dsn: "postgres://u:p@h/b" };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("adds an eager source without touching the existing one", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await manager.addSource(srcB);
+
+    expect(instances).toHaveLength(2);
+    expect(instances[0].disconnect).not.toHaveBeenCalled();
+    expect(manager.getConnector("a")).toBe(instances[0]);
+    expect(manager.getConnector("b")).toBe(instances[1]);
+    expect(manager.getSourceIds()).toEqual(["a", "b"]);
+    expect(manager.getAllSourceConfigs()).toEqual([srcA, srcB]);
+  });
+
+  it("registers a lazy source and connects it on first use", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await manager.addSource({ ...srcB, lazy: true });
+    expect(instances).toHaveLength(1);
+    expect(manager.getSourceIds()).toEqual(["a", "b"]);
+
+    await manager.ensureConnected("b");
+    expect(instances).toHaveLength(2);
+    expect(manager.getConnector("b")).toBe(instances[1]);
+  });
+
+  it("rejects a duplicate source id", async () => {
+    stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await expect(manager.addSource(srcA)).rejects.toThrow("already exists");
+  });
+
+  it("removes one source and leaves the other connected", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA, srcB]);
+
+    await manager.removeSource("a");
+
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(instances[1].disconnect).not.toHaveBeenCalled();
+    expect(manager.getSourceIds()).toEqual(["b"]);
+    expect(manager.getConnector()).toBe(instances[1]);
+    expect(() => manager.getConnector("a")).toThrow("Source 'a' not found");
+  });
+
+  it("removing an unknown source is a no-op", async () => {
+    stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA]);
+
+    await expect(manager.removeSource("nope")).resolves.toBeUndefined();
+    expect(manager.getSourceIds()).toEqual(["a"]);
+  });
+
+  it("reorders sources so the requested first id becomes the default", async () => {
+    const instances = stubConnectorRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([srcA, srcB]);
+
+    manager.reorderSources(["b", "unknown", "a"]);
+
+    expect(manager.getSourceIds()).toEqual(["b", "a"]);
+    expect(manager.getConnector()).toBe(instances[1]);
+  });
+});
+
+describe("ConnectorManager IAM refresh racing with removeSource", () => {
+  const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000;
+
+  function makeIamSource(dsn = "mysql://dbuser:ignored@mydb.abc123.eu-west-1.rds.amazonaws.com:3306/mydb"): SourceConfig {
+    return { id: "mysql_iam", type: "mysql", dsn, aws_iam_auth: true, aws_region: "eu-west-1" };
+  }
+
+  /** Connector stubs; the first one's disconnect() blocks until the test releases it. */
+  function stubSlowDisconnectRegistry() {
+    const instances: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn>; release: () => void }> = [];
+    const prototype = {
+      id: "mysql",
+      clone: () => {
+        let release: () => void = () => {};
+        const disconnect = instances.length === 0
+          ? vi.fn().mockImplementation(() => new Promise<void>(resolve => { release = resolve; }))
+          : vi.fn().mockResolvedValue(undefined);
+        const instance = {
+          id: "mysql",
+          connect: vi.fn().mockResolvedValue(undefined),
+          disconnect,
+          release: () => release(),
+        };
+        instances.push(instance);
+        return instance;
+      },
+    };
+    vi.spyOn(ConnectorRegistry, "getConnectorForDSN").mockReturnValue(prototype as any);
+    return instances;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    mocks.generateRdsAuthToken.mockResolvedValue("token");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("does not resurrect a source removed while its IAM refresh was in flight", async () => {
+    const instances = stubSlowDisconnectRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+
+    // Refresh fires and blocks inside the old connector's disconnect().
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+
+    // Config reload drops the source while the refresh is parked.
+    const removal = manager.removeSource("mysql_iam");
+    instances[0].release();
+    await removal;
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The refresh finished its reconnect, and removal then tore that connector down too.
+    expect(instances).toHaveLength(2);
+    expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getSourceIds()).toEqual([]);
+    expect(() => manager.getConnector("mysql_iam")).toThrow();
+
+    // And no refresh timer was re-armed for the dead source.
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances).toHaveLength(2);
+  });
+
+  it("does not clobber a same-id replacement added while the old refresh was in flight", async () => {
+    const instances = stubSlowDisconnectRegistry();
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+
+    const replacement = makeIamSource("mysql://dbuser:ignored@other.abc123.eu-west-1.rds.amazonaws.com:3306/mydb");
+    const swap = (async () => {
+      await manager.removeSource("mysql_iam");
+      await manager.addSource(replacement);
+    })();
+    instances[0].release();
+    await swap;
+    await vi.advanceTimersByTimeAsync(0);
+
+    // instances[1] is the refresh's reconnect of the old config, torn down by removeSource;
+    // instances[2] is the replacement and is what the manager serves.
+    expect(instances).toHaveLength(3);
+    expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[2]);
+    expect(manager.getSourceConfig("mysql_iam")).toBe(replacement);
+    expect(instances[2].connect.mock.calls[0][0]).toContain("other.abc123");
+
+    // The next refresh tick belongs to the replacement, not the removed config.
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances).toHaveLength(4);
+    expect(instances[3].connect.mock.calls[0][0]).toContain("other.abc123");
   });
 });

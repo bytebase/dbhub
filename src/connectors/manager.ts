@@ -25,6 +25,7 @@ export class ConnectorManager {
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
   private iamRefreshTimers: Map<string, NodeJS.Timeout> = new Map();
+  private pendingIamRefreshes: Map<string, Promise<void>> = new Map(); // In-flight refresh per source
   private isDisconnecting = false;
 
   // Lazy connection support
@@ -244,59 +245,62 @@ export class ConnectorManager {
       );
     }
 
-    // Find connector prototype for this DSN
-    const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
-    if (!connectorPrototype) {
-      throw new Error(
-        `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
-      );
-    }
-
-    // Create a new instance of the connector (clone) to avoid sharing state between sources
-    // All connectors support cloning for multi-source configurations
-    const connector = connectorPrototype.clone();
-
-    // Attach source ID to connector instance for tool handlers
-    (connector as any).sourceId = sourceId;
-
-    // Build config for database-specific options
-    if (source.connection_timeout !== undefined) {
-      config.connectionTimeoutSeconds = source.connection_timeout;
-    }
-    // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
-    if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
-      config.queryTimeoutSeconds = source.query_timeout;
-    }
-    if (source.pool_max_connections !== undefined) {
-      config.poolMaxConnections = source.pool_max_connections;
-    }
-    // Note: read-only enforcement is per-tool, not per-source. It is applied at
-    // execution time via ExecuteOptions.readonly. Some connectors also add an
-    // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),
-    // because a single source connection may be shared by both read-only and
-    // writable tools. ConnectorConfig.readonly (connection-level) remains supported
-    // for direct connector use but is intentionally not wired from source config.
-    // Pass search_path for PostgreSQL
-    if (source.search_path) {
-      config.searchPath = source.search_path;
-    }
-    // Pass timezone for MySQL/MariaDB
-    if (source.timezone) {
-      config.timezone = source.timezone;
-    }
-    // Pass charset / collation for MySQL/MariaDB (either, or both together)
-    if (source.charset) {
-      config.charset = source.charset;
-    }
-    if (source.collation) {
-      config.collation = source.collation;
-    }
-
-    // Connect to the database with config and optional init script. If this fails,
-    // close the tunnel established for this attempt: the source may be retried (lazy
-    // connection or a failed IAM refresh), and each retry would otherwise open a new
-    // tunnel and orphan this one's SSH clients and local listener.
+    // Everything from here until the connector is stored can fail (no connector for
+    // the DSN, connect rejected). If it does, close the tunnel established for this
+    // attempt: the source may be retried (lazy connection, failed IAM refresh, next
+    // config reload), and each retry would otherwise open a new tunnel and orphan this
+    // one's SSH clients and local listener.
+    let connector: Connector;
     try {
+      // Find connector prototype for this DSN
+      const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
+      if (!connectorPrototype) {
+        throw new Error(
+          `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
+        );
+      }
+
+      // Create a new instance of the connector (clone) to avoid sharing state between sources
+      // All connectors support cloning for multi-source configurations
+      connector = connectorPrototype.clone();
+
+      // Attach source ID to connector instance for tool handlers
+      (connector as any).sourceId = sourceId;
+
+      // Build config for database-specific options
+      if (source.connection_timeout !== undefined) {
+        config.connectionTimeoutSeconds = source.connection_timeout;
+      }
+      // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
+      if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
+        config.queryTimeoutSeconds = source.query_timeout;
+      }
+      if (source.pool_max_connections !== undefined) {
+        config.poolMaxConnections = source.pool_max_connections;
+      }
+      // Note: read-only enforcement is per-tool, not per-source. It is applied at
+      // execution time via ExecuteOptions.readonly. Some connectors also add an
+      // engine-level backstop in executeSQL (e.g. READ ONLY transactions or SQLite PRAGMA query_only),
+      // because a single source connection may be shared by both read-only and
+      // writable tools. ConnectorConfig.readonly (connection-level) remains supported
+      // for direct connector use but is intentionally not wired from source config.
+      // Pass search_path for PostgreSQL
+      if (source.search_path) {
+        config.searchPath = source.search_path;
+      }
+      // Pass timezone for MySQL/MariaDB
+      if (source.timezone) {
+        config.timezone = source.timezone;
+      }
+      // Pass charset / collation for MySQL/MariaDB (either, or both together)
+      if (source.charset) {
+        config.charset = source.charset;
+      }
+      if (source.collation) {
+        config.collation = source.collation;
+      }
+
+      // Connect to the database with config and optional init script
       await connector.connect(actualDSN, source.init_script, config);
     } catch (error) {
       if (tunnel) {
@@ -323,6 +327,84 @@ export class ConnectorManager {
 
     // MySQL/MariaDB still rotate pools; PostgreSQL authenticates on demand.
     this.scheduleIamRefresh(source);
+  }
+
+  /**
+   * Add a single source without touching the others. Eager sources connect now;
+   * lazy ones are registered and connect on first use. Used by the TOML hot reload
+   * to apply only the entries that changed.
+   */
+  async addSource(source: SourceConfig): Promise<void> {
+    if (this.sourceIds.includes(source.id)) {
+      throw new Error(`Source '${source.id}' already exists`);
+    }
+    if (source.lazy) {
+      this.registerLazySource(source);
+    } else {
+      await this.connectSource(source);
+    }
+  }
+
+  /**
+   * Disconnect and forget a single source, leaving every other source's pool and
+   * tunnel untouched. Resolves silently for an unknown id.
+   */
+  async removeSource(sourceId: string): Promise<void> {
+    // Let an in-flight lazy connection or IAM refresh settle first, so the connector
+    // and tunnel we tear down are the ones that end up registered, not a stale pair
+    // that an outstanding reconnect would otherwise put back after we return.
+    const pending = this.pendingConnections.get(sourceId);
+    if (pending) {
+      try { await pending; } catch { /* the failure already cleaned up after itself */ }
+    }
+    const refresh = this.pendingIamRefreshes.get(sourceId);
+    if (refresh) {
+      await refresh; // never rejects
+    }
+
+    const timer = this.iamRefreshTimers.get(sourceId);
+    if (timer) {
+      clearTimeout(timer);
+      this.iamRefreshTimers.delete(sourceId);
+    }
+
+    const connector = this.connectors.get(sourceId);
+    this.connectors.delete(sourceId);
+    if (connector) {
+      try {
+        await connector.disconnect();
+        console.error(`Disconnected from source '${sourceId}'`);
+      } catch (error) {
+        console.error(`Error disconnecting from source '${sourceId}':`, error);
+      }
+    }
+
+    const tunnel = this.sshTunnels.get(sourceId);
+    this.sshTunnels.delete(sourceId);
+    if (tunnel) {
+      try {
+        await tunnel.close();
+      } catch (error) {
+        console.error(`Error closing SSH tunnel for source '${sourceId}':`, error);
+      }
+    }
+
+    this.sourceConfigs.delete(sourceId);
+    this.lazySources.delete(sourceId);
+    this.pendingConnections.delete(sourceId);
+    this.sourceIds = this.sourceIds.filter(id => id !== sourceId);
+  }
+
+  /**
+   * Reorder known sources to match `orderedIds` (the first entry is the default
+   * source). Unknown ids are ignored; known ids missing from the list keep their
+   * relative order after the listed ones.
+   */
+  reorderSources(orderedIds: string[]): void {
+    const known = new Set(this.sourceIds);
+    const ordered = orderedIds.filter(id => known.has(id));
+    const listed = new Set(ordered);
+    this.sourceIds = [...ordered, ...this.sourceIds.filter(id => !listed.has(id))];
   }
 
   /**
@@ -363,6 +445,7 @@ export class ConnectorManager {
     this.sourceConfigs.clear();
     this.lazySources.clear();
     this.pendingConnections.clear();
+    this.pendingIamRefreshes.clear();
     this.sourceIds = [];
     this.isDisconnecting = false;
   }
@@ -504,25 +587,31 @@ export class ConnectorManager {
       return;
     }
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       if (this.isDisconnecting) {
         return;
       }
-      try {
-        await this.refreshIamSourceConnection(source);
-      } catch (error) {
-        console.error(
-          `Error refreshing AWS IAM auth token for source '${sourceId}':`,
-          error
-        );
-      } finally {
-        // Continue rotating only while the source is still connected and not shutting
-        // down. A source whose refresh failed has been handed back to lazySources, and
-        // its next successful connectSource() re-arms the timer.
-        if (!this.isDisconnecting && this.connectors.has(sourceId)) {
-          this.scheduleIamRefresh(source);
+      const run = (async () => {
+        try {
+          await this.refreshIamSourceConnection(source);
+        } catch (error) {
+          console.error(
+            `Error refreshing AWS IAM auth token for source '${sourceId}':`,
+            error
+          );
+        } finally {
+          this.pendingIamRefreshes.delete(sourceId);
+          // Continue rotating only while this exact source is still registered and
+          // connected, and we are not shutting down. A source whose refresh failed has
+          // been handed back to lazySources, and its next successful connectSource()
+          // re-arms the timer. A source removed or replaced mid-refresh must not re-arm.
+          if (!this.isDisconnecting && this.ownsSource(source) && this.connectors.has(sourceId)) {
+            this.scheduleIamRefresh(source);
+          }
         }
-      }
+      })();
+      // Exposed so removeSource() can wait for the refresh instead of racing it.
+      this.pendingIamRefreshes.set(sourceId, run);
     }, AWS_IAM_TOKEN_REFRESH_MS);
     timer.unref?.();
     this.iamRefreshTimers.set(sourceId, timer);
@@ -548,7 +637,10 @@ export class ConnectorManager {
       this.sshTunnels.delete(sourceId);
     }
 
-    if (this.isDisconnecting) {
+    // removeSource() may have run while we were awaiting above (e.g. a config reload
+    // dropped or replaced this source). Reconnecting now would resurrect it, or clobber
+    // its replacement, so stop here.
+    if (this.isDisconnecting || !this.ownsSource(source)) {
       return;
     }
 
@@ -558,11 +650,20 @@ export class ConnectorManager {
       // The old connector is already gone. Register the source for lazy reconnection so
       // the next tool call retries (e.g. after the user re-authenticates) instead of
       // failing forever with "Source not found".
-      if (!this.isDisconnecting && this.sourceConfigs.has(sourceId)) {
+      if (!this.isDisconnecting && this.ownsSource(source)) {
         this.lazySources.set(sourceId, source);
       }
       throw error;
     }
+  }
+
+  /**
+   * True while `source` is the config object registered under its id. Every
+   * registration path stores the same object, so identity tells an in-flight
+   * operation whether its source was removed or replaced underneath it.
+   */
+  private ownsSource(source: SourceConfig): boolean {
+    return this.sourceConfigs.get(source.id) === source;
   }
 
   /**

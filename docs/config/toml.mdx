@@ -32,8 +32,8 @@ When using TOML configuration, DBHub automatically watches `dbhub.toml` for chan
 
 1. DBHub detects file changes and waits 500ms (debounce) to handle editors that write in multiple steps
 2. The new configuration is parsed and validated — if invalid, existing connections are preserved
-3. All database connections are disconnected and reconnected with the new configuration
-4. If reconnection fails, DBHub automatically rolls back to the previous working configuration
+3. The new source list is compared with the running one, and only what changed is applied: new `[[sources]]` entries are connected, removed ones are disconnected, and edited ones are reconnected. Sources that did not change keep serving queries throughout
+4. If a changed source fails to connect, that source alone is rolled back to its previous configuration; a new source that fails to connect is skipped. The other sources are unaffected
 
 ```
 # Edit dbhub.toml while DBHub is running — changes apply automatically
