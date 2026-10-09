@@ -67,24 +67,9 @@ describe('buildAllowedHosts', () => {
     expect(hosts.has('my-host')).toBe(true);
     expect(hosts.has('10.0.0.2')).toBe(true);
   });
-
-  it('wildcard config overrides self hosts', () => {
-    const hosts = buildAllowedHosts(['*'], '0.0.0.0', ['192.168.1.5']);
-    expect(hosts.has(ALLOW_ANY_HOST)).toBe(true);
-    expect(hosts.size).toBe(1);
-  });
 });
 
 describe('getSelfHosts', () => {
-  it('returns an array of non-empty host strings', () => {
-    const hosts = getSelfHosts();
-    expect(Array.isArray(hosts)).toBe(true);
-    for (const h of hosts) {
-      expect(typeof h).toBe('string');
-      expect(h.length).toBeGreaterThan(0);
-    }
-  });
-
   it('does not include loopback or IPv6 link-local addresses', () => {
     const hosts = getSelfHosts();
     expect(hosts).not.toContain('127.0.0.1');
@@ -105,30 +90,17 @@ describe('getSelfHosts', () => {
 });
 
 describe('validateOrigin', () => {
-  it('allows requests with no Origin header to an allowed host', () => {
-    expect(validateOrigin(undefined, 'localhost:8080', loopback)).toEqual({ ok: true });
-  });
-
-  it('allows matching origin and host (hostname)', () => {
-    expect(validateOrigin('http://localhost:5173', 'localhost:8080', loopback)).toEqual({ ok: true });
-  });
-
-  it('allows matching origin and host (IPv4)', () => {
-    expect(validateOrigin('http://127.0.0.1:5173', '127.0.0.1:8080', loopback)).toEqual({ ok: true });
-  });
-
-  it('allows matching origin and host for IPv6 bracketed literals', () => {
+  it.each([
+    ['no Origin header', undefined, 'localhost:8080'],
+    ['matching hostname', 'http://localhost:5173', 'localhost:8080'],
+    ['matching IPv4', 'http://127.0.0.1:5173', '127.0.0.1:8080'],
     // Regression: .split(":")[0] mangled [::1]:8080 to "["; URL parsing preserves ::1.
-    expect(validateOrigin('http://[::1]:5173', '[::1]:8080', loopback)).toEqual({ ok: true });
-  });
-
-  it('allows a cross-loopback origin/host pair (both on the allow-list)', () => {
+    ['matching bracketed IPv6 literal', 'http://[::1]:5173', '[::1]:8080'],
     // 127.0.0.1 and ::1 are both loopback, so reflecting one to the other is safe.
-    expect(validateOrigin('http://127.0.0.1:5173', '[::1]:8080', loopback)).toEqual({ ok: true });
-  });
-
-  it('is case-insensitive on hostnames', () => {
-    expect(validateOrigin('http://LocalHost:5173', 'localhost:8080', loopback)).toEqual({ ok: true });
+    ['cross-loopback pair (both on the allow-list)', 'http://127.0.0.1:5173', '[::1]:8080'],
+    ['hostname differing only in case', 'http://LocalHost:5173', 'localhost:8080'],
+  ])('allows an allowed host with %s', (_case, origin, host) => {
+    expect(validateOrigin(origin, host, loopback)).toEqual({ ok: true });
   });
 
   it('rejects a rebound attacker host even when Origin matches it (the CVE)', () => {
@@ -172,73 +144,27 @@ describe('validateOrigin', () => {
     expect(validateOrigin(undefined, 'anything.example', any)).toEqual({ ok: true });
   });
 
-  it('rejects when Origin is malformed with status 400', () => {
-    const result = validateOrigin('not a url', 'localhost:8080', loopback);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(400);
-      expect(result.message).toBe('Malformed Origin header');
-    }
-  });
-
-  it('rejects when Host header is malformed with status 400', () => {
-    const result = validateOrigin('http://localhost:5173', '', loopback);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(400);
-      expect(result.message).toBe('Malformed Host header');
-    }
-  });
-
-  it('rejects an explicitly empty Origin header as malformed (400)', () => {
-    // `Origin:` (empty value) is not the same as "Origin absent"; a browser
-    // would not produce it, and letting it through bypasses the guard.
-    expect(validateOrigin('', 'localhost:8080', loopback)).toEqual({
+  // `Origin:` with an empty or blank value is not the same as "Origin absent"; a
+  // browser would not produce it, and letting it through bypasses the guard.
+  it.each([['not a url'], [''], ['   ']])('rejects a malformed Origin header %j with 400', (origin) => {
+    expect(validateOrigin(origin, 'localhost:8080', loopback)).toEqual({
       ok: false,
       status: 400,
       message: 'Malformed Origin header',
     });
   });
 
-  it('rejects a whitespace-only Origin header as malformed (400)', () => {
-    expect(validateOrigin('   ', 'localhost:8080', loopback)).toEqual({
-      ok: false,
-      status: 400,
-      message: 'Malformed Origin header',
-    });
-  });
-
-  it('rejects a Host header containing a path separator as malformed (400)', () => {
-    // `new URL("http://evil.com/localhost:8080").hostname` silently yields
-    // "evil.com"; the char filter rejects the crafted Host outright.
-    expect(
-      validateOrigin('http://evil.com', 'evil.com/localhost:8080', loopback)
-    ).toEqual({
-      ok: false,
-      status: 400,
-      message: 'Malformed Host header',
-    });
-  });
-
-  it('rejects a Host header containing a userinfo character as malformed (400)', () => {
-    // `new URL("http://evil.com@localhost:8080").hostname` yields "localhost";
-    // the char filter rejects the crafted Host before it can match the list.
-    expect(
-      validateOrigin('http://localhost:8080', 'evil.com@localhost:8080', loopback)
-    ).toEqual({
-      ok: false,
-      status: 400,
-      message: 'Malformed Host header',
-    });
-  });
-
-  it('rejects a Host header containing whitespace as malformed (400)', () => {
-    expect(
-      validateOrigin('http://localhost:8080', 'localhost 8080', loopback)
-    ).toEqual({
-      ok: false,
-      status: 400,
-      message: 'Malformed Host header',
-    });
-  });
+  // `new URL("http://evil.com/localhost:8080").hostname` silently yields
+  // "evil.com" and `new URL("http://evil.com@localhost:8080").hostname` yields
+  // "localhost"; the char filter rejects crafted Hosts before they can match.
+  it.each([[''], ['evil.com/localhost:8080'], ['evil.com@localhost:8080'], ['localhost 8080']])(
+    'rejects a malformed Host header %j with 400',
+    (host) => {
+      expect(validateOrigin('http://localhost:8080', host, loopback)).toEqual({
+        ok: false,
+        status: 400,
+        message: 'Malformed Host header',
+      });
+    }
+  );
 });

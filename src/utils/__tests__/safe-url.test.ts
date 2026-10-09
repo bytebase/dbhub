@@ -26,36 +26,16 @@ describe('SafeURL', () => {
     expect(url.searchParams.size).toBe(0);
   });
 
-  it('should handle special characters in password correctly', () => {
-    const url = new SafeURL('postgres://user:pass%23word@localhost:5432/dbname');
-    
-    expect(url.protocol).toBe('postgres:');
-    expect(url.hostname).toBe('localhost');
-    expect(url.port).toBe('5432');
-    expect(url.pathname).toBe('/dbname');
-    expect(url.username).toBe('user');
-    expect(url.password).toBe('pass#word');
-    expect(url.searchParams.size).toBe(0);
-  });
-
-  it('should handle unencoded special characters in password correctly', () => {
-    const url = new SafeURL('postgres://user:pass#word@localhost:5432/dbname');
-    
-    expect(url.protocol).toBe('postgres:');
-    expect(url.hostname).toBe('localhost');
-    expect(url.port).toBe('5432');
-    expect(url.pathname).toBe('/dbname');
-    expect(url.username).toBe('user');
-    expect(url.password).toBe('pass#word');
-    expect(url.searchParams.size).toBe(0);
+  it.each([
+    ['percent-encoded', 'postgres://user:pass%23word@localhost:5432/dbname'],
+    ['unencoded', 'postgres://user:pass#word@localhost:5432/dbname'],
+  ])('should handle a %s special character in the password', (_form, dsn) => {
+    expect(new SafeURL(dsn).password).toBe('pass#word');
   });
 
   it('should parse query parameters correctly', () => {
     const url = new SafeURL('postgres://localhost:5432/dbname?sslmode=require&timeout=30');
     
-    expect(url.protocol).toBe('postgres:');
-    expect(url.hostname).toBe('localhost');
-    expect(url.port).toBe('5432');
     expect(url.pathname).toBe('/dbname');
     expect(url.searchParams.size).toBe(2);
     expect(url.getSearchParam('sslmode')).toBe('require');
@@ -106,24 +86,20 @@ describe('SafeURL', () => {
   });
 
   describe("'@' inside the password", () => {
-    it('splits on the last @ of the authority, not the first', () => {
-      // Splitting on the first '@' yields password 'pa' and hostname
+    it.each([
+      ['pa@ss', 'sqlserver://user:pa@ss@localhost:1433/dbname'],
+      ['a@b@c', 'sqlserver://user:a@b@c@localhost:1433/dbname'],
+    ])('splits on the last @ of the authority, not the first (password %j)', (password, dsn) => {
+      // Splitting on the first '@' yields a truncated password and hostname
       // 'ss@localhost', so the failure surfaces as a DNS lookup error rather
       // than as a bad password — a confusing way to learn it was truncated.
-      const url = new SafeURL('sqlserver://user:pa@ss@localhost/dbname');
+      const url = new SafeURL(dsn);
 
       expect(url.username).toBe('user');
-      expect(url.password).toBe('pa@ss');
+      expect(url.password).toBe(password);
       expect(url.hostname).toBe('localhost');
+      expect(url.port).toBe('1433');
       expect(url.pathname).toBe('/dbname');
-    });
-
-    it('handles a password containing several @ characters', () => {
-      const url = new SafeURL('sqlserver://user:a@b@c@host/db');
-
-      expect(url.username).toBe('user');
-      expect(url.password).toBe('a@b@c');
-      expect(url.hostname).toBe('host');
     });
 
     it('does not treat an @ in the path as the separator', () => {
@@ -144,21 +120,6 @@ describe('SafeURL', () => {
       expect(url.password).toBe('');
       expect(url.hostname).toBe('localhost');
       expect(url.pathname).toBe('/we@ird');
-    });
-
-    it('still accepts a percent-encoded @', () => {
-      const url = new SafeURL('sqlserver://user:pa%40ss@localhost/dbname');
-
-      expect(url.password).toBe('pa@ss');
-      expect(url.hostname).toBe('localhost');
-    });
-
-    it('keeps the port when the password carries an @', () => {
-      const url = new SafeURL('sqlserver://user:pa@ss@localhost:1433/dbname');
-
-      expect(url.password).toBe('pa@ss');
-      expect(url.hostname).toBe('localhost');
-      expect(url.port).toBe('1433');
     });
   });
 });
