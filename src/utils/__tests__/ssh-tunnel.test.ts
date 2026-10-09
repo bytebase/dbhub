@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi, type MockInstance } from 'vitest';
 import { generateKeyPairSync } from 'crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
@@ -53,6 +53,23 @@ vi.mock('ssh2', async () => {
   return { Client: MockClient, default: { Client: MockClient, utils } };
 });
 
+const options = {
+  targetHost: 'database.local',
+  targetPort: 5432,
+};
+
+/**
+ * Run establish() against the mocked ssh2 client, which always fails at connect,
+ * and return the config handed to ssh2 — i.e. the auth that survived resolution.
+ */
+async function connectWith(config: SSHTunnelConfig): Promise<Record<string, unknown>> {
+  await expect(new SSHTunnel().establish(config, options)).rejects.toThrow(
+    'SSH connection error: mock connect failure'
+  );
+  expect(connectCalls).toHaveLength(1);
+  return connectCalls[0];
+}
+
 describe('SSHTunnel', () => {
   beforeEach(() => {
     connectCalls.length = 0;
@@ -64,50 +81,15 @@ describe('SSHTunnel', () => {
     vi.unstubAllEnvs();
   });
 
-  describe('Initial State', () => {
-    it('should have initial state as disconnected', () => {
-      const tunnel = new SSHTunnel();
-      expect(tunnel.getIsConnected()).toBe(false);
-      expect(tunnel.getTunnelInfo()).toBeNull();
-    });
-  });
-
   describe('Tunnel State Management', () => {
-    it('should prevent establishing multiple tunnels', async () => {
-      const tunnel = new SSHTunnel();
-
-      // Set tunnel as connected (simulating a connected state)
-      (tunnel as any).isConnected = true;
-
-      const config: SSHTunnelConfig = {
-        host: 'ssh.example.com',
-        username: 'testuser',
-        password: 'testpass',
-      };
-
-      const options = {
-        targetHost: 'database.local',
-        targetPort: 5432,
-      };
-
-      await expect(tunnel.establish(config, options)).rejects.toThrow(
-        'SSH tunnel is already established'
-      );
-    });
+    const config: SSHTunnelConfig = {
+      host: 'ssh.example.com',
+      username: 'testuser',
+      password: 'testpass',
+    };
 
     it('should reject concurrent establish calls', async () => {
       const tunnel = new SSHTunnel();
-
-      const config: SSHTunnelConfig = {
-        host: 'ssh.example.com',
-        username: 'testuser',
-        password: 'testpass',
-      };
-
-      const options = {
-        targetHost: 'database.local',
-        targetPort: 5432,
-      };
 
       // Start first establish call (fails via the mocked client's error, but
       // only after the second call below has already been rejected)
@@ -120,28 +102,21 @@ describe('SSHTunnel', () => {
       await promise1;
     });
 
-    it('should reset connection state after failed establish', async () => {
+    it('should start disconnected and reset connection state after failed establish', async () => {
       const tunnel = new SSHTunnel();
+      expect(tunnel.getIsConnected()).toBe(false);
+      expect(tunnel.getTunnelInfo()).toBeNull();
 
-      const config: SSHTunnelConfig = {
-        host: 'ssh.example.com',
-        username: 'testuser',
-        // Missing both password and privateKey - will fail validation
-      };
-
-      const options = {
-        targetHost: 'database.local',
-        targetPort: 5432,
-      };
-
-      // First establish should fail
-      await expect(tunnel.establish(config, options)).rejects.toThrow();
+      // Missing both password and privateKey - will fail validation
+      const noAuth: SSHTunnelConfig = { host: 'ssh.example.com', username: 'testuser' };
+      await expect(tunnel.establish(noAuth, options)).rejects.toThrow();
 
       // After failure, isConnected should be false
       expect(tunnel.getIsConnected()).toBe(false);
+      expect(tunnel.getTunnelInfo()).toBeNull();
 
       // Should be able to try establishing again (even though it will fail again)
-      await expect(tunnel.establish(config, options)).rejects.toThrow();
+      await expect(tunnel.establish(noAuth, options)).rejects.toThrow();
     });
 
     it('should handle close when not connected', async () => {
@@ -154,50 +129,28 @@ describe('SSHTunnel', () => {
 
   describe('Private Key Resolution', () => {
     it('should accept base64-encoded private key', async () => {
-      const tunnel = new SSHTunnel();
       // A minimal PEM private key structure, base64-encoded
       const fakeKey = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBg==\n-----END PRIVATE KEY-----\n';
       const base64Key = Buffer.from(fakeKey).toString('base64');
 
-      const config: SSHTunnelConfig = {
-        host: 'ssh.example.com',
-        username: 'testuser',
-        privateKey: base64Key,
-      };
-
-      const options = {
-        targetHost: 'database.local',
-        targetPort: 5432,
-      };
-
       // The base64 key passes local validation, so establish() proceeds to the
       // (mocked) SSH connection and fails there — not at key resolution.
-      await expect(tunnel.establish(config, options)).rejects.toThrow(
-        'SSH connection error: mock connect failure'
-      );
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', privateKey: base64Key });
 
       // The key handed to ssh2 must be the decoded PEM, proving the base64
       // content was recognized and decoded rather than treated as a file path.
-      expect(connectCalls).toHaveLength(1);
-      expect(Buffer.isBuffer(connectCalls[0].privateKey)).toBe(true);
-      expect((connectCalls[0].privateKey as Buffer).toString('utf8')).toBe(fakeKey);
+      expect(Buffer.isBuffer(call.privateKey)).toBe(true);
+      expect((call.privateKey as Buffer).toString('utf8')).toBe(fakeKey);
     });
 
     it('should reject invalid private key that is neither file nor base64', async () => {
-      const tunnel = new SSHTunnel();
-
       const config: SSHTunnelConfig = {
         host: 'ssh.example.com',
         username: 'testuser',
         privateKey: 'not-a-file-and-not-base64-key',
       };
 
-      const options = {
-        targetHost: 'database.local',
-        targetPort: 5432,
-      };
-
-      await expect(tunnel.establish(config, options)).rejects.toThrow(
+      await expect(new SSHTunnel().establish(config, options)).rejects.toThrow(
         'SSH key is neither a valid file path nor a base64-encoded private key'
       );
 
@@ -207,11 +160,6 @@ describe('SSHTunnel', () => {
   });
 
   describe('SSH Agent', () => {
-    const options = {
-      targetHost: 'database.local',
-      targetPort: 5432,
-    };
-
     // The tunnel only checks that the socket path exists, so plain files stand in
     // for agent sockets.
     const sockDir = mkdtempSync(join(tmpdir(), 'dbhub-ssh-agent-'));
@@ -221,15 +169,23 @@ describe('SSHTunnel', () => {
     writeFileSync(ambientSock, '');
     writeFileSync(configuredSock, '');
 
+    let warnSpy: MockInstance;
+
+    beforeEach(() => {
+      warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     afterAll(() => {
       rmSync(sockDir, { recursive: true, force: true });
     });
 
     it('should reject when no password, key, or agent is available', async () => {
-      const tunnel = new SSHTunnel();
-
       await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser' }, options)
+        new SSHTunnel().establish({ host: 'ssh.example.com', username: 'testuser' }, options)
       ).rejects.toThrow(
         'Either password, privateKey, or an SSH agent (agent or SSH_AUTH_SOCK) must be provided for SSH authentication'
       );
@@ -239,57 +195,34 @@ describe('SSHTunnel', () => {
 
     it('should authenticate with the agent alone when SSH_AUTH_SOCK is set', async () => {
       vi.stubEnv('SSH_AUTH_SOCK', ambientSock);
-      const tunnel = new SSHTunnel();
 
-      await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser' }, options)
-      ).rejects.toThrow('SSH connection error: mock connect failure');
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser' });
 
-      expect(connectCalls).toHaveLength(1);
-      expect(connectCalls[0].agent).toBe(ambientSock);
-      expect(connectCalls[0].password).toBeUndefined();
-      expect(connectCalls[0].privateKey).toBeUndefined();
+      expect(call.agent).toBe(ambientSock);
+      expect(call.password).toBeUndefined();
+      expect(call.privateKey).toBeUndefined();
     });
 
     it('should offer the agent alongside an explicit password', async () => {
       vi.stubEnv('SSH_AUTH_SOCK', ambientSock);
-      const tunnel = new SSHTunnel();
 
-      await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser', password: 'secret' }, options)
-      ).rejects.toThrow('SSH connection error: mock connect failure');
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', password: 'secret' });
 
-      expect(connectCalls[0]).toMatchObject({ password: 'secret', agent: ambientSock });
-    });
-
-    it('should authenticate with a configured agent when SSH_AUTH_SOCK is unset', async () => {
-      const tunnel = new SSHTunnel();
-
-      await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser', agent: configuredSock }, options)
-      ).rejects.toThrow('SSH connection error: mock connect failure');
-
-      expect(connectCalls).toHaveLength(1);
-      expect(connectCalls[0].agent).toBe(configuredSock);
+      expect(call).toMatchObject({ password: 'secret', agent: ambientSock });
     });
 
     it('should prefer a configured agent over SSH_AUTH_SOCK', async () => {
       vi.stubEnv('SSH_AUTH_SOCK', ambientSock);
-      const tunnel = new SSHTunnel();
 
-      await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser', agent: configuredSock }, options)
-      ).rejects.toThrow('SSH connection error: mock connect failure');
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', agent: configuredSock });
 
-      expect(connectCalls[0].agent).toBe(configuredSock);
+      expect(call.agent).toBe(configuredSock);
     });
 
     // Windows agents are named pipes, so socket paths are not checked there
     it.skipIf(process.platform === 'win32')('should reject a configured agent socket that does not exist', async () => {
-      const tunnel = new SSHTunnel();
-
       await expect(
-        tunnel.establish(
+        new SSHTunnel().establish(
           { host: 'ssh.example.com', username: 'testuser', password: 'secret', agent: missingSock },
           options
         )
@@ -301,30 +234,21 @@ describe('SSHTunnel', () => {
     // Windows agents are named pipes, so socket paths are not checked there
     it.skipIf(process.platform === 'win32')('should ignore a stale SSH_AUTH_SOCK', async () => {
       vi.stubEnv('SSH_AUTH_SOCK', missingSock);
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      try {
-        // With another auth method the connection proceeds without the agent...
-        await expect(
-          new SSHTunnel().establish({ host: 'ssh.example.com', username: 'testuser', password: 'secret' }, options)
-        ).rejects.toThrow('SSH connection error: mock connect failure');
-        expect(connectCalls[0].agent).toBeUndefined();
-        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Ignoring SSH_AUTH_SOCK'));
+      // With another auth method the connection proceeds without the agent...
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', password: 'secret' });
+      expect(call.agent).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Ignoring SSH_AUTH_SOCK'));
 
-        // ...and on its own it does not count as an auth method.
-        await expect(
-          new SSHTunnel().establish({ host: 'ssh.example.com', username: 'testuser' }, options)
-        ).rejects.toThrow('must be provided for SSH authentication');
-      } finally {
-        warnSpy.mockRestore();
-      }
+      // ...and on its own it does not count as an auth method.
+      await expect(
+        new SSHTunnel().establish({ host: 'ssh.example.com', username: 'testuser' }, options)
+      ).rejects.toThrow('must be provided for SSH authentication');
     });
 
     it('should offer the configured agent to jump hosts', async () => {
-      const tunnel = new SSHTunnel();
-
       await expect(
-        tunnel.establish(
+        new SSHTunnel().establish(
           { host: 'ssh.example.com', username: 'testuser', agent: configuredSock, proxyJump: 'jump.example.com' },
           options
         )
@@ -341,80 +265,38 @@ describe('SSHTunnel', () => {
       });
       const base64Key = Buffer.from(encryptedKey).toString('base64');
 
-      it('should skip an undecryptable key from ~/.ssh/config and use the agent', async () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const tunnel = new SSHTunnel();
+      it.each([
+        ['the agent', { agent: configuredSock }],
+        ['the password', { password: 'secret' }],
+      ])('should skip an undecryptable key from ~/.ssh/config and use %s', async (_method, fallback) => {
+        const call = await connectWith({
+          host: 'ssh.example.com',
+          username: 'testuser',
+          privateKey: base64Key,
+          privateKeyDiscovered: true,
+          ...fallback,
+        });
 
-        try {
-          await expect(
-            tunnel.establish(
-              {
-                host: 'ssh.example.com',
-                username: 'testuser',
-                privateKey: base64Key,
-                privateKeyDiscovered: true,
-                agent: configuredSock,
-              },
-              options
-            )
-          ).rejects.toThrow('SSH connection error: mock connect failure');
-
-          expect(connectCalls).toHaveLength(1);
-          expect(connectCalls[0].privateKey).toBeUndefined();
-          expect(connectCalls[0].agent).toBe(configuredSock);
-          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping unusable SSH private key'));
-        } finally {
-          warnSpy.mockRestore();
-        }
-      });
-
-      it('should skip an undecryptable key from ~/.ssh/config and use the password', async () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const tunnel = new SSHTunnel();
-
-        try {
-          await expect(
-            tunnel.establish(
-              {
-                host: 'ssh.example.com',
-                username: 'testuser',
-                privateKey: base64Key,
-                privateKeyDiscovered: true,
-                password: 'secret',
-              },
-              options
-            )
-          ).rejects.toThrow('SSH connection error: mock connect failure');
-
-          expect(connectCalls[0].privateKey).toBeUndefined();
-          expect(connectCalls[0].password).toBe('secret');
-        } finally {
-          warnSpy.mockRestore();
-        }
+        expect(call.privateKey).toBeUndefined();
+        expect(call).toMatchObject(fallback);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping unusable SSH private key'));
       });
 
       it('should skip an undecryptable jump host key', async () => {
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const tunnel = new SSHTunnel();
+        await expect(
+          new SSHTunnel().establish(
+            {
+              host: 'ssh.example.com',
+              username: 'testuser',
+              agent: configuredSock,
+              resolvedJumpHosts: [{ host: 'jump.example.com', port: 22, privateKey: base64Key }],
+            },
+            options
+          )
+        ).rejects.toThrow('mock connect failure');
 
-        try {
-          await expect(
-            tunnel.establish(
-              {
-                host: 'ssh.example.com',
-                username: 'testuser',
-                agent: configuredSock,
-                resolvedJumpHosts: [{ host: 'jump.example.com', port: 22, privateKey: base64Key }],
-              },
-              options
-            )
-          ).rejects.toThrow('mock connect failure');
-
-          expect(connectCalls[0]).toMatchObject({ host: 'jump.example.com', agent: configuredSock });
-          expect(connectCalls[0].privateKey).toBeUndefined();
-        } finally {
-          warnSpy.mockRestore();
-        }
+        expect(connectCalls[0]).toMatchObject({ host: 'jump.example.com', agent: configuredSock });
+        expect(connectCalls[0].privateKey).toBeUndefined();
       });
 
       it('should skip a public key from ~/.ssh/config and use the agent', async () => {
@@ -433,88 +315,49 @@ describe('SSHTunnel', () => {
         ]);
         const publicKeyPath = join(sockDir, 'id_ed25519.pub');
         writeFileSync(publicKeyPath, sshPublicKey);
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        const tunnel = new SSHTunnel();
 
-        try {
-          await expect(
-            tunnel.establish(
-              {
-                host: 'ssh.example.com',
-                username: 'testuser',
-                privateKey: publicKeyPath,
-                privateKeyDiscovered: true,
-                agent: configuredSock,
-              },
-              options
-            )
-          ).rejects.toThrow('SSH connection error: mock connect failure');
+        const call = await connectWith({
+          host: 'ssh.example.com',
+          username: 'testuser',
+          privateKey: publicKeyPath,
+          privateKeyDiscovered: true,
+          agent: configuredSock,
+        });
 
-          expect(connectCalls[0].privateKey).toBeUndefined();
-          expect(connectCalls[0].agent).toBe(configuredSock);
-          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not a private key'));
-        } finally {
-          warnSpy.mockRestore();
-        }
+        expect(call.privateKey).toBeUndefined();
+        expect(call.agent).toBe(configuredSock);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not a private key'));
       });
 
-      it('should not skip an explicitly configured key', async () => {
-        const tunnel = new SSHTunnel();
+      // Handed to ssh2 as-is, which rejects the connection with a parse error.
+      it.each([
+        ['an explicitly configured key', { privateKey: base64Key, agent: configuredSock }],
+        ['a key from ~/.ssh/config that is the only method', { privateKey: base64Key, privateKeyDiscovered: true }],
+      ])('should still hand %s to ssh2', async (_desc, auth) => {
+        const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', ...auth });
 
-        await expect(
-          tunnel.establish(
-            { host: 'ssh.example.com', username: 'testuser', privateKey: base64Key, agent: configuredSock },
-            options
-          )
-        ).rejects.toThrow('SSH connection error: mock connect failure');
-
-        // Handed to ssh2 as-is, which rejects the connection with a parse error.
-        expect(Buffer.isBuffer(connectCalls[0].privateKey)).toBe(true);
+        expect(Buffer.isBuffer(call.privateKey)).toBe(true);
       });
 
       it('should keep a key from ~/.ssh/config that the passphrase decrypts', async () => {
-        const tunnel = new SSHTunnel();
+        const call = await connectWith({
+          host: 'ssh.example.com',
+          username: 'testuser',
+          privateKey: base64Key,
+          privateKeyDiscovered: true,
+          passphrase: 'secret',
+          agent: configuredSock,
+        });
 
-        await expect(
-          tunnel.establish(
-            {
-              host: 'ssh.example.com',
-              username: 'testuser',
-              privateKey: base64Key,
-              privateKeyDiscovered: true,
-              passphrase: 'secret',
-              agent: configuredSock,
-            },
-            options
-          )
-        ).rejects.toThrow('SSH connection error: mock connect failure');
-
-        expect(Buffer.isBuffer(connectCalls[0].privateKey)).toBe(true);
-        expect(connectCalls[0]).toMatchObject({ passphrase: 'secret', agent: configuredSock });
-      });
-
-      it('should still hand a key from ~/.ssh/config to ssh2 when it is the only method', async () => {
-        const tunnel = new SSHTunnel();
-
-        await expect(
-          tunnel.establish(
-            { host: 'ssh.example.com', username: 'testuser', privateKey: base64Key, privateKeyDiscovered: true },
-            options
-          )
-        ).rejects.toThrow('SSH connection error: mock connect failure');
-
-        expect(Buffer.isBuffer(connectCalls[0].privateKey)).toBe(true);
+        expect(Buffer.isBuffer(call.privateKey)).toBe(true);
+        expect(call).toMatchObject({ passphrase: 'secret', agent: configuredSock });
       });
     });
 
     it('should not set agent when SSH_AUTH_SOCK is unset', async () => {
-      const tunnel = new SSHTunnel();
+      const call = await connectWith({ host: 'ssh.example.com', username: 'testuser', password: 'secret' });
 
-      await expect(
-        tunnel.establish({ host: 'ssh.example.com', username: 'testuser', password: 'secret' }, options)
-      ).rejects.toThrow('SSH connection error: mock connect failure');
-
-      expect(connectCalls[0].agent).toBeUndefined();
+      expect(call.agent).toBeUndefined();
     });
   });
 });

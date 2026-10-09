@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { ConnectorManager } from "../manager.js";
 import { ConnectorRegistry, type Connector, type ConnectorConfig } from "../interface.js";
 import { SSHTunnel } from "../../utils/ssh-tunnel.js";
@@ -23,18 +23,36 @@ vi.mock("../../utils/ssh-config-parser.js", () => ({
   getDefaultSSHConfigPath: mocks.getDefaultSSHConfigPath,
 }));
 
+/** A postgres source behind an SSH host; override to vary the SSH fields. */
+function sshSource(overrides: Partial<SourceConfig> = {}): SourceConfig {
+  return {
+    id: "test",
+    type: "postgres",
+    dsn: "postgres://user:pass@db.internal:5432/mydb",
+    ssh_host: "mybastion",
+    ...overrides,
+  };
+}
+
 describe("ConnectorManager SSH config resolution", () => {
+  // Stop at tunnel establishment and capture the merged SSH config handed to it.
+  let establishSpy: MockInstance;
+
   beforeEach(() => {
     vi.clearAllMocks();
     // An agent socket exported in the developer's shell would satisfy SSH auth
     vi.stubEnv("SSH_AUTH_SOCK", "");
+    establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockRejectedValue(new Error("stop after config resolution"));
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  it("should resolve SSH config from ~/.ssh/config for alias hosts", async () => {
+  it("should resolve an alias from ~/.ssh/config and let explicit TOML fields override its values", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(true);
     mocks.parseSSHConfig.mockReturnValue({
       host: "bastion.example.com",
@@ -44,104 +62,65 @@ describe("ConnectorManager SSH config resolution", () => {
     });
 
     const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
-    };
-
-    // connectSource is private; connectWithSources calls it.
-    // It will fail when trying to establish the actual SSH tunnel,
-    // but only after the config resolution succeeds.
-    await expect(manager.connectWithSources([source])).rejects.toThrow();
-
-    expect(mocks.looksLikeSSHAlias).toHaveBeenCalledWith("mybastion");
-    expect(mocks.parseSSHConfig).toHaveBeenCalledWith("mybastion", expect.stringContaining(".ssh/config"));
-  });
-
-  it("should let explicit TOML fields override SSH config values", async () => {
-    mocks.looksLikeSSHAlias.mockReturnValue(true);
-    mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      port: 2222,
-      username: "ubuntu",
-      privateKey: "/home/user/.ssh/id_rsa",
-    });
-
-    const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
+    const source = sshSource({
       ssh_user: "override-user",
       ssh_port: 3333,
       ssh_key: "/custom/key",
-    };
+    });
 
-    // Capture the merged SSH config at tunnel establishment
-    const establishSpy = vi.spyOn(SSHTunnel.prototype, "establish");
-    try {
-      establishSpy.mockRejectedValue(new Error("SSH connection failed (expected in test)"));
+    await expect(manager.connectWithSources([source])).rejects.toThrow("stop after config resolution");
 
-      await expect(manager.connectWithSources([source])).rejects.toThrow();
+    expect(mocks.looksLikeSSHAlias).toHaveBeenCalledWith("mybastion");
+    expect(mocks.parseSSHConfig).toHaveBeenCalledWith("mybastion", expect.stringContaining(".ssh/config"));
 
-      // Verify parseSSHConfig was still called (alias was resolved)
-      expect(mocks.parseSSHConfig).toHaveBeenCalled();
-
-      // Explicit TOML fields win over the resolved SSH config values;
-      // the host still comes from the resolved alias.
-      expect(establishSpy).toHaveBeenCalledTimes(1);
-      const [sshConfig] = establishSpy.mock.calls[0];
-      expect(sshConfig).toMatchObject({
-        host: "bastion.example.com",
-        username: "override-user",
-        port: 3333,
-        privateKey: "/custom/key",
-      });
-    } finally {
-      establishSpy.mockRestore();
-    }
+    // Explicit TOML fields win over the resolved SSH config values;
+    // the host still comes from the resolved alias.
+    expect(establishSpy).toHaveBeenCalledTimes(1);
+    expect(establishSpy.mock.calls[0][0]).toMatchObject({
+      host: "bastion.example.com",
+      username: "override-user",
+      port: 3333,
+      privateKey: "/custom/key",
+    });
   });
 
   it("should throw when SSH alias not found and no ssh_user provided", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(true);
     mocks.parseSSHConfig.mockReturnValue(null);
 
-    const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "unknown-alias",
-    };
-
-    await expect(manager.connectWithSources([source])).rejects.toThrow(
+    await expect(
+      new ConnectorManager().connectWithSources([sshSource({ ssh_host: "unknown-alias" })])
+    ).rejects.toThrow(
       "SSH tunnel requires ssh_user (or a matching Host entry in ~/.ssh/config with User)"
     );
   });
 
-  it("should throw when no auth method available after SSH config resolution", async () => {
-    mocks.looksLikeSSHAlias.mockReturnValue(true);
-    mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      username: "ubuntu",
-      // No privateKey, no password
-    });
+  it.each([
+    ["rejects", "", false],
+    ["accepts", "/tmp/agent.sock", true],
+  ])(
+    "%s an alias with no key or password when SSH_AUTH_SOCK is %j",
+    async (_verb, authSock, reachesTunnel) => {
+      vi.stubEnv("SSH_AUTH_SOCK", authSock);
+      mocks.looksLikeSSHAlias.mockReturnValue(true);
+      mocks.parseSSHConfig.mockReturnValue({
+        host: "bastion.example.com",
+        username: "ubuntu",
+        // No privateKey, no password
+      });
 
-    const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
-      ssh_host: "mybastion",
-    };
-
-    await expect(manager.connectWithSources([source])).rejects.toThrow(
-      "SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile, or an SSH agent via ssh_agent or SSH_AUTH_SOCK)"
-    );
-  });
+      const attempt = new ConnectorManager().connectWithSources([sshSource()]);
+      if (reachesTunnel) {
+        await expect(attempt).rejects.toThrow("stop after config resolution");
+        expect(establishSpy).toHaveBeenCalledTimes(1);
+      } else {
+        await expect(attempt).rejects.toThrow(
+          "SSH tunnel requires either ssh_password or ssh_key (or a matching Host entry in ~/.ssh/config with IdentityFile, or an SSH agent via ssh_agent or SSH_AUTH_SOCK)"
+        );
+        expect(establishSpy).not.toHaveBeenCalled();
+      }
+    }
+  );
 
   it("should mark a key resolved from ~/.ssh/config as discovered, but not an explicit ssh_key", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(true);
@@ -152,104 +131,44 @@ describe("ConnectorManager SSH config resolution", () => {
       privateKeyDiscovered: true,
     });
 
-    const establishSpy = vi
-      .spyOn(SSHTunnel.prototype, "establish")
-      .mockRejectedValue(new Error("stop after config resolution"));
+    await expect(new ConnectorManager().connectWithSources([sshSource()])).rejects.toThrow();
+    expect(establishSpy.mock.calls[0][0]).toMatchObject({
+      privateKey: "/home/user/.ssh/id_rsa",
+      privateKeyDiscovered: true,
+    });
 
-    try {
-      const source: SourceConfig = {
-        id: "test",
-        type: "postgres",
-        dsn: "postgres://user:pass@db.internal:5432/mydb",
-        ssh_host: "mybastion",
-      };
-
-      await expect(new ConnectorManager().connectWithSources([source])).rejects.toThrow();
-      expect(establishSpy.mock.calls[0][0]).toMatchObject({
-        privateKey: "/home/user/.ssh/id_rsa",
-        privateKeyDiscovered: true,
-      });
-
-      await expect(
-        new ConnectorManager().connectWithSources([{ ...source, ssh_key: "/custom/key" }])
-      ).rejects.toThrow();
-      expect(establishSpy.mock.calls[1][0]).toMatchObject({ privateKey: "/custom/key" });
-      expect(establishSpy.mock.calls[1][0].privateKeyDiscovered).toBeFalsy();
-    } finally {
-      establishSpy.mockRestore();
-    }
+    await expect(
+      new ConnectorManager().connectWithSources([sshSource({ ssh_key: "/custom/key" })])
+    ).rejects.toThrow();
+    expect(establishSpy.mock.calls[1][0]).toMatchObject({ privateKey: "/custom/key" });
+    expect(establishSpy.mock.calls[1][0].privateKeyDiscovered).toBeFalsy();
   });
 
   it("should pass ssh_agent to the tunnel as the only auth method", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(false);
 
-    const establishSpy = vi
-      .spyOn(SSHTunnel.prototype, "establish")
-      .mockRejectedValue(new Error("stop after config resolution"));
-
-    try {
-      const manager = new ConnectorManager();
-      const source: SourceConfig = {
-        id: "test",
-        type: "postgres",
-        dsn: "postgres://user:pass@db.internal:5432/mydb",
-        ssh_host: "bastion.example.com",
-        ssh_user: "ubuntu",
-        ssh_agent: "/tmp/configured.sock",
-      };
-
-      await expect(manager.connectWithSources([source])).rejects.toThrow("stop after config resolution");
-      expect(establishSpy).toHaveBeenCalledTimes(1);
-      expect(establishSpy.mock.calls[0][0]).toMatchObject({ agent: "/tmp/configured.sock" });
-    } finally {
-      establishSpy.mockRestore();
-    }
-  });
-
-  it("should accept an SSH agent as the only auth method", async () => {
-    vi.stubEnv("SSH_AUTH_SOCK", "/tmp/agent.sock");
-    mocks.looksLikeSSHAlias.mockReturnValue(true);
-    mocks.parseSSHConfig.mockReturnValue({
-      host: "bastion.example.com",
-      username: "ubuntu",
-      // No privateKey, no password
+    const source = sshSource({
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_agent: "/tmp/configured.sock",
     });
 
-    const establishSpy = vi
-      .spyOn(SSHTunnel.prototype, "establish")
-      .mockRejectedValue(new Error("stop after config resolution"));
-
-    try {
-      const manager = new ConnectorManager();
-      const source: SourceConfig = {
-        id: "test",
-        type: "postgres",
-        dsn: "postgres://user:pass@db.internal:5432/mydb",
-        ssh_host: "mybastion",
-      };
-
-      await expect(manager.connectWithSources([source])).rejects.toThrow("stop after config resolution");
-      expect(establishSpy).toHaveBeenCalledTimes(1);
-    } finally {
-      establishSpy.mockRestore();
-    }
+    await expect(new ConnectorManager().connectWithSources([source])).rejects.toThrow("stop after config resolution");
+    expect(establishSpy).toHaveBeenCalledTimes(1);
+    expect(establishSpy.mock.calls[0][0]).toMatchObject({ agent: "/tmp/configured.sock" });
   });
 
   it("should skip SSH config resolution for direct hostnames", async () => {
     mocks.looksLikeSSHAlias.mockReturnValue(false);
 
-    const manager = new ConnectorManager();
-    const source: SourceConfig = {
-      id: "test",
-      type: "postgres",
-      dsn: "postgres://user:pass@db.internal:5432/mydb",
+    const source = sshSource({
       ssh_host: "bastion.example.com",
       ssh_user: "myuser",
       ssh_key: "/home/user/.ssh/id_rsa",
-    };
+    });
 
     // Will fail at tunnel establishment, not at config resolution
-    await expect(manager.connectWithSources([source])).rejects.toThrow();
+    await expect(new ConnectorManager().connectWithSources([source])).rejects.toThrow();
 
     expect(mocks.looksLikeSSHAlias).toHaveBeenCalledWith("bastion.example.com");
     expect(mocks.parseSSHConfig).not.toHaveBeenCalled();

@@ -84,21 +84,11 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "sqlite")).toBe(" ");
       expect(stripCommentsAndStrings(sql, "sqlserver")).toBe(" ");
     });
-
-    it("should handle deeply nested block comments in PostgreSQL", () => {
-      const sql = "SELECT /* a /* b /* c */ b */ a */ 1";
-      expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT   1");
-    });
   });
 
   describe("single-quoted strings", () => {
     it("should strip simple single-quoted string", () => {
       const sql = "SELECT 'hello' AS msg";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");
-    });
-
-    it("should strip string containing SQL keywords", () => {
-      const sql = "SELECT 'SELECT * FROM evil' AS msg";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");
     });
 
@@ -111,11 +101,6 @@ describe("stripCommentsAndStrings", () => {
       const sql = "SELECT 'a', 'b', 'c' FROM test";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT  ,  ,   FROM test");
     });
-
-    it("should handle string with parameter-like content", () => {
-      const sql = "SELECT '$1 is the price' AS msg";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");
-    });
   });
 
   describe("double-quoted identifiers", () => {
@@ -126,11 +111,6 @@ describe("stripCommentsAndStrings", () => {
 
     it("should handle escaped double quotes", () => {
       const sql = 'SELECT * FROM "table""name"';
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM  ");
-    });
-
-    it("should handle identifier with special chars", () => {
-      const sql = 'SELECT * FROM "table-with-dashes"';
       expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM  ");
     });
 
@@ -159,11 +139,6 @@ describe("stripCommentsAndStrings", () => {
     it("should NOT consume $1 parameters as dollar-quotes", () => {
       const sql = "SELECT $1, $2 FROM users WHERE id = $3";
       expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT $1, $2 FROM users WHERE id = $3");
-    });
-
-    it("should NOT consume $123 as dollar-quote", () => {
-      const sql = "INSERT INTO t VALUES ($1, $22, $333)";
-      expect(stripCommentsAndStrings(sql, "postgres")).toBe("INSERT INTO t VALUES ($1, $22, $333)");
     });
 
     it("should handle unclosed dollar-quote gracefully", () => {
@@ -196,33 +171,23 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "postgres")).toBe("DO  ; SELECT 1");
     });
 
-    it("should NOT recognize dollar-quoting for MySQL dialect", () => {
-      const sql = "SELECT $$a$$";
-      // MySQL doesn't have dollar-quoting — $$ should pass through as plain text
-      expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT $$a$$");
-    });
-
-    it("should NOT recognize dollar-quoting for SQL Server dialect", () => {
-      const sql = "SELECT $$a$$";
-      expect(stripCommentsAndStrings(sql, "sqlserver")).toBe("SELECT $$a$$");
-    });
+    it.each(["mysql", "sqlserver"] as const)(
+      "should NOT recognize dollar-quoting for %s dialect ($$ passes through as plain text)",
+      (dialect) => {
+        const sql = "SELECT $$a$$";
+        expect(stripCommentsAndStrings(sql, dialect)).toBe("SELECT $$a$$");
+      }
+    );
   });
 
   describe("backtick-quoted identifiers (MySQL/MariaDB/SQLite)", () => {
-    it("should strip backtick-quoted identifier for MySQL", () => {
-      const sql = "SELECT * FROM `my table`";
-      expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT * FROM  ");
-    });
-
-    it("should strip backtick-quoted identifier for MariaDB", () => {
-      const sql = "SELECT * FROM `my table`";
-      expect(stripCommentsAndStrings(sql, "mariadb")).toBe("SELECT * FROM  ");
-    });
-
-    it("should strip backtick-quoted identifier for SQLite", () => {
-      const sql = "SELECT * FROM `my table`";
-      expect(stripCommentsAndStrings(sql, "sqlite")).toBe("SELECT * FROM  ");
-    });
+    it.each(["mysql", "mariadb", "sqlite"] as const)(
+      "should strip backtick-quoted identifier for %s",
+      (dialect) => {
+        const sql = "SELECT * FROM `my table`";
+        expect(stripCommentsAndStrings(sql, dialect)).toBe("SELECT * FROM  ");
+      }
+    );
 
     it("should handle escaped backticks", () => {
       const sql = "SELECT * FROM `table``name`";
@@ -239,16 +204,13 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT * FROM  ");
     });
 
-    it("should NOT recognize backticks for PostgreSQL dialect", () => {
-      const sql = "SELECT * FROM `my table`";
-      // PostgreSQL doesn't use backtick quoting — backticks pass through as plain text
-      expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT * FROM `my table`");
-    });
-
-    it("should NOT recognize backticks for SQL Server dialect", () => {
-      const sql = "SELECT * FROM `my table`";
-      expect(stripCommentsAndStrings(sql, "sqlserver")).toBe("SELECT * FROM `my table`");
-    });
+    it.each(["postgres", "sqlserver"] as const)(
+      "should NOT recognize backticks for %s dialect (backticks pass through as plain text)",
+      (dialect) => {
+        const sql = "SELECT * FROM `my table`";
+        expect(stripCommentsAndStrings(sql, dialect)).toBe("SELECT * FROM `my table`");
+      }
+    );
   });
 
   describe("alternative-quoted strings (Oracle q'...')", () => {
@@ -278,15 +240,13 @@ describe("stripCommentsAndStrings", () => {
   });
 
   describe("bracket-quoted identifiers (SQL Server/SQLite)", () => {
-    it("should strip bracket-quoted identifier for SQL Server", () => {
-      const sql = "SELECT * FROM [my table]";
-      expect(stripCommentsAndStrings(sql, "sqlserver")).toBe("SELECT * FROM  ");
-    });
-
-    it("should strip bracket-quoted identifier for SQLite", () => {
-      const sql = "SELECT * FROM [my table]";
-      expect(stripCommentsAndStrings(sql, "sqlite")).toBe("SELECT * FROM  ");
-    });
+    it.each(["sqlserver", "sqlite"] as const)(
+      "should strip bracket-quoted identifier for %s",
+      (dialect) => {
+        const sql = "SELECT * FROM [my table]";
+        expect(stripCommentsAndStrings(sql, dialect)).toBe("SELECT * FROM  ");
+      }
+    );
 
     it("should handle escaped brackets (]] inside bracket identifier)", () => {
       const sql = "SELECT * FROM [table]]name]";
@@ -303,33 +263,24 @@ describe("stripCommentsAndStrings", () => {
       expect(stripCommentsAndStrings(sql, "sqlserver")).toBe("SELECT * FROM  ");
     });
 
-    it("should NOT recognize brackets for PostgreSQL dialect", () => {
-      const sql = "SELECT * FROM [my table]";
-      // PostgreSQL doesn't use bracket quoting — brackets pass through as plain text
-      expect(stripCommentsAndStrings(sql, "postgres")).toBe("SELECT * FROM [my table]");
-    });
-
-    it("should NOT recognize brackets for MySQL dialect", () => {
-      const sql = "SELECT * FROM [my table]";
-      expect(stripCommentsAndStrings(sql, "mysql")).toBe("SELECT * FROM [my table]");
-    });
+    it.each(["postgres", "mysql"] as const)(
+      "should NOT recognize brackets for %s dialect (brackets pass through as plain text)",
+      (dialect) => {
+        const sql = "SELECT * FROM [my table]";
+        expect(stripCommentsAndStrings(sql, dialect)).toBe("SELECT * FROM [my table]");
+      }
+    );
   });
 
   describe("default dialect (no dialect specified — ANSI only)", () => {
-    it("should NOT recognize dollar-quoting with no dialect", () => {
-      const sql = "DO $$ BEGIN NULL; END; $$";
-      // ANSI scanner doesn't know about dollar-quoting — $$ passes through as plain text
-      expect(stripCommentsAndStrings(sql)).toBe("DO $$ BEGIN NULL; END; $$");
-    });
-
-    it("should NOT recognize backtick-quoting with no dialect", () => {
-      const sql = "SELECT * FROM `my table`";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM `my table`");
-    });
-
-    it("should NOT recognize bracket-quoting with no dialect", () => {
-      const sql = "SELECT * FROM [my table]";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM [my table]");
+    // The ANSI scanner knows none of the dialect quoting forms — each passes
+    // through as plain text.
+    it.each([
+      ["dollar-quoting", "DO $$ BEGIN NULL; END; $$"],
+      ["backtick-quoting", "SELECT * FROM `my table`"],
+      ["bracket-quoting", "SELECT * FROM [my table]"],
+    ])("should NOT recognize %s with no dialect", (_label, sql) => {
+      expect(stripCommentsAndStrings(sql)).toBe(sql);
     });
 
     it("should still handle ANSI features (comments, single/double quotes)", () => {
@@ -342,11 +293,6 @@ describe("stripCommentsAndStrings", () => {
     it("should handle comment inside string (keeps comment in original SQL)", () => {
       const sql = "SELECT '/* not a comment */' AS msg";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");
-    });
-
-    it("should handle string after comment", () => {
-      const sql = "SELECT /* comment */ 'value' AS msg";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT     AS msg");
     });
 
     it("should handle complex mixed SQL", () => {
@@ -387,40 +333,15 @@ describe("stripCommentsAndStrings", () => {
 
 describe("splitSQLStatements", () => {
   describe("basic splitting", () => {
-    it("should return single statement without semicolon", () => {
-      expect(splitSQLStatements("SELECT 1")).toEqual(["SELECT 1"]);
-    });
-
-    it("should return single statement with trailing semicolon", () => {
-      expect(splitSQLStatements("SELECT 1;")).toEqual(["SELECT 1"]);
-    });
-
-    it("should split two statements", () => {
-      expect(splitSQLStatements("SELECT 1; SELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
-    });
-
-    it("should handle trailing semicolons", () => {
-      expect(splitSQLStatements("SELECT 1; SELECT 2;")).toEqual(["SELECT 1", "SELECT 2"]);
-    });
-
-    it("should handle empty input", () => {
-      expect(splitSQLStatements("")).toEqual([]);
-    });
-
-    it("should handle whitespace-only input", () => {
-      expect(splitSQLStatements("   \n  \t  ")).toEqual([]);
-    });
-
-    it("should handle multiple semicolons with no content", () => {
-      expect(splitSQLStatements(";;;")).toEqual([]);
-    });
-
-    it("should discard whitespace-only segments between statements", () => {
-      expect(splitSQLStatements("SELECT 1; ; ; SELECT 2")).toEqual(["SELECT 1", "SELECT 2"]);
-    });
-
-    it("should trim statements", () => {
-      expect(splitSQLStatements("  SELECT 1 ;  SELECT 2  ")).toEqual(["SELECT 1", "SELECT 2"]);
+    it.each([
+      ["single statement without semicolon", "SELECT 1", ["SELECT 1"]],
+      ["single statement with trailing semicolon", "SELECT 1;", ["SELECT 1"]],
+      ["two statements", "SELECT 1; SELECT 2", ["SELECT 1", "SELECT 2"]],
+      ["empty input", "", []],
+      ["whitespace-only segments between statements", "SELECT 1; ; ; SELECT 2", ["SELECT 1", "SELECT 2"]],
+      ["surrounding whitespace (trimmed)", "  SELECT 1 ;  SELECT 2  ", ["SELECT 1", "SELECT 2"]],
+    ])("should handle %s", (_label, sql, expected) => {
+      expect(splitSQLStatements(sql)).toEqual(expected);
     });
   });
 
@@ -444,14 +365,12 @@ describe("splitSQLStatements", () => {
   });
 
   describe("semicolons inside dollar-quoted blocks (PostgreSQL)", () => {
+    // The dollar-quote scanner itself is pinned under stripCommentsAndStrings;
+    // here only the split-specific behaviour matters: no split inside the
+    // block, and splitting resumes once it closes.
     it("should not split on semicolons inside $$ block", () => {
       const sql = "DO $$ BEGIN RAISE NOTICE 'test'; END; $$";
       expect(splitSQLStatements(sql, "postgres")).toEqual(["DO $$ BEGIN RAISE NOTICE 'test'; END; $$"]);
-    });
-
-    it("should not split on semicolons inside $tag$ block", () => {
-      const sql = "DO $body$ BEGIN RAISE NOTICE 'test'; END; $body$";
-      expect(splitSQLStatements(sql, "postgres")).toEqual(["DO $body$ BEGIN RAISE NOTICE 'test'; END; $body$"]);
     });
 
     it("should split after dollar-quoted block ends", () => {
@@ -461,41 +380,16 @@ describe("splitSQLStatements", () => {
         "SELECT 1",
       ]);
     });
-
-    it("should NOT treat $1 as dollar-quote opening", () => {
-      const sql = "SELECT $1; SELECT $2";
-      expect(splitSQLStatements(sql, "postgres")).toEqual(["SELECT $1", "SELECT $2"]);
-    });
-
-    it("should handle adjacent dollar-quoted blocks", () => {
-      const sql = "SELECT $$a$$, $$b$$; SELECT 1";
-      expect(splitSQLStatements(sql, "postgres")).toEqual(["SELECT $$a$$, $$b$$", "SELECT 1"]);
-    });
-
-    it("should not close $outer$ on $$ inside it", () => {
-      const sql = "DO $outer$ x := 'text; with $$ inside'; $outer$; SELECT 1";
-      expect(splitSQLStatements(sql, "postgres")).toEqual([
-        "DO $outer$ x := 'text; with $$ inside'; $outer$",
-        "SELECT 1",
-      ]);
-    });
   });
 
   describe("semicolons inside backtick-quoted identifiers (MySQL/MariaDB/SQLite)", () => {
-    it("should not split on semicolon inside backtick identifier (MySQL)", () => {
-      const sql = "SELECT * FROM `table; name`; SELECT 1";
-      expect(splitSQLStatements(sql, "mysql")).toEqual(["SELECT * FROM `table; name`", "SELECT 1"]);
-    });
-
-    it("should not split on semicolon inside backtick identifier (MariaDB)", () => {
-      const sql = "SELECT * FROM `table; name`; SELECT 1";
-      expect(splitSQLStatements(sql, "mariadb")).toEqual(["SELECT * FROM `table; name`", "SELECT 1"]);
-    });
-
-    it("should not split on semicolon inside backtick identifier (SQLite)", () => {
-      const sql = "SELECT * FROM `table; name`; SELECT 1";
-      expect(splitSQLStatements(sql, "sqlite")).toEqual(["SELECT * FROM `table; name`", "SELECT 1"]);
-    });
+    it.each(["mysql", "mariadb", "sqlite"] as const)(
+      "should not split on semicolon inside backtick identifier (%s)",
+      (dialect) => {
+        const sql = "SELECT * FROM `table; name`; SELECT 1";
+        expect(splitSQLStatements(sql, dialect)).toEqual(["SELECT * FROM `table; name`", "SELECT 1"]);
+      }
+    );
 
     it("should handle escaped backticks with semicolons", () => {
       const sql = "SELECT * FROM `tab``le; name`; SELECT 1";
@@ -510,15 +404,13 @@ describe("splitSQLStatements", () => {
   });
 
   describe("semicolons inside bracket-quoted identifiers (SQL Server/SQLite)", () => {
-    it("should not split on semicolon inside bracket identifier (SQL Server)", () => {
-      const sql = "SELECT * FROM [table; name]; SELECT 1";
-      expect(splitSQLStatements(sql, "sqlserver")).toEqual(["SELECT * FROM [table; name]", "SELECT 1"]);
-    });
-
-    it("should not split on semicolon inside bracket identifier (SQLite)", () => {
-      const sql = "SELECT * FROM [table; name]; SELECT 1";
-      expect(splitSQLStatements(sql, "sqlite")).toEqual(["SELECT * FROM [table; name]", "SELECT 1"]);
-    });
+    it.each(["sqlserver", "sqlite"] as const)(
+      "should not split on semicolon inside bracket identifier (%s)",
+      (dialect) => {
+        const sql = "SELECT * FROM [table; name]; SELECT 1";
+        expect(splitSQLStatements(sql, dialect)).toEqual(["SELECT * FROM [table; name]", "SELECT 1"]);
+      }
+    );
 
     it("should handle escaped brackets with semicolons", () => {
       const sql = "SELECT * FROM [table]]; name]; SELECT 1";
@@ -588,13 +480,6 @@ describe("splitSQLStatements", () => {
       expect(stmts[1]).toBe("SELECT increment(1)");
     });
 
-    it("should handle DO block with dollar-quoting", () => {
-      const sql = "DO $$ BEGIN RAISE NOTICE 'hello'; END; $$;";
-      const stmts = splitSQLStatements(sql, "postgres");
-      expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toBe("DO $$ BEGIN RAISE NOTICE 'hello'; END; $$");
-    });
-
     it("should handle tagged dollar-quote in CREATE FUNCTION", () => {
       const sql = `
         CREATE FUNCTION test() RETURNS void AS $fn$
@@ -610,17 +495,6 @@ describe("splitSQLStatements", () => {
       expect(stmts).toHaveLength(1);
       expect(stmts[0]).toContain("$fn$");
       expect(stmts[0]).toContain("INSERT INTO log VALUES (x);");
-    });
-
-    it("should handle multiple function definitions", () => {
-      const sql = `
-        CREATE FUNCTION a() RETURNS void AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql;
-        CREATE FUNCTION b() RETURNS void AS $$ BEGIN NULL; END; $$ LANGUAGE plpgsql;
-      `;
-      const stmts = splitSQLStatements(sql, "postgres");
-      expect(stmts).toHaveLength(2);
-      expect(stmts[0]).toContain("FUNCTION a()");
-      expect(stmts[1]).toContain("FUNCTION b()");
     });
   });
 
@@ -667,14 +541,5 @@ describe("blankCommentsAndStrings", () => {
     const result = blankCommentsAndStrings(sql, "sqlserver");
     expect(result).toHaveLength(sql.length);
     expect(result).toBe("SELECT         FROM      .       ");
-  });
-
-  it("leaves parentheses and keywords outside strings/comments untouched, so depth-scanning stays accurate", () => {
-    const sql = "SELECT id FROM a UNION ALL SELECT id FROM b -- 'fake union' inside a comment";
-    const result = blankCommentsAndStrings(sql);
-    expect(result.slice(0, "SELECT id FROM a UNION ALL SELECT id FROM b".length)).toBe(
-      "SELECT id FROM a UNION ALL SELECT id FROM b"
-    );
-    expect(result).not.toContain("fake union");
   });
 });

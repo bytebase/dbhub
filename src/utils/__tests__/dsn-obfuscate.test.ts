@@ -10,82 +10,27 @@ import type { SSHTunnelConfig } from '../../types/ssh.js';
 
 describe('DSN Obfuscation Utilities', () => {
   describe('obfuscateDSNPassword', () => {
-    it('should obfuscate password in postgres DSN', () => {
-      const dsn = 'postgres://user:secretpass@localhost:5432/db';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://user:********@localhost:5432/db');
-    });
-
-    it('should handle DSN without password', () => {
-      const dsn = 'postgres://user@localhost:5432/db';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe(dsn);
-    });
-
-    it('should not obfuscate SQLite DSN', () => {
-      const dsn = 'sqlite:///path/to/database.db';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe(dsn);
-    });
-
-    it('should handle empty DSN', () => {
-      const result = obfuscateDSNPassword('');
-      expect(result).toBe('');
-    });
-
-    it('should preserve query parameters when obfuscating', () => {
-      const dsn = 'postgres://user:secretpass@localhost:5432/db?sslmode=require';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://user:********@localhost:5432/db?sslmode=require');
-    });
-
-    it('should preserve multiple query parameters when obfuscating', () => {
-      const dsn = 'postgres://user:pass@localhost:5432/db?sslmode=require&connect_timeout=10';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://user:****@localhost:5432/db?sslmode=require&connect_timeout=10');
-    });
-
-    it('should obfuscate DSN without database path', () => {
-      const dsn = 'postgres://user:pass@localhost:5432';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://user:****@localhost:5432');
-    });
-
-    it('should obfuscate DSN without username but with password', () => {
-      const dsn = 'postgres://:pass@localhost:5432/db';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://****@localhost:5432/db');
-    });
-
-    it('should obfuscate DSN without username and without database path', () => {
-      const dsn = 'postgres://:pass@localhost:5432';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://****@localhost:5432');
-    });
-
-    it('should obfuscate DSN without database path but with query parameters', () => {
-      const dsn = 'postgres://user:pass@localhost:5432?sslmode=require';
-      const result = obfuscateDSNPassword(dsn);
-      expect(result).toBe('postgres://user:****@localhost:5432?sslmode=require');
-    });
-
-    it('should obfuscate the whole password when it contains an @', () => {
-      // Splitting the authority on the first '@' masks only the part before it
-      // and leaves the rest in the string, so the tail of the password reaches
-      // whatever reads this line — DBHub prints it per source at startup.
-      const dsn = 'postgres://user:pa@ss@localhost:5432/db';
-      const result = obfuscateDSNPassword(dsn);
-
-      expect(result).toBe('postgres://user:*****@localhost:5432/db');
-      expect(result).not.toContain('ss@');
-    });
-
-    it('should obfuscate the whole password when it contains a #', () => {
-      const dsn = 'postgres://user:pa#ss@localhost:5432/db';
-      const result = obfuscateDSNPassword(dsn);
-
-      expect(result).toBe('postgres://user:*****@localhost:5432/db');
-      expect(result).not.toContain('pa#ss');
+    it.each([
+      ['postgres://user:secretpass@localhost:5432/db', 'postgres://user:********@localhost:5432/db'],
+      // Nothing to mask: no password, SQLite path, empty string
+      ['postgres://user@localhost:5432/db', 'postgres://user@localhost:5432/db'],
+      ['sqlite:///path/to/database.db', 'sqlite:///path/to/database.db'],
+      ['', ''],
+      // Query parameters and a missing database path are preserved
+      ['postgres://user:secretpass@localhost:5432/db?sslmode=require', 'postgres://user:********@localhost:5432/db?sslmode=require'],
+      ['postgres://user:pass@localhost:5432/db?sslmode=require&connect_timeout=10', 'postgres://user:****@localhost:5432/db?sslmode=require&connect_timeout=10'],
+      ['postgres://user:pass@localhost:5432', 'postgres://user:****@localhost:5432'],
+      ['postgres://user:pass@localhost:5432?sslmode=require', 'postgres://user:****@localhost:5432?sslmode=require'],
+      // Password without a username
+      ['postgres://:pass@localhost:5432/db', 'postgres://****@localhost:5432/db'],
+      ['postgres://:pass@localhost:5432', 'postgres://****@localhost:5432'],
+      // The whole password is masked when it contains '@' or '#': splitting the
+      // authority on the first '@' would leave the tail of the password in the
+      // string, which DBHub prints per source at startup.
+      ['postgres://user:pa@ss@localhost:5432/db', 'postgres://user:*****@localhost:5432/db'],
+      ['postgres://user:pa#ss@localhost:5432/db', 'postgres://user:*****@localhost:5432/db'],
+    ])('should obfuscate %s as %s', (dsn, expected) => {
+      expect(obfuscateDSNPassword(dsn)).toBe(expected);
     });
 
     it('should fail closed on a scheme-less DSN instead of echoing it', () => {
@@ -134,6 +79,11 @@ describe('DSN Obfuscation Utilities', () => {
       expect(result.host).toBe('bastion.example.com');
       expect(result.username).toBe('ubuntu');
     });
+
+    it('should keep the private key path as-is', () => {
+      const config: SSHTunnelConfig = { host: 'bastion.example.com', username: 'ubuntu', privateKey: '/home/user/.ssh/id_rsa' };
+      expect(obfuscateSSHConfig(config).privateKey).toBe('/home/user/.ssh/id_rsa');
+    });
   });
 
   describe('getDatabaseTypeFromDSN', () => {
@@ -166,6 +116,10 @@ describe('DSN Obfuscation Utilities', () => {
       ['mariadb://admin:pass123@maria.server:3306/production', { type: 'mariadb', host: 'maria.server', port: 3306, database: 'production', user: 'admin' }],
       ['sqlserver://sa:StrongPass@sqlserver.local:1433/master', { type: 'sqlserver', host: 'sqlserver.local', port: 1433, database: 'master', user: 'sa' }],
       ['oracle://app:secret@ora.local:1521/FREEPDB1', { type: 'oracle', host: 'ora.local', port: 1521, database: 'FREEPDB1', user: 'app' }],
+      // Edge cases: no port, query parameters, no user credentials
+      ['postgres://user:pass@localhost/db', { type: 'postgres', host: 'localhost', database: 'db', user: 'user' }],
+      ['postgres://user:pass@localhost:5432/db?sslmode=require', { type: 'postgres', host: 'localhost', port: 5432, database: 'db', user: 'user' }],
+      ['postgres://localhost:5432/db', { type: 'postgres', host: 'localhost', port: 5432, database: 'db' }],
     ])('should parse %s correctly', (dsn, expected) => {
       expect(parseConnectionInfoFromDSN(dsn)).toEqual(expected);
     });
@@ -179,25 +133,6 @@ describe('DSN Obfuscation Utilities', () => {
       ['sqlite:///C:/Users/test/database.db', 'C:/Users/test/database.db', 'Windows absolute'],
     ])('should parse sqlite DSN with %s path', (dsn, expectedDb) => {
       expect(parseConnectionInfoFromDSN(dsn)).toEqual({ type: 'sqlite', database: expectedDb });
-    });
-
-    // Test edge cases
-    it('should handle DSN without port', () => {
-      expect(parseConnectionInfoFromDSN('postgres://user:pass@localhost/db')).toEqual({
-        type: 'postgres', host: 'localhost', database: 'db', user: 'user',
-      });
-    });
-
-    it('should handle DSN with query parameters', () => {
-      expect(parseConnectionInfoFromDSN('postgres://user:pass@localhost:5432/db?sslmode=require')).toEqual({
-        type: 'postgres', host: 'localhost', port: 5432, database: 'db', user: 'user',
-      });
-    });
-
-    it('should handle DSN without user credentials', () => {
-      expect(parseConnectionInfoFromDSN('postgres://localhost:5432/db')).toEqual({
-        type: 'postgres', host: 'localhost', port: 5432, database: 'db',
-      });
     });
 
     it.each([
