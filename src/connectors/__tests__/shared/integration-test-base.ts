@@ -79,11 +79,17 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
    * Cleanup method to be called in afterAll
    */
   async cleanup(): Promise<void> {
-    if (this.connector) {
-      await this.connector.disconnect();
-    }
-    if (this.container) {
-      await this.container.stop();
+    // Always stop the container, even if disconnecting fails or hangs: a
+    // connector error here must not leak a running container into the next
+    // suite (or onto the CI runner).
+    try {
+      if (this.connector) {
+        await this.connector.disconnect();
+      }
+    } finally {
+      if (this.container) {
+        await this.container.stop();
+      }
     }
   }
 
