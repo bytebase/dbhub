@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import pg from 'pg';
 import { PostgresConnector } from '../postgres/index.js';
 import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
@@ -218,6 +219,120 @@ describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {
     await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
       'encrypted private keys are not supported'
     );
+  });
+});
+
+describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslkey)', () => {
+  const parser = new PostgresConnector().dsnParser;
+  let tempDir: string;
+  let caPath: string;
+  let certPath: string;
+  let keyPath: string;
+  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
+  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
+  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
+  const NEW_CA = '-----BEGIN CERTIFICATE-----\nca-rotated\n-----END CERTIFICATE-----\n';
+  const NEW_CERT = '-----BEGIN CERTIFICATE-----\nclient-rotated\n-----END CERTIFICATE-----\n';
+  const NEW_KEY = '-----BEGIN PRIVATE KEY-----\nclient-rotated\n-----END PRIVATE KEY-----\n';
+  const ENCRYPTED_KEY =
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n';
+
+  const dsn = () =>
+    'postgres://user:pass@localhost:5432/db?sslmode=verify-full' +
+    `&sslrootcert=${encodeURIComponent(caPath)}` +
+    `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
+
+  type ClientCtor = new (config: pg.PoolConfig) => pg.Client;
+  /** The pool constructs one client per physical connection from config.Client. */
+  const newPoolClient = (config: pg.PoolConfig): pg.Client =>
+    new (config.Client as unknown as ClientCtor)(config);
+  const pems = (config: pg.PoolConfig) => {
+    const ssl = config.ssl as { ca?: string; cert?: string; key?: string };
+    return { ca: ssl.ca, cert: ssl.cert, key: ssl.key };
+  };
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-certrotation-test-'));
+    caPath = writeTempPem(tempDir, 'ca.pem', CA);
+    certPath = writeTempPem(tempDir, 'client.crt', CERT);
+    keyPath = writeTempPem(tempDir, 'client.key', KEY);
+    // Stop at the point where pg would open a socket; the PEM reload happens before it.
+    vi.spyOn(pg.Client.prototype, 'connect').mockImplementation(function (
+      this: pg.Client,
+      callback?: (err: Error) => void
+    ) {
+      if (callback) {
+        callback(undefined as unknown as Error);
+        return;
+      }
+      return Promise.resolve();
+    } as typeof pg.Client.prototype.connect);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('installs a custom pool Client only when PEM files are configured', async () => {
+    const withPems = await parser.parse(dsn());
+    expect(withPems.Client).toBeDefined();
+    const withoutPems = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=require');
+    expect(withoutPems.Client).toBeUndefined();
+  });
+
+  it('re-reads rotated PEM files when a new connection is opened', async () => {
+    const config = await parser.parse(dsn());
+    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
+
+    fs.writeFileSync(caPath, NEW_CA);
+    fs.writeFileSync(certPath, NEW_CERT);
+    fs.writeFileSync(keyPath, NEW_KEY);
+
+    await newPoolClient(config).connect();
+    // pg marks ssl.key non-enumerable when a Client is constructed, so
+    // compare the fields explicitly rather than with toEqual.
+    expect(pems(config)).toEqual({ ca: NEW_CA, cert: NEW_CERT, key: NEW_KEY });
+    expect(pg.Client.prototype.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails the new connection, naming the file, when a PEM file cannot be read', async () => {
+    const config = await parser.parse(dsn());
+    fs.rmSync(keyPath);
+
+    const err = await newPoolClient(config).connect().catch((e: unknown) => e as Error);
+    expect((err as Error).name).toBe('FailedToReadCertificate');
+    expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+  });
+
+  it('reports the failure through the callback form of connect as well', async () => {
+    const config = await parser.parse(dsn());
+    fs.rmSync(certPath);
+
+    const err = await new Promise<Error>((resolve) => newPoolClient(config).connect(resolve));
+    expect(err.message).toContain(`Failed to read SSL client certificate at '${certPath}'`);
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+  });
+
+  it('never publishes a half-rotated cert/key pair', async () => {
+    const config = await parser.parse(dsn());
+    fs.writeFileSync(certPath, NEW_CERT);
+    fs.rmSync(keyPath);
+
+    await expect(newPoolClient(config).connect()).rejects.toThrow('Failed to read SSL client key');
+    // The pair in the pool config is still the one that was read together.
+    expect(pems(config)).toEqual({ ca: CA, cert: CERT, key: KEY });
+  });
+
+  it('rejects a rotated key that is encrypted', async () => {
+    const config = await parser.parse(dsn());
+    fs.writeFileSync(keyPath, ENCRYPTED_KEY);
+
+    await expect(newPoolClient(config).connect()).rejects.toThrow(
+      'encrypted private keys are not supported'
+    );
+    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
   });
 });
 

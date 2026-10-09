@@ -38,7 +38,9 @@ function generateCerts(dir: string): void {
     'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', '/CN=dbhub-test-ca', '-keyout', 'ca.key', '-out', 'ca.crt',
   ]);
-  for (const [name, cn] of [['server', 'localhost'], ['client', DB_USER]]) {
+  // client and client-rotated share a CN so both authenticate as DB_USER; they
+  // differ by serial number, which is how the rotation test tells them apart.
+  for (const [name, cn] of [['server', 'localhost'], ['client', DB_USER], ['client-rotated', DB_USER]]) {
     openssl([
       'req', '-newkey', 'rsa:2048', '-nodes', '-subj', `/CN=${cn}`,
       '-keyout', `${name}.key`, '-out', `${name}.csr`,
@@ -138,6 +140,76 @@ describe.skipIf(!hasOpenssl())('PostgreSQL client certificate authentication', (
       await connector.connect(dsn);
       const result = await connector.executeSQL('SELECT current_user', {});
       expect(result.resultSets[0].rows[0].current_user).toBe(DB_USER);
+    } finally {
+      await connector.disconnect();
+    }
+  });
+
+  /** Decimal serial of a generated certificate, as pg_stat_ssl.client_serial reports it. */
+  const serialOf = (name: string): string => {
+    const out = execFileSync('openssl', ['x509', '-noout', '-serial', '-in', path.join(certDir, `${name}.crt`)])
+      .toString()
+      .trim();
+    return BigInt(`0x${out.split('=')[1]}`).toString();
+  };
+
+  /** Copy a generated client cert/key pair over the files the DSN points at. */
+  const installClientPair = (dir: string, name: string): void => {
+    fs.copyFileSync(path.join(certDir, `${name}.crt`), path.join(dir, 'client.crt'));
+    fs.copyFileSync(path.join(certDir, `${name}.key`), path.join(dir, 'client.key'));
+  };
+
+  const SERIAL_SQL =
+    'SELECT pg_sleep(0.5), client_serial::text AS serial FROM pg_stat_ssl WHERE pid = pg_backend_pid()';
+
+  it('should present a client certificate rotated on disk to new pool connections', async () => {
+    const rotatingDir = fs.mkdtempSync(path.join(certDir, 'rotating-'));
+    installClientPair(rotatingDir, 'client');
+    const dsn =
+      `${baseUri}?sslmode=verify-ca&sslrootcert=${encodeURIComponent(path.join(certDir, 'ca.crt'))}` +
+      `&sslcert=${encodeURIComponent(path.join(rotatingDir, 'client.crt'))}` +
+      `&sslkey=${encodeURIComponent(path.join(rotatingDir, 'client.key'))}`;
+    const connector = new PostgresConnector();
+    try {
+      await connector.connect(dsn);
+      const before = await connector.executeSQL(SERIAL_SQL, {});
+      expect(before.resultSets[0].rows[0].serial).toBe(serialOf('client'));
+
+      installClientPair(rotatingDir, 'client-rotated');
+
+      // Two overlapping queries: one reuses the idle connection, the other
+      // forces the pool to open a new one, which must present the new pair.
+      const results = await Promise.all([
+        connector.executeSQL(SERIAL_SQL, {}),
+        connector.executeSQL(SERIAL_SQL, {}),
+      ]);
+      const serials = results.map((r) => String(r.resultSets[0].rows[0].serial)).sort();
+      expect(serials).toEqual([serialOf('client'), serialOf('client-rotated')].sort());
+    } finally {
+      await connector.disconnect();
+    }
+  });
+
+  it('should fail new pool connections, naming the file, when a rotated key is missing', async () => {
+    const rotatingDir = fs.mkdtempSync(path.join(certDir, 'rotating-'));
+    installClientPair(rotatingDir, 'client');
+    const keyPath = path.join(rotatingDir, 'client.key');
+    const dsn =
+      `${baseUri}?sslmode=require&sslcert=${encodeURIComponent(path.join(rotatingDir, 'client.crt'))}` +
+      `&sslkey=${encodeURIComponent(keyPath)}`;
+    const connector = new PostgresConnector();
+    try {
+      await connector.connect(dsn);
+      fs.rmSync(keyPath);
+
+      const outcomes = await Promise.allSettled([
+        connector.executeSQL(SERIAL_SQL, {}),
+        connector.executeSQL(SERIAL_SQL, {}),
+      ]);
+      // The existing connection keeps working; only the new one fails.
+      expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+      const rejected = outcomes.find((o) => o.status === 'rejected') as PromiseRejectedResult;
+      expect(rejected.reason.message).toContain(`Failed to read SSL client key at '${keyPath}'`);
     } finally {
       await connector.disconnect();
     }
