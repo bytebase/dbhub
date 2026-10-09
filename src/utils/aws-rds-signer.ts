@@ -17,8 +17,8 @@ export interface RdsAuthTokenParams {
  * contents of `~/.aws/credentials` and `~/.aws/config` in a module-level map
  * for the lifetime of the process, so a long-running DBHub would otherwise keep
  * signing with the credentials it read at startup and never notice that the
- * files were rotated externally (e.g. refreshed STS credentials). Tokens are
- * regenerated every ~14 minutes, so the extra file read is negligible.
+ * files were rotated externally (e.g. refreshed STS credentials). PostgreSQL
+ * requests tokens on connection authentication; MySQL/MariaDB refresh on a timer.
  */
 export async function generateRdsAuthToken(params: RdsAuthTokenParams): Promise<string> {
   let Signer: typeof import("@aws-sdk/rds-signer")["Signer"];
