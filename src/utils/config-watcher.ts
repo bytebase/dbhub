@@ -2,12 +2,13 @@ import fs from "fs";
 import { loadTomlConfig, resolveTomlConfigPath } from "../config/toml-loader.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { initializeToolRegistry } from "../tools/registry.js";
-import type { SourceConfig } from "../types/config.js";
+import type { SourceConfig, ToolConfig } from "../types/config.js";
 
 const DEBOUNCE_MS = 500;
 
 interface ConfigWatcherOptions {
   connectorManager: ConnectorManager;
+  initialTools?: ToolConfig[];
 }
 
 /** Stable, key-order-independent comparison of two source configs. */
@@ -30,21 +31,52 @@ function stableStringify(value: unknown): string {
 }
 
 /**
+ * Pick the tools to register after a reload. A tool may only reference a live source,
+ * so the registry does not reject the whole config over one source that failed to
+ * connect. A source that was rolled back to its previous config keeps its previous
+ * tools too: the new file's tools were written against the config that did not apply.
+ */
+export function selectTools(
+  applied: SourceConfig[],
+  rolledBack: Set<string>,
+  newTools: ToolConfig[] | undefined,
+  oldTools: ToolConfig[] | undefined
+): ToolConfig[] | undefined {
+  if (newTools === undefined && oldTools === undefined) {
+    return undefined;
+  }
+  const liveIds = new Set(applied.map(s => s.id));
+  return [
+    ...(newTools ?? []).filter(t => liveIds.has(t.source) && !rolledBack.has(t.source)),
+    ...(oldTools ?? []).filter(t => rolledBack.has(t.source)),
+  ];
+}
+
+export interface SourceDiffResult {
+  /** Sources live after the reload, in file order. */
+  sources: SourceConfig[];
+  /** Ids whose new config failed to connect and were restored to their previous config. */
+  rolledBack: Set<string>;
+}
+
+/**
  * Move the connector manager from `oldSources` to `newSources` one source at a time.
  * Unchanged sources are left alone, so their pools keep serving requests throughout.
  *
- * Returns the sources that are live afterwards, in `newSources` order. A changed
- * source that fails to connect is rolled back to its previous config; a new source
- * that fails is skipped. Either way the other sources are unaffected.
+ * Returns the sources that are live afterwards, in `newSources` order, and the ids
+ * that were rolled back. A changed source that fails to connect is rolled back to its
+ * previous config; a new source that fails is skipped. Either way the other sources
+ * are unaffected.
  */
 export async function applySourceDiff(
   connectorManager: ConnectorManager,
   oldSources: SourceConfig[],
   newSources: SourceConfig[]
-): Promise<SourceConfig[]> {
+): Promise<SourceDiffResult> {
   const oldById = new Map(oldSources.map(s => [s.id, s]));
   const newById = new Map(newSources.map(s => [s.id, s]));
   const applied = new Map<string, SourceConfig>();
+  const rolledBack = new Set<string>();
 
   for (const oldSource of oldSources) {
     const newSource = newById.get(oldSource.id);
@@ -77,6 +109,7 @@ export async function applySourceDiff(
         try {
           await connectorManager.addSource(oldSource);
           applied.set(oldSource.id, oldSource);
+          rolledBack.add(oldSource.id);
           console.error(`Config reload: rolled back source '${oldSource.id}' to its previous config.`);
         } catch (rollbackError) {
           console.error(`Config reload: rollback of source '${oldSource.id}' also failed:`, rollbackError);
@@ -88,7 +121,10 @@ export async function applySourceDiff(
   // Keep the default (first) source and tool ordering in line with the file.
   const order = newSources.map(s => s.id);
   connectorManager.reorderSources(order);
-  return order.filter(id => applied.has(id)).map(id => applied.get(id)!);
+  return {
+    sources: order.filter(id => applied.has(id)).map(id => applied.get(id)!),
+    rolledBack,
+  };
 }
 
 /**
@@ -101,7 +137,7 @@ export async function applySourceDiff(
  * HTTP transport creates a fresh server per request, so tool changes take effect immediately.
  */
 export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) | null {
-  const { connectorManager } = options;
+  const { connectorManager, initialTools } = options;
   const configPath = resolveTomlConfigPath();
   if (!configPath) {
     return null;
@@ -111,8 +147,10 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
   let isReloading = false;
   let reloadPending = false;
 
-  // Sources currently live in the manager; each reload is a diff against this list.
+  // Sources (and their tools) currently live in the manager; each reload is a diff
+  // against this list.
   let lastGoodSources: SourceConfig[] = connectorManager.getAllSourceConfigs();
+  let lastGoodTools: ToolConfig[] | undefined = initialTools;
 
   const scheduleReload = () => {
     if (debounceTimer) {
@@ -139,15 +177,16 @@ export function startConfigWatcher(options: ConfigWatcherOptions): (() => void) 
         return;
       }
 
-      const applied = await applySourceDiff(connectorManager, lastGoodSources, newConfig.sources);
-
-      // Tools may only reference sources that are actually live; drop the rest so the
-      // registry does not reject the whole config over one source that failed to connect.
-      const appliedIds = new Set(applied.map(s => s.id));
-      const tools = newConfig.tools?.filter(t => appliedIds.has(t.source));
+      const { sources: applied, rolledBack } = await applySourceDiff(
+        connectorManager,
+        lastGoodSources,
+        newConfig.sources
+      );
+      const tools = selectTools(applied, rolledBack, newConfig.tools, lastGoodTools);
 
       initializeToolRegistry({ sources: applied, tools });
       lastGoodSources = applied;
+      lastGoodTools = tools;
 
       if (applied.length === newConfig.sources.length) {
         console.error("Configuration reloaded successfully.");

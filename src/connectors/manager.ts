@@ -25,6 +25,7 @@ export class ConnectorManager {
   private sourceConfigs: Map<string, SourceConfig> = new Map(); // Store original source configs
   private sourceIds: string[] = []; // Ordered list of source IDs (first is default)
   private iamRefreshTimers: Map<string, NodeJS.Timeout> = new Map();
+  private pendingIamRefreshes: Map<string, Promise<void>> = new Map(); // In-flight refresh per source
   private isDisconnecting = false;
 
   // Lazy connection support
@@ -346,10 +347,16 @@ export class ConnectorManager {
    * tunnel untouched. Resolves silently for an unknown id.
    */
   async removeSource(sourceId: string): Promise<void> {
-    // Let an in-flight lazy connection settle so its connector/tunnel are not orphaned.
+    // Let an in-flight lazy connection or IAM refresh settle first, so the connector
+    // and tunnel we tear down are the ones that end up registered, not a stale pair
+    // that an outstanding reconnect would otherwise put back after we return.
     const pending = this.pendingConnections.get(sourceId);
     if (pending) {
       try { await pending; } catch { /* the failure already cleaned up after itself */ }
+    }
+    const refresh = this.pendingIamRefreshes.get(sourceId);
+    if (refresh) {
+      await refresh; // never rejects
     }
 
     const timer = this.iamRefreshTimers.get(sourceId);
@@ -435,6 +442,7 @@ export class ConnectorManager {
     this.sourceConfigs.clear();
     this.lazySources.clear();
     this.pendingConnections.clear();
+    this.pendingIamRefreshes.clear();
     this.sourceIds = [];
     this.isDisconnecting = false;
   }
@@ -576,25 +584,31 @@ export class ConnectorManager {
       return;
     }
 
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       if (this.isDisconnecting) {
         return;
       }
-      try {
-        await this.refreshIamSourceConnection(source);
-      } catch (error) {
-        console.error(
-          `Error refreshing AWS IAM auth token for source '${sourceId}':`,
-          error
-        );
-      } finally {
-        // Continue rotating only while the source is still connected and not shutting
-        // down. A source whose refresh failed has been handed back to lazySources, and
-        // its next successful connectSource() re-arms the timer.
-        if (!this.isDisconnecting && this.connectors.has(sourceId)) {
-          this.scheduleIamRefresh(source);
+      const run = (async () => {
+        try {
+          await this.refreshIamSourceConnection(source);
+        } catch (error) {
+          console.error(
+            `Error refreshing AWS IAM auth token for source '${sourceId}':`,
+            error
+          );
+        } finally {
+          this.pendingIamRefreshes.delete(sourceId);
+          // Continue rotating only while this exact source is still registered and
+          // connected, and we are not shutting down. A source whose refresh failed has
+          // been handed back to lazySources, and its next successful connectSource()
+          // re-arms the timer. A source removed or replaced mid-refresh must not re-arm.
+          if (!this.isDisconnecting && this.ownsSource(source) && this.connectors.has(sourceId)) {
+            this.scheduleIamRefresh(source);
+          }
         }
-      }
+      })();
+      // Exposed so removeSource() can wait for the refresh instead of racing it.
+      this.pendingIamRefreshes.set(sourceId, run);
     }, AWS_IAM_TOKEN_REFRESH_MS);
     timer.unref?.();
     this.iamRefreshTimers.set(sourceId, timer);
@@ -620,7 +634,10 @@ export class ConnectorManager {
       this.sshTunnels.delete(sourceId);
     }
 
-    if (this.isDisconnecting) {
+    // removeSource() may have run while we were awaiting above (e.g. a config reload
+    // dropped or replaced this source). Reconnecting now would resurrect it, or clobber
+    // its replacement, so stop here.
+    if (this.isDisconnecting || !this.ownsSource(source)) {
       return;
     }
 
@@ -630,11 +647,20 @@ export class ConnectorManager {
       // The old connector is already gone. Register the source for lazy reconnection so
       // the next tool call retries (e.g. after the user re-authenticates) instead of
       // failing forever with "Source not found".
-      if (!this.isDisconnecting && this.sourceConfigs.has(sourceId)) {
+      if (!this.isDisconnecting && this.ownsSource(source)) {
         this.lazySources.set(sourceId, source);
       }
       throw error;
     }
+  }
+
+  /**
+   * True while `source` is the config object registered under its id. Every
+   * registration path stores the same object, so identity tells an in-flight
+   * operation whether its source was removed or replaced underneath it.
+   */
+  private ownsSource(source: SourceConfig): boolean {
+    return this.sourceConfigs.get(source.id) === source;
   }
 
   /**

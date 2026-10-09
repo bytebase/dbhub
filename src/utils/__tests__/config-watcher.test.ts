@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
-import { startConfigWatcher, applySourceDiff, sourceConfigEquals } from "../config-watcher.js";
+import { startConfigWatcher, applySourceDiff, sourceConfigEquals, selectTools } from "../config-watcher.js";
 import type { ConnectorManager } from "../../connectors/manager.js";
 
 // Mock dependencies
@@ -26,8 +26,8 @@ function createMockManager(overrides: Partial<Record<string, any>> = {}) {
   } as unknown as ConnectorManager;
 }
 
-function createOptions(connectorManager: ConnectorManager) {
-  return { connectorManager };
+function createOptions(connectorManager: ConnectorManager, initialTools?: any[]) {
+  return { connectorManager, initialTools };
 }
 
 const dbA = { id: "a", type: "sqlite" as const, dsn: "sqlite:///:memory:" };
@@ -54,7 +54,7 @@ describe("applySourceDiff", () => {
     const manager = createMockManager();
     const dbC = { id: "c", type: "mysql" as const, dsn: "mysql://localhost/c" };
 
-    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, dbC]);
+    const { sources: applied, rolledBack } = await applySourceDiff(manager, [dbA, dbB], [dbA, dbC]);
 
     expect(manager.removeSource).toHaveBeenCalledTimes(1);
     expect(manager.removeSource).toHaveBeenCalledWith("b");
@@ -62,13 +62,14 @@ describe("applySourceDiff", () => {
     expect(manager.addSource).toHaveBeenCalledWith(dbC);
     expect(manager.reorderSources).toHaveBeenCalledWith(["a", "c"]);
     expect(applied).toEqual([dbA, dbC]);
+    expect(rolledBack.size).toBe(0);
   });
 
   it("reconnects only a source whose config changed", async () => {
     const manager = createMockManager();
     const changedB = { ...dbB, query_timeout: 10 };
 
-    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
+    const { sources: applied } = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
 
     expect(manager.removeSource).toHaveBeenCalledTimes(1);
     expect(manager.removeSource).toHaveBeenCalledWith("b");
@@ -85,12 +86,13 @@ describe("applySourceDiff", () => {
         .mockResolvedValueOnce(undefined),
     });
 
-    const applied = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
+    const { sources: applied, rolledBack } = await applySourceDiff(manager, [dbA, dbB], [dbA, changedB]);
 
     expect(manager.removeSource).toHaveBeenCalledTimes(1);
     expect(manager.addSource).toHaveBeenNthCalledWith(1, changedB);
     expect(manager.addSource).toHaveBeenNthCalledWith(2, dbB);
     expect(applied).toEqual([dbA, dbB]);
+    expect([...rolledBack]).toEqual(["b"]);
   });
 
   it("skips a new source that fails to connect and keeps the rest", async () => {
@@ -98,21 +100,51 @@ describe("applySourceDiff", () => {
       addSource: vi.fn().mockRejectedValue(new Error("Connection refused")),
     });
 
-    const applied = await applySourceDiff(manager, [dbA], [dbA, dbB]);
+    const { sources: applied, rolledBack } = await applySourceDiff(manager, [dbA], [dbA, dbB]);
 
     expect(manager.removeSource).not.toHaveBeenCalled();
     expect(applied).toEqual([dbA]);
+    expect(rolledBack.size).toBe(0);
   });
 
   it("reorders sources so the file's first entry stays the default", async () => {
     const manager = createMockManager();
 
-    const applied = await applySourceDiff(manager, [dbA, dbB], [dbB, dbA]);
+    const { sources: applied } = await applySourceDiff(manager, [dbA, dbB], [dbB, dbA]);
 
     expect(manager.removeSource).not.toHaveBeenCalled();
     expect(manager.addSource).not.toHaveBeenCalled();
     expect(manager.reorderSources).toHaveBeenCalledWith(["b", "a"]);
     expect(applied).toEqual([dbB, dbA]);
+  });
+});
+
+describe("selectTools", () => {
+  const toolA = { name: "execute_sql" as const, source: "a" };
+  const oldToolB = { name: "execute_sql" as const, source: "b", readonly: true };
+  const newToolB = { name: "execute_sql" as const, source: "b", readonly: false };
+  const toolC = { name: "execute_sql" as const, source: "c" };
+
+  it("uses the new file's tools for live sources and drops tools of sources that are not live", () => {
+    expect(selectTools([dbA], new Set(), [toolA, newToolB], [toolA, oldToolB])).toEqual([toolA]);
+  });
+
+  it("keeps the previous tools for a source that was rolled back", () => {
+    expect(selectTools([dbA, dbB], new Set(["b"]), [toolA, newToolB], [toolA, oldToolB]))
+      .toEqual([toolA, oldToolB]);
+  });
+
+  it("applies new tools to an unchanged source", () => {
+    expect(selectTools([dbA, dbB], new Set(), [toolA, newToolB], [toolA, oldToolB]))
+      .toEqual([toolA, newToolB]);
+  });
+
+  it("drops a rolled-back source's new tools even when it had none before", () => {
+    expect(selectTools([dbB], new Set(["b"]), [newToolB, toolC], [])).toEqual([]);
+  });
+
+  it("returns undefined when neither config declares tools", () => {
+    expect(selectTools([dbA], new Set(), undefined, undefined)).toBeUndefined();
   });
 });
 
@@ -231,6 +263,29 @@ describe("startConfigWatcher", () => {
       sources: [dbA],
       tools: [{ name: "execute_sql", source: "a" }],
     });
+  });
+
+  it("should keep a rolled-back source's previous tools instead of the new file's", async () => {
+    vi.mocked(resolveTomlConfigPath).mockReturnValue("/path/to/dbhub.toml");
+    const changedB = { ...dbB, dsn: "postgres://unreachable/b" };
+    const oldTools = [{ name: "execute_sql" as const, source: "b", readonly: true }];
+    vi.mocked(loadTomlConfig).mockReturnValue({
+      sources: [dbA, changedB],
+      tools: [{ name: "execute_sql" as const, source: "b", readonly: false }],
+      source: "dbhub.toml",
+    });
+    const mockManager = createMockManager({
+      addSource: vi.fn()
+        .mockRejectedValueOnce(new Error("Connection refused"))
+        .mockResolvedValueOnce(undefined),
+      getAllSourceConfigs: vi.fn().mockReturnValue([dbA, dbB]),
+    });
+
+    startConfigWatcher(createOptions(mockManager, oldTools));
+    watchCallback("change");
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(initializeToolRegistry).toHaveBeenCalledWith({ sources: [dbA, dbB], tools: oldTools });
   });
 
   it("should debounce rapid file changes", async () => {
