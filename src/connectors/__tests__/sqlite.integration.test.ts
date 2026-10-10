@@ -252,8 +252,7 @@ describe('SQLite Connector Integration Tests', () => {
         SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%';
       `, {});
 
-      // Two writes then one read, matching both source order and SQLite's
-      // writes-then-reads execution order here.
+      // Two writes then one read, in source order.
       expect(result.resultSets).toHaveLength(3);
       expect(result.resultSets[0]).toEqual({
         sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30)",
@@ -267,6 +266,30 @@ describe('SQLite Connector Integration Tests', () => {
       });
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(Number(result.resultSets[2].rows[0].total)).toBe(2);
+    });
+
+    it('should execute multi-statement batches in source order', async () => {
+      await sqliteTest.connector.executeSQL(`
+        CREATE TABLE order_check (a INTEGER);
+        INSERT INTO order_check VALUES (1), (2), (3);
+      `, {});
+
+      const result = await sqliteTest.connector.executeSQL(`
+        SELECT a AS before_delete FROM order_check ORDER BY a;
+        DELETE FROM order_check;
+        SELECT COUNT(*) AS after_delete FROM order_check;
+      `, {});
+
+      expect(result.resultSets.map((rs) => rs.sql)).toEqual([
+        'SELECT a AS before_delete FROM order_check ORDER BY a',
+        'DELETE FROM order_check',
+        'SELECT COUNT(*) AS after_delete FROM order_check',
+      ]);
+      expect(result.resultSets[0].rows.map((row) => Number(row.before_delete))).toEqual([1, 2, 3]);
+      expect(result.resultSets[1].rowCount).toBe(3);
+      expect(Number(result.resultSets[2].rows[0].after_delete)).toBe(0);
+
+      await sqliteTest.connector.executeSQL('DROP TABLE order_check', {});
     });
 
     it('should handle SQLite foreign key constraints', async () => {
@@ -412,25 +435,23 @@ describe('SQLite Connector Integration Tests', () => {
         INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35);
       `, { maxRows: 1 });
 
-      // SQLite's connector executes all write statements first, then all
-      // read statements, regardless of source order - so resultSets order
-      // here is [INSERT 'Multi Test 1', INSERT 'Multi Test 2', SELECT],
-      // not the source order [INSERT, SELECT, INSERT]. Both inserts have
-      // already run by the time the SELECT executes.
+      // Statements run in source order [INSERT, SELECT, INSERT], so only the
+      // first insert has run by the time the SELECT executes.
       expect(result.resultSets).toHaveLength(3);
       expect(result.resultSets[0]).toEqual({
         sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 1', 'multi1@test.com', 30)",
         rows: [],
         rowCount: 1,
       });
-      expect(result.resultSets[1]).toEqual({
+      // Should return only 1 row from the SELECT statement
+      expect(result.resultSets[1].sql).toBe("SELECT name FROM users WHERE email LIKE '%@test.com' ORDER BY name");
+      expect(result.resultSets[1].rows).toHaveLength(1);
+      expect(result.resultSets[1].rows[0].name).toBe('Multi Test 1');
+      expect(result.resultSets[2]).toEqual({
         sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35)",
         rows: [],
         rowCount: 1,
       });
-      // Should return only 1 row from the SELECT statement
-      expect(result.resultSets[2].rows).toHaveLength(1);
-      expect(result.resultSets[2].rows[0].name).toBe('Multi Test 1');
     });
 
   });
