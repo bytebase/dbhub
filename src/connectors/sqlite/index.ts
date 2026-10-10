@@ -541,51 +541,32 @@ export class SQLiteConnector implements Connector {
           throw new Error("Parameters are not supported for multi-statement queries in SQLite");
         }
 
-        // Use native .exec() for optimal performance
-        // Note: .exec() doesn't return results, so we need to handle SELECT statements differently
-        const readStatements = [];
-        const writeStatements = [];
-
-        // Separate read and write operations
-        for (const statement of statements) {
-          if (this.returnsRows(statement)) {
-            readStatements.push(statement);
-          } else {
-            writeStatements.push(statement);
-          }
-        }
-
-        // Execute write statements individually to track changes. Each
-        // statement becomes its own result set, in the order actually run -
-        // note that's writes-then-reads (see readStatements/writeStatements
-        // split above), not necessarily the original source order.
+        // Execute each statement individually, in source order, so a later
+        // statement sees the effects of earlier ones and result sets line up
+        // with the batch as written.
         const resultSets: SQLResultSet[] = [];
-        for (const statement of writeStatements) {
+        for (const statement of statements) {
           // Re-assert the read-only backstop before each statement so an earlier
           // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
           // cannot disable it for the ones that follow.
           if (options.readonly) {
             this.db.exec("PRAGMA query_only = ON");
           }
-          const result = this.prepare(statement).run();
-          resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
-        }
-
-        // Execute read statements individually to collect results
-        for (const statement of readStatements) {
-          if (options.readonly) {
-            this.db.exec("PRAGMA query_only = ON");
+          if (this.returnsRows(statement)) {
+            // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
+            const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+              statement,
+              options.maxRows,
+              "sqlite"
+            );
+            const rows = this.prepare(processedStatement).all();
+            const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
+            SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
+            resultSets.push(resultSet);
+          } else {
+            const result = this.prepare(statement).run();
+            resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
           }
-          // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
-          const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-            statement,
-            options.maxRows,
-            "sqlite"
-          );
-          const rows = this.prepare(processedStatement).all();
-          const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
-          SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
-          resultSets.push(resultSet);
         }
 
         return { resultSets };
