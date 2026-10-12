@@ -99,12 +99,12 @@ Add DuckDB to the connector loader array:
 [[sources]]
 id = "postgres_logic"
 description = "Production PostgreSQL database"
-dsn = "postgresql://postgres:DigiBull@192.168.1.18:5432/logic_db_2?sslmode=disable"
+dsn = "{POSTGRES_CONNECTION_STRING}"
 
 [[sources]]
 id = "duckdb_local"
 description = "Local DuckDB analytical database"
-dsn = "duckdb:///C:/SRIM-DB-SETUP/Databases/Bom_storage.duckdb"
+dsn = "{DUCKDB_FILE_PATH}"
 ```
 
 ### 4.2 DBHub Start Command
@@ -232,7 +232,7 @@ Expected: no 403.
 
 ```powershell
 $headers = @{
-  "Authorization" = "Bearer <base64(DigiBull:DigiBull@2026)>"
+  "Authorization" = "Bearer <base64(<BIFROST_CREDENTIALS>)>"
   "Content-Type"  = "application/json"
 }
 $clients = Invoke-RestMethod -Uri "http://localhost:8010/api/mcp/clients" -Headers $headers
@@ -263,7 +263,7 @@ Due to `qwen2.5-coder:7b` not emitting native `tool_calls`, use this **4-step ma
 # ============================================================
 
 $headers = @{
-  "Authorization"            = "Bearer RGlnaUJ1bGw6RGlnaUJ1bGxAMjAyNg=="
+  "Authorization"            = "Bearer <TOKEN>"
   "Content-Type"             = "application/json"
   "x-bf-mcp-include-clients" = "DBHub_MCP"
 }
