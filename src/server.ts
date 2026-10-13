@@ -38,9 +38,30 @@ export const SERVER_VERSION = packageJson.version;
 // cached tool list can be after a reload.
 const TOOLS_LIST_CACHE_TTL_MS = 300_000;
 
+// DBHub never emits change notifications over HTTP: createMcpHandler builds
+// a fresh stateless server per request, so no instance outlives the request
+// that would have to carry a `notifications/tools/list_changed`. Yet the SDK
+// advertises `tools.listChanged` once tools are registered, and 2026-07-28
+// clients then open `subscriptions/listen`, a POST the handler holds open as
+// a notification stream that never carries anything. Behind a buffering
+// proxy (e.g. AWS API Gateway, which cuts at 30s with a 503) that held-open
+// request delays tool discovery by the proxy timeout and shows up as a
+// steady stream of gateway errors. A limit of 0 makes the SDK refuse the
+// listen in-band (JSON-RPC -32603, HTTP 200) so clients fall back to plain
+// polling immediately. Revisit if list-changed notifications are ever wired
+// up for TOML hot reload. See https://github.com/bytebase/dbhub/issues/474.
+const MAX_HTTP_SUBSCRIPTIONS = 0;
+
+// The SDK reports every refused `subscriptions/listen` through `onerror`
+// with this message. With the limit at 0 that is the configured answer, not
+// a failure, so it is not worth an error line per client connect.
+const SUBSCRIPTION_REFUSED_PREFIX = "subscriptions/listen refused: subscription limit reached";
+
 /** Per-surface error logger for the MCP serving entries. */
-const logMcpError = (scope: string) => (error: Error) =>
+const logMcpError = (scope: string) => (error: Error) => {
+  if (error.message.startsWith(SUBSCRIPTION_REFUSED_PREFIX)) return;
   console.error(`MCP ${scope} error:`, error);
+};
 
 /**
  * Generate ASCII art banner with version information
@@ -277,7 +298,10 @@ See documentation for more details on configuring database connections.
       // the same per-request idiom DBHub hand-wired before. It also validates
       // the 2026-07-28 standard headers (Mcp-Method / Mcp-Name) against the
       // body on the modern path.
-      const mcpHandler = createMcpHandler(createServer, { onerror: logMcpError("handler") });
+      const mcpHandler = createMcpHandler(createServer, {
+        maxSubscriptions: MAX_HTTP_SUBSCRIPTIONS,
+        onerror: logMcpError("handler"),
+      });
       const mcpNodeHandler = toNodeHandler(mcpHandler, { onerror: logMcpError("adapter") });
 
       // express.json() has already consumed the request stream, so hand the

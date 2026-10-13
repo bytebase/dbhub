@@ -402,4 +402,65 @@ describe('JSON RPC Integration Tests', () => {
       expect(response.status).toBeLessThan(500);
     });
   });
+
+  describe('2026-07-28 subscriptions/listen', () => {
+    // DBHub never emits change notifications (a fresh stateless server is
+    // built per request), yet the SDK advertises tools.listChanged, so
+    // modern clients open subscriptions/listen right after discovery and
+    // wait on it before listing tools. The handler must refuse the listen
+    // in-band at once rather than hold the POST open as an empty stream:
+    // behind a buffering proxy (AWS API Gateway cuts at 30s with a 503) a
+    // held-open listen delays tool discovery by the proxy timeout. See
+    // https://github.com/bytebase/dbhub/issues/474.
+    it('refuses subscriptions/listen in-band instead of holding the request open', async () => {
+      const logLengthBefore = startupLogs.length;
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 5000);
+      let response: Response;
+      try {
+        response = await fetch(`${baseUrl}/mcp`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'Mcp-Protocol-Version': '2026-07-28',
+            'Mcp-Method': 'subscriptions/listen',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 'listen-1',
+            method: 'subscriptions/listen',
+            params: {
+              notifications: { tools: true },
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            },
+          }),
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
+
+      // In-band refusal: HTTP 200 carrying a JSON-RPC error. Without the
+      // limit the handler instead answers with a text/event-stream it holds
+      // open until the client gives up (the abort above).
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      const body = await response.json();
+      expect(body).toMatchObject({
+        jsonrpc: '2.0',
+        id: 'listen-1',
+        error: { code: -32603, message: 'Subscription limit reached' },
+      });
+
+      // The SDK reports each refusal through onerror; with the limit at 0
+      // that is the configured answer, so it must not land in the log.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const newLogs = startupLogs.slice(logLengthBefore).join('');
+      expect(newLogs).not.toContain('subscriptions/listen refused');
+    });
+  });
 });
