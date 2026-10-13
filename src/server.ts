@@ -18,6 +18,7 @@ import { getToolsForSource } from "./utils/tool-metadata.js";
 import { startConfigWatcher } from "./utils/config-watcher.js";
 import { validateOrigin, buildAllowedHosts, getSelfHosts, ALLOW_ANY_HOST } from "./utils/cross-origin.js";
 import { validateAuthToken } from "./utils/auth-token.js";
+import { configureHttpKeepAlive } from "./utils/http-keep-alive.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -298,6 +299,12 @@ See documentation for more details on configuring database connections.
       // (EADDRINUSE, EACCES on privileged ports) can fire before the listener
       // is registered. Matches the pattern used in utils/ssh-tunnel.ts.
       const httpServer = http.createServer(app);
+
+      // Outlive proxy idle timeouts (ALB/API Gateway/nginx default to 60s) so
+      // the proxy, not DBHub, closes idle connections. Otherwise a request
+      // written into a socket Node is closing surfaces as a proxy 502/503
+      // that never reaches our logs (issue #472).
+      configureHttpKeepAlive(httpServer);
 
       httpServer.on('error', (err) => {
         const displayHost = host!.includes(':') ? `[${host!}]` : host!;
