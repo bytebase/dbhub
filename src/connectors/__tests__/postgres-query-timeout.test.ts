@@ -19,7 +19,15 @@ const clientTimeout = () => new Error("Query read timeout");
 class FakePgPool extends EventEmitter {
   statements: string[] = [];
   failOn: (sql: string) => Error | undefined = () => undefined;
-  client = {
+  /**
+   * pg-pool's release for the checked-out client. pg-pool reassigns
+   * `client.release` on every checkout, and the connector wraps it per
+   * checkout to attach an 'error' listener (bytebase/dbhub#479), so the
+   * underlying mock is reinstalled by connect() and asserted on directly.
+   */
+  release = vi.fn();
+  // A real EventEmitter, like pg.Client.
+  client = Object.assign(new EventEmitter(), {
     processID: BACKEND_PID,
     query: vi.fn(async (sql: string) => {
       this.statements.push(sql);
@@ -27,9 +35,12 @@ class FakePgPool extends EventEmitter {
       if (failure) throw failure;
       return { rows: [{ ok: 1 }], rowCount: 1 };
     }),
-    release: vi.fn(),
-  };
-  connect = vi.fn(async () => this.client);
+    release: this.release as (err?: Error | boolean) => void,
+  });
+  connect = vi.fn(async () => {
+    this.client.release = this.release;
+    return this.client;
+  });
   query = vi.fn(async (_config: unknown) => ({ rows: [{ pg_cancel_backend: true }], rowCount: 1 }));
   end = vi.fn().mockResolvedValue(undefined);
 }
@@ -53,7 +64,7 @@ async function connect() {
     queryTimeoutSeconds: 30,
   });
   // connect() checks out and releases a client to test the connection.
-  pool.client.release.mockClear();
+  pool.release.mockClear();
   pool.connect.mockClear();
   return connector;
 }
@@ -78,8 +89,8 @@ describe("PostgreSQL client-side query timeout", () => {
     expect(pool.statements).not.toContain("ROLLBACK");
     // Released exactly once, with a truthy argument: pg-pool closes the socket
     // and drops the client instead of returning it to the pool.
-    expect(pool.client.release).toHaveBeenCalledTimes(1);
-    expect(pool.client.release).toHaveBeenCalledWith(true);
+    expect(pool.release).toHaveBeenCalledTimes(1);
+    expect(pool.release).toHaveBeenCalledWith(true);
     // The statement is cancelled on the server over another pooled connection,
     // bounded by its own short timeout...
     expect(pool.query).toHaveBeenCalledWith({
@@ -89,7 +100,7 @@ describe("PostgreSQL client-side query timeout", () => {
     });
     // ...after the client was discarded, so the cancel can use its pool slot
     // (pool_max_connections = 1 would otherwise wait on itself).
-    expect(pool.client.release.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(pool.release.mock.invocationCallOrder[0]).toBeLessThan(
       pool.query.mock.invocationCallOrder[0]
     );
   });
@@ -102,7 +113,7 @@ describe("PostgreSQL client-side query timeout", () => {
     await expect(connector.executeSQL("SELECT pg_sleep(600)", { readonly: true })).rejects.toThrow(
       "Query read timeout"
     );
-    expect(pool.client.release).toHaveBeenCalledWith(true);
+    expect(pool.release).toHaveBeenCalledWith(true);
   });
 
   it("keeps the client for a server-side statement_timeout cancellation", async () => {
@@ -119,8 +130,8 @@ describe("PostgreSQL client-side query timeout", () => {
     // The server ended the statement itself: the client is clean, so it is
     // rolled back and returned to the pool as usual, and nothing is cancelled.
     expect(pool.statements[pool.statements.length - 1]).toBe("ROLLBACK");
-    expect(pool.client.release).toHaveBeenCalledTimes(1);
-    expect(pool.client.release).toHaveBeenCalledWith();
+    expect(pool.release).toHaveBeenCalledTimes(1);
+    expect(pool.release).toHaveBeenCalledWith();
     expect(pool.query).not.toHaveBeenCalled();
   });
 });

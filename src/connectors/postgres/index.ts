@@ -291,7 +291,7 @@ export class PostgresConnector implements Connector {
       });
 
       // Test the connection
-      const client = await this.pool.connect();
+      const client = await this.acquireClient();
       client.release();
     } catch (err) {
       // Tear down the pool if it was created before the failure, otherwise it
@@ -318,7 +318,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       const result = await client.query(`
         SELECT schema_name
@@ -338,7 +338,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -368,7 +368,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       const schemaToUse = schema || this.defaultSchema;
 
@@ -394,7 +394,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -421,7 +421,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -477,7 +477,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -519,7 +519,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -551,7 +551,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       const schemaToUse = schema || this.defaultSchema;
 
@@ -581,7 +581,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       const [connectionsResult, maxConnectionsResult, bufferCacheResult] = await Promise.all([
         client.query(`
@@ -643,7 +643,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -680,7 +680,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
@@ -773,7 +773,7 @@ export class PostgresConnector implements Connector {
       throw new Error("Not connected to database");
     }
 
-    const client = await this.pool.connect();
+    const client = await this.acquireClient();
     // Captured up front, before a timeout can lead to the client being discarded.
     const backendPid = (client as unknown as { processID: number | null }).processID;
     let isClientDiscarded = false;
@@ -889,6 +889,44 @@ export class PostgresConnector implements Connector {
         client.release();
       }
     }
+  }
+
+  /**
+   * Checks a client out of the pool with an 'error' listener attached for the
+   * whole checkout, and releases it with that error so the pool discards it.
+   *
+   * pg-pool only listens for a client's 'error' while the client is idle: the
+   * listener is removed on checkout and re-attached on release. If the server
+   * ends the connection while a query is in flight (pg_terminate_backend, a
+   * failover, idle_in_transaction_session_timeout, a proxy reset), pg emits
+   * 'error' on the Client itself, and with nobody listening Node exits the
+   * whole process (#479). The pool-level listener in connect() cannot help:
+   * it only covers idle clients. pool.query() attaches exactly this kind of
+   * per-checkout listener; this does the same for the pool.connect() path.
+   */
+  private async acquireClient(): Promise<pg.PoolClient> {
+    if (!this.pool) {
+      throw new Error("Not connected to database");
+    }
+    const client = await this.pool.connect();
+    let connectionError: Error | undefined;
+    const onError = (err: Error) => {
+      connectionError = err;
+    };
+    client.on("error", onError);
+    const release = client.release;
+    client.release = (err?: Error | boolean) => {
+      client.removeListener("error", onError);
+      // Releasing with a truthy argument makes the pool close and drop the
+      // client instead of handing the dead connection to the next caller.
+      const reason = err ?? connectionError;
+      if (reason === undefined) {
+        release();
+      } else {
+        release(reason);
+      }
+    };
+    return client;
   }
 
   /**
