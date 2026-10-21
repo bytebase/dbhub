@@ -17,7 +17,9 @@ import { EventEmitter } from "events";
  */
 
 class FakePgPool extends EventEmitter {
-  connect = vi.fn().mockResolvedValue({ release: vi.fn() });
+  // The client is a real EventEmitter, like pg.Client: the connector attaches a
+  // per-checkout 'error' listener to it (bytebase/dbhub#479).
+  connect = vi.fn().mockResolvedValue(Object.assign(new EventEmitter(), { release: vi.fn() }));
   end = vi.fn().mockResolvedValue(undefined);
 }
 
