@@ -109,6 +109,60 @@ describe('SQLite Connector Integration Tests', () => {
   sqliteTest.createErrorHandlingTests();
 
   describe('SQLite-specific Features', () => {
+    it('should include virtual and stored generated columns in table schemas', async () => {
+      await sqliteTest.connector.executeSQL(`
+        CREATE TABLE "line items" (
+          id INTEGER PRIMARY KEY,
+          qty INTEGER NOT NULL DEFAULT 1,
+          subtotal REAL GENERATED ALWAYS AS (qty * price) VIRTUAL NOT NULL,
+          price REAL NOT NULL,
+          stored_total REAL GENERATED ALWAYS AS (qty * price) STORED
+        );
+        INSERT INTO "line items" (qty, price) VALUES (3, 12.5);
+      `, {});
+
+      try {
+        const result = await sqliteTest.connector.executeSQL('SELECT * FROM "line items"', {});
+        expect(result.resultSets[0].rows[0].subtotal).toBe(37.5);
+        expect(result.resultSets[0].rows[0].stored_total).toBe(37.5);
+
+        const columns = await sqliteTest.connector.getTableSchema('line items', 'main');
+        expect(columns.map(column => column.column_name)).toEqual([
+          'id', 'qty', 'subtotal', 'price', 'stored_total',
+        ]);
+        expect(columns.find(column => column.column_name === 'subtotal')).toEqual({
+          column_name: 'subtotal',
+          data_type: 'REAL',
+          is_nullable: 'NO',
+          column_default: null,
+          description: null,
+        });
+        expect(columns.find(column => column.column_name === 'stored_total')).toEqual({
+          column_name: 'stored_total',
+          data_type: 'REAL',
+          is_nullable: 'YES',
+          column_default: null,
+          description: null,
+        });
+        expect(columns.find(column => column.column_name === 'qty')?.column_default).toBe('1');
+      } finally {
+        await sqliteTest.connector.executeSQL('DROP TABLE "line items"', {});
+      }
+    });
+
+    it('should exclude hidden virtual-table columns from table schemas', async () => {
+      await sqliteTest.connector.executeSQL(
+        'CREATE VIRTUAL TABLE schema_fts USING fts5(title, content)', {}
+      );
+
+      try {
+        const columns = await sqliteTest.connector.getTableSchema('schema_fts', 'main');
+        expect(columns.map(column => column.column_name)).toEqual(['title', 'content']);
+      } finally {
+        await sqliteTest.connector.executeSQL('DROP TABLE schema_fts', {});
+      }
+    });
+
     it('should handle SQLite data types correctly', async () => {
       await sqliteTest.connector.executeSQL(`
         CREATE TABLE IF NOT EXISTS types_test (

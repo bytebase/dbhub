@@ -403,7 +403,11 @@ export class SQLiteConnector implements Connector {
     // 3. The PRAGMA commands operate on the current database connection
     try {
       const quotedTableName = quoteIdentifier(tableName, "sqlite");
-      const rows = this.queryAll<SQLiteTableInfo>(`PRAGMA table_info(${quotedTableName})`);
+      // table_info omits generated columns. Keep them, but exclude virtual-table
+      // implementation columns (hidden=1) exposed by table_xinfo.
+      const rows = this.queryAll<SQLiteTableInfo & { hidden: number }>(
+        `PRAGMA table_xinfo(${quotedTableName})`
+      ).filter((row) => row.hidden !== 1);
 
       // Convert SQLite schema format to our standard TableColumn format
       // SQLite does not support column comments, so description is always null
