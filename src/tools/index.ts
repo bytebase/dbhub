@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/server";
-import { createExecuteSqlToolHandler, executeSqlInputSchema } from "./execute-sql.js";
+import { createExecuteSqlToolHandler, executeSqlInputSchema, executeSqlOutputSchema } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema } from "./search-objects.js";
 import { createExplainSqlToolHandler, explainSqlInputSchema } from "./explain-sql.js";
 import { createHealthCheckToolHandler, healthCheckInputSchema } from "./health-check.js";
@@ -70,6 +70,7 @@ function registerExecuteSqlTool(
     {
       description: metadata.description,
       inputSchema: executeSqlInputSchema,
+      outputSchema: executeSqlOutputSchema,
       annotations: metadata.annotations,
     },
     createExecuteSqlToolHandler(sourceId)

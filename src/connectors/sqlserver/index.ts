@@ -875,7 +875,22 @@ export class SQLServerConnector implements Connector {
   ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
       const rows = recordset ?? [];
-      return { rows, rowCount: rows.length };
+      // node-mssql attaches the column map to each recordset itself
+      // (recordset.columns: { name -> { index, name, type, ... } }), so the
+      // result set can describe its own shape without a second round trip.
+      const columns = recordset?.columns
+        ? Object.values(recordset.columns as Record<string, any>)
+            .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+            .map((column) => ({
+              name: column.name,
+              type: column.type?.name ?? String(column.type),
+            }))
+        : undefined;
+      return {
+        rows,
+        rowCount: rows.length,
+        ...(columns ? { columns } : {}),
+      };
     });
 
     // Rows the SELECTs returned are counted before any probe row is dropped

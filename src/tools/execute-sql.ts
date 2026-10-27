@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
-import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
+import { bigIntReplacer, createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import { allowedKeywords } from "../utils/allowed-keywords.js";
 import { policyFromReadonly, isReadOnlyPolicy, sqlVerdict } from "../utils/sql-access-policy.js";
 import { getToolRegistry } from "./registry.js";
@@ -21,6 +21,26 @@ export const executeSqlSchema = {
 };
 
 export const executeSqlInputSchema = z.object(executeSqlSchema);
+
+// Structured-output contract for the tool result: the MCP client renders this
+// in code-mode catalogs, so it describes the actual response envelope (the
+// `statements` payload built by the handler). Column metadata is present only
+// when the connector could recover it from the driver.
+export const executeSqlOutputSchema = z.object({
+  statements: z.array(
+    z.object({
+      sql: z.string().optional(),
+      columns: z
+        .array(z.object({ name: z.string(), type: z.string() }))
+        .optional(),
+      rows: z.array(z.record(z.string(), z.unknown())),
+      count: z.number(),
+      truncated: z.boolean().optional(),
+    })
+  ),
+  source_id: z.string(),
+  messages: z.array(z.record(z.string(), z.unknown())).optional(),
+});
 
 /**
  * Create an execute_sql tool handler for a specific source
@@ -75,7 +95,13 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
       };
 
-      return createToolSuccessResponse(responseData);
+      // structuredContent carries the same payload in machine-readable form
+      // for MCP clients that render tool output schemas (code-mode catalogs).
+      return {
+        ...createToolSuccessResponse(responseData),
+        structuredContent: JSON.parse(JSON.stringify(responseData, bigIntReplacer)),
+        isError: false as const,
+      };
     } catch (error) {
       success = false;
       errorMessage = (error as Error).message;

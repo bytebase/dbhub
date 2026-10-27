@@ -40,6 +40,49 @@ import {
   isClientSideTimeout,
 } from "../../utils/query-timeout.js";
 
+// pg reports result columns as OIDs (dataTypeID); map the common ones so the
+// result set can describe its own shape. Unmapped OIDs fall back to `oid:<n>`
+// rather than omitting the column - a row still needs its field list.
+const PG_TYPE_NAMES: Record<number, string> = {
+  16: "bool",
+  17: "bytea",
+  18: "char",
+  19: "name",
+  20: "int8",
+  21: "int2",
+  23: "int4",
+  25: "text",
+  26: "oid",
+  114: "json",
+  700: "float4",
+  701: "float8",
+  790: "money",
+  869: "inet",
+  1042: "bpchar",
+  1043: "varchar",
+  1082: "date",
+  1083: "time",
+  1114: "timestamp",
+  1184: "timestamptz",
+  1186: "interval",
+  1700: "numeric",
+  2950: "uuid",
+  3802: "jsonb",
+};
+
+function pgColumns(fields: Array<{ name: string; dataTypeID?: number }>): { columns: Array<{ name: string; type: string }> } {
+  return {
+    columns: fields.map((field) => ({
+      name: field.name,
+      type:
+        field.dataTypeID === undefined
+          ? "unknown"
+          : PG_TYPE_NAMES[field.dataTypeID] ?? `oid:${field.dataTypeID}`,
+    })),
+  };
+}
+
+const POSTGRES_CLIENT_QUERY_TIMEOUT_GRACE_MS = 5_000;
 /**
  * PostgreSQL DSN Parser
  * Handles DSN strings like: postgres://user:password@localhost:5432/dbname?sslmode=disable
@@ -824,6 +867,7 @@ export class PostgresConnector implements Connector {
           sql: statements[0],
           rows: result.rows,
           rowCount: result.rowCount ?? result.rows.length,
+          ...(pgColumns(result.fields ?? [])),
         };
         SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
         return { resultSets: [resultSet] };
@@ -857,6 +901,7 @@ export class PostgresConnector implements Connector {
               sql: statement,
               rows: result.rows ?? [],
               rowCount: result.rowCount ?? result.rows?.length ?? 0,
+              ...(pgColumns(result.fields ?? [])),
             };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             resultSets.push(resultSet);

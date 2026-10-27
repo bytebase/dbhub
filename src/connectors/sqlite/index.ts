@@ -563,8 +563,27 @@ export class SQLiteConnector implements Connector {
               options.maxRows,
               "sqlite"
             );
-            const rows = this.prepare(processedStatement).all();
-            const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
+            const readStatement = this.prepare(processedStatement);
+            const rows = readStatement.all();
+            // node:sqlite exposes the statement's column list; map to the same
+            // { name, type } shape the other connectors report.
+            const rawColumns =
+              typeof (readStatement as any).columns === "function"
+                ? (readStatement as any).columns()
+                : [];
+            const columns =
+              Array.isArray(rawColumns) && rawColumns.length > 0
+                ? rawColumns.map((column: any) => ({
+                    name: column.name,
+                    type: typeof column.type === "string" && column.type !== "" ? column.type : "unknown",
+                  }))
+                : undefined;
+            const resultSet: SQLResultSet = {
+              sql: statement,
+              rows,
+              rowCount: rows.length,
+              ...(columns ? { columns } : {}),
+            };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             resultSets.push(resultSet);
           } else {

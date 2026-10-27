@@ -37,6 +37,14 @@ export interface SQLResultSet {
   rows: any[];
   rowCount: number;
   /**
+   * Column metadata for SELECT-shaped result sets, as reported by the driver.
+   * Optional: connectors populate it when the driver exposes column
+   * information (node-mssql `recordset.columns`, pg `result.fields`,
+   * mysql2 `fields`, node:sqlite `statement.columns()`); synthetic sets
+   * (write summaries) and drivers without metadata omit it.
+   */
+  columns?: Array<{ name: string; type: string }>;
+  /**
    * True when a configured max_rows cap cut off this result set: the query
    * had more rows than the cap allows, and `rows`/`rowCount` reflect only the
    * first max_rows of them. Omitted (never false) when the result is

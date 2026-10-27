@@ -9,6 +9,19 @@
 import type { SQLResultSet } from "../connectors/interface.js";
 
 /**
+ * Describes one result column from driver field metadata. MySQL2 reports the
+ * protocol type as a numeric `columnType`; MariaDB fields carry a string
+ * `type`. Anything unrecognized stays "unknown" rather than being dropped -
+ * the field name is the load-bearing part for the model.
+ */
+function describeColumn(field: any): { name: string; type: string } {
+  if (typeof field?.type === "string" && field.type !== "") {
+    return { name: field.name, type: field.type };
+  }
+  return { name: field.name, type: "unknown" };
+}
+
+/**
  * Checks if an element is a metadata object from INSERT/UPDATE/DELETE operations
  * rather than a row array from SELECT queries.
  *
@@ -80,8 +93,19 @@ function buildResultSetsFromMultiStatement(results: any[], statementTexts?: stri
  * to attribute each result set to the statement that produced it
  * @returns One `SQLResultSet` per statement, in execution order
  */
-export function parseQueryResultSets(results: any, statementTexts?: string[]): SQLResultSet[] {
+export function parseQueryResultSets(
+  results: any,
+  statementTexts?: string[],
+  fields?: any[]
+): SQLResultSet[] {
   const singleStatementSql = statementTexts?.length === 1 ? statementTexts[0] : undefined;
+  // MySQL2 promise API hands back [rows, fields] for single-statement queries
+  // (fields are lost in multi-statement mode) - when present, they describe
+  // the result set's own columns.
+  const columns =
+    Array.isArray(fields) && fields.length > 0
+      ? fields.map(describeColumn)
+      : undefined;
 
   // Non-array results (e.g. a single INSERT/UPDATE/DELETE without RETURNING)
   if (isMetadataObject(results)) {
@@ -96,5 +120,12 @@ export function parseQueryResultSets(results: any, statementTexts?: string[]): S
   }
 
   // Single statement result - results is the rows array directly
-  return [{ sql: singleStatementSql, rows: results, rowCount: results.length }];
+  return [
+    {
+      sql: singleStatementSql,
+      rows: results,
+      rowCount: results.length,
+      ...(columns ? { columns } : {}),
+    },
+  ];
 }

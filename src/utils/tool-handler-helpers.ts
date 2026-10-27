@@ -37,7 +37,7 @@ export function getEffectiveSourceId(sourceId?: string): string {
  */
 export function toStatementsPayload(
   resultSets: SQLResultSet[]
-): Array<{ sql?: string; rows: any[]; count: number; truncated?: boolean }> {
+): Array<{ sql?: string; rows: any[]; count: number; truncated?: boolean; columns?: Array<{ name: string; type: string }> }> {
   return resultSets.map((set) => ({
     sql: set.sql,
     rows: set.rows,
@@ -46,6 +46,9 @@ export function toStatementsPayload(
     // can tell a capped result from a table with exactly max_rows rows
     // (and complete results don't pay the extra tokens).
     ...(set.truncated ? { truncated: true } : {}),
+    // Column metadata, when the connector could recover it: lets the
+    // consumer learn the result's own shape without a schema round trip.
+    ...(set.columns ? { columns: set.columns } : {}),
   }));
 }
 

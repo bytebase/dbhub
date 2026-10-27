@@ -342,10 +342,13 @@ export class MySQLConnector implements Connector {
 
           // MySQL2 returns results in format [rows, fields]
           // Extract the first element which contains the actual row data
-          const [firstResult] = results;
+          // (fields ride along for single-statement queries and describe the
+          // result columns in the tool response; multi-statement mode drops
+          // them, so those result sets stay column-less).
+          const [firstResult, firstFields] = results;
 
           // Parse results using shared utility that handles both single and multi-statement queries
-          const resultSets = parseQueryResultSets(firstResult, statements);
+          const resultSets = parseQueryResultSets(firstResult, statements, firstFields);
 
           // Result sets are per statement in source order, so a length match
           // means the pairing with the probe flags is exact (same reasoning as
