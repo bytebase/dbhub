@@ -146,6 +146,27 @@ export class SQLiteConnector implements Connector {
   }
 
   /**
+   * Map node:sqlite's statement column list to the connector-agnostic
+   * `{ name, type }` shape the other connectors report. SQLite has no
+   * declared type for expression columns, so those come back as
+   * `"unknown"`. Returns `undefined` when the statement exposes no
+   * columns, so result sets can omit the field entirely.
+   */
+  private columnsOf(statement: StatementSync): SQLResultSet["columns"] | undefined {
+    const rawColumns =
+      typeof (statement as any).columns === "function"
+        ? (statement as any).columns()
+        : [];
+    if (!Array.isArray(rawColumns) || rawColumns.length === 0) {
+      return undefined;
+    }
+    return rawColumns.map((column: any) => ({
+      name: column.name,
+      type: typeof column.type === "string" && column.type !== "" ? column.type : "unknown",
+    }));
+  }
+
+  /**
    * Run an introspection query and return all rows. Integers come back as plain
    * numbers (no `setReadBigInts`), which is what the schema-reading callers need
    * for boolean flag comparisons. node:sqlite types `.all()` as a generic record
@@ -517,12 +538,19 @@ export class SQLiteConnector implements Connector {
         }
 
         if (isReadStatement) {
+          const readStatement = this.prepare(processedStatement);
           // Pass parameters if provided
           const rows =
             parameters && parameters.length > 0
-              ? this.prepare(processedStatement).all(...parameters)
-              : this.prepare(processedStatement).all();
-          const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount: rows.length };
+              ? readStatement.all(...parameters)
+              : readStatement.all();
+          const columns = this.columnsOf(readStatement);
+          const resultSet: SQLResultSet = {
+            sql: statements[0],
+            rows,
+            rowCount: rows.length,
+            ...(columns ? { columns } : {}),
+          };
           SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
           return { resultSets: [resultSet] };
         } else {
@@ -567,17 +595,7 @@ export class SQLiteConnector implements Connector {
             const rows = readStatement.all();
             // node:sqlite exposes the statement's column list; map to the same
             // { name, type } shape the other connectors report.
-            const rawColumns =
-              typeof (readStatement as any).columns === "function"
-                ? (readStatement as any).columns()
-                : [];
-            const columns =
-              Array.isArray(rawColumns) && rawColumns.length > 0
-                ? rawColumns.map((column: any) => ({
-                    name: column.name,
-                    type: typeof column.type === "string" && column.type !== "" ? column.type : "unknown",
-                  }))
-                : undefined;
+            const columns = this.columnsOf(readStatement);
             const resultSet: SQLResultSet = {
               sql: statement,
               rows,
