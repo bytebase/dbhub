@@ -14,6 +14,17 @@ describe('SafeURL', () => {
     expect(url.searchParams.size).toBe(0);
   });
 
+  it.each([
+    ['postgres://user:pass@[::1]:5432/dbname', '::1', '5432'],
+    ['mysql://[2001:db8::1]:3306/dbname', '2001:db8::1', '3306'],
+    ['postgres://[::1]/dbname', '::1', ''],
+  ])('should parse a bracketed IPv6 host in %s', (dsn, hostname, port) => {
+    const url = new SafeURL(dsn);
+    expect(url.hostname).toBe(hostname);
+    expect(url.port).toBe(port);
+    expect(url.pathname).toBe('/dbname');
+  });
+
   it('should parse a DSN with authentication correctly', () => {
     const url = new SafeURL('postgres://user:password@localhost:5432/dbname');
     

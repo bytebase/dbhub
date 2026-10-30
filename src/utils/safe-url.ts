@@ -122,12 +122,22 @@ export class SafeURL implements ISafeURL {
       }
 
       // Extract hostname and port
-      const colonIndex: number = urlString.indexOf(':');
-      if (colonIndex !== -1) {
-        this.hostname = urlString.substring(0, colonIndex);
-        this.port = urlString.substring(colonIndex + 1);
+      if (urlString.startsWith('[')) {
+        // Brackets delimit an IPv6 host; its colons are not port separators.
+        const ipv6Host = /^\[([^\]]+)\](?::(.*))?$/.exec(urlString);
+        if (!ipv6Host) {
+          throw new Error('Invalid bracketed IPv6 host');
+        }
+        this.hostname = ipv6Host[1];
+        this.port = ipv6Host[2] ?? '';
       } else {
-        this.hostname = urlString;
+        const colonIndex: number = urlString.indexOf(':');
+        if (colonIndex !== -1) {
+          this.hostname = urlString.substring(0, colonIndex);
+          this.port = urlString.substring(colonIndex + 1);
+        } else {
+          this.hostname = urlString;
+        }
       }
       
       // Additional validation
