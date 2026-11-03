@@ -29,6 +29,11 @@ describe('DSN Obfuscation Utilities', () => {
       // string, which DBHub prints per source at startup.
       ['postgres://user:pa@ss@localhost:5432/db', 'postgres://user:*****@localhost:5432/db'],
       ['postgres://user:pa#ss@localhost:5432/db', 'postgres://user:*****@localhost:5432/db'],
+      // A bracketed IPv6 host keeps its brackets: SafeURL hands back the bare
+      // address, and without the brackets its colons would read as a port.
+      ['postgres://user:pass@[::1]:5432/db', 'postgres://user:****@[::1]:5432/db'],
+      ['mysql://user:pass@[2001:db8::1]/db?sslmode=require', 'mysql://user:****@[2001:db8::1]/db?sslmode=require'],
+      ['postgres://:pass@[::1]', 'postgres://****@[::1]'],
     ])('should obfuscate %s as %s', (dsn, expected) => {
       expect(obfuscateDSNPassword(dsn)).toBe(expected);
     });
