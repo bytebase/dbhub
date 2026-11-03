@@ -332,20 +332,23 @@ export class MySQLConnector implements Connector {
           }
 
           // Use dedicated connection with multipleStatements: true support
-          // Pass parameters if provided, with optional query timeout
+          // Pass parameters if provided, with optional query timeout.
+          // Rows are fetched positionally (rowsAsArray) and rebuilt from the
+          // field metadata by parseQueryResultSets, so a result with repeated
+          // column names keeps every column (bytebase/dbhub#484).
+          const queryOptions = { sql: processedSQL, timeout, rowsAsArray: true };
           let results: any;
           if (parameters && parameters.length > 0) {
-            results = await conn.query({ sql: processedSQL, timeout }, parameters);
+            results = await conn.query(queryOptions, parameters);
           } else {
-            results = await conn.query({ sql: processedSQL, timeout });
+            results = await conn.query(queryOptions);
           }
 
           // MySQL2 returns results in format [rows, fields]
-          // Extract the first element which contains the actual row data
-          const [firstResult] = results;
+          const [firstResult, fields] = results;
 
           // Parse results using shared utility that handles both single and multi-statement queries
-          const resultSets = parseQueryResultSets(firstResult, statements);
+          const resultSets = parseQueryResultSets(firstResult, statements, fields);
 
           // Result sets are per statement in source order, so a length match
           // means the pairing with the probe flags is exact (same reasoning as

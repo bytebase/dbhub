@@ -20,6 +20,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { objectRows } from "../../utils/result-columns.js";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
 import { postgresTypeParsers } from "./type-parsers.js";
 import {
@@ -768,6 +769,36 @@ export class PostgresConnector implements Connector {
   }
 
 
+  /**
+   * Runs one statement of execute_sql and returns its rows as objects.
+   *
+   * node-postgres's default row objects are keyed by column name, so a result
+   * with a repeated name (`SELECT count(*), count(*) FILTER (...)`) keeps only
+   * the last value (bytebase/dbhub#484). The rows are fetched positionally
+   * (`rowMode: 'array'`) and rebuilt from `result.fields`, which lists every
+   * column, with repeated names suffixed `_1`, `_2`, ... (see result-columns.ts).
+   * A result without field metadata (a test double) is passed through as is.
+   */
+  private static async queryRows(
+    client: pg.PoolClient,
+    text: string,
+    parameters?: any[]
+  ): Promise<{ rows: any[]; rowCount: number }> {
+    const result = await client.query({
+      text,
+      values: parameters && parameters.length > 0 ? parameters : undefined,
+      rowMode: "array",
+    });
+    const positional = result.rows ?? [];
+    const rows = Array.isArray(result.fields)
+      ? objectRows(
+          result.fields.map((field) => field.name),
+          positional
+        )
+      : positional;
+    return { rows, rowCount: result.rowCount ?? rows.length };
+  }
+
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     if (!this.pool) {
       throw new Error("Not connected to database");
@@ -795,15 +826,13 @@ export class PostgresConnector implements Connector {
         if (options.readonly) {
           await client.query('BEGIN READ ONLY');
           try {
-            const result = parameters && parameters.length > 0
-              ? await client.query(processedStatement, parameters)
-              : await client.query(processedStatement);
+            const { rows, rowCount } = await PostgresConnector.queryRows(
+              client,
+              processedStatement,
+              parameters
+            );
             await client.query('COMMIT');
-            const resultSet: SQLResultSet = {
-              sql: statements[0],
-              rows: result.rows,
-              rowCount: result.rowCount ?? result.rows.length,
-            };
+            const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             return { resultSets: [resultSet] };
           } catch (error) {
@@ -812,19 +841,12 @@ export class PostgresConnector implements Connector {
           }
         }
 
-        // Use parameters if provided
-        let result;
-        if (parameters && parameters.length > 0) {
-          result = await client.query(processedStatement, parameters);
-        } else {
-          result = await client.query(processedStatement);
-        }
-        // Explicitly return rows and rowCount to ensure rowCount is preserved
-        const resultSet: SQLResultSet = {
-          sql: statements[0],
-          rows: result.rows,
-          rowCount: result.rowCount ?? result.rows.length,
-        };
+        const { rows, rowCount } = await PostgresConnector.queryRows(
+          client,
+          processedStatement,
+          parameters
+        );
+        const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount };
         SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
         return { resultSets: [resultSet] };
       } else {
@@ -852,12 +874,8 @@ export class PostgresConnector implements Connector {
             "postgres"
           );
 
-            const result = await client.query(processedStatement);
-            const resultSet: SQLResultSet = {
-              sql: statement,
-              rows: result.rows ?? [],
-              rowCount: result.rowCount ?? result.rows?.length ?? 0,
-            };
+            const { rows, rowCount } = await PostgresConnector.queryRows(client, processedStatement);
+            const resultSet: SQLResultSet = { sql: statement, rows, rowCount };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             resultSets.push(resultSet);
           }

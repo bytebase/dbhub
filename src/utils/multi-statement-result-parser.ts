@@ -7,6 +7,36 @@
  */
 
 import type { SQLResultSet } from "../connectors/interface.js";
+import { objectRows } from "./result-columns.js";
+
+/**
+ * The column metadata a driver returns alongside its rows. For a single
+ * result set it is a flat list of column descriptors; for a multi-statement
+ * batch it is one entry per statement - that statement's descriptor list, or
+ * null/undefined for a statement that produced no rows. mysql2 describes a
+ * column as `{ name: string }` (FieldPacket), mariadb as an object with a
+ * `name()` method (ColumnDefinition).
+ */
+export type DriverFields = unknown[] | undefined;
+
+/** The column name of a mysql2 FieldPacket or a mariadb ColumnDefinition. */
+function columnName(field: any): string {
+  const name = typeof field?.name === "function" ? field.name() : field?.name;
+  return typeof name === "string" ? name : String(name ?? "");
+}
+
+/**
+ * Rebuilds object rows from the positional rows the drivers return in array
+ * row mode (`rowsAsArray`), under unique column names (see result-columns.ts).
+ * Rows that are already objects, and results without column metadata, are
+ * returned unchanged.
+ */
+function toObjectRows(rows: any[], fields: unknown): any[] {
+  if (!Array.isArray(fields) || !rows.some(Array.isArray)) {
+    return rows;
+  }
+  return objectRows(fields.map(columnName), rows);
+}
 
 /**
  * Checks if an element is a metadata object from INSERT/UPDATE/DELETE operations
@@ -35,15 +65,29 @@ function isMetadataObject(element: any): boolean {
  * - Metadata objects (from INSERT/UPDATE/DELETE)
  * - Arrays of rows (from SELECT queries)
  */
-function isMultiStatementResult(results: any): boolean {
+function isMultiStatementResult(results: any, fields: DriverFields): boolean {
   if (!Array.isArray(results) || results.length === 0) {
     return false;
   }
 
   const firstElement = results[0];
 
-  // If first element is metadata or an array, it's a multi-statement result
-  return isMetadataObject(firstElement) || Array.isArray(firstElement);
+  if (isMetadataObject(firstElement)) {
+    return true;
+  }
+  if (!Array.isArray(firstElement)) {
+    return false;
+  }
+
+  // The first element is an array: either the first statement's row list
+  // (multi-statement) or, in array row mode, the first row of a single
+  // statement. The column metadata tells them apart - a single statement's
+  // is a flat list of column descriptors, a batch's has one entry per
+  // statement (a list, or null/undefined for a statement without rows).
+  if (fields === undefined) {
+    return true;
+  }
+  return fields.every((entry) => entry == null || Array.isArray(entry));
 }
 
 /**
@@ -55,11 +99,16 @@ function isMultiStatementResult(results: any): boolean {
  * it - both drivers return one entry per statement in source order, so a
  * length match means the pairing is exact, not a guess.
  */
-function buildResultSetsFromMultiStatement(results: any[], statementTexts?: string[]): SQLResultSet[] {
+function buildResultSetsFromMultiStatement(
+  results: any[],
+  statementTexts: string[] | undefined,
+  fields: DriverFields
+): SQLResultSet[] {
   const sql = statementTexts?.length === results.length ? statementTexts : undefined;
   return results.map((result, index) => {
     if (Array.isArray(result)) {
-      return { sql: sql?.[index], rows: result, rowCount: result.length };
+      const rows = toObjectRows(result, fields?.[index]);
+      return { sql: sql?.[index], rows, rowCount: rows.length };
     }
     if (isMetadataObject(result)) {
       return { sql: sql?.[index], rows: [], rowCount: result.affectedRows || 0 };
@@ -78,9 +127,16 @@ function buildResultSetsFromMultiStatement(results: any[], statementTexts?: stri
  * @param results - Raw results from the database driver
  * @param statementTexts - The original, source-order statement texts, used
  * to attribute each result set to the statement that produced it
+ * @param fields - The driver's column metadata (see `DriverFields`). With it,
+ * rows fetched in array row mode are rebuilt as objects under unique column
+ * names, so a result with repeated names keeps every column
  * @returns One `SQLResultSet` per statement, in execution order
  */
-export function parseQueryResultSets(results: any, statementTexts?: string[]): SQLResultSet[] {
+export function parseQueryResultSets(
+  results: any,
+  statementTexts?: string[],
+  fields?: DriverFields
+): SQLResultSet[] {
   const singleStatementSql = statementTexts?.length === 1 ? statementTexts[0] : undefined;
 
   // Non-array results (e.g. a single INSERT/UPDATE/DELETE without RETURNING)
@@ -91,10 +147,11 @@ export function parseQueryResultSets(results: any, statementTexts?: string[]): S
     return [{ sql: singleStatementSql, rows: [], rowCount: 0 }];
   }
 
-  if (isMultiStatementResult(results)) {
-    return buildResultSetsFromMultiStatement(results, statementTexts);
+  if (isMultiStatementResult(results, fields)) {
+    return buildResultSetsFromMultiStatement(results, statementTexts, fields);
   }
 
   // Single statement result - results is the rows array directly
-  return [{ sql: singleStatementSql, rows: results, rowCount: results.length }];
+  const rows = toObjectRows(results, fields);
+  return [{ sql: singleStatementSql, rows, rowCount: rows.length }];
 }

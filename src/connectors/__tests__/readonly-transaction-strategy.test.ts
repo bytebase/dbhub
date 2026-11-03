@@ -53,7 +53,9 @@ function makeFakePool(
       statements.push(sql);
       const failure = failOn?.(sql);
       if (failure) throw failure;
-      return wrapResults([{ id: 1 }]);
+      const results = wrapResults([{ id: 1 }]);
+      // mariadb answers a `metaAsArray` query with [rows, meta].
+      return typeof arg === "object" && arg.metaAsArray ? [results, []] : results;
     }),
     release: vi.fn(),
     destroy: vi.fn(),
@@ -69,7 +71,8 @@ function makeFakePool(
   return { pool, conn, statements };
 }
 
-// mysql2 returns [rows, fields]; mariadb returns rows directly.
+// mysql2 returns [rows, fields]; mariadb returns rows directly (except for a
+// metaAsArray query, handled in makeFakePool).
 const asMysql = (rows: any[]) => [rows, []];
 const asMariadb = (rows: any[]) => rows;
 
@@ -254,10 +257,12 @@ describe("readonly transaction strategy", () => {
       const connector = await connectMysql(pool, { queryTimeoutSeconds: 30 });
       await connector.executeSQL("SELECT 1", {});
 
-      expect(conn.query).toHaveBeenCalledWith({
-        sql: "SELECT 1",
-        timeout: 30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS,
-      });
+      expect(conn.query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sql: "SELECT 1",
+          timeout: 30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS,
+        })
+      );
     });
   });
 
@@ -306,7 +311,9 @@ describe("readonly transaction strategy", () => {
       // on the pooled connection.
       const answer = conn.query.getMockImplementation()!;
       conn.query.mockImplementation((arg: any) =>
-        arg === "SELECT SLEEP(600)" ? new Promise(() => {}) : answer(arg)
+        (typeof arg === "string" ? arg : arg.sql) === "SELECT SLEEP(600)"
+          ? new Promise(() => {})
+          : answer(arg)
       );
 
       const settled = connector

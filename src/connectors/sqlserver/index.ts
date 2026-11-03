@@ -19,6 +19,7 @@ import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
+import { objectRows } from "../../utils/result-columns.js";
 import { LEADING_SQL_NOISE, splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 import { assertNoReadOnlyEscapes, bindParameters } from "./request-helpers.js";
@@ -811,6 +812,8 @@ export class SQLServerConnector implements Connector {
       );
 
       bindParameters(request, parameters);
+      // Positional rows; buildResultSets rebuilds the objects (see objectRows).
+      request.arrayRowMode = true;
 
       const result = await request.query(processedSQL);
 
@@ -856,6 +859,32 @@ export class SQLServerConnector implements Connector {
     /^\s*(?:create|alter)\s+(?:or\s+alter\s+)?(?:proc|procedure|function|trigger)\b/i;
 
   /**
+   * Rebuilds object rows from a recordset fetched in node-mssql's array row
+   * mode, under unique column names (see result-columns.ts).
+   *
+   * In its default mode node-mssql keys rows by column name and merges the
+   * values of a repeated name into one array, so `SELECT 1 AS a, 2 AS a`
+   * came back as `{ a: [1, 2] }` - a silent shape change. Array row mode
+   * returns each row positionally and lists every column on
+   * `recordset.columns`, so repeated names can be suffixed `_1`, `_2`, ...
+   * (bytebase/dbhub#484). A FOR JSON / FOR XML result arrives as one chunked
+   * column that node-mssql assembles into a single-key object even in array
+   * row mode, so a row that is not an array is read positionally too. A
+   * recordset without column metadata (object-mode test doubles) is returned
+   * as is.
+   */
+  private static objectRows(recordset: any[]): any[] {
+    const columns = (recordset as { columns?: unknown }).columns;
+    if (!Array.isArray(columns)) {
+      return recordset;
+    }
+    return objectRows(
+      columns.map((column: { name: string }) => column.name),
+      recordset.map((row) => (Array.isArray(row) || row == null ? row : Object.values(row)))
+    );
+  }
+
+  /**
    * Builds one result set per recordset. With `maxRows`, every set is capped:
    * a statement the TOP/FETCH probe rewrite reached returns at most
    * maxRows + 1 rows, and more than maxRows rows means the cap fired, so the
@@ -874,7 +903,7 @@ export class SQLServerConnector implements Connector {
     maxRows?: number,
   ): SQLResultSet[] {
     const sets: SQLResultSet[] = (recordsets ?? []).map((recordset: any) => {
-      const rows = recordset ?? [];
+      const rows = SQLServerConnector.objectRows(recordset ?? []);
       return { rows, rowCount: rows.length };
     });
 
@@ -942,6 +971,8 @@ export class SQLServerConnector implements Connector {
     );
 
     bindParameters(request, parameters);
+    // Positional rows; buildResultSets rebuilds the objects (see objectRows).
+    request.arrayRowMode = true;
 
     let result;
     let queryFailed = false;
