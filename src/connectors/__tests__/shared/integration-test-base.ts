@@ -205,6 +205,21 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         expect(Number(rowValue(selectResult.resultSets[0].rows[0], 'age'))).toBe(25);
       });
 
+      it('should keep every column when names repeat', async () => {
+        // Every driver's default row object is keyed by column name, so the
+        // second `n` used to overwrite the first (bytebase/dbhub#484). The
+        // first column keeps its name; the repeat is suffixed `_1`.
+        const result = await this.connector.executeSQL(
+          'SELECT COUNT(*) AS n, COUNT(*) + 1 AS n FROM users', {}
+        );
+        expect(result.resultSets[0].rows).toHaveLength(1);
+        const row = result.resultSets[0].rows[0];
+        expect(Object.keys(row)).toHaveLength(2);
+        const first = Number(rowValue(row, 'n'));
+        expect(first).toBeGreaterThanOrEqual(3);
+        expect(Number(rowValue(row, 'n_1'))).toBe(first + 1);
+      });
+
       it('should handle complex queries with joins', async () => {
         const result = await this.connector.executeSQL(`
           SELECT u.name, COUNT(o.id) as order_count

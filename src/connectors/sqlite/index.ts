@@ -28,6 +28,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
+import { objectRows } from "../../utils/result-columns.js";
 
 /**
  * SQLite DSN Parser
@@ -143,6 +144,30 @@ export class SQLiteConnector implements Connector {
     const statement = this.db.prepare(sql);
     statement.setReadBigInts(true);
     return statement;
+  }
+
+  /**
+   * Reads every row of a prepared execute_sql statement as objects.
+   *
+   * node:sqlite's `all()` keys each row by column name, so a result with a
+   * repeated name (`SELECT 1 AS a, 2 AS a`) keeps only the last value
+   * (bytebase/dbhub#484). Where the runtime offers positional rows
+   * (`setReturnArrays`, with `columns()` for the names - Node 22.17+/24+),
+   * the rows are read that way and rebuilt under unique names, repeated ones
+   * suffixed `_1`, `_2`, ... (see result-columns.ts). Older runtimes fall
+   * back to the driver's own objects.
+   */
+  private readRows(statement: StatementSync, parameters: any[]): Record<string, unknown>[] {
+    const positional = statement as unknown as {
+      columns?: () => { name: string }[];
+      setReturnArrays?: (enabled: boolean) => void;
+    };
+    if (typeof positional.columns !== "function" || typeof positional.setReturnArrays !== "function") {
+      return statement.all(...parameters);
+    }
+    const names = positional.columns().map((column) => column.name);
+    positional.setReturnArrays(true);
+    return objectRows(names, statement.all(...parameters) as unknown as unknown[][]);
   }
 
   /**
@@ -518,10 +543,7 @@ export class SQLiteConnector implements Connector {
 
         if (isReadStatement) {
           // Pass parameters if provided
-          const rows =
-            parameters && parameters.length > 0
-              ? this.prepare(processedStatement).all(...parameters)
-              : this.prepare(processedStatement).all();
+          const rows = this.readRows(this.prepare(processedStatement), parameters ?? []);
           const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount: rows.length };
           SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
           return { resultSets: [resultSet] };
@@ -563,7 +585,7 @@ export class SQLiteConnector implements Connector {
               options.maxRows,
               "sqlite"
             );
-            const rows = this.prepare(processedStatement).all();
+            const rows = this.readRows(this.prepare(processedStatement), []);
             const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             resultSets.push(resultSet);

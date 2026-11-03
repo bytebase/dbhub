@@ -308,19 +308,24 @@ export class MariaDBConnector implements Connector {
             }
           }
 
-          // Use dedicated connection - MariaDB driver returns rows directly for single statements
+          // Use dedicated connection. Rows are fetched positionally
+          // (rowsAsArray) with the column metadata alongside (metaAsArray:
+          // `[rows, meta]`, per statement for a batch) and rebuilt by
+          // parseQueryResultSets, so a result with repeated column names
+          // keeps every column (bytebase/dbhub#484).
           // Pass parameters if provided
           // Bounded by the client-side fallback deadline, which trails the
           // server-side max_statement_time (see query-timeout.ts).
-          const results: any = await withClientQueryDeadline(
+          const queryOptions = { sql: processedSQL, rowsAsArray: true, metaAsArray: true };
+          const [results, meta]: [any, any] = await withClientQueryDeadline(
             parameters && parameters.length > 0
-              ? conn.query(processedSQL, parameters)
-              : conn.query(processedSQL),
+              ? conn.query(queryOptions, parameters)
+              : conn.query(queryOptions),
             this.clientQueryTimeoutMs
           );
 
           // Parse results using shared utility that handles both single and multi-statement queries
-          const resultSets = parseQueryResultSets(results, statements);
+          const resultSets = parseQueryResultSets(results, statements, meta);
 
           // Result sets are per statement in source order, so a length match
           // means the pairing with the probe flags is exact (same reasoning as

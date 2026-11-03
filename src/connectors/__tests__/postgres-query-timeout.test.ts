@@ -29,7 +29,10 @@ class FakePgPool extends EventEmitter {
   // A real EventEmitter, like pg.Client.
   client = Object.assign(new EventEmitter(), {
     processID: BACKEND_PID,
-    query: vi.fn(async (sql: string) => {
+    // execute_sql statements arrive as a query config (array row mode);
+    // transaction control and the cancel probe as plain strings.
+    query: vi.fn(async (query: string | { text: string }) => {
+      const sql = typeof query === "string" ? query : query.text;
       this.statements.push(sql);
       const failure = this.failOn(sql);
       if (failure) throw failure;

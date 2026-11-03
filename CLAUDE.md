@@ -40,6 +40,7 @@ src/
 │   ├── dsn-obfuscator.ts# DSN security
 │   ├── response-formatter.ts # Output formatting
 │   ├── allowed-keywords.ts  # Read-only SQL classification primitives
+│   ├── result-columns.ts    # Unique column names for result rows (repeats → `_1`, `_2`; connectors fetch rows positionally)
 │   └── sql-access-policy.ts # Statement class → verdict pipeline (single source of readonly semantics)
 └── index.ts             # Entry point with transport handling
 ```
