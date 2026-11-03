@@ -16,6 +16,19 @@ function writeTempPem(dir: string, name: string, pem: string): string {
   return file;
 }
 
+describe('DSN Parser - IPv6 hosts', () => {
+  it.each([
+    [new PostgresConnector(), 'postgres', 5432],
+    [new MySQLConnector(), 'mysql', 3306],
+    [new MariaDBConnector(), 'mariadb', 3306],
+  ] as const)('passes an IPv6 host and port to the %s driver', async (connector, scheme, defaultPort) => {
+    const explicit = await connector.dsnParser.parse(`${scheme}://user:pass@[::1]:15432/db`);
+    expect(explicit).toMatchObject({ host: '::1', port: 15432, database: 'db' });
+    const implicit = await connector.dsnParser.parse(`${scheme}://user:pass@[::1]/db`);
+    expect(implicit).toMatchObject({ host: '::1', port: defaultPort, database: 'db' });
+  });
+});
+
 describe('DSN Parser - PostgreSQL SSL Modes', () => {
   const connector = new PostgresConnector();
   const parser = connector.dsnParser;
