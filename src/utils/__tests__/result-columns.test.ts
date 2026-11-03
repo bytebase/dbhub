@@ -44,6 +44,15 @@ describe("rowsFromArrays", () => {
   it("returns an empty list for no rows", () => {
     expect(rowsFromArrays(["a"], [])).toEqual([]);
   });
+
+  it("keeps a column named __proto__ as an own, serialisable property", () => {
+    const [row] = rowsFromArrays(uniqueColumnNames(["__proto__", "__proto__"]), [[1, 2]]);
+    expect(Object.keys(row)).toEqual(["__proto__", "__proto___1"]);
+    // Compared as text: a `{ __proto__: 1 }` literal in source would set the
+    // prototype instead of a key, so it cannot express the expected value.
+    expect(JSON.stringify(row)).toBe('{"__proto__":1,"__proto___1":2}');
+    expect(Object.getPrototypeOf(row)).toBeNull();
+  });
 });
 
 describe("objectRows", () => {

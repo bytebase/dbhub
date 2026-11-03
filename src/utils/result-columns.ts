@@ -46,6 +46,11 @@ export function uniqueColumnNames(names: readonly string[]): string[] {
  * Builds object rows from positional rows and their (already unique) column
  * names. A row that is not an array is passed through unchanged, so a caller
  * can hand over rows a driver (or a test double) already produced as objects.
+ *
+ * Each row is a null-prototype object: on a plain `{}` a column named
+ * `__proto__` would hit the inherited prototype setter instead of becoming an
+ * own property, and its value would be lost. Consumers only read properties
+ * and JSON-serialise rows, which both work the same without `Object.prototype`.
  */
 export function rowsFromArrays(
   columnNames: readonly string[],
@@ -55,7 +60,7 @@ export function rowsFromArrays(
     if (!Array.isArray(row)) {
       return row as Record<string, unknown>;
     }
-    const object: Record<string, unknown> = {};
+    const object: Record<string, unknown> = Object.create(null);
     for (let i = 0; i < columnNames.length; i++) {
       object[columnNames[i]] = row[i];
     }
