@@ -130,11 +130,15 @@ export function obfuscateDSNPassword(dsn: string): string {
     const obfuscatedPassword = '*'.repeat(Math.min(url.password.length, 8));
     const protocol = dsn.split(':')[0];
 
+    // SafeURL strips the brackets from an IPv6 literal so drivers get the bare
+    // address; a DSN needs them back, or the address's colons read as a port.
+    const host = url.hostname.includes(':') ? `[${url.hostname}]` : url.hostname;
+
     let result;
     if (url.username) {
-      result = `${protocol}://${url.username}:${obfuscatedPassword}@${url.hostname}`;
+      result = `${protocol}://${url.username}:${obfuscatedPassword}@${host}`;
     } else {
-      result = `${protocol}://${obfuscatedPassword}@${url.hostname}`;
+      result = `${protocol}://${obfuscatedPassword}@${host}`;
     }
     if (url.port) {
       result += `:${url.port}`;
