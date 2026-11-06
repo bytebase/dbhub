@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars } from '../toml-loader.js';
+import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars, findUnresolvedEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
 import { MAX_QUERY_TIMEOUT_SECONDS } from '../../utils/query-timeout.js';
@@ -1513,15 +1513,65 @@ dsn = "postgres://\${TEST_DB_USER}:\${TEST_DB_PASSWORD}@localhost:5432/testdb"
       expect(result?.sources[0].dsn).toBe('postgres://admin:p@ss@localhost:5432/testdb');
     });
 
-    it('should leave unresolved variables as-is', () => {
+    it('should reject a source that references an unset variable', () => {
       delete process.env.NONEXISTENT_VAR;
-      const result = loadToml(`
+      expect(() => loadToml(`
 [[sources]]
 id = "test_db"
 dsn = "postgres://user:\${NONEXISTENT_VAR}@localhost:5432/testdb"
+`)).toThrow("source 'test_db' references unset environment variable(s): NONEXISTENT_VAR");
+    });
+
+    it('should name every unset variable of a source, not their values', () => {
+      delete process.env.MISSING_USER;
+      delete process.env.MISSING_PASSWORD;
+      vi.stubEnv('TEST_DB_HOST', 'db.internal');
+      expect(() => loadToml(`
+[[sources]]
+id = "test_db"
+type = "postgres"
+host = "\${TEST_DB_HOST}"
+database = "testdb"
+user = "\${MISSING_USER}"
+password = "\${MISSING_PASSWORD}"
+`)).toThrow(/unset environment variable\(s\): MISSING_USER, MISSING_PASSWORD$/);
+    });
+
+    it('should identify a source without id by its position', () => {
+      delete process.env.NONEXISTENT_VAR;
+      expect(() => loadToml(`
+[[sources]]
+dsn = "postgres://user:\${NONEXISTENT_VAR}@localhost:5432/testdb"
+`)).toThrow('source #1 references unset environment variable(s): NONEXISTENT_VAR');
+    });
+
+    it('should accept a variable set to an empty string', () => {
+      vi.stubEnv('EMPTY_PASSWORD', '');
+      const result = loadToml(`
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:\${EMPTY_PASSWORD}@localhost:5432/testdb"
 `);
 
-      expect(result?.sources[0].dsn).toBe('postgres://user:${NONEXISTENT_VAR}@localhost:5432/testdb');
+      expect(result?.sources[0].dsn).toBe('postgres://user:@localhost:5432/testdb');
+    });
+
+    it('should not mistake a resolved value containing ${...} for a missing variable', () => {
+      vi.stubEnv('TEST_DB_PASSWORD', 'pa${ss}word');
+      const result = loadToml(`
+[[sources]]
+id = "test_db"
+dsn = "postgres://user:\${TEST_DB_PASSWORD}@localhost:5432/testdb"
+`);
+
+      expect(result?.sources[0].dsn).toBe('postgres://user:pa${ss}word@localhost:5432/testdb');
+    });
+
+    it('should report unset variables recursively', () => {
+      delete process.env.NONEXISTENT_VAR;
+      vi.stubEnv('TEST_SET_VAR', 'x');
+      expect(findUnresolvedEnvVars({ a: '${TEST_SET_VAR}', b: ['${NONEXISTENT_VAR}'], c: { d: '${NONEXISTENT_VAR}' }, e: 1 }))
+        .toEqual(['NONEXISTENT_VAR']);
     });
 
     it('should not affect non-string values', () => {
