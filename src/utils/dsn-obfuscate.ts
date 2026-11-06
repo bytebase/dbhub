@@ -90,6 +90,9 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
  */
 export const REDACTED_DSN = '<redacted DSN>';
 
+/** DSN query parameters whose value is a secret and must not be logged. */
+const SECRET_QUERY_PARAM = /password/i;
+
 /**
  * Obfuscates the password in a DSN string for logging purposes.
  * Fails closed: if the DSN cannot be parsed, returns REDACTED_DSN rather than
@@ -121,35 +124,43 @@ export function obfuscateDSNPassword(dsn: string): string {
       return REDACTED_DSN;
     }
 
+    // Query parameters can carry secrets too (e.g. Oracle wallet_password)
+    let hasSecretParam = false;
+    url.forEachSearchParam((value, key) => {
+      if (SECRET_QUERY_PARAM.test(key) && value) {
+        hasSecretParam = true;
+      }
+    });
+
     // No password to obfuscate
-    if (!url.password) {
+    if (!url.password && !hasSecretParam) {
       return dsn;
     }
 
     // Reconstruct DSN with obfuscated password
-    const obfuscatedPassword = '*'.repeat(Math.min(url.password.length, 8));
     const protocol = dsn.split(':')[0];
 
     // SafeURL strips the brackets from an IPv6 literal so drivers get the bare
     // address; a DSN needs them back, or the address's colons read as a port.
     const host = url.hostname.includes(':') ? `[${url.hostname}]` : url.hostname;
 
-    let result;
-    if (url.username) {
-      result = `${protocol}://${url.username}:${obfuscatedPassword}@${host}`;
-    } else {
-      result = `${protocol}://${obfuscatedPassword}@${host}`;
+    let userinfo = url.username;
+    if (url.password) {
+      const obfuscatedPassword = '*'.repeat(Math.min(url.password.length, 8));
+      userinfo = url.username ? `${url.username}:${obfuscatedPassword}` : obfuscatedPassword;
     }
+    let result = userinfo ? `${protocol}://${userinfo}@${host}` : `${protocol}://${host}`;
     if (url.port) {
       result += `:${url.port}`;
     }
     result += url.pathname;
 
-    // Preserve query parameters
+    // Preserve query parameters, masking secret ones
     if (url.searchParams.size > 0) {
       const params: string[] = [];
       url.forEachSearchParam((value, key) => {
-        params.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+        const shown = SECRET_QUERY_PARAM.test(key) && value ? '*'.repeat(Math.min(value.length, 8)) : value;
+        params.push(`${encodeURIComponent(key)}=${encodeURIComponent(shown)}`);
       });
       result += `?${params.join('&')}`;
     }

@@ -435,10 +435,66 @@ pool_max_connections = ${value}
         ['timezone', 'postgres', 'timezone = "+09:00"', "'timezone' but it is only supported for MySQL and MariaDB"],
         ['charset', 'postgres', 'charset = "utf8mb4"', "'charset' but it is only supported for MySQL and MariaDB"],
         ['collation', 'postgres', 'collation = "utf8mb4_0900_ai_ci"', "'collation' but it is only supported for MySQL and MariaDB"],
+        ['wallet_location', 'postgres', 'sslmode = "require"\nwallet_location = "/opt/wallet"', 'wallet_location but it is only supported for Oracle'],
+        ['ssl_server_cert_dn', 'sqlserver', 'sslmode = "require"\nssl_server_cert_dn = "CN=db"', 'ssl_server_cert_dn but it is only supported for Oracle'],
       ])('should reject %s for a %s source', (_field, type, extra, message) => {
         writeSource(extra, type);
 
         expect(() => loadTomlConfig()).toThrow(message);
+      });
+    });
+
+    describe('Oracle wallet options', () => {
+      it('should accept a wallet directory and pass the options to the DSN', () => {
+        const walletDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-wallet-'));
+        try {
+          writeSource(
+            `sslmode = "require"\nwallet_location = '${walletDir}'\nwallet_password = "w@llet"\nssl_server_cert_dn = "CN=adb.example.com"`,
+            'oracle'
+          );
+          const source = loadTomlConfig()!.sources[0];
+          const dsn = buildDSNFromSource(source);
+
+          expect(dsn).toContain(`wallet_location=${encodeURIComponent(walletDir)}`);
+          expect(dsn).toContain('wallet_password=w%40llet');
+          expect(dsn).toContain('ssl_server_cert_dn=CN%3Dadb.example.com');
+        } finally {
+          fs.rmSync(walletDir, { recursive: true, force: true });
+        }
+      });
+
+      it.each([
+        ['sslmode not set', 'ssl_server_cert_dn = "CN=db"', "sslmode is 'not set'. Oracle wallet/TLS options require sslmode 'require' or 'verify-full'"],
+        ['sslmode disable', 'sslmode = "disable"\nssl_server_cert_dn = "CN=db"', "sslmode is 'disable'"],
+        ['wallet_password alone', 'sslmode = "require"\nwallet_password = "x"', 'has wallet_password but no wallet_location'],
+        ['missing wallet directory', 'sslmode = "require"\nwallet_location = "/nonexistent/dbhub-wallet"', 'wallet_location is not an accessible directory'],
+        ['empty value', 'sslmode = "require"\nssl_server_cert_dn = " "', 'has invalid ssl_server_cert_dn'],
+      ])('should reject %s', (_case, extra, message) => {
+        writeSource(extra, 'oracle');
+
+        expect(() => loadTomlConfig()).toThrow(message);
+      });
+
+      it('should reject a wallet_password that conflicts with the DSN without echoing either value', () => {
+        const walletDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-wallet-'));
+        try {
+          let error: Error | undefined;
+          try {
+            loadToml(`
+[[sources]]
+id = "adb"
+dsn = "oracle://app:pass@adb.example.com:1522/svc?sslmode=require&wallet_location=${encodeURIComponent(walletDir)}&wallet_password=dsnSecret"
+wallet_password = "fieldSecret"
+`);
+          } catch (e) {
+            error = e as Error;
+          }
+          expect(error?.message).toContain('conflicting wallet_password');
+          expect(error?.message).not.toContain('dsnSecret');
+          expect(error?.message).not.toContain('fieldSecret');
+        } finally {
+          fs.rmSync(walletDir, { recursive: true, force: true });
+        }
       });
     });
 
@@ -981,6 +1037,16 @@ aws_iam_auth = true
         'merge authentication and domain fields into a SQL Server DSN',
         { type: 'sqlserver', dsn: 'sqlserver://user:pass@localhost:1433/db', authentication: 'ntlm', domain: 'CORP' },
         'sqlserver://user:pass@localhost:1433/db?authentication=ntlm&domain=CORP',
+      ],
+      [
+        'merge Oracle wallet fields into an Oracle DSN',
+        { type: 'oracle', dsn: 'oracle://app:pass@adb:1522/svc', sslmode: 'require', wallet_location: '/opt/wallet', wallet_password: 'p&w', ssl_server_cert_dn: 'CN=adb' },
+        'oracle://app:pass@adb:1522/svc?sslmode=require&wallet_location=%2Fopt%2Fwallet&wallet_password=p%26w&ssl_server_cert_dn=CN%3Dadb',
+      ],
+      [
+        'not duplicate Oracle wallet params already present in the DSN',
+        { type: 'oracle', dsn: 'oracle://app:pass@adb:1522/svc?sslmode=require&wallet_location=%2Fw', sslmode: 'require', wallet_location: '/w' },
+        'oracle://app:pass@adb:1522/svc?sslmode=require&wallet_location=%2Fw',
       ],
       [
         'merge sslrootcert field into a postgres DSN for verify-ca',

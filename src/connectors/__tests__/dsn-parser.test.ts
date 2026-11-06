@@ -656,6 +656,40 @@ describe('DSN Parser - Oracle', () => {
     expect(config.pool.password).toBe('p@ss:w/rd');
   });
 
+  it('passes a PEM wallet for mutual TLS', async () => {
+    const config = await parser.parse(
+      'oracle://app:secret@adb.example.com:1522/svc_tp?sslmode=require&wallet_location=%2Fopt%2Fwallet&wallet_password=w%40llet'
+    );
+    expect(config.pool.connectString).toBe('tcps://adb.example.com:1522/svc_tp');
+    expect(config.pool.walletLocation).toBe('/opt/wallet');
+    expect(config.pool.walletPassword).toBe('w@llet');
+    expect(config.pool.sslServerDNMatch).toBe(false);
+    expect(config.pool.sslServerCertDN).toBeUndefined();
+  });
+
+  it('checks an explicit server certificate DN even with sslmode=require', async () => {
+    const dn = 'CN=adb.eu-frankfurt-1.oraclecloud.com, O=Oracle Corporation, L=Redwood City, ST=California, C=US';
+    const config = await parser.parse(
+      `oracle://app:secret@10.0.0.5:1522/svc_tp?sslmode=require&ssl_server_cert_dn=${encodeURIComponent(dn)}`
+    );
+    expect(config.pool.sslServerCertDN).toBe(dn);
+    expect(config.pool.sslServerDNMatch).toBe(true);
+  });
+
+  it('leaves wallet attributes unset when not given', async () => {
+    const config = await parser.parse('oracle://app:secret@db:2484/PROD?sslmode=require');
+    expect(config.pool.walletLocation).toBeUndefined();
+    expect(config.pool.walletPassword).toBeUndefined();
+  });
+
+  it.each([
+    ['oracle://app:secret@db:1522/X?wallet_location=%2Fw', 'require sslmode=require or sslmode=verify-full'],
+    ['oracle://app:secret@db:1522/X?sslmode=disable&ssl_server_cert_dn=CN%3Dx', 'require sslmode=require or sslmode=verify-full'],
+    ['oracle://app:secret@db:1522/X?sslmode=require&wallet_password=x', 'wallet_password requires wallet_location'],
+  ])('rejects invalid wallet options in %s', async (dsn, message) => {
+    await expect(parser.parse(dsn)).rejects.toThrow(message);
+  });
+
   it.each([
     ['oracle://app:secret@db:1521/X?sslmode=verify-ca', "Unsupported sslmode 'verify-ca'"],
     ['oracle://app:secret@db:1521/', 'must include a service name'],

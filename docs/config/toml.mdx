@@ -480,6 +480,47 @@ Sources define database connections. Each source represents a database that DBHu
   </Tip>
 </ParamField>
 
+### wallet_location / wallet_password / ssl_server_cert_dn
+
+<ParamField path="wallet_location" type="string">
+  Directory containing the PEM wallet (`ewallet.pem`) for **mutual TLS**, as required by default by Oracle Autonomous Database. Use the directory of the unzipped wallet downloaded from the database console. node-oracledb Thin mode reads `ewallet.pem` only; `cwallet.sso` and `ewallet.p12` are ignored.
+
+  Supports `~/` path expansion. The directory must exist at startup.
+
+  **Oracle only.** Requires `sslmode` `require` or `verify-full`.
+</ParamField>
+
+<ParamField path="wallet_password" type="string">
+  Password of an encrypted `ewallet.pem`. Requires `wallet_location`. Keep it out of the file with environment variable interpolation (`wallet_password = "${WALLET_PASSWORD}"`); it is masked in logs.
+
+  **Oracle only.**
+</ParamField>
+
+<ParamField path="ssl_server_cert_dn" type="string">
+  Expected distinguished name of the server certificate. Set it when the host name does not match the certificate, e.g. an Autonomous Database private endpoint reached through an internal DNS name or IP address, where `verify-full` would fail. When set, the certificate DN is always checked, with `sslmode = "require"` too.
+
+  **Oracle only.** Requires `sslmode` `require` or `verify-full`.
+
+  ```toml
+  [[sources]]
+  id = "adb"
+  type = "oracle"
+  host = "adb.internal.example.com"
+  port = 1522
+  database = "abc123_mydb_tp.adb.oraclecloud.com"
+  user = "app"
+  password = "${ADB_PASSWORD}"
+  sslmode = "require"
+  wallet_location = "~/wallets/mydb"
+  wallet_password = "${ADB_WALLET_PASSWORD}"
+  ssl_server_cert_dn = "CN=adb.eu-frankfurt-1.oraclecloud.com, O=Oracle Corporation, L=Redwood City, ST=California, C=US"
+  ```
+
+  <Tip>
+  Can also be set via DSN query parameters (percent-encoded): `?sslmode=require&wallet_location=%2Fpath%2Fto%2Fwallet&wallet_password=...&ssl_server_cert_dn=...`
+  </Tip>
+</ParamField>
+
 ### instanceName
 
 <ParamField path="instanceName" type="string">
