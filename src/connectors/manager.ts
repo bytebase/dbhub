@@ -299,6 +299,10 @@ export class ConnectorManager {
       if (source.collation) {
         config.collation = source.collation;
       }
+      // Pass [sources.session] settings for MySQL/PostgreSQL
+      if (source.session) {
+        config.sessionSettings = source.session;
+      }
 
       // Connect to the database with config and optional init script
       await connector.connect(actualDSN, source.init_script, config);

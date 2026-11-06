@@ -7,6 +7,7 @@ import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
+import { validateSessionSettings } from "../utils/session-settings.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
 
 /**
@@ -799,6 +800,21 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid collation '${source.collation}'. ` +
           `Must be a non-empty string naming a collation (e.g. "utf8mb4_0900_ai_ci").`
+      );
+    }
+  }
+
+  // Validate [sources.session] (MySQL/PostgreSQL only)
+  if (source.session !== undefined) {
+    if (source.type !== "mysql" && source.type !== "postgres") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has [sources.session] but it is only supported for MySQL and PostgreSQL sources.`
+      );
+    }
+    const problem = validateSessionSettings(source.session, source.type);
+    if (problem !== undefined) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' [sources.session] ${problem}`
       );
     }
   }

@@ -40,6 +40,7 @@ import {
   clientQueryTimeoutMs,
   isClientSideTimeout,
 } from "../../utils/query-timeout.js";
+import { buildPostgresSessionOptions } from "../../utils/session-settings.js";
 
 /**
  * PostgreSQL DSN Parser
@@ -274,6 +275,15 @@ export class PostgresConnector implements Connector {
           // Escape backslashes then spaces for PostgreSQL options string parser
           const optionsValue = quotedSchemas.join(',').replace(/\\/g, '\\\\').replace(/ /g, '\\ ');
           poolConfig.options = (poolConfig.options || '') + ` -c search_path=${optionsValue}`;
+        }
+      }
+
+      // Per-source [sources.session] settings, sent as startup options like
+      // search_path, so the server rejects a bad one when the connection opens.
+      if (config?.sessionSettings !== undefined) {
+        const sessionOptions = buildPostgresSessionOptions(config.sessionSettings);
+        if (sessionOptions !== '') {
+          poolConfig.options = (poolConfig.options || '') + sessionOptions;
         }
       }
 
