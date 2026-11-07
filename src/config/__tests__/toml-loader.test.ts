@@ -575,7 +575,7 @@ ${body}
 `;
 
       it.each([
-        ['mysql', 'transaction_read_only = 1\nlock_wait_timeout = 5\ntime_zone = "+09:00"', { transaction_read_only: 1, lock_wait_timeout: 5, time_zone: '+09:00' }],
+        ['mysql', 'sql_safe_updates = true\nlock_wait_timeout = 5\ntime_zone = "+09:00"', { sql_safe_updates: true, lock_wait_timeout: 5, time_zone: '+09:00' }],
         ['mysql', 'max_heap_table_size = 9223372036854775807', { max_heap_table_size: 9223372036854775807n }],
         ['postgres', 'lock_timeout = "5s"\n"pg_stat_statements.track" = "all"\njit = false', { lock_timeout: '5s', 'pg_stat_statements.track': 'all', jit: false }],
       ])('should accept a %s session table and echo it back', (type, body, expected) => {
@@ -591,9 +591,11 @@ ${body}
         ['a name that is not an identifier', 'mysql', '"lock wait" = 5', "invalid setting name 'lock wait'"],
         ['a dotted name on MySQL', 'mysql', '"a.b" = 1', "invalid setting name 'a.b'"],
         ['a name with more than one dot on PostgreSQL', 'postgres', '"a.b.c" = 1', "invalid setting name 'a.b.c'"],
-        ['max_execution_time on MySQL', 'mysql', 'MAX_EXECUTION_TIME = 1000', "Use 'query_timeout' instead"],
-        ['statement_timeout on PostgreSQL', 'postgres', 'statement_timeout = "5s"', "Use 'query_timeout' instead"],
-        ['search_path on PostgreSQL', 'postgres', 'search_path = "app"', "Use 'search_path' instead"],
+        ['max_execution_time on MySQL', 'mysql', 'MAX_EXECUTION_TIME = 1000', "Use the 'query_timeout' source option instead"],
+        ['transaction_read_only on MySQL', 'mysql', 'transaction_read_only = 1', "use 'readonly = true' on the source's tools instead"],
+        ['tx_read_only on MySQL', 'mysql', 'tx_read_only = 1', "use 'readonly = true' on the source's tools instead"],
+        ['statement_timeout on PostgreSQL', 'postgres', 'statement_timeout = "5s"', "Use the 'query_timeout' source option instead"],
+        ['search_path on PostgreSQL', 'postgres', 'search_path = "app"', "Use the 'search_path' source option instead"],
         ['an array value', 'mysql', 'sql_mode = ["ANSI"]', "invalid value for 'sql_mode'"],
         ['a nested table', 'postgres', '[sources.session.lock_timeout]\nx = 1', "invalid value for 'lock_timeout'"],
         ['a date value', 'postgres', 'datestyle = 1979-05-27', "invalid value for 'datestyle'"],

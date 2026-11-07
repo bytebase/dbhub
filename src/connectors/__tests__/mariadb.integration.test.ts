@@ -516,10 +516,11 @@ describe('MariaDB Connector Integration Tests', () => {
   });
 
   describe('Per-tool readonly engine backstop (options.readonly)', () => {
-    // The READ ONLY transaction reliably blocks DML. (DDL like DROP performs an
-    // implicit commit and escapes the transaction; stacked-DDL payloads such as
-    // `SELECT 1--1;DROP TABLE t` are instead rejected upstream by the read-only
-    // classifier — see the unit tests in allowed-keywords.test.ts.)
+    // The READ ONLY transaction blocks DML; the session-level READ ONLY set
+    // around it blocks DDL, which commits implicitly and would otherwise escape
+    // the transaction. (Stacked-DDL payloads such as `SELECT 1--1;DROP TABLE t`
+    // are also rejected upstream by the read-only classifier — see the unit
+    // tests in allowed-keywords.test.ts.)
     it('should block a stacked UPDATE hidden after -- via the READ ONLY transaction', async () => {
       const connector = new MariaDBConnector();
       try {
@@ -557,6 +558,39 @@ describe('MariaDB Connector Integration Tests', () => {
         expect(insert.resultSets[0].rowCount).toBe(1);
         await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
       } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should stop DDL, which commits implicitly, and leave the connection writable afterward', async () => {
+      const connector = new MariaDBConnector();
+      const table = 'dbhub_readonly_ddl';
+      const exists = async (): Promise<boolean> => {
+        const result = await connector.executeSQL(
+          `SELECT COUNT(*) AS c FROM information_schema.tables
+           WHERE table_schema = DATABASE() AND table_name = '${table}'`,
+          {}
+        );
+        return Number(result.resultSets[0].rows[0].c) > 0;
+      };
+      try {
+        await connector.connect(mariadbTest.connectionString);
+
+        // CREATE TABLE performs an implicit COMMIT that ends the READ ONLY
+        // transaction, so only the session-level READ ONLY stops it
+        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION).
+        const blocked = await settle(
+          connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly: true })
+        );
+        expect(blocked.error?.errno).toBe(1792);
+        expect(await exists()).toBe(false);
+
+        // The session flag is cleared afterwards: the same pooled connection
+        // serves writable tools too.
+        await connector.executeSQL(`CREATE TABLE ${table} (id INT)`, {});
+        expect(await exists()).toBe(true);
+      } finally {
+        await settle(connector.executeSQL(`DROP TABLE IF EXISTS ${table}`, {}));
         await connector.disconnect();
       }
     });

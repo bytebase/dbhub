@@ -24,14 +24,21 @@ const MYSQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // PostgreSQL also accepts extension settings such as `pg_stat_statements.track`.
 const POSTGRES_NAME = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/;
 
-/** Settings DBHub sets itself, keyed by lower-cased name, with the option to use instead. */
+/** Settings DBHub sets itself, keyed by lower-cased name, with what to use instead. */
 const MANAGED_SETTINGS: Record<SessionSettingsEngine, Record<string, string>> = {
   mysql: {
-    max_execution_time: "query_timeout",
+    max_execution_time: "Use the 'query_timeout' source option instead.",
+    // The read-only backstop sets the session READ ONLY around every read-only
+    // execution and clears it afterwards, which would silently undo a value
+    // configured here (see readonly-transaction.ts).
+    transaction_read_only:
+      "DBHub sets the session read-only itself for read-only executions; use 'readonly = true' on the source's tools instead.",
+    tx_read_only:
+      "DBHub sets the session read-only itself for read-only executions; use 'readonly = true' on the source's tools instead.",
   },
   postgres: {
-    statement_timeout: "query_timeout",
-    search_path: "search_path",
+    statement_timeout: "Use the 'query_timeout' source option instead.",
+    search_path: "Use the 'search_path' source option instead.",
   },
 };
 
@@ -62,9 +69,9 @@ export function validateSessionSettings(
         engine === "postgres" ? ", optionally prefixed like 'ext.name'" : ""
       }).`;
     }
-    const managedBy = MANAGED_SETTINGS[engine][name.toLowerCase()];
-    if (managedBy !== undefined) {
-      return `sets '${name}', which DBHub manages through the '${managedBy}' source option. Use '${managedBy}' instead.`;
+    const managed = MANAGED_SETTINGS[engine][name.toLowerCase()];
+    if (managed !== undefined) {
+      return `sets '${name}', which DBHub manages itself. ${managed}`;
     }
     const isScalar =
       typeof value === "string" ||

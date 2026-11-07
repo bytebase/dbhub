@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
+import {
+  READ_ONLY_OPEN,
+  READ_ONLY_COMMIT,
+  READ_ONLY_ROLLBACK,
+  TIDB_OPEN,
+  TIDB_CLOSE,
+} from "../../utils/readonly-transaction.js";
 
 /**
  * Unit coverage for the readonly transaction strategy in the MySQL/MariaDB
@@ -10,8 +17,13 @@ import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
  * is precisely that it *rejects* the statement the other engines accept). These
  * tests mock the driver so both branches are asserted at the statement level:
  *
- *   MySQL/MariaDB -> START TRANSACTION READ ONLY ... COMMIT
+ *   MySQL/MariaDB -> SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
+ *                    ... COMMIT; SET SESSION TRANSACTION READ WRITE
  *   TiDB          -> START TRANSACTION ... ROLLBACK   (writes discarded)
+ *
+ * The session-level READ ONLY is what stops DDL, which commits implicitly and
+ * would otherwise escape the transaction; it must be cleared again because the
+ * pooled connection is shared with writable tools.
  */
 
 const mysqlCreatePool = vi.fn();
@@ -96,13 +108,15 @@ describe("readonly transaction strategy", () => {
   });
 
   describe("MySQL connector", () => {
-    it("uses READ ONLY transaction + COMMIT on stock MySQL", async () => {
+    it("sets the session READ ONLY around a READ ONLY transaction on stock MySQL", async () => {
       const { pool, statements } = makeFakePool(MYSQL_VERSION, asMysql);
       const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements[0]).toBe("START TRANSACTION READ ONLY");
-      expect(statements[statements.length - 1]).toBe("COMMIT");
+      expect(statements).toEqual([READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
+      // The guard is one batch on each side, so the query still costs two
+      // round trips beyond itself.
+      expect(statements).toHaveLength(3);
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
@@ -111,10 +125,10 @@ describe("readonly transaction strategy", () => {
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       // TiDB rejects the READ ONLY modifier, so it must never be sent...
-      expect(statements).not.toContain("START TRANSACTION READ ONLY");
-      expect(statements[0]).toBe("START TRANSACTION");
+      expect(statements.join("\n")).not.toContain("READ ONLY");
+      expect(statements[0]).toBe(TIDB_OPEN);
       // ...and the transaction is discarded so any missed DML never persists.
-      expect(statements[statements.length - 1]).toBe("ROLLBACK");
+      expect(statements[statements.length - 1]).toBe(TIDB_CLOSE);
     });
 
     it("opens no transaction when readonly is off", async () => {
@@ -137,16 +151,17 @@ describe("readonly transaction strategy", () => {
         "syntax error"
       );
 
-      // The open transaction must be rolled back so the pooled connection is
-      // returned clean, and the original error must survive.
-      expect(statements[0]).toBe("START TRANSACTION READ ONLY");
-      expect(statements[statements.length - 1]).toBe("ROLLBACK");
+      // The open transaction must be rolled back and the session flag cleared
+      // so the pooled connection is returned clean, and the original error
+      // must survive.
+      expect(statements[0]).toBe(READ_ONLY_OPEN);
+      expect(statements[statements.length - 1]).toBe(READ_ONLY_ROLLBACK);
       expect(conn.release).toHaveBeenCalled();
     });
 
-    it("attempts a rollback when the transaction fails to open", async () => {
+    it("attempts a rollback when the guard fails to open", async () => {
       const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, (sql) =>
-        sql === "START TRANSACTION READ ONLY" ? new Error("server gone") : undefined
+        sql === READ_ONLY_OPEN ? new Error("server gone") : undefined
       );
       const connector = await connectMysql(pool);
 
@@ -154,9 +169,10 @@ describe("readonly transaction strategy", () => {
         "server gone"
       );
 
-      // A partially-opened transaction must still be rolled back, or the
-      // connection returns to the pool with an open transaction.
-      expect(statements).toContain("ROLLBACK");
+      // A partially-opened guard must still be rolled back and reset, or the
+      // connection returns to the pool with an open transaction or a read-only
+      // session.
+      expect(statements).toContain(READ_ONLY_ROLLBACK);
       // The query itself must never run once the read-only guard failed to open.
       expect(statements).not.toContain("SELECT 1");
       expect(conn.release).toHaveBeenCalled();
@@ -165,7 +181,7 @@ describe("readonly transaction strategy", () => {
     it("surfaces the original error even if the rollback also fails", async () => {
       const { pool, conn } = makeFakePool(MYSQL_VERSION, asMysql, (sql) => {
         if (sql === "SELECT bad") return new Error("syntax error");
-        if (sql === "ROLLBACK") return new Error("connection lost");
+        if (sql === READ_ONLY_ROLLBACK) return new Error("connection lost");
         return undefined;
       });
       const connector = await connectMysql(pool);
@@ -206,7 +222,7 @@ describe("readonly transaction strategy", () => {
       // The connection's command queue is stuck behind the abandoned query,
       // so attempting ROLLBACK on it would hang until the server-side
       // statement eventually finishes.
-      expect(statements).not.toContain("ROLLBACK");
+      expect(statements.join("\n")).not.toContain("ROLLBACK");
       // The server-side statement is killed over the fresh connection, bounded
       // by its own short timeout independent of the user's query_timeout...
       expect(killerConn.query).toHaveBeenCalledWith(
@@ -267,13 +283,12 @@ describe("readonly transaction strategy", () => {
   });
 
   describe("MariaDB connector", () => {
-    it("uses READ ONLY transaction + COMMIT on stock MariaDB", async () => {
+    it("sets the session READ ONLY around a READ ONLY transaction on stock MariaDB", async () => {
       const { pool, statements } = makeFakePool(MARIADB_VERSION, asMariadb);
       const connector = await connectMariadb(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements[0]).toBe("START TRANSACTION READ ONLY");
-      expect(statements[statements.length - 1]).toBe("COMMIT");
+      expect(statements).toEqual([READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
@@ -281,9 +296,9 @@ describe("readonly transaction strategy", () => {
       const connector = await connectMariadb(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements).not.toContain("START TRANSACTION READ ONLY");
-      expect(statements[0]).toBe("START TRANSACTION");
-      expect(statements[statements.length - 1]).toBe("ROLLBACK");
+      expect(statements.join("\n")).not.toContain("READ ONLY");
+      expect(statements[0]).toBe(TIDB_OPEN);
+      expect(statements[statements.length - 1]).toBe(TIDB_CLOSE);
     });
   });
 
@@ -330,7 +345,7 @@ describe("readonly transaction strategy", () => {
       expect(error.code).toBe("DBHUB_CLIENT_QUERY_TIMEOUT");
       // The connection is still waiting on the abandoned statement, so a
       // ROLLBACK would queue behind it.
-      expect(statements).not.toContain("ROLLBACK");
+      expect(statements.join("\n")).not.toContain("ROLLBACK");
       // destroy() also kills the server-side thread (the driver does this
       // itself when a command is in flight); the connection never returns to
       // the pool.
