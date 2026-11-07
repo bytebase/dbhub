@@ -39,6 +39,12 @@ describe('DSN Obfuscation Utilities', () => {
       ['oracle://app:pass@db:1522/svc?sslmode=require&wallet_location=%2Fw&wallet_password=w%40llet', 'oracle://app:****@db:1522/svc?sslmode=require&wallet_location=%2Fw&wallet_password=******'],
       ['oracle://app@db:1522/svc?wallet_password=secret', 'oracle://app@db:1522/svc?wallet_password=******'],
       ['oracle://db:1522/svc?wallet_password=secret', 'oracle://db:1522/svc?wallet_password=******'],
+      // A secret value with an unescaped '=' (which SafeURL cannot parse) is
+      // still masked; other pairs are kept exactly as written
+      ['oracle://app@db:1522/svc?sslmode=require&wallet_password=secret==', 'oracle://app@db:1522/svc?sslmode=require&wallet_password=********'],
+      ['oracle://app@db:1522/svc?ssl_server_cert_dn=CN=db&wallet_password=s%3D=', 'oracle://app@db:1522/svc?ssl_server_cert_dn=CN=db&wallet_password=***'],
+      ['oracle://app@db:1522/svc?wallet%5Fpassword=secret', 'oracle://app@db:1522/svc?wallet%5Fpassword=******'],
+      ['postgres://user:pass@localhost:5432/db?sslrootcert=~/.ssl/ca.pem&flag', 'postgres://user:****@localhost:5432/db?sslrootcert=~/.ssl/ca.pem&flag'],
     ])('should obfuscate %s as %s', (dsn, expected) => {
       expect(obfuscateDSNPassword(dsn)).toBe(expected);
     });
@@ -63,6 +69,17 @@ describe('DSN Obfuscation Utilities', () => {
 
         expect(result).toBe(REDACTED_DSN);
         expect(result).not.toContain('secret');
+      }
+    });
+
+    it('should never echo a secret query value, however it is written', () => {
+      for (const dsn of [
+        'oracle://app@db:1522/svc?wallet_password=hunter2==',
+        'oracle://app@db:1522/svc?wallet_password=hunter2=&sslmode=require',
+        'oracle://app@db:1522/svc?WALLET_PASSWORD=hunter2',
+        'oracle://app@db:1522/svc?wallet%5Fpassword=hunter2',
+      ]) {
+        expect(obfuscateDSNPassword(dsn)).not.toContain('hunter2');
       }
     });
 

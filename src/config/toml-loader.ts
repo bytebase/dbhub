@@ -1030,6 +1030,21 @@ function processSourceConfigs(
       } catch {
         // DSN parsing for query params is best-effort; connector will handle errors
       }
+
+      // Oracle wallet options given only in the DSN go through the same checks
+      // as the TOML fields (Oracle only, sslmode, wallet directory exists) and
+      // can be completed by a field: wallet_location in the DSN with
+      // wallet_password = "${WALLET_PASSWORD}" beside it is a valid split.
+      // Explicit fields are kept as they are, so conflicts are still detected.
+      // Raw lookup rather than SafeURL: a wallet password may contain '='.
+      if (processed.type === "oracle") {
+        for (const field of ORACLE_WALLET_FIELDS) {
+          const dsnValue = getRawDSNQueryParam(processed.dsn, field);
+          if (processed[field] === undefined && dsnValue) {
+            processed[field] = dsnValue;
+          }
+        }
+      }
     }
 
     return processed;

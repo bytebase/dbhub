@@ -74,10 +74,18 @@ export class SafeURL implements ISafeURL {
         urlString = urlString.substring(0, questionMarkIndex);
 
         // Parse query parameters
+        // Split each pair at its first '=' only: a value may itself contain
+        // '=' (an Oracle certificate DN, a base64-ish password), and dropping
+        // such a pair would silently discard the setting.
         queryParams.split('&').forEach(pair => {
-          const parts: string[] = pair.split('=');
-          if (parts.length === 2 && parts[0] && parts[1]) {
-            this.searchParams.set(parts[0], decodeURIComponent(parts[1]));
+          const eq: number = pair.indexOf('=');
+          if (eq === -1) {
+            return;
+          }
+          const key: string = pair.substring(0, eq);
+          const value: string = pair.substring(eq + 1);
+          if (key && value) {
+            this.searchParams.set(key, decodeURIComponent(value));
           }
         });
       }

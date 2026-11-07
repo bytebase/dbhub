@@ -667,6 +667,21 @@ describe('DSN Parser - Oracle', () => {
     expect(config.pool.sslServerCertDN).toBeUndefined();
   });
 
+  it('expands ~/ in wallet_location', async () => {
+    const config = await parser.parse(
+      'oracle://app:secret@adb.example.com:1522/svc_tp?sslmode=require&wallet_location=~%2Fwallets%2Fmydb'
+    );
+    expect(config.pool.walletLocation).toBe(path.join(os.homedir(), 'wallets/mydb'));
+  });
+
+  it('accepts a server certificate DN and wallet password written without percent-encoding', async () => {
+    const config = await parser.parse(
+      'oracle://app:secret@10.0.0.5:1522/svc_tp?sslmode=require&wallet_location=%2Fw&wallet_password=abc==&ssl_server_cert_dn=CN=db,O=Acme'
+    );
+    expect(config.pool.walletPassword).toBe('abc==');
+    expect(config.pool.sslServerCertDN).toBe('CN=db,O=Acme');
+  });
+
   it('checks an explicit server certificate DN even with sslmode=require', async () => {
     const dn = 'CN=adb.eu-frankfurt-1.oraclecloud.com, O=Oracle Corporation, L=Redwood City, ST=California, C=US';
     const config = await parser.parse(

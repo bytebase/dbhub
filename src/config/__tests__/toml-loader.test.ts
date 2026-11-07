@@ -475,6 +475,40 @@ pool_max_connections = ${value}
         expect(() => loadTomlConfig()).toThrow(message);
       });
 
+      it('should complete wallet_location from the DSN with a wallet_password field', () => {
+        const walletDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-wallet-'));
+        try {
+          const config = loadToml(`
+[[sources]]
+id = "adb"
+dsn = "oracle://app:pass@adb.example.com:1522/svc?sslmode=require&wallet_location=${encodeURIComponent(walletDir)}"
+wallet_password = "w@llet"
+`);
+          const source = config!.sources[0];
+          expect(source.wallet_location).toBe(walletDir);
+          expect(source.wallet_password).toBe('w@llet');
+
+          const dsn = buildDSNFromSource(source);
+          expect(dsn).toContain(`wallet_location=${encodeURIComponent(walletDir)}`);
+          expect(dsn).toContain('wallet_password=w%40llet');
+          expect(dsn.match(/wallet_location=/g)).toHaveLength(1);
+        } finally {
+          fs.rmSync(walletDir, { recursive: true, force: true });
+        }
+      });
+
+      it.each([
+        ['missing wallet directory', 'sslmode=require&wallet_location=%2Fnonexistent%2Fdbhub-wallet', 'wallet_location is not an accessible directory'],
+        ['wallet_password alone', 'sslmode=require&wallet_password=x', 'has wallet_password but no wallet_location'],
+        ['sslmode disable', 'sslmode=disable&ssl_server_cert_dn=CN%3Ddb', "sslmode is 'disable'"],
+      ])('should validate wallet options given only in the DSN (%s)', (_case, query, message) => {
+        expect(() => loadToml(`
+[[sources]]
+id = "adb"
+dsn = "oracle://app:pass@adb.example.com:1522/svc?${query}"
+`)).toThrow(message);
+      });
+
       it('should reject a wallet_password that conflicts with the DSN without echoing either value', () => {
         const walletDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-wallet-'));
         try {
