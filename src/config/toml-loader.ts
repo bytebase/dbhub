@@ -251,6 +251,27 @@ function validateToolsConfig(
  * and the merge step to append a duplicate param. Scanning the raw query string
  * here avoids that.
  */
+/** Raw (undecoded) keys of a DSN's query string, in order, duplicates included. */
+function rawDSNQueryKeys(dsn: string): string[] {
+  const queryStart = dsn.indexOf("?");
+  if (queryStart === -1) {
+    return [];
+  }
+  return dsn
+    .substring(queryStart + 1)
+    .split("&")
+    .filter((pair) => pair !== "")
+    .map((pair) => {
+      const eq = pair.indexOf("=");
+      return eq === -1 ? pair : pair.substring(0, eq);
+    });
+}
+
+/** How many times `key` appears in the DSN's query string. */
+function countRawDSNQueryParam(dsn: string, key: string): number {
+  return rawDSNQueryKeys(dsn).filter((rawKey) => rawKey === key).length;
+}
+
 function getRawDSNQueryParam(dsn: string, key: string): string | null {
   const queryStart = dsn.indexOf("?");
   if (queryStart === -1) {
@@ -447,6 +468,17 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   const dsnDomain = getRawDSNQueryParam(source.dsn!, "domain");
   if (source.domain && dsnDomain !== null && dsnDomain !== source.domain) {
     conflict("domain", source.domain, dsnDomain);
+  }
+
+  // A repeated wallet parameter is ambiguous: this loader reads the first
+  // occurrence and SafeURL (hence the connector) the last, so the directory
+  // checked here could differ from the one used at connection time.
+  for (const field of ORACLE_WALLET_FIELDS) {
+    if (countRawDSNQueryParam(source.dsn!, field) > 1) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has ${field} more than once in the DSN. Set it once.`
+      );
+    }
   }
 
   const dsnWalletLocation = getRawDSNQueryParam(source.dsn!, "wallet_location");
@@ -1036,11 +1068,13 @@ function processSourceConfigs(
       // can be completed by a field: wallet_location in the DSN with
       // wallet_password = "${WALLET_PASSWORD}" beside it is a valid split.
       // Explicit fields are kept as they are, so conflicts are still detected.
-      // Raw lookup rather than SafeURL: a wallet password may contain '='.
+      // Raw lookup rather than SafeURL: a wallet password may contain '=', and
+      // a present-but-empty value (`?ssl_server_cert_dn=`) must reach
+      // validation to be rejected like an empty field, not be ignored.
       if (processed.type === "oracle") {
         for (const field of ORACLE_WALLET_FIELDS) {
           const dsnValue = getRawDSNQueryParam(processed.dsn, field);
-          if (processed[field] === undefined && dsnValue) {
+          if (processed[field] === undefined && dsnValue !== null) {
             processed[field] = dsnValue;
           }
         }

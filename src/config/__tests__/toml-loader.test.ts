@@ -501,6 +501,9 @@ wallet_password = "w@llet"
         ['missing wallet directory', 'sslmode=require&wallet_location=%2Fnonexistent%2Fdbhub-wallet', 'wallet_location is not an accessible directory'],
         ['wallet_password alone', 'sslmode=require&wallet_password=x', 'has wallet_password but no wallet_location'],
         ['sslmode disable', 'sslmode=disable&ssl_server_cert_dn=CN%3Ddb', "sslmode is 'disable'"],
+        // Present but empty is rejected like an empty field, not ignored
+        ['empty value', 'sslmode=require&ssl_server_cert_dn=', 'has invalid ssl_server_cert_dn'],
+        ['duplicate parameter', 'sslmode=require&wallet_location=%2Fmissing&wallet_location=%2Ftmp', 'has wallet_location more than once in the DSN'],
       ])('should validate wallet options given only in the DSN (%s)', (_case, query, message) => {
         expect(() => loadToml(`
 [[sources]]
