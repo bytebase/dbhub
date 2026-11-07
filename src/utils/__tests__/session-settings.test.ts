@@ -82,4 +82,12 @@ describe("validateSessionSettings", () => {
   it("should allow a backslash in a PostgreSQL string", () => {
     expect(validateSessionSettings({ application_name: "a\\b" }, "postgres")).toBeUndefined();
   });
+
+  it("should reject a Date in place of the table", () => {
+    // The TOML parser returns a Date for `session = 2024-01-01T00:00:00Z`; it has
+    // no enumerable entries, so it must not pass as an empty table.
+    expect(validateSessionSettings(new Date("2024-01-01T00:00:00Z"), "postgres")).toContain(
+      "must be a table"
+    );
+  });
 });

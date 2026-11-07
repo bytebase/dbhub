@@ -48,6 +48,20 @@ describe("sourceConfigEquals", () => {
       { id: "x", type: "postgres", dsn: "postgres://h/d", query_timeout: 5 },
     )).toBe(false);
   });
+
+  it("compares bigint session settings instead of throwing", () => {
+    // A TOML integer beyond Number.MAX_SAFE_INTEGER is parsed as a bigint,
+    // which JSON.stringify rejects.
+    const big = { id: "x", type: "mysql" as const, dsn: "mysql://h/d", session: { max_heap_table_size: 9223372036854775807n } };
+    expect(sourceConfigEquals(big, { ...big, session: { max_heap_table_size: 9223372036854775807n } })).toBe(true);
+    expect(sourceConfigEquals(big, { ...big, session: { max_heap_table_size: 9223372036854775806n } })).toBe(false);
+    expect(sourceConfigEquals(big, { ...big, session: { max_heap_table_size: 5 } })).toBe(false);
+    // Same digits, different type.
+    expect(sourceConfigEquals(
+      { ...big, session: { x: 5n } },
+      { ...big, session: { x: 5 } },
+    )).toBe(false);
+  });
 });
 
 describe("applySourceDiff", () => {
@@ -63,6 +77,19 @@ describe("applySourceDiff", () => {
     expect(manager.addSource).toHaveBeenCalledWith(dbC);
     expect(manager.reorderSources).toHaveBeenCalledWith(["a", "c"]);
     expect(applied).toEqual([dbA, dbC]);
+    expect(rolledBack.size).toBe(0);
+  });
+
+  it("keeps a source with a bigint session setting connected across a reload", async () => {
+    const manager = createMockManager();
+    const big = { id: "big", type: "mysql" as const, dsn: "mysql://h/d", session: { max_heap_table_size: 9223372036854775807n } };
+    const reloaded = { ...big, session: { ...big.session } };
+
+    const { sources: applied, rolledBack } = await applySourceDiff(manager, [dbA, big], [dbA, reloaded]);
+
+    expect(manager.removeSource).not.toHaveBeenCalled();
+    expect(manager.addSource).not.toHaveBeenCalled();
+    expect(applied).toEqual([dbA, big]);
     expect(rolledBack.size).toBe(0);
   });
 

@@ -261,11 +261,6 @@ export class PostgresConnector implements Connector {
       // not shifted by the host's local timezone (see type-parsers.ts).
       poolConfig.types = postgresTypeParsers;
 
-      // SDK-level readonly enforcement: Set default_transaction_read_only for the entire connection
-      if (config?.readonly) {
-        poolConfig.options = (poolConfig.options || '') + ' -c default_transaction_read_only=on';
-      }
-
       // Set search_path if configured
       if (config?.searchPath) {
         const schemas = config.searchPath.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -285,6 +280,14 @@ export class PostgresConnector implements Connector {
         if (sessionOptions !== '') {
           poolConfig.options = (poolConfig.options || '') + sessionOptions;
         }
+      }
+
+      // SDK-level readonly enforcement: set default_transaction_read_only for the
+      // entire connection. Appended last on purpose: the server applies startup
+      // options in order, so the enforced value wins over a conflicting
+      // `default_transaction_read_only = false` in [sources.session].
+      if (config?.readonly) {
+        poolConfig.options = (poolConfig.options || '') + ' -c default_transaction_read_only=on';
       }
 
       this.pool = new Pool(poolConfig);
