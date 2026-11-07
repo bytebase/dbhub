@@ -826,4 +826,67 @@ describe('PostgreSQL Connector Integration Tests', () => {
       }
     });
   });
+
+  describe('[sources.session] settings', () => {
+    it('should apply each setting to every new connection as its default', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString, undefined, {
+          searchPath: 'test_schema,public',
+          sessionSettings: {
+            lock_timeout: '5s',
+            idle_in_transaction_session_timeout: 60000,
+            application_name: 'dbhub agent',
+            'dbhub.note': 'a b\\c',
+          },
+        });
+
+        const show =
+          "SELECT current_setting('lock_timeout') AS lock_timeout, " +
+          "current_setting('idle_in_transaction_session_timeout') AS idle, " +
+          "current_setting('application_name') AS app, " +
+          "current_setting('dbhub.note') AS note, " +
+          "current_setting('search_path') AS search_path";
+        // Concurrent calls check out separate pool connections.
+        const results = await Promise.all(
+          [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
+        );
+        for (const result of results) {
+          expect(result.resultSets[0].rows[0]).toMatchObject({
+            lock_timeout: '5s',
+            idle: '1min',
+            app: 'dbhub agent',
+            note: 'a b\\c',
+          });
+          expect(result.resultSets[0].rows[0].search_path).toContain('test_schema');
+        }
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should block writes on a connection whose default is read-only', async () => {
+      const connector = new PostgresConnector();
+      try {
+        await connector.connect(postgresTest.connectionString, undefined, {
+          sessionSettings: { default_transaction_read_only: true },
+        });
+
+        await expect(
+          connector.executeSQL('CREATE TABLE dbhub_session_ro (id int)', {})
+        ).rejects.toThrow(/read-only transaction/);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should fail to connect when the server rejects a setting', async () => {
+      const connector = new PostgresConnector();
+      await expect(
+        connector.connect(postgresTest.connectionString, undefined, {
+          sessionSettings: { lock_timeout: 'soon' },
+        })
+      ).rejects.toThrow(/lock_timeout/);
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MySqlContainer, StartedMySqlContainer } from '@testcontainers/mysql';
-import { MySQLConnector } from '../mysql/index.js';
+import mysql from 'mysql2/promise';
+import { MySQLConnector, applyOnEveryConnection } from '../mysql/index.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import { settle, waitFor } from './shared/query-timeout-helpers.js';
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from '../../utils/query-timeout.js';
@@ -627,5 +628,98 @@ describe('MySQL Connector Integration Tests', () => {
         await observer.disconnect();
       }
     }, 30_000);
+  });
+
+  describe('[sources.session] settings', () => {
+    const tableExists = async (name: string): Promise<boolean> => {
+      const observer = new MySQLConnector();
+      try {
+        await observer.connect(mysqlTest.connectionString);
+        const result = await observer.executeSQL(
+          `SELECT COUNT(*) AS c FROM information_schema.tables
+           WHERE table_schema = 'testdb' AND table_name = '${name}'`,
+          {}
+        );
+        return Number(result.resultSets[0].rows[0].c) > 0;
+      } finally {
+        await observer.disconnect();
+      }
+    };
+
+    it('should apply each setting to every new connection as its default', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          queryTimeoutSeconds: 30,
+          sessionSettings: { lock_wait_timeout: 5, time_zone: '+09:00', sql_safe_updates: true },
+        });
+
+        const show =
+          'SELECT SLEEP(0.2) AS s, @@session.lock_wait_timeout AS lwt, @@session.time_zone AS tz, ' +
+          '@@session.sql_safe_updates AS safe, @@session.max_execution_time AS met';
+        // Concurrent calls check out separate pool connections.
+        const results = await Promise.all(
+          [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
+        );
+        for (const result of results) {
+          const row = result.resultSets[0].rows[0];
+          expect(Number(row.lwt)).toBe(5);
+          expect(row.tz).toBe('+09:00');
+          expect(Number(row.safe)).toBe(1);
+          // The query_timeout hook still applies alongside.
+          expect(Number(row.met)).toBe(30000);
+        }
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should stop DDL that escapes the per-execution READ ONLY transaction', async () => {
+      const connector = new MySQLConnector();
+      const table = 'dbhub_session_ro';
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          sessionSettings: { transaction_read_only: 1 },
+        });
+
+        // ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION, on writable and read-only
+        // executions alike.
+        for (const readonly of [false, true]) {
+          const result = await settle(
+            connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
+          );
+          expect(result.error?.errno).toBe(1792);
+        }
+        expect(await tableExists(table)).toBe(false);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should fail to connect when the server rejects a setting', async () => {
+      const connector = new MySQLConnector();
+      await expect(
+        connector.connect(mysqlTest.connectionString, undefined, {
+          sessionSettings: { no_such_variable: 1 },
+        })
+      ).rejects.toThrow(/Unknown system variable/);
+    });
+
+    it('should not send the queued statement when applying the settings fails', async () => {
+      // Drive the hook directly with a statement the loader would never build,
+      // to cover a SET that fails on a connection opened after startup.
+      const pool = mysql.createPool(mysqlTest.connectionString);
+      const table = 'dbhub_session_fail_closed';
+      try {
+        applyOnEveryConnection(pool, 'SET SESSION no_such_variable = 1');
+
+        await expect(pool.query(`CREATE TABLE ${table} (id INT)`)).rejects.toThrow(
+          /Unknown system variable/
+        );
+        expect(await tableExists(table)).toBe(false);
+      } finally {
+        await pool.end();
+      }
+    });
   });
 });

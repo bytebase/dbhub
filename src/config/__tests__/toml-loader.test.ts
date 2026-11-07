@@ -564,6 +564,52 @@ ${extra}
       });
     });
 
+    describe('[sources.session]', () => {
+      const withSession = (type: string, body: string): string => `
+[[sources]]
+id = "test_db"
+dsn = "${DSN_BY_TYPE[type]}"
+
+[sources.session]
+${body}
+`;
+
+      it.each([
+        ['mysql', 'transaction_read_only = 1\nlock_wait_timeout = 5\ntime_zone = "+09:00"', { transaction_read_only: 1, lock_wait_timeout: 5, time_zone: '+09:00' }],
+        ['mysql', 'max_heap_table_size = 9223372036854775807', { max_heap_table_size: 9223372036854775807n }],
+        ['postgres', 'lock_timeout = "5s"\n"pg_stat_statements.track" = "all"\njit = false', { lock_timeout: '5s', 'pg_stat_statements.track': 'all', jit: false }],
+      ])('should accept a %s session table and echo it back', (type, body, expected) => {
+        const result = loadToml(withSession(type, body));
+        expect(result?.sources[0].session).toEqual(expected);
+      });
+
+      it.each([
+        ['for a MariaDB source', 'mariadb', 'lock_wait_timeout = 5', 'only supported for MySQL and PostgreSQL'],
+        ['a non-table value', 'mysql', null, 'must be a table'],
+        ['a name that is not an identifier', 'mysql', '"lock wait" = 5', "invalid setting name 'lock wait'"],
+        ['a dotted name on MySQL', 'mysql', '"a.b" = 1', "invalid setting name 'a.b'"],
+        ['a name with more than one dot on PostgreSQL', 'postgres', '"a.b.c" = 1', "invalid setting name 'a.b.c'"],
+        ['max_execution_time on MySQL', 'mysql', 'MAX_EXECUTION_TIME = 1000', "Use 'query_timeout' instead"],
+        ['statement_timeout on PostgreSQL', 'postgres', 'statement_timeout = "5s"', "Use 'query_timeout' instead"],
+        ['search_path on PostgreSQL', 'postgres', 'search_path = "app"', "Use 'search_path' instead"],
+        ['an array value', 'mysql', 'sql_mode = ["ANSI"]', "invalid value for 'sql_mode'"],
+        ['a nested table', 'postgres', '[sources.session.lock_timeout]\nx = 1', "invalid value for 'lock_timeout'"],
+        ['a date value', 'postgres', 'datestyle = 1979-05-27', "invalid value for 'datestyle'"],
+        ['a backslash in a MySQL string', 'mysql', 'sql_mode = "A\\\\B"', 'must not contain backslashes'],
+        ['a NUL in a PostgreSQL string', 'postgres', 'application_name = "a\\u0000b"', 'must not contain NUL'],
+      ])('should reject %s', (_label, type, body, message) => {
+        const toml = body === null
+          ? `
+[[sources]]
+id = "test_db"
+dsn = "${DSN_BY_TYPE[type]}"
+session = 5
+`
+          : withSession(type, body);
+        expect(() => loadToml(toml)).toThrow(message);
+      });
+    });
+
     describe('DSN/field conflicts', () => {
       // A DSN already encodes the connection identity; setting a field to a
       // different value is silently ignored at connection time, so it must error.

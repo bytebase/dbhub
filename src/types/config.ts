@@ -2,6 +2,8 @@
  * Configuration types for TOML-based multi-database setup
  */
 
+import type { SessionSettings } from "../utils/session-settings.js";
+
 /**
  * SSH tunnel configuration (inline per-source)
  */
@@ -73,6 +75,7 @@ export interface SourceConfig extends ConnectionParams, SSHConfig {
   timezone?: string; // MySQL/MariaDB: how the driver interprets DATETIME values. "Z" (UTC), "local", or "±HH:MM" (e.g., "+09:00")
   charset?: string; // MySQL/MariaDB: connection character set (e.g., "utf8mb4"). May be combined with collation; when both are set, collation takes precedence (it implies its character set).
   collation?: string; // MySQL/MariaDB: connection collation (e.g., "utf8mb4_0900_ai_ci"). Takes precedence over charset when both are set.
+  session?: SessionSettings; // MySQL/PostgreSQL: [sources.session] settings applied to every new connection (e.g., lock_timeout = "5s")
 }
 
 /**

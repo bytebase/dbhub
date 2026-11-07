@@ -20,6 +20,7 @@ import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.js";
+import { buildMySQLSessionStatement } from "../../utils/session-settings.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
 import {
@@ -152,6 +153,34 @@ class MySQLDSNParser implements DSNParser {
   }
 }
 
+/** The callback-style connection mysql2 passes to the pool's 'connection' event. */
+interface RawPoolConnection {
+  query(sql: string, callback: (err: unknown) => void): void;
+  stream: { destroy(err?: Error): void };
+}
+
+/**
+ * Run `statement` on every new pool connection before anything else, and fail
+ * closed: if it errors, the connection is destroyed so the caller's statement,
+ * queued right behind it, is never sent and rejects with that error instead of
+ * running without the settings. At startup this surfaces as a failed connect.
+ *
+ * The socket is destroyed synchronously inside the callback, while the caller's
+ * statement is still in the connection's queue. Destroying the stream (rather
+ * than calling connection.destroy()) routes the error through mysql2's fatal
+ * error path, which rejects every queued statement and drops the connection
+ * from the pool.
+ */
+export function applyOnEveryConnection(pool: mysql.Pool, statement: string): void {
+  (pool as unknown as NodeJS.EventEmitter).on("connection", (connection: RawPoolConnection) => {
+    connection.query(statement, (err) => {
+      if (err) {
+        connection.stream.destroy(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+  });
+}
+
 /**
  * MySQL Connector Implementation
  */
@@ -202,6 +231,16 @@ export class MySQLConnector implements Connector {
             connection.query(setServerLimit, () => {});
           }
         );
+      }
+
+      // Per-source [sources.session] settings become the default of every new
+      // connection. Unlike max_execution_time above, a failure is not ignored.
+      const sessionStatement =
+        config?.sessionSettings !== undefined
+          ? buildMySQLSessionStatement(config.sessionSettings)
+          : undefined;
+      if (sessionStatement !== undefined) {
+        applyOnEveryConnection(this.pool, sessionStatement);
       }
 
       // Test the connection and detect the server flavor in the same round trip.

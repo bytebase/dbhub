@@ -1,3 +1,5 @@
+import type { SessionSettings } from "../utils/session-settings.js";
+
 /**
  * Type definition for supported database connector types
  */
@@ -179,6 +181,11 @@ export interface ConnectorConfig {
    * set, the driver falls back to its built-in default (mysql2: `utf8mb4_unicode_ci`).
    */
   collation?: string;
+  /**
+   * Per-source session settings from `[sources.session]` (MySQL, PostgreSQL),
+   * applied once to every new connection. Validated by the TOML loader.
+   */
+  sessionSettings?: SessionSettings;
 }
 
 /**
