@@ -517,7 +517,7 @@ Sources define database connections. Each source represents a database that DBHu
   ```
 
   <Tip>
-  Can also be set via DSN query parameters (percent-encoded): `?sslmode=require&wallet_location=%2Fpath%2Fto%2Fwallet&wallet_password=...&ssl_server_cert_dn=...`
+  Can also be set via DSN query parameters (percent-encoded): `?sslmode=require&wallet_location=%2Fpath%2Fto%2Fwallet&wallet_password=...&ssl_server_cert_dn=...`. The two forms can be mixed, e.g. `wallet_location` in the DSN and `wallet_password = "${ADB_WALLET_PASSWORD}"` as a field; DSN values get the same checks as fields, and `~/` is expanded there too.
   </Tip>
 </ParamField>
 

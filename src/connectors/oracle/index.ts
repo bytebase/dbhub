@@ -1,3 +1,5 @@
+import os from "os";
+import path from "path";
 import oracledb from "oracledb";
 import {
   Connector,
@@ -24,6 +26,11 @@ import {
 } from "../../utils/sql-parser.js";
 import { isReadOnlySQL } from "../../utils/allowed-keywords.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
+
+/** Expand a leading `~/` in a wallet directory given as a DSN parameter. */
+function expandHomeDir(dir: string): string {
+  return dir.startsWith("~/") ? path.join(os.homedir(), dir.slice(2)) : dir;
+}
 
 /** What the DSN parser hands to the connector. */
 export interface OracleConnectionConfig {
@@ -133,7 +140,9 @@ export class OracleDSNParser implements DSNParser {
         pool.sslServerCertDN = sslServerCertDN;
       }
       if (walletLocation) {
-        pool.walletLocation = walletLocation;
+        // Expanded here, not only for TOML fields, so a DSN given on the
+        // command line can point into the home directory too.
+        pool.walletLocation = expandHomeDir(walletLocation);
       }
       if (walletPassword) {
         pool.walletPassword = walletPassword;

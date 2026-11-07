@@ -53,6 +53,14 @@ describe('SafeURL', () => {
     expect(url.getSearchParam('timeout')).toBe('30');
   });
 
+  it('should keep a query value that itself contains "="', () => {
+    const url = new SafeURL('oracle://localhost:1522/svc?ssl_server_cert_dn=CN=db,O=Acme&wallet_password=abc==&flag');
+
+    expect(url.getSearchParam('ssl_server_cert_dn')).toBe('CN=db,O=Acme');
+    expect(url.getSearchParam('wallet_password')).toBe('abc==');
+    expect(url.getSearchParam('flag')).toBeNull();
+  });
+
   it('should handle special characters in query parameters', () => {
     const url = new SafeURL('postgres://localhost:5432/dbname?param=value%20with%20spaces');
     
