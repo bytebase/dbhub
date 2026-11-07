@@ -23,6 +23,22 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     const fileContent = fs.readFileSync(configPath, "utf-8");
     const rawToml = toml.parse(fileContent) as unknown as TomlConfig;
 
+    // An unresolved placeholder would reach the driver verbatim (e.g. as the
+    // password), failing every login and eventually locking the account. Check
+    // before interpolating so that a resolved value containing "${...}" is not
+    // mistaken for a missing variable.
+    if (Array.isArray(rawToml.sources)) {
+      rawToml.sources.forEach((source, index) => {
+        const missing = findUnresolvedEnvVars(source);
+        if (missing.length > 0) {
+          const name = typeof source?.id === "string" ? `'${source.id}'` : `#${index + 1}`;
+          throw new Error(
+            `source ${name} references unset environment variable(s): ${missing.join(", ")}`
+          );
+        }
+      });
+    }
+
     // Interpolate environment variables (e.g., ${DB_PASSWORD}) in all string values
     const parsedToml = interpolateEnvVars(rawToml) as TomlConfig;
 
@@ -1023,9 +1039,33 @@ function processSourceConfigs(
 /**
  * Interpolate environment variables in configuration values.
  * Supports ${VAR_NAME} syntax, resolved from process.env at load time.
- * Unresolved variables are left as-is (no error thrown).
+ * Unresolved variables are left as-is; loadTomlConfig rejects sources that
+ * contain any (see findUnresolvedEnvVars).
  */
 const ENV_VAR_PATTERN = /\$\{([^}]+)\}/g;
+
+/**
+ * Names of the ${VAR_NAME} placeholders in a value whose environment variable
+ * is not set, in order of first appearance.
+ */
+export function findUnresolvedEnvVars(value: unknown): string[] {
+  const missing = new Set<string>();
+  const visit = (item: unknown): void => {
+    if (typeof item === "string") {
+      for (const [, varName] of item.matchAll(ENV_VAR_PATTERN)) {
+        if (process.env[varName] === undefined) {
+          missing.add(varName);
+        }
+      }
+    } else if (Array.isArray(item)) {
+      item.forEach(visit);
+    } else if (item !== null && typeof item === "object" && Object.getPrototypeOf(item) === Object.prototype) {
+      Object.values(item).forEach(visit);
+    }
+  };
+  visit(value);
+  return [...missing];
+}
 export function interpolateEnvVars(value: unknown): unknown {
   if (typeof value === "string") {
     return value.replace(ENV_VAR_PATTERN, (match, varName) => {

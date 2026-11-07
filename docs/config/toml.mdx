@@ -78,7 +78,7 @@ npx @bytebase/dbhub@latest --config dbhub.toml
 ```
 
 <Note>
-Unresolved variables (where the environment variable is not set) are left as the literal `${VAR_NAME}` string. No error is thrown for missing variables.
+A source that references an environment variable which is not set is rejected at load time, naming the missing variables (never their values). This prevents DBHub from connecting with the literal `${VAR_NAME}` string, for example as a password, which would fail every login and can lock the account. A variable set to an empty string counts as set.
 </Note>
 
 ## Configuration Structure
