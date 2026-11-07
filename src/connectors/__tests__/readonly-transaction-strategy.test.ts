@@ -66,7 +66,7 @@ function makeFakePool(
   wrapResults: (rows: any[]) => any,
   failOn?: (sql: string) => Error | undefined,
   /** What the server reports for @@session.<flag> before the guard is raised. */
-  flag: 0 | 1 = 0
+  flag: unknown = 0
 ) {
   const statements: string[] = [];
   const conn = {
@@ -140,6 +140,38 @@ describe("readonly transaction strategy", () => {
 
       expect(statements[statements.length - 1]).toBe(
         readOnlyClose("transaction_read_only", "COMMIT", 1)
+      );
+    });
+
+    // (A default-parameter fake cannot pass `undefined`; a missing column is
+    // covered by the failed-read case below.)
+    it.each([null, "", "   ", 2, "01", true, {}])(
+      "refuses to proceed when the flag reads as %j",
+      async (raw) => {
+        // Only an exact 0 or 1 will do: coercion would turn null or a blank
+        // string into 0 and later restore the session as writable.
+        const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, undefined, raw);
+        const connector = await connectMysql(pool);
+
+        await expect(connector.executeSQL("SELECT 1", { readonly: true })).rejects.toThrow(
+          "Could not read @@session.transaction_read_only"
+        );
+        expect(statements).toEqual([READ_FLAG, TIDB_CLOSE]);
+        expect(conn.release).toHaveBeenCalled();
+      }
+    );
+
+    it.each([
+      ["the string '1'", "1", 1],
+      ["the bigint 1n", 1n, 1],
+      ["the string '0'", "0", 0],
+    ])("accepts the flag as %s from drivers that return strings or bigints", async (_label, raw, saved) => {
+      const { pool, statements } = makeFakePool(MYSQL_VERSION, asMysql, undefined, raw);
+      const connector = await connectMysql(pool);
+      await connector.executeSQL("SELECT 1", { readonly: true });
+
+      expect(statements[statements.length - 1]).toBe(
+        readOnlyClose("transaction_read_only", "COMMIT", saved as 0 | 1)
       );
     });
 

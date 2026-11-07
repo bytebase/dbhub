@@ -117,11 +117,22 @@ async function readFlag(
   const result = await conn.query(readOnlyFlagQuery(variable));
   // mysql2 resolves a string query to [rows, fields]; mariadb to the rows.
   const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
-  const value = Number((rows as Array<{ ro?: unknown }> | undefined)?.[0]?.ro);
-  if (value !== 0 && value !== 1) {
+  const value = parseFlag((rows as Array<{ ro?: unknown }> | undefined)?.[0]?.ro);
+  if (value === undefined) {
     throw new Error(`Could not read @@session.${variable} before a read-only execution`);
   }
   return value;
+}
+
+/**
+ * Accept only an exact 0 or 1, as a number, bigint or their decimal strings
+ * (drivers differ in how they hand back a system variable). No coercion:
+ * `Number(null)` and `Number("")` are 0, which would read as "writable".
+ */
+function parseFlag(raw: unknown): 0 | 1 | undefined {
+  if (raw === 0 || raw === 0n || raw === "0") return 0;
+  if (raw === 1 || raw === 1n || raw === "1") return 1;
+  return undefined;
 }
 
 /**
