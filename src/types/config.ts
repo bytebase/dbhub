@@ -48,6 +48,10 @@ export interface ConnectionParams {
   sslrootcert?: string; // CA certificate path (PostgreSQL only; requires verify-ca or verify-full)
   sslcert?: string; // PEM client certificate path for client certificate authentication (PostgreSQL only; requires sslkey and sslmode require/verify-ca/verify-full)
   sslkey?: string; // PEM private key path for sslcert (PostgreSQL only; unencrypted)
+  // Oracle wallet / mutual TLS options (Oracle only; require sslmode require or verify-full)
+  wallet_location?: string; // Directory containing the PEM wallet (ewallet.pem)
+  wallet_password?: string; // Password of an encrypted ewallet.pem
+  ssl_server_cert_dn?: string; // Expected server certificate DN, for hosts whose name does not match the certificate
   // SQL Server authentication options
   authentication?: "ntlm" | "azure-active-directory-access-token";
   domain?: string; // Required for NTLM authentication

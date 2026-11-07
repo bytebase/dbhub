@@ -221,6 +221,9 @@ This page covers command-line flags and environment variables. For TOML configur
 
       # TCPS (TLS): require = encrypted, verify-full = certificate DN matched against the host
       oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
+
+      # Mutual TLS with a PEM wallet (e.g. Autonomous Database), percent-encoded values
+      oracle://app:secret@adb.example.com:1522/abc123_mydb_tp.adb.oraclecloud.com?sslmode=require&wallet_location=%2Fopt%2Fwallet&wallet_password=w%40llet
       ```
 
       <Note>
@@ -260,6 +263,9 @@ This page covers command-line flags and environment variables. For TOML configur
   | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
   | `sid` | Oracle | Connect by SID instead of service name | `?sid=ORCL` |
+  | `wallet_location` | Oracle | Directory containing the PEM wallet (`ewallet.pem`) for mutual TLS (requires `require` or `verify-full`) | `?wallet_location=%2Fopt%2Fwallet` |
+  | `wallet_password` | Oracle | Password of an encrypted `ewallet.pem` (requires `wallet_location`; masked in logs) | `?wallet_password=...` |
+  | `ssl_server_cert_dn` | Oracle | Expected server certificate DN, for hosts whose name does not match the certificate; always checked when set | `?ssl_server_cert_dn=CN%3Ddb.example.com` |
 
   **SSL/TLS Options:**
 

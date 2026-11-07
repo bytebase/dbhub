@@ -262,6 +262,9 @@ function getRawDSNQueryParam(dsn: string, key: string): string | null {
   return null;
 }
 
+/** Oracle wallet / mutual TLS fields, also accepted as DSN query parameters of the same name. */
+const ORACLE_WALLET_FIELDS = ["wallet_location", "wallet_password", "ssl_server_cert_dn"] as const;
+
 /** SSL modes in which a PostgreSQL client certificate (sslcert/sslkey) is presented. */
 const CLIENT_CERT_SSL_MODES: ReadonlyArray<string> = ["require", "verify-ca", "verify-full"];
 
@@ -428,6 +431,29 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   const dsnDomain = getRawDSNQueryParam(source.dsn!, "domain");
   if (source.domain && dsnDomain !== null && dsnDomain !== source.domain) {
     conflict("domain", source.domain, dsnDomain);
+  }
+
+  const dsnWalletLocation = getRawDSNQueryParam(source.dsn!, "wallet_location");
+  if (
+    source.wallet_location &&
+    dsnWalletLocation !== null &&
+    expandHomeDir(source.wallet_location) !== expandHomeDir(dsnWalletLocation)
+  ) {
+    conflict("wallet_location", expandHomeDir(source.wallet_location), expandHomeDir(dsnWalletLocation));
+  }
+
+  const dsnCertDN = getRawDSNQueryParam(source.dsn!, "ssl_server_cert_dn");
+  if (source.ssl_server_cert_dn && dsnCertDN !== null && dsnCertDN !== source.ssl_server_cert_dn) {
+    conflict("ssl_server_cert_dn", source.ssl_server_cert_dn, dsnCertDN);
+  }
+
+  // Same check, but never echo the secret values.
+  const dsnWalletPassword = getRawDSNQueryParam(source.dsn!, "wallet_password");
+  if (source.wallet_password && dsnWalletPassword !== null && dsnWalletPassword !== source.wallet_password) {
+    throw new Error(
+      `Configuration file ${configPath}: source '${source.id}' has conflicting wallet_password: ` +
+        `the DSN and the wallet_password field differ. Set wallet_password in only one place.`
+    );
   }
 }
 
@@ -726,6 +752,49 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
         `Configuration file ${configPath}: source '${source.id}' has domain but authentication is set to '${source.authentication}'. ` +
           `Domain is only valid with authentication = "ntlm".`
       );
+    }
+  }
+
+  // Validate Oracle wallet / mutual TLS options
+  const walletFields = ORACLE_WALLET_FIELDS.filter((field) => source[field] !== undefined);
+  if (walletFields.length > 0) {
+    if (source.type !== "oracle") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has ${walletFields.join(", ")} but ` +
+          `${walletFields.length > 1 ? "they are" : "it is"} only supported for Oracle.`
+      );
+    }
+    for (const field of walletFields) {
+      if (typeof source[field] !== "string" || source[field]!.trim().length === 0) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' has invalid ${field}. Must be a non-empty string.`
+        );
+      }
+    }
+    if (source.sslmode !== "require" && source.sslmode !== "verify-full") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has ${walletFields.join(", ")} but sslmode is ` +
+          `'${source.sslmode ?? "not set"}'. Oracle wallet/TLS options require sslmode 'require' or 'verify-full'`
+      );
+    }
+    if (source.wallet_password !== undefined && source.wallet_location === undefined) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has wallet_password but no wallet_location.`
+      );
+    }
+    if (source.wallet_location !== undefined) {
+      const walletDir = expandHomeDir(source.wallet_location);
+      let isDirectory = false;
+      try {
+        isDirectory = fs.statSync(walletDir).isDirectory();
+      } catch {
+        // reported below
+      }
+      if (!isDirectory) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' wallet_location is not an accessible directory: '${walletDir}'`
+        );
+      }
     }
   }
 
@@ -1036,6 +1105,7 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
   }
 
   additions.push(...postgresSslFileParams(source).filter(({ key }) => !hasParam(key)).map(({ param }) => param));
+  additions.push(...oracleWalletParams(source).filter(({ key }) => !hasParam(key)).map(({ param }) => param));
 
   if (additions.length === 0) {
     return dsn;
@@ -1076,6 +1146,27 @@ function postgresSslFileParams(source: SourceConfig): Array<{ key: string; param
   if (source.sslcert && source.sslkey && CLIENT_CERT_SSL_MODES.includes(source.sslmode ?? "")) {
     push("sslcert");
     push("sslkey");
+  }
+  return params;
+}
+
+/**
+ * Oracle wallet / mutual TLS parameters (wallet_location/wallet_password/
+ * ssl_server_cert_dn) to append to a DSN query string, percent-encoded, with
+ * `~/` expanded in wallet_location. Validation already restricts them to Oracle
+ * sources with sslmode require or verify-full.
+ */
+function oracleWalletParams(source: SourceConfig): Array<{ key: string; param: string }> {
+  if (source.type !== "oracle") {
+    return [];
+  }
+  const params: Array<{ key: string; param: string }> = [];
+  for (const key of ORACLE_WALLET_FIELDS) {
+    const value = source[key];
+    if (value) {
+      const resolved = key === "wallet_location" ? expandHomeDir(value) : value;
+      params.push({ key, param: `${key}=${encodeURIComponent(resolved)}` });
+    }
   }
   return params;
 }
@@ -1170,6 +1261,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   queryParams.push(...postgresSslFileParams(source).map(({ param }) => param));
+  queryParams.push(...oracleWalletParams(source).map(({ param }) => param));
 
   // Append query string if any params exist
   if (queryParams.length > 0) {

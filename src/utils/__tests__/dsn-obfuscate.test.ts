@@ -34,6 +34,11 @@ describe('DSN Obfuscation Utilities', () => {
       ['postgres://user:pass@[::1]:5432/db', 'postgres://user:****@[::1]:5432/db'],
       ['mysql://user:pass@[2001:db8::1]/db?sslmode=require', 'mysql://user:****@[2001:db8::1]/db?sslmode=require'],
       ['postgres://:pass@[::1]', 'postgres://****@[::1]'],
+      // Secret query parameters (Oracle wallet_password) are masked too,
+      // also when the authority carries no password
+      ['oracle://app:pass@db:1522/svc?sslmode=require&wallet_location=%2Fw&wallet_password=w%40llet', 'oracle://app:****@db:1522/svc?sslmode=require&wallet_location=%2Fw&wallet_password=******'],
+      ['oracle://app@db:1522/svc?wallet_password=secret', 'oracle://app@db:1522/svc?wallet_password=******'],
+      ['oracle://db:1522/svc?wallet_password=secret', 'oracle://db:1522/svc?wallet_password=******'],
     ])('should obfuscate %s as %s', (dsn, expected) => {
       expect(obfuscateDSNPassword(dsn)).toBe(expected);
     });

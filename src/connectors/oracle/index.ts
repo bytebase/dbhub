@@ -41,6 +41,12 @@ export interface OracleConnectionConfig {
  * database, e.g. FREEPDB1). An old-style SID can be given instead with
  * `?sid=ORCL`. `sslmode=require` switches the transport to TCPS without
  * certificate DN checks; `sslmode=verify-full` also checks the DN.
+ *
+ * Mutual TLS (e.g. Oracle Autonomous Database) uses a PEM wallet:
+ * `wallet_location` is the directory holding ewallet.pem and `wallet_password`
+ * its password. `ssl_server_cert_dn` pins the expected server certificate DN,
+ * for hosts whose name does not match the certificate (private endpoints).
+ * All three need sslmode require or verify-full.
  */
 export class OracleDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<OracleConnectionConfig> {
@@ -55,11 +61,20 @@ export class OracleDSNParser implements DSNParser {
 
       let sslmode: string | undefined;
       let sid: string | undefined;
+      let walletLocation: string | undefined;
+      let walletPassword: string | undefined;
+      let sslServerCertDN: string | undefined;
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
           sslmode = value;
         } else if (key === "sid") {
           sid = value;
+        } else if (key === "wallet_location") {
+          walletLocation = value;
+        } else if (key === "wallet_password") {
+          walletPassword = value;
+        } else if (key === "ssl_server_cert_dn") {
+          sslServerCertDN = value;
         }
       });
 
@@ -80,6 +95,14 @@ export class OracleDSNParser implements DSNParser {
       }
 
       const useTls = sslmode === "require" || sslmode === "verify-full";
+      if (!useTls && (walletLocation || walletPassword || sslServerCertDN)) {
+        throw new Error(
+          "wallet_location, wallet_password and ssl_server_cert_dn require sslmode=require or sslmode=verify-full"
+        );
+      }
+      if (walletPassword && !walletLocation) {
+        throw new Error("wallet_password requires wallet_location");
+      }
       let connectString: string;
       if (sid) {
         // Easy Connect has no SID form; use a full connect descriptor.
@@ -103,7 +126,17 @@ export class OracleDSNParser implements DSNParser {
         pool.connectTimeout = config.connectionTimeoutSeconds;
       }
       if (useTls) {
-        pool.sslServerDNMatch = sslmode === "verify-full";
+        // An explicit DN is only meaningful when it is checked, whatever the sslmode.
+        pool.sslServerDNMatch = sslmode === "verify-full" || sslServerCertDN !== undefined;
+      }
+      if (sslServerCertDN) {
+        pool.sslServerCertDN = sslServerCertDN;
+      }
+      if (walletLocation) {
+        pool.walletLocation = walletLocation;
+      }
+      if (walletPassword) {
+        pool.walletPassword = walletPassword;
       }
 
       return {
