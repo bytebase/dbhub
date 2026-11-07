@@ -16,16 +16,19 @@
  * The session flag is restored afterwards, not cleared: the pooled connection
  * is shared with writable tools on the same source, but its previous value may
  * itself be read-only, set by the operator (`[sources.session]`), a global
- * default or an `init_connect` hook, and that must survive. The value is saved
- * in a user variable on the connection before the flag is raised and read back
- * from it afterwards, so nothing has to be parsed client-side. Stacked-DDL
- * payloads (e.g. `SELECT 1--1;DROP TABLE t`) are additionally rejected upstream
- * by the read-only classifier, which splits `--`-hidden statements (see
+ * default or an `init_connect` hook, and that must survive. The value is read
+ * into application state before the flag is raised and restored as a literal,
+ * never via anything the executed SQL can reach: a user variable, for example,
+ * can be overwritten by a `SELECT @v := 0`, which the classifier allows and a
+ * read-only transaction permits. Stacked-DDL payloads (e.g.
+ * `SELECT 1--1;DROP TABLE t`) are additionally rejected upstream by the
+ * read-only classifier, which splits `--`-hidden statements (see
  * scanSingleLineCommentMySQL in sql-parser.ts).
  *
- * Save, flag and transaction control ride in one multi-statement batch on each
- * side (both connectors enable multipleStatements), so a read-only execution
- * still costs two round trips beyond the query itself.
+ * Flag and transaction control ride in one multi-statement batch on each side
+ * (both connectors enable multipleStatements); with the read of the flag's
+ * current value, a read-only execution costs three round trips beyond the query
+ * itself.
  *
  * TiDB rejects the READ ONLY modifier (see isTiDBVersion), so there we open a
  * plain transaction and always ROLLBACK instead of COMMIT: any DML the
@@ -82,29 +85,44 @@ function readOnlyVariableFor(version: unknown): ReadOnlyVariable {
   return "transaction_read_only";
 }
 
-/** User variable holding the connection's own value of the flag while it is raised. */
-const SAVED_FLAG = "@dbhub_tx_read_only";
-
-/** Opens the guard on stock MySQL/MariaDB: save the flag, raise it, begin. */
-export function readOnlyOpen(variable: ReadOnlyVariable): string {
-  return (
-    `SET ${SAVED_FLAG} := @@session.${variable}; ` +
-    "SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY"
-  );
+/** Reads the flag's current value, so it can be put back afterwards. */
+export function readOnlyFlagQuery(variable: ReadOnlyVariable): string {
+  return `SELECT @@session.${variable} AS ro`;
 }
 
-/**
- * Closes the guard: end the transaction, then put the flag back to the saved
- * value. If the open batch failed before the save, nothing was raised, so the
- * flag is left as it is (COALESCE on its current value).
- */
-export function readOnlyClose(variable: ReadOnlyVariable, end: "COMMIT" | "ROLLBACK"): string {
-  return `${end}; SET SESSION ${variable} = COALESCE(${SAVED_FLAG}, @@session.${variable})`;
+/** Opens the guard on stock MySQL/MariaDB: raise the flag, begin. */
+export const READ_ONLY_OPEN = "SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY";
+
+/** Closes the guard: end the transaction, then put the flag back to `saved`. */
+export function readOnlyClose(
+  variable: ReadOnlyVariable,
+  end: "COMMIT" | "ROLLBACK",
+  saved: 0 | 1
+): string {
+  return `${end}; SET SESSION ${variable} = ${saved}`;
 }
 
 /** TiDB counterparts: no READ ONLY, and always discard. */
 export const TIDB_OPEN = "START TRANSACTION";
 export const TIDB_CLOSE = "ROLLBACK";
+
+/**
+ * Read the flag into application state. Refuses to proceed on anything but a
+ * clear 0 or 1: guessing "writable" could later clear a read-only default.
+ */
+async function readFlag(
+  conn: ReadOnlyTransactionConnection,
+  variable: ReadOnlyVariable
+): Promise<0 | 1> {
+  const result = await conn.query(readOnlyFlagQuery(variable));
+  // mysql2 resolves a string query to [rows, fields]; mariadb to the rows.
+  const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+  const value = Number((rows as Array<{ ro?: unknown }> | undefined)?.[0]?.ro);
+  if (value !== 0 && value !== 1) {
+    throw new Error(`Could not read @@session.${variable} before a read-only execution`);
+  }
+  return value;
+}
 
 /**
  * Run `execute` inside the read-only backstop.
@@ -127,17 +145,25 @@ export async function withReadOnlyTransaction<T>(
     return execute();
   }
 
-  const session = backstop.kind === "session";
-  const open = session ? readOnlyOpen(backstop.variable) : TIDB_OPEN;
-  const commit = session ? readOnlyClose(backstop.variable, "COMMIT") : TIDB_CLOSE;
-  const rollback = session ? readOnlyClose(backstop.variable, "ROLLBACK") : TIDB_CLOSE;
-
+  // A bare ROLLBACK until the flag has been raised: if the read of its value
+  // fails there is nothing to restore, only a transaction to clean up.
+  let rollback = TIDB_CLOSE;
   // The open is inside the try so that a failure to open the guard still
   // attempts the best-effort rollback below: if it partially succeeded, or the
   // server left the session with an open transaction or a raised flag, the
   // connection must not go back to the pool dirty.
   try {
-    await conn.query(open);
+    let commit: string;
+    if (backstop.kind === "session") {
+      // Read before raising, into a local the executed SQL cannot reach.
+      const saved = await readFlag(conn, backstop.variable);
+      rollback = readOnlyClose(backstop.variable, "ROLLBACK", saved);
+      commit = readOnlyClose(backstop.variable, "COMMIT", saved);
+      await conn.query(READ_ONLY_OPEN);
+    } else {
+      commit = TIDB_CLOSE;
+      await conn.query(TIDB_OPEN);
+    }
     const result = await execute();
     await conn.query(commit);
     return result;

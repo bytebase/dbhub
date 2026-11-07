@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   detectReadOnlyBackstop,
-  readOnlyOpen,
+  readOnlyFlagQuery,
   readOnlyClose,
+  READ_ONLY_OPEN,
 } from "../readonly-transaction.js";
 
 describe("detectReadOnlyBackstop", () => {
@@ -34,13 +35,14 @@ describe("detectReadOnlyBackstop", () => {
 });
 
 describe("read-only guard statements", () => {
-  it("saves the flag before raising it and restores it after the transaction", () => {
-    expect(readOnlyOpen("tx_read_only")).toBe(
-      "SET @dbhub_tx_read_only := @@session.tx_read_only; " +
-        "SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY"
-    );
-    expect(readOnlyClose("tx_read_only", "ROLLBACK")).toBe(
-      "ROLLBACK; SET SESSION tx_read_only = COALESCE(@dbhub_tx_read_only, @@session.tx_read_only)"
+  it("reads the flag, raises it with the transaction, and restores it as a literal", () => {
+    expect(readOnlyFlagQuery("tx_read_only")).toBe("SELECT @@session.tx_read_only AS ro");
+    expect(READ_ONLY_OPEN).toBe("SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY");
+    // The restore carries the value DBHub read, not a server-side variable the
+    // executed SQL could have overwritten.
+    expect(readOnlyClose("tx_read_only", "ROLLBACK", 1)).toBe("ROLLBACK; SET SESSION tx_read_only = 1");
+    expect(readOnlyClose("transaction_read_only", "COMMIT", 0)).toBe(
+      "COMMIT; SET SESSION transaction_read_only = 0"
     );
   });
 });

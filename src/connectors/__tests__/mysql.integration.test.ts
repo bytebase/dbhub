@@ -719,13 +719,18 @@ describe('MySQL Connector Integration Tests', () => {
         // The read-only backstop raises and then restores the session flag; a
         // value configured here must survive it, so DDL is refused
         // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION) on read-only and writable
-        // executions alike, in either order.
+        // executions alike, in either order. The SELECT in between is what a
+        // read-only tool could run to tamper with server-side state the
+        // restore might read from: the restore must not depend on any.
         for (const readonly of [true, false, true]) {
           const result = await settle(
             connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
           );
           expect(result.error?.errno).toBe(1792);
+          await connector.executeSQL('SELECT @dbhub_tx_read_only := 0 AS tampered', { readonly: true });
         }
+        const flag = await connector.executeSQL('SELECT @@session.transaction_read_only AS ro', {});
+        expect(Number(flag.resultSets[0].rows[0].ro)).toBe(1);
         expect(await tableExists(table)).toBe(false);
       } finally {
         await connector.disconnect();

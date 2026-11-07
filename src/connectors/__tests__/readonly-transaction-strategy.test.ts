@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
-import { readOnlyOpen, readOnlyClose, TIDB_OPEN, TIDB_CLOSE } from "../../utils/readonly-transaction.js";
+import {
+  READ_ONLY_OPEN,
+  readOnlyFlagQuery,
+  readOnlyClose,
+  TIDB_OPEN,
+  TIDB_CLOSE,
+} from "../../utils/readonly-transaction.js";
 
-// MySQL 8 has transaction_read_only; MariaDB has tx_read_only.
-const READ_ONLY_OPEN = readOnlyOpen("transaction_read_only");
-const READ_ONLY_COMMIT = readOnlyClose("transaction_read_only", "COMMIT");
-const READ_ONLY_ROLLBACK = readOnlyClose("transaction_read_only", "ROLLBACK");
-const MARIADB_OPEN = readOnlyOpen("tx_read_only");
-const MARIADB_COMMIT = readOnlyClose("tx_read_only", "COMMIT");
+// MySQL 8 has transaction_read_only; MariaDB has tx_read_only. The fake pool
+// below answers the flag read with 0 (writable) unless a test says otherwise.
+const READ_FLAG = readOnlyFlagQuery("transaction_read_only");
+const READ_ONLY_COMMIT = readOnlyClose("transaction_read_only", "COMMIT", 0);
+const READ_ONLY_ROLLBACK = readOnlyClose("transaction_read_only", "ROLLBACK", 0);
+const MARIADB_READ_FLAG = readOnlyFlagQuery("tx_read_only");
+const MARIADB_COMMIT = readOnlyClose("tx_read_only", "COMMIT", 0);
 
 /**
  * Unit coverage for the readonly transaction strategy in the MySQL/MariaDB
@@ -18,8 +25,8 @@ const MARIADB_COMMIT = readOnlyClose("tx_read_only", "COMMIT");
  * is precisely that it *rejects* the statement the other engines accept). These
  * tests mock the driver so both branches are asserted at the statement level:
  *
- *   MySQL/MariaDB -> save flag; SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
- *                    ... COMMIT; restore flag
+ *   MySQL/MariaDB -> read flag; SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
+ *                    ... COMMIT; SET SESSION <flag> = <value read>
  *   TiDB          -> START TRANSACTION ... ROLLBACK   (writes discarded)
  *
  * The session-level READ ONLY is what stops DDL, which commits implicitly and
@@ -57,7 +64,9 @@ const TIDB_VERSION = "8.0.11-TiDB-v7.5.0";
 function makeFakePool(
   version: string,
   wrapResults: (rows: any[]) => any,
-  failOn?: (sql: string) => Error | undefined
+  failOn?: (sql: string) => Error | undefined,
+  /** What the server reports for @@session.<flag> before the guard is raised. */
+  flag: 0 | 1 = 0
 ) {
   const statements: string[] = [];
   const conn = {
@@ -67,7 +76,7 @@ function makeFakePool(
       statements.push(sql);
       const failure = failOn?.(sql);
       if (failure) throw failure;
-      const results = wrapResults([{ id: 1 }]);
+      const results = wrapResults(sql.startsWith("SELECT @@session.") ? [{ ro: flag }] : [{ id: 1 }]);
       // mariadb answers a `metaAsArray` query with [rows, meta].
       return typeof arg === "object" && arg.metaAsArray ? [results, []] : results;
     }),
@@ -115,17 +124,37 @@ describe("readonly transaction strategy", () => {
       const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements).toEqual([READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
-      // The guard is one batch on each side, so the query still costs two
-      // round trips beyond itself.
-      expect(statements).toHaveLength(3);
-      // The flag goes back to the value the connection had, never to a fixed
-      // READ WRITE, so a read-only default set outside DBHub survives.
-      expect(READ_ONLY_OPEN).toMatch(/^SET @dbhub_tx_read_only := @@session\.transaction_read_only; /);
-      expect(READ_ONLY_COMMIT).toBe(
-        "COMMIT; SET SESSION transaction_read_only = COALESCE(@dbhub_tx_read_only, @@session.transaction_read_only)"
-      );
+      // Read the flag, raise it with the transaction, run, commit and restore:
+      // three round trips beyond the query.
+      expect(statements).toEqual([READ_FLAG, READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
       expect(statements.join("\n")).not.toContain("READ WRITE");
+    });
+
+    it("restores a read-only default it found rather than clearing it", async () => {
+      // The connection already defaulted to read-only (global default,
+      // init_connect, or [sources.session]). The value DBHub read is what goes
+      // back, as a literal: nothing the executed SQL does can change it.
+      const { pool, statements } = makeFakePool(MYSQL_VERSION, asMysql, undefined, 1);
+      const connector = await connectMysql(pool);
+      await connector.executeSQL("SELECT @dbhub_tx_read_only := 0", { readonly: true });
+
+      expect(statements[statements.length - 1]).toBe(
+        readOnlyClose("transaction_read_only", "COMMIT", 1)
+      );
+    });
+
+    it("refuses to proceed when the flag cannot be read", async () => {
+      const { pool, conn, statements } = makeFakePool(MYSQL_VERSION, asMysql, (sql) =>
+        sql === READ_FLAG ? new Error("server gone") : undefined
+      );
+      const connector = await connectMysql(pool);
+
+      await expect(connector.executeSQL("SELECT 1", { readonly: true })).rejects.toThrow(
+        "server gone"
+      );
+      // Nothing was raised, so nothing is restored; the query never ran.
+      expect(statements).toEqual([READ_FLAG, TIDB_CLOSE]);
+      expect(conn.release).toHaveBeenCalled();
     });
 
     it("uses tx_read_only on MySQL before 5.7.20", async () => {
@@ -133,8 +162,8 @@ describe("readonly transaction strategy", () => {
       const connector = await connectMysql(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements[0]).toBe(readOnlyOpen("tx_read_only"));
-      expect(statements[2]).toBe(readOnlyClose("tx_read_only", "COMMIT"));
+      expect(statements[0]).toBe(readOnlyFlagQuery("tx_read_only"));
+      expect(statements[3]).toBe(readOnlyClose("tx_read_only", "COMMIT", 0));
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
@@ -169,10 +198,10 @@ describe("readonly transaction strategy", () => {
         "syntax error"
       );
 
-      // The open transaction must be rolled back and the session flag cleared
+      // The open transaction must be rolled back and the session flag restored
       // so the pooled connection is returned clean, and the original error
       // must survive.
-      expect(statements[0]).toBe(READ_ONLY_OPEN);
+      expect(statements[1]).toBe(READ_ONLY_OPEN);
       expect(statements[statements.length - 1]).toBe(READ_ONLY_ROLLBACK);
       expect(conn.release).toHaveBeenCalled();
     });
@@ -307,7 +336,7 @@ describe("readonly transaction strategy", () => {
       await connector.executeSQL("SELECT 1", { readonly: true });
 
       // MariaDB names the flag tx_read_only.
-      expect(statements).toEqual([MARIADB_OPEN, "SELECT 1", MARIADB_COMMIT]);
+      expect(statements).toEqual([MARIADB_READ_FLAG, READ_ONLY_OPEN, "SELECT 1", MARIADB_COMMIT]);
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
