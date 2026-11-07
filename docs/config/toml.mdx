@@ -661,7 +661,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### session
 
 <ParamField path="[sources.session]" type="table">
-  Server settings applied to every new connection, so they become that connection's defaults. Each key is the server's own setting name and each value a string, number or boolean.
+  Server settings applied to every new connection, as `name = value` pairs. Keys are the server's own setting names; values are strings, numbers or booleans.
 
   **MySQL / PostgreSQL only.**
 
@@ -671,7 +671,6 @@ Sources define database connections. Each source represents a database that DBHu
   dsn = "mysql://reader:secret@prod.example.com:3306/myapp"
 
   [sources.session]
-  transaction_read_only = 1
   lock_wait_timeout = 5
 
   [[sources]]
@@ -682,14 +681,12 @@ Sources define database connections. Each source represents a database that DBHu
   lock_timeout = "5s"
   ```
 
-  The table must follow the `[[sources]]` entry it belongs to. On MySQL the settings are applied with one `SET SESSION` statement when each pooled connection opens; on PostgreSQL they are sent as connection startup options (`-c name=value`), like `search_path`.
+  Place the table directly after the `[[sources]]` entry it belongs to. DBHub checks only the shape; the server decides whether a setting exists and accepts the value, and a rejected setting fails startup rather than being skipped. Settings with a dedicated option are refused here: use `query_timeout` instead of `max_execution_time` or `statement_timeout`, and the `search_path` option instead of a `search_path` entry.
 
-  DBHub checks only the shape: names must be identifiers (PostgreSQL also accepts `ext.name`), and values must be scalars. Whether a setting exists and accepts the value is up to the server, and a rejected setting fails the connection rather than leaving it without the setting, so a typo stops startup. Settings that DBHub manages itself are rejected in favour of their dedicated option: `max_execution_time` on MySQL and `statement_timeout` on PostgreSQL (use `query_timeout`), and `search_path` on PostgreSQL (use `search_path`).
-
-  The settings apply to every tool on the source, read-only and writable alike. For example, MySQL `transaction_read_only = 1` makes the server refuse writes and DDL, which the per-execution `READ ONLY` transaction cannot stop on its own because DDL commits implicitly.
+  The settings apply to every tool on the source, read-only and writable alike.
 
   <Note>
-  This option is **only available via TOML**. It is not supported as a DSN query parameter. On PostgreSQL, as with `search_path`, the settings travel in the `options` startup parameter, which some connection poolers such as PgBouncer reject or drop.
+  This option is **only available via TOML**. It is not supported as a DSN query parameter. On PostgreSQL the settings are sent as connection startup options, which some poolers such as PgBouncer drop.
   </Note>
 </ParamField>
 

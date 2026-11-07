@@ -137,13 +137,12 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # collation = "utf8mb4_0900_ai_ci"  # Connection collation
 
 # Session settings applied to every new connection (MySQL/PostgreSQL only).
-# Names are the server's own setting names; the server rejects unknown ones at connect.
+# Keys are the server's own setting names; a setting the server rejects fails startup.
 # [[sources]]
 # id = "prod_mysql"
 # dsn = "mysql://reader:secret@prod.example.com:3306/myapp"
 #
 # [sources.session]
-# transaction_read_only = 1  # Server-side read-only, DDL included
 # lock_wait_timeout = 5      # Give up on metadata locks (e.g. behind ALTER TABLE) after 5s
 
 # MySQL on AWS RDS with IAM authentication (no password in config)
