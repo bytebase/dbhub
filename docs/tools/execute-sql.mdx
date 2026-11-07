@@ -126,14 +126,14 @@ In read-only mode, DBHub enforces read-only access in two layers:
 
 - **PostgreSQL** — runs inside a `BEGIN READ ONLY` transaction
 - **SQLite** — runs with `PRAGMA query_only = ON`
-- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`
+- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`, with the session itself set `READ ONLY` for the duration so DDL, which commits implicitly and would end the transaction, is rejected too
 
 <Note>
 Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.
 </Note>
 
 <Warning>
-Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction. On MySQL/MariaDB, DDL performs an implicit commit and is stopped only by the keyword classifier.
+Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction.
 
 For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
 </Warning>

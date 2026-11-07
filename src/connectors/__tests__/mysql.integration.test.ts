@@ -504,10 +504,11 @@ describe('MySQL Connector Integration Tests', () => {
   });
 
   describe('Per-tool readonly engine backstop (options.readonly)', () => {
-    // The READ ONLY transaction reliably blocks DML. (DDL like DROP performs an
-    // implicit commit and escapes the transaction; stacked-DDL payloads such as
-    // `SELECT 1--1;DROP TABLE t` are instead rejected upstream by the read-only
-    // classifier — see the unit tests in allowed-keywords.test.ts.)
+    // The READ ONLY transaction blocks DML; the session-level READ ONLY set
+    // around it blocks DDL, which commits implicitly and would otherwise escape
+    // the transaction. (Stacked-DDL payloads such as `SELECT 1--1;DROP TABLE t`
+    // are also rejected upstream by the read-only classifier — see the unit
+    // tests in allowed-keywords.test.ts.)
     it('should block a stacked UPDATE hidden after -- via the READ ONLY transaction', async () => {
       const connector = new MySQLConnector();
       try {
@@ -549,6 +550,39 @@ describe('MySQL Connector Integration Tests', () => {
         expect(insert.resultSets[0].rowCount).toBe(1);
         await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
       } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should stop DDL, which commits implicitly, and leave the connection writable afterward', async () => {
+      const connector = new MySQLConnector();
+      const table = 'dbhub_readonly_ddl';
+      const exists = async (): Promise<boolean> => {
+        const result = await connector.executeSQL(
+          `SELECT COUNT(*) AS c FROM information_schema.tables
+           WHERE table_schema = DATABASE() AND table_name = '${table}'`,
+          {}
+        );
+        return Number(result.resultSets[0].rows[0].c) > 0;
+      };
+      try {
+        await connector.connect(mysqlTest.connectionString);
+
+        // CREATE TABLE performs an implicit COMMIT that ends the READ ONLY
+        // transaction, so only the session-level READ ONLY stops it
+        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION).
+        const blocked = await settle(
+          connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly: true })
+        );
+        expect(blocked.error?.errno).toBe(1792);
+        expect(await exists()).toBe(false);
+
+        // The session flag is cleared afterwards: the same pooled connection
+        // serves writable tools too.
+        await connector.executeSQL(`CREATE TABLE ${table} (id INT)`, {});
+        expect(await exists()).toBe(true);
+      } finally {
+        await settle(connector.executeSQL(`DROP TABLE IF EXISTS ${table}`, {}));
         await connector.disconnect();
       }
     });
@@ -674,7 +708,7 @@ describe('MySQL Connector Integration Tests', () => {
       }
     });
 
-    it('should stop DDL that escapes the per-execution READ ONLY transaction', async () => {
+    it('should keep a read-only session default in force after a read-only execution', async () => {
       const connector = new MySQLConnector();
       const table = 'dbhub_session_ro';
       try {
@@ -682,14 +716,21 @@ describe('MySQL Connector Integration Tests', () => {
           sessionSettings: { transaction_read_only: 1 },
         });
 
-        // ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION, on writable and read-only
-        // executions alike.
-        for (const readonly of [false, true]) {
+        // The read-only backstop raises and then restores the session flag; a
+        // value configured here must survive it, so DDL is refused
+        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION) on read-only and writable
+        // executions alike, in either order. The SELECT in between is what a
+        // read-only tool could run to tamper with server-side state the
+        // restore might read from: the restore must not depend on any.
+        for (const readonly of [true, false, true]) {
           const result = await settle(
             connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
           );
           expect(result.error?.errno).toBe(1792);
+          await connector.executeSQL('SELECT @dbhub_tx_read_only := 0 AS tampered', { readonly: true });
         }
+        const flag = await connector.executeSQL('SELECT @@session.transaction_read_only AS ro', {});
+        expect(Number(flag.resultSets[0].rows[0].ro)).toBe(1);
         expect(await tableExists(table)).toBe(false);
       } finally {
         await connector.disconnect();
