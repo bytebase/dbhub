@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
-import {
-  READ_ONLY_OPEN,
-  READ_ONLY_COMMIT,
-  READ_ONLY_ROLLBACK,
-  TIDB_OPEN,
-  TIDB_CLOSE,
-} from "../../utils/readonly-transaction.js";
+import { readOnlyOpen, readOnlyClose, TIDB_OPEN, TIDB_CLOSE } from "../../utils/readonly-transaction.js";
+
+// MySQL 8 has transaction_read_only; MariaDB has tx_read_only.
+const READ_ONLY_OPEN = readOnlyOpen("transaction_read_only");
+const READ_ONLY_COMMIT = readOnlyClose("transaction_read_only", "COMMIT");
+const READ_ONLY_ROLLBACK = readOnlyClose("transaction_read_only", "ROLLBACK");
+const MARIADB_OPEN = readOnlyOpen("tx_read_only");
+const MARIADB_COMMIT = readOnlyClose("tx_read_only", "COMMIT");
 
 /**
  * Unit coverage for the readonly transaction strategy in the MySQL/MariaDB
@@ -17,13 +18,14 @@ import {
  * is precisely that it *rejects* the statement the other engines accept). These
  * tests mock the driver so both branches are asserted at the statement level:
  *
- *   MySQL/MariaDB -> SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
- *                    ... COMMIT; SET SESSION TRANSACTION READ WRITE
+ *   MySQL/MariaDB -> save flag; SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
+ *                    ... COMMIT; restore flag
  *   TiDB          -> START TRANSACTION ... ROLLBACK   (writes discarded)
  *
  * The session-level READ ONLY is what stops DDL, which commits implicitly and
- * would otherwise escape the transaction; it must be cleared again because the
- * pooled connection is shared with writable tools.
+ * would otherwise escape the transaction; the flag is restored to the value the
+ * connection had, not cleared, because the pooled connection is shared with
+ * writable tools and its own default may be read-only too.
  */
 
 const mysqlCreatePool = vi.fn();
@@ -117,6 +119,22 @@ describe("readonly transaction strategy", () => {
       // The guard is one batch on each side, so the query still costs two
       // round trips beyond itself.
       expect(statements).toHaveLength(3);
+      // The flag goes back to the value the connection had, never to a fixed
+      // READ WRITE, so a read-only default set outside DBHub survives.
+      expect(READ_ONLY_OPEN).toMatch(/^SET @dbhub_tx_read_only := @@session\.transaction_read_only; /);
+      expect(READ_ONLY_COMMIT).toBe(
+        "COMMIT; SET SESSION transaction_read_only = COALESCE(@dbhub_tx_read_only, @@session.transaction_read_only)"
+      );
+      expect(statements.join("\n")).not.toContain("READ WRITE");
+    });
+
+    it("uses tx_read_only on MySQL before 5.7.20", async () => {
+      const { pool, statements } = makeFakePool("5.7.19-log", asMysql);
+      const connector = await connectMysql(pool);
+      await connector.executeSQL("SELECT 1", { readonly: true });
+
+      expect(statements[0]).toBe(readOnlyOpen("tx_read_only"));
+      expect(statements[2]).toBe(readOnlyClose("tx_read_only", "COMMIT"));
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
@@ -288,7 +306,8 @@ describe("readonly transaction strategy", () => {
       const connector = await connectMariadb(pool);
       await connector.executeSQL("SELECT 1", { readonly: true });
 
-      expect(statements).toEqual([READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
+      // MariaDB names the flag tx_read_only.
+      expect(statements).toEqual([MARIADB_OPEN, "SELECT 1", MARIADB_COMMIT]);
     });
 
     it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {

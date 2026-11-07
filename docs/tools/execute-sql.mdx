@@ -126,7 +126,7 @@ In read-only mode, DBHub enforces read-only access in two layers:
 
 - **PostgreSQL** — runs inside a `BEGIN READ ONLY` transaction
 - **SQLite** — runs with `PRAGMA query_only = ON`
-- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`, with the session itself set `READ ONLY` for the duration so DDL, which commits implicitly and would end the transaction, is rejected too. (TiDB rejects `READ ONLY`; there writes are discarded by a rollback and DDL is stopped by the classifier alone.)
+- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`, with the session itself set `READ ONLY` for the duration so DDL, which commits implicitly and would end the transaction, is rejected too
 
 <Note>
 Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.

@@ -708,6 +708,30 @@ describe('MySQL Connector Integration Tests', () => {
       }
     });
 
+    it('should keep a read-only session default in force after a read-only execution', async () => {
+      const connector = new MySQLConnector();
+      const table = 'dbhub_session_ro';
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          sessionSettings: { transaction_read_only: 1 },
+        });
+
+        // The read-only backstop raises and then restores the session flag; a
+        // value configured here must survive it, so DDL is refused
+        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION) on read-only and writable
+        // executions alike, in either order.
+        for (const readonly of [true, false, true]) {
+          const result = await settle(
+            connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
+          );
+          expect(result.error?.errno).toBe(1792);
+        }
+        expect(await tableExists(table)).toBe(false);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
     it('should fail to connect when the server rejects a setting', async () => {
       const connector = new MySQLConnector();
       await expect(

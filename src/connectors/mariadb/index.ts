@@ -21,13 +21,16 @@ import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-data
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.js";
 import { splitSQLStatements } from "../../utils/sql-parser.js";
-import { withReadOnlyTransaction } from "../../utils/readonly-transaction.js";
+import {
+  withReadOnlyTransaction,
+  detectReadOnlyBackstop,
+  type ReadOnlyBackstop,
+} from "../../utils/readonly-transaction.js";
 import {
   clientQueryTimeoutMs,
   isClientSideTimeout,
   withClientQueryDeadline,
 } from "../../utils/query-timeout.js";
-import { isTiDBVersion } from "../../utils/server-flavor.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
@@ -155,9 +158,10 @@ export class MariaDBConnector implements Connector {
   // Client-side fallback deadline; the mariadb driver has no client-side
   // timer of its own (see query-timeout.ts).
   private clientQueryTimeoutMs?: number;
-  // TiDB speaks the MySQL protocol but rejects `START TRANSACTION READ ONLY`
-  // unless tidb_enable_noop_functions is on. Detected once at connect time.
-  private supportsReadOnlyTransaction: boolean = true;
+  // How the read-only backstop takes effect on this server (which session
+  // variable to save/restore; TiDB rejects `START TRANSACTION READ ONLY`
+  // unless tidb_enable_noop_functions is on). Detected once at connect time.
+  private readOnlyBackstop: ReadOnlyBackstop = { kind: "session", variable: "transaction_read_only" };
 
   getId(): string {
     return this.sourceId;
@@ -193,7 +197,7 @@ export class MariaDBConnector implements Connector {
 
       // Test the connection and detect the server flavor in the same round trip.
       const rows = await this.pool.query("SELECT VERSION() AS version");
-      this.supportsReadOnlyTransaction = !isTiDBVersion(rows?.[0]?.version);
+      this.readOnlyBackstop = detectReadOnlyBackstop(rows?.[0]?.version);
     } catch (err) {
       // Tear down the pool if it was created before the failure, otherwise it
       // strands sockets and keeps the event loop alive (see closeQuietly).
@@ -288,7 +292,7 @@ export class MariaDBConnector implements Connector {
       return await withReadOnlyTransaction(
         conn,
         options.readonly,
-        this.supportsReadOnlyTransaction,
+        this.readOnlyBackstop,
         async () => {
           // Split up front so the original statement text is available for
           // attribution below, whether or not maxRows needs to rewrite it.

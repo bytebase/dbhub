@@ -11,13 +11,14 @@ describe("buildMySQLSessionStatement", () => {
   it("should render every setting in one SET SESSION statement", () => {
     expect(
       buildMySQLSessionStatement({
+        transaction_read_only: 1,
         lock_wait_timeout: 5,
         sql_safe_updates: true,
         foreign_key_checks: false,
         time_zone: "+09:00",
       })
     ).toBe(
-      "SET SESSION lock_wait_timeout = 5, sql_safe_updates = TRUE, " +
+      "SET SESSION transaction_read_only = 1, lock_wait_timeout = 5, sql_safe_updates = TRUE, " +
         "foreign_key_checks = FALSE, time_zone = '+09:00'"
     );
   });
@@ -68,7 +69,7 @@ describe("buildPostgresSessionOptions", () => {
 describe("validateSessionSettings", () => {
   it("should match managed setting names case-insensitively", () => {
     expect(validateSessionSettings({ Statement_Timeout: 0 }, "postgres")).toContain(
-      "Use the 'query_timeout' source option instead"
+      "Use 'query_timeout' instead"
     );
   });
 

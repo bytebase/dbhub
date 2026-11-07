@@ -681,7 +681,7 @@ Sources define database connections. Each source represents a database that DBHu
   lock_timeout = "5s"
   ```
 
-  Place the table directly after the `[[sources]]` entry it belongs to. DBHub checks only the shape; the server decides whether a setting exists and accepts the value, and a rejected setting fails startup rather than being skipped. Settings DBHub manages itself are refused here: use `query_timeout` instead of `max_execution_time` or `statement_timeout`, the `search_path` option instead of a `search_path` entry, and `readonly = true` on the tools instead of MySQL's `transaction_read_only`, which the read-only backstop sets and clears around each read-only execution.
+  Place the table directly after the `[[sources]]` entry it belongs to. DBHub checks only the shape; the server decides whether a setting exists and accepts the value, and a rejected setting fails startup rather than being skipped. Settings with a dedicated option are refused here: use `query_timeout` instead of `max_execution_time` or `statement_timeout`, and the `search_path` option instead of a `search_path` entry.
 
   The settings apply to every tool on the source, read-only and writable alike.
 
