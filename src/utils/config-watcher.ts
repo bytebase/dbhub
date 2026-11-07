@@ -27,6 +27,12 @@ function stableStringify(value: unknown): string {
       .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
     return `{${entries.join(",")}}`;
   }
+  // A TOML integer beyond Number.MAX_SAFE_INTEGER (e.g. in [sources.session])
+  // is parsed as a bigint, which JSON.stringify rejects. The suffix keeps it
+  // distinct from a number of the same digits.
+  if (typeof value === "bigint") {
+    return `${value}n`;
+  }
   return JSON.stringify(value);
 }
 

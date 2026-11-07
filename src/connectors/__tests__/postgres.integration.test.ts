@@ -888,5 +888,25 @@ describe('PostgreSQL Connector Integration Tests', () => {
         })
       ).rejects.toThrow(/lock_timeout/);
     });
+
+    it('should keep connection-level readonly in force over a conflicting session setting', async () => {
+      const connector = new PostgresConnector();
+      try {
+        // The server applies startup options in order, so the enforced option
+        // must come after the session table to win.
+        await connector.connect(postgresTest.connectionString, undefined, {
+          readonly: true,
+          sessionSettings: { default_transaction_read_only: false },
+        });
+
+        const show = await connector.executeSQL('SHOW default_transaction_read_only', {});
+        expect(show.resultSets[0].rows[0].default_transaction_read_only).toBe('on');
+        await expect(
+          connector.executeSQL('CREATE TABLE dbhub_session_ro_conflict (id int)', {})
+        ).rejects.toThrow(/read-only transaction/);
+      } finally {
+        await connector.disconnect();
+      }
+    });
   });
 });

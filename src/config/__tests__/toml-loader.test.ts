@@ -585,7 +585,9 @@ ${body}
 
       it.each([
         ['for a MariaDB source', 'mariadb', 'lock_wait_timeout = 5', 'only supported for MySQL and PostgreSQL'],
-        ['a non-table value', 'mysql', null, 'must be a table'],
+        ['a non-table value', 'mysql', { inline: 'session = 5' }, 'must be a table'],
+        ['a datetime in place of the table', 'postgres', { inline: 'session = 2024-01-01T00:00:00Z' }, 'must be a table'],
+        ['a local date in place of the table', 'mysql', { inline: 'session = 1979-05-27' }, 'must be a table'],
         ['a name that is not an identifier', 'mysql', '"lock wait" = 5', "invalid setting name 'lock wait'"],
         ['a dotted name on MySQL', 'mysql', '"a.b" = 1', "invalid setting name 'a.b'"],
         ['a name with more than one dot on PostgreSQL', 'postgres', '"a.b.c" = 1', "invalid setting name 'a.b.c'"],
@@ -598,14 +600,15 @@ ${body}
         ['a backslash in a MySQL string', 'mysql', 'sql_mode = "A\\\\B"', 'must not contain backslashes'],
         ['a NUL in a PostgreSQL string', 'postgres', 'application_name = "a\\u0000b"', 'must not contain NUL'],
       ])('should reject %s', (_label, type, body, message) => {
-        const toml = body === null
-          ? `
+        // `inline` replaces the [sources.session] table with a plain key.
+        const toml = typeof body === 'string'
+          ? withSession(type, body)
+          : `
 [[sources]]
 id = "test_db"
 dsn = "${DSN_BY_TYPE[type]}"
-session = 5
-`
-          : withSession(type, body);
+${body.inline}
+`;
         expect(() => loadToml(toml)).toThrow(message);
       });
     });

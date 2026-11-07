@@ -43,7 +43,15 @@ export function validateSessionSettings(
   settings: unknown,
   engine: SessionSettingsEngine
 ): string | undefined {
-  if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+  // Only a plain table will do. The TOML parser returns a Date for a datetime
+  // value, which is an object with no enumerable entries and would otherwise
+  // pass as an empty table.
+  if (
+    typeof settings !== "object" ||
+    settings === null ||
+    Array.isArray(settings) ||
+    settings instanceof Date
+  ) {
     return "must be a table of setting names and values (e.g. [sources.session] followed by lock_timeout = \"5s\")";
   }
 
