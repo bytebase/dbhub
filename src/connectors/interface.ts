@@ -146,7 +146,7 @@ export interface ConnectorConfig {
   connectionTimeoutSeconds?: number;
   /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
   queryTimeoutSeconds?: number;
-  /** Maximum connections in a PostgreSQL source pool */
+  /** Maximum connections in a source pool (PostgreSQL, MySQL) */
   poolMaxConnections?: number;
   /**
    * Read-only mode for SDK-level enforcement (PostgreSQL, SQLite)

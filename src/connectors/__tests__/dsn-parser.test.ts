@@ -379,6 +379,24 @@ describe('DSN Parser - PostgreSQL pool size', () => {
   });
 });
 
+describe('DSN Parser - MySQL pool size', () => {
+  it('maps the configured maximum to mysql2 connectionLimit', async () => {
+    const parser = new MySQLConnector().dsnParser;
+    const config = await parser.parse('mysql://user:pass@localhost:3306/db', {
+      poolMaxConnections: 5,
+    });
+
+    expect(config.connectionLimit).toBe(5);
+  });
+
+  it('leaves mysql2 defaults unchanged when no maximum is configured', async () => {
+    const parser = new MySQLConnector().dsnParser;
+    const config = await parser.parse('mysql://user:pass@localhost:3306/db');
+
+    expect(config.connectionLimit).toBeUndefined();
+  });
+});
+
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {
     const connector = new MySQLConnector();

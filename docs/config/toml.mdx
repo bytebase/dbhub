@@ -332,7 +332,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### pool_max_connections
 
 <ParamField path="pool_max_connections" type="integer" default="10">
-  Maximum number of connections in this PostgreSQL source's pool. The value must be between 1 and 1000.
+  Maximum number of connections in this PostgreSQL or MySQL source's pool. The value must be between 1 and 1000.
 
   ```toml
   [[sources]]
@@ -341,10 +341,10 @@ Sources define database connections. Each source represents a database that DBHu
   pool_max_connections = 5
   ```
 
-  When omitted, the PostgreSQL driver default of 10 is unchanged. This limit applies per DBHub process and per source, so include every running process and source when budgeting database connections.
+  When omitted, the driver default of 10 is unchanged. This limit applies per DBHub process and per source, so include every running process and source when budgeting database connections.
 
   <Note>
-  This option is PostgreSQL-only and is not supported as a DSN query parameter.
+  This option is not supported as a DSN query parameter.
   </Note>
 </ParamField>
 
@@ -990,7 +990,7 @@ default = 10
 | `lazy` | boolean | ❌ | Defer connection until first query (default: `false`) |
 | `connection_timeout` | number | ❌ | Connection timeout (seconds) |
 | `query_timeout` | number | ❌ | Query timeout (seconds) |
-| `pool_max_connections` | integer | ❌ | PostgreSQL pool size per process and source (default: `10`, range: `1`-`1000`) |
+| `pool_max_connections` | integer | ❌ | PostgreSQL and MySQL pool size per process and source (default: `10`, range: `1`-`1000`) |
 | `sslmode` | string | ❌ | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` |
 | `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
 | `sslcert` | string | ❌ | PEM client certificate path for client certificate authentication (PostgreSQL only, requires `sslkey` and TLS enabled) |
