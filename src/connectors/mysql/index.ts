@@ -43,9 +43,10 @@ import { closeQuietly } from "../../utils/resource-cleanup.js";
  * - Any other value: Standard SSL connection with certificate verification
  */
 class MySQLDSNParser implements DSNParser {
-  async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.ConnectionOptions> {
+  async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.PoolOptions> {
     const connectionTimeoutSeconds = config?.connectionTimeoutSeconds;
-    // Capture these before the local `config` (mysql.ConnectionOptions) shadows the param below
+    const poolMaxConnections = config?.poolMaxConnections;
+    // Capture these before the local `config` (mysql.PoolOptions) shadows the param below
     const timezone = config?.timezone;
     const charset = config?.charset;
     const collation = config?.collation;
@@ -66,7 +67,7 @@ class MySQLDSNParser implements DSNParser {
       const database = url.pathname ? url.pathname.substring(1) : ''; // Remove leading '/' if exists
       requireDatabaseInDSN(database, dsn, "MySQL");
 
-      const config: mysql.ConnectionOptions = {
+      const config: mysql.PoolOptions = {
         host: url.hostname,
         port: url.port ? parseInt(url.port) : 3306,
         database,
@@ -94,6 +95,12 @@ class MySQLDSNParser implements DSNParser {
       if (connectionTimeoutSeconds !== undefined) {
         // mysql2 library expects connectTimeout in milliseconds
         config.connectTimeout = connectionTimeoutSeconds * 1000;
+      }
+
+      // mysql2 defaults to 10 connections per pool; callers beyond the limit
+      // wait for a free connection.
+      if (poolMaxConnections !== undefined) {
+        config.connectionLimit = poolMaxConnections;
       }
 
       // Apply timezone if specified: controls how mysql2 interprets DATETIME values

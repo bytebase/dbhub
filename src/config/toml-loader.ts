@@ -618,9 +618,9 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
   }
 
   if (source.pool_max_connections !== undefined) {
-    if (source.type !== "postgres") {
+    if (source.type !== "postgres" && source.type !== "mysql") {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has 'pool_max_connections' but it is only supported for PostgreSQL sources.`
+        `Configuration file ${configPath}: source '${source.id}' has 'pool_max_connections' but it is only supported for PostgreSQL and MySQL sources.`
       );
     }
     if (
