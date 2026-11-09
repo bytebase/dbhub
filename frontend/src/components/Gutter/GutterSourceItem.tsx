@@ -6,9 +6,10 @@ import type { DataSource } from '../../types/datasource';
 
 interface GutterSourceItemProps {
   source: DataSource;
+  expanded: boolean;
 }
 
-export default function GutterSourceItem({ source }: GutterSourceItemProps) {
+export default function GutterSourceItem({ source, expanded }: GutterSourceItemProps) {
   const { sourceId } = useParams<{ sourceId: string }>();
   const isActive = sourceId === source.id;
 
@@ -20,17 +21,20 @@ export default function GutterSourceItem({ source }: GutterSourceItemProps) {
             to={`/source/${source.id}`}
             aria-label={source.id}
             className={cn(
-              'w-full rounded-l-lg p-2 mt-1 flex flex-col items-center justify-center transition-colors',
+              'w-full rounded-l-lg p-2 mt-1 flex items-center transition-colors',
+              expanded ? 'gap-3 justify-start' : 'flex-col justify-center',
               isActive && 'bg-accent shadow'
             )}
           >
             <img
               src={DB_LOGOS[source.type]}
               alt={`${source.type} logo`}
-              className="w-7 h-7"
+              className="w-7 h-7 shrink-0"
             />
             <span className={cn(
-              'text-[10px] w-full text-center mt-1 leading-tight break-words line-clamp-2',
+              expanded
+                ? 'min-w-0 text-sm text-left leading-snug [overflow-wrap:anywhere]'
+                : 'text-[10px] w-full text-center mt-1 leading-tight break-words line-clamp-2',
               isActive ? 'text-foreground' : 'text-muted-foreground'
             )}>
               {source.id}

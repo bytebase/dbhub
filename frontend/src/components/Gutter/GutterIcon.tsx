@@ -7,20 +7,23 @@ interface GutterIconProps {
   tooltip: string;
   to?: string;
   href?: string;
+  expanded: boolean;
 }
 
-export default function GutterIcon({ icon, tooltip, to, href }: GutterIconProps) {
+export default function GutterIcon({ icon, tooltip, to, href, expanded }: GutterIconProps) {
   const location = useLocation();
   const isActive = to ? location.pathname === to : false;
 
   const iconButton = (
     <div
       className={cn(
-        'w-full h-10 rounded-l-lg p-2 flex items-center justify-center transition-colors',
+        'w-full h-10 rounded-l-lg p-2 flex items-center transition-colors',
+        expanded ? 'justify-start gap-3' : 'justify-center',
         isActive && 'bg-accent shadow'
       )}
     >
       {icon}
+      {expanded && <span className="text-sm">{tooltip}</span>}
     </div>
   );
 
