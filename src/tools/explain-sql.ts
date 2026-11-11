@@ -2,7 +2,11 @@ import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import { splitSQLStatements, stripCommentsAndStrings } from "../utils/sql-parser.js";
-import { getFirstKeyword } from "../utils/allowed-keywords.js";
+import {
+  explainAnalyzeKeyword,
+  nonExecutingExplainOptions,
+  readExplainOptionList,
+} from "../utils/allowed-keywords.js";
 import type { ConnectorType } from "../connectors/interface.js";
 import {
   getEffectiveSourceId,
@@ -34,6 +38,9 @@ function buildExplainStatement(connectorType: ConnectorType, sql: string): strin
   return `EXPLAIN ${sql}`;
 }
 
+const ANALYZE_NOT_SUPPORTED =
+  "explain_sql does not support ANALYZE (it must never execute the statement)";
+
 /**
  * Reject input that could turn the tool's own EXPLAIN prefix into something
  * that actually executes the statement (e.g. a leading ANALYZE combining with
@@ -46,24 +53,30 @@ function validateExplainInput(sql: string, connectorType: ConnectorType): string
     return "explain_sql only supports a single SQL statement";
   }
 
-  const firstWord = getFirstKeyword(statements[0], connectorType);
-  if (firstWord === "explain") {
+  const cleaned = stripCommentsAndStrings(statements[0], connectorType).trim();
+  if (/^explain\b/i.test(cleaned)) {
     return "explain_sql input must not itself start with EXPLAIN";
   }
-  if (firstWord === "analyze") {
-    return "explain_sql does not support ANALYZE (it must never execute the statement)";
+  if (explainAnalyzeKeyword.test(cleaned)) {
+    return ANALYZE_NOT_SUPPORTED;
   }
 
   // PostgreSQL's EXPLAIN accepts a parenthesized option list immediately
   // after EXPLAIN (e.g. EXPLAIN (ANALYZE, VERBOSE) SELECT ...). Input
   // starting with such a "(...)" block combines with our EXPLAIN prefix into
-  // a form that actually executes the statement, bypassing the bare-ANALYZE
-  // check above (whose \S+ matching never isolates "analyze" as its own
-  // token when it's glued to parens/commas).
-  const cleaned = stripCommentsAndStrings(statements[0], connectorType).trim();
-  const leadingOptions = cleaned.match(/^\(([\s\S]*?)\)/)?.[1];
-  if (leadingOptions && /\banalyze\b/i.test(leadingOptions)) {
-    return "explain_sql does not support ANALYZE (it must never execute the statement)";
+  // a form that actually executes the statement. Matching ANALYZE alone is
+  // not enough: PostgreSQL also honours a quoted option name ("analyze"),
+  // which the stripping above has blanked out. So a leading option list is
+  // only accepted when every option in it is one known not to execute.
+  const optionList = readExplainOptionList(cleaned);
+  if (optionList?.options.some(({ name }) => explainAnalyzeKeyword.test(name))) {
+    return ANALYZE_NOT_SUPPORTED;
+  }
+  if (optionList?.options.some(({ name }) => !nonExecutingExplainOptions.has(name))) {
+    return (
+      "explain_sql only accepts these EXPLAIN options, written unquoted: " +
+      [...nonExecutingExplainOptions].join(", ")
+    );
   }
 
   return null;

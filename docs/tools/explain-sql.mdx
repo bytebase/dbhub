@@ -28,7 +28,9 @@ EXPLAIN SELECT * FROM users WHERE status = 'active'
 ```
 </CodeGroup>
 
-Only a single statement is accepted (no `;`-separated batches), and the input must not itself begin with `EXPLAIN` or `ANALYZE` — both are rejected so the tool's own `EXPLAIN` prefix can never combine with a smuggled `ANALYZE` to actually execute the statement.
+Only a single statement is accepted (no `;`-separated batches), and the input must not itself begin with `EXPLAIN` or `ANALYZE` (or PostgreSQL's `ANALYSE` spelling) — both are rejected so the tool's own `EXPLAIN` prefix can never combine with a smuggled `ANALYZE` to actually execute the statement.
+
+A leading PostgreSQL option list such as `(FORMAT JSON) SELECT ...` is accepted only when every option is one that cannot execute the statement: `VERBOSE`, `COSTS`, `SETTINGS`, `GENERIC_PLAN`, `BUFFERS`, `SERIALIZE`, `WAL`, `TIMING`, `SUMMARY`, `MEMORY`, `FORMAT`. `ANALYZE`, quoted option names, and any other option are rejected.
 
 <Tip>
 Because plain `EXPLAIN` never executes the target statement, `explain_sql` is safe to run against write statements too. `explain_sql` on `DELETE FROM users WHERE id = 1` returns the plan without deleting anything.
