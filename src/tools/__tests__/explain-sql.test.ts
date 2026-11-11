@@ -111,6 +111,64 @@ describe('explain-sql tool', () => {
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
+    // PostgreSQL accepts ANALYSE as a synonym, and reads the keyword even when
+    // it is glued to the parenthesis that follows (#501).
+    it.each([
+      'ANALYSE SELECT * FROM users',
+      'ANALYSE VERBOSE SELECT * FROM users',
+      'analyse DELETE FROM users',
+      'ANALYZE(SELECT * FROM users)',
+      'ANALYSE(SELECT * FROM users)',
+      '(ANALYSE) SELECT * FROM users',
+      '(VERBOSE, ANALYSE true) SELECT * FROM users',
+      '(ANALYZE false) SELECT * FROM users',
+    ])('rejects ANALYZE in either spelling: %s', async (sql) => {
+      const handler = createExplainSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(result.isError).toBe(true);
+      const parsed = parseToolResponse(result);
+      expect(parsed.code).toBe('INVALID_INPUT');
+      expect(parsed.error).toContain('ANALYZE');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
+    // A quoted option name is still the option to PostgreSQL, so an option
+    // list is only accepted when every name in it is recognized as written.
+    it.each([
+      '("analyze") SELECT * FROM users',
+      '("analyze" true) SELECT * FROM users',
+      '(VERBOSE, "analyze") SELECT * FROM users',
+      '(U&"\\0061nalyze") SELECT * FROM users',
+      '(RUN_IT) SELECT * FROM users',
+      '() SELECT * FROM users',
+    ])('rejects a leading option list with an unrecognized option: %s', async (sql) => {
+      const handler = createExplainSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      '(SELECT id FROM users) UNION (SELECT id FROM admins)',
+      '(SELECT id, "analyze" FROM users) UNION (SELECT 1, 2)',
+      '((SELECT 1)) UNION (SELECT 2)',
+      '(VALUES (1)) UNION (VALUES (2))',
+      'VERBOSE SELECT * FROM users',
+      'SELECT analyse FROM users',
+    ])('allows input that only looks like an option list or ANALYZE: %s', async (sql) => {
+      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+
+      const handler = createExplainSqlToolHandler('test_source');
+      const result = await handler({ sql }, null);
+
+      expect(parseToolResponse(result).success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(`EXPLAIN ${sql}`, { readonly: true });
+    });
+
     it('allows a leading parenthesized option list that does not contain ANALYZE', async () => {
       const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);

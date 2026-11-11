@@ -256,9 +256,101 @@ const sqliteReadOnlyArgPragmas = new Set([
 /** Matches `PRAGMA [schema.]name(` to extract the pragma name of the parenthesized form. */
 const sqlitePragmaParenPattern = /^pragma\s+(?:[a-z0-9_]+\.)?([a-z0-9_]+)\s*\(/;
 
-/** Matches EXPLAIN ANALYZE (or parenthesized form), excluding disabled forms (false/off/0) */
-const explainAnalyzePattern =
-  /^explain\s+(?:\([^)]*\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)[^)]*\)|\banalyze\b(?!\s*(?:=\s*)?(?:false|off|0)\b)(?:\s+verbose\b)?)/i;
+/**
+ * The EXPLAIN keyword that makes it execute the statement, at the start of the
+ * text. PostgreSQL accepts both spellings. Anchored on a word boundary rather
+ * than whitespace because `ANALYZE(SELECT 1)` is the keyword too.
+ */
+export const explainAnalyzeKeyword = /^analy[sz]e\b/i;
+
+/**
+ * EXPLAIN options that only shape the plan output. ANALYZE is deliberately
+ * absent: it is the option that executes the statement. A name that is not
+ * listed is treated as one that might, which covers options added later or by
+ * an extension, and a quoted name (`"analyze"`), which PostgreSQL honours but
+ * stripCommentsAndStrings has already blanked out.
+ */
+export const nonExecutingExplainOptions: ReadonlySet<string> = new Set([
+  "verbose",
+  "costs",
+  "settings",
+  "generic_plan",
+  "buffers",
+  "serialize",
+  "wal",
+  "timing",
+  "summary",
+  "memory",
+  "format",
+]);
+
+/**
+ * A parenthesis that opens a query rather than an EXPLAIN option list, as in
+ * `EXPLAIN (SELECT 1) UNION (SELECT 2)`. These words are either reserved, so
+ * they cannot name an option, or (VALUES) not an option any engine accepts.
+ */
+const parenthesizedQueryStart = /^\(\s*(?:\(|(?:select|with|table|values)\b)/i;
+
+/** A value that switches an EXPLAIN option off, e.g. `ANALYZE false`. */
+const disabledExplainOptionValue = /^\s*(?:=\s*)?(?:false|off|0)\b/i;
+
+export interface ExplainOption {
+  /** Lowercased option name; "" when the option does not start with a bare name. */
+  name: string;
+  /** Whatever follows the name. */
+  value: string;
+}
+
+/**
+ * Read the parenthesized option list that opens the text following EXPLAIN,
+ * e.g. `(ANALYZE, FORMAT JSON) SELECT ...`. Returns null when the text does
+ * not open with one. Expects comment/string-stripped input.
+ */
+export function readExplainOptionList(
+  afterExplain: string
+): { options: ExplainOption[]; rest: string } | null {
+  if (!afterExplain.startsWith("(") || parenthesizedQueryStart.test(afterExplain)) {
+    return null;
+  }
+  const close = afterExplain.indexOf(")");
+  const end = close === -1 ? afterExplain.length : close;
+  const options = afterExplain
+    .slice(1, end)
+    .split(",")
+    .map((option) => {
+      const m = /^\s*([a-z_][\w$]*)(?=[\s=]|$)([\s\S]*)$/i.exec(option);
+      return m ? { name: m[1].toLowerCase(), value: m[2] } : { name: "", value: option };
+    });
+  return { options, rest: afterExplain.slice(end + 1) };
+}
+
+/**
+ * The statement an EXPLAIN executes, given the text that follows the EXPLAIN
+ * keyword, or null when it only plans. PostgreSQL applies options in order,
+ * so one enabling ANALYZE anywhere in the list is enough.
+ */
+function statementExecutedByExplain(afterExplain: string): string | null {
+  const optionList = readExplainOptionList(afterExplain);
+  if (optionList) {
+    const executes = optionList.options.some(({ name, value }) =>
+      explainAnalyzeKeyword.test(name)
+        ? !disabledExplainOptionValue.test(value)
+        : !nonExecutingExplainOptions.has(name)
+    );
+    return executes ? optionList.rest.trim() : null;
+  }
+
+  // Bare form: ANALYZE [VERBOSE] <statement>
+  const analyze = explainAnalyzeKeyword.exec(afterExplain);
+  if (!analyze) {
+    return null;
+  }
+  const rest = afterExplain.slice(analyze[0].length);
+  if (disabledExplainOptionValue.test(rest)) {
+    return null;
+  }
+  return rest.replace(/^\s+verbose\b/i, "").trim();
+}
 
 /**
  * Check if a SQL query is read-only.
@@ -272,17 +364,6 @@ export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string
     stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase(),
     connectorType,
   );
-}
-
-/**
- * Extract the first keyword of a SQL statement, after stripping comments and
- * string literals so a keyword hidden in a comment/string can't be mistaken
- * for the statement's real leading token. Returns "" for empty/whitespace-only
- * or comment-only input.
- */
-export function getFirstKeyword(sql: string, connectorType: ConnectorType | string): string {
-  const cleaned = stripCommentsAndStrings(sql, connectorType as ConnectorType).trim();
-  return cleaned.match(/\S+/)?.[0]?.toLowerCase() ?? "";
 }
 
 function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string): boolean {
@@ -339,12 +420,9 @@ function checkReadOnly(cleanedSQL: string, connectorType: ConnectorType | string
 
   // EXPLAIN ANALYZE actually executes the statement (Postgres)
   if (firstWord === "explain") {
-    const m = explainAnalyzePattern.exec(cleanedSQL);
-    if (m) {
-      const afterExplain = cleanedSQL.slice(m[0].length).trim();
-      if (afterExplain && !checkReadOnly(afterExplain, connectorType)) {
-        return false;
-      }
+    const executed = statementExecutedByExplain(cleanedSQL.slice(firstWord.length).trim());
+    if (executed && !checkReadOnly(executed, connectorType)) {
+      return false;
     }
   }
 

@@ -152,6 +152,60 @@ describe("isReadOnlySQL", () => {
         expect(isReadOnlySQL(`EXPLAIN (ANALYZE ${value}) DELETE FROM users`, "postgres")).toBe(true);
       }
     );
+
+    // PostgreSQL accepts ANALYSE wherever it accepts ANALYZE (#501).
+    it.each([
+      "EXPLAIN ANALYSE DELETE FROM users",
+      "EXPLAIN ANALYSE VERBOSE DELETE FROM users",
+      "EXPLAIN (ANALYSE) DELETE FROM users",
+      "EXPLAIN (VERBOSE, ANALYSE true) DELETE FROM users",
+    ])("should reject the ANALYSE spelling with DML: %s", (sql) => {
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should allow EXPLAIN ANALYSE with SELECT", () => {
+      expect(isReadOnlySQL("EXPLAIN ANALYSE SELECT * FROM users", "postgres")).toBe(true);
+      expect(isReadOnlySQL("EXPLAIN (ANALYSE false) DELETE FROM users", "postgres")).toBe(true);
+    });
+
+    // A quoted option name is still the option to PostgreSQL, but it is
+    // stripped before classification, so the list cannot be shown to be safe.
+    it.each([
+      'EXPLAIN ("analyze") DELETE FROM users',
+      'EXPLAIN ("analyze" true) DELETE FROM users',
+      'EXPLAIN (VERBOSE, "analyze") DELETE FROM users',
+      'EXPLAIN (U&"\\0061nalyze") DELETE FROM users',
+    ])("should reject a quoted EXPLAIN option name with DML: %s", (sql) => {
+      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
+    });
+
+    it("should reject an unrecognized EXPLAIN option with DML", () => {
+      expect(isReadOnlySQL("EXPLAIN (RUN_IT) DELETE FROM users", "postgres")).toBe(false);
+      expect(isReadOnlySQL("EXPLAIN (RUN_IT) SELECT * FROM users", "postgres")).toBe(true);
+    });
+
+    // PostgreSQL applies options in order, so a later ANALYZE wins.
+    it("should reject a re-enabled ANALYZE with DML", () => {
+      expect(isReadOnlySQL("EXPLAIN (ANALYZE false, ANALYZE) DELETE FROM users", "postgres")).toBe(false);
+    });
+
+    it.each([
+      "EXPLAIN (VERBOSE, COSTS off, FORMAT JSON) DELETE FROM users",
+      "EXPLAIN (BUFFERS, SETTINGS, GENERIC_PLAN) DELETE FROM users",
+    ])("should allow non-executing EXPLAIN options with DML: %s", (sql) => {
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
+
+    // A leading parenthesis that opens a query is not an option list.
+    it.each([
+      "EXPLAIN (SELECT id FROM users) UNION (SELECT id FROM admins)",
+      'EXPLAIN (SELECT id, "analyze" FROM users) UNION (SELECT 1, 2)',
+      "EXPLAIN ((SELECT 1)) UNION (SELECT 2)",
+      "EXPLAIN (VALUES (1)) UNION (VALUES (2))",
+      "EXPLAIN (WITH x AS (SELECT 1) SELECT * FROM x)",
+    ])("should allow EXPLAIN of a parenthesized query: %s", (sql) => {
+      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
+    });
   });
 
   describe("SELECT INTO", () => {
