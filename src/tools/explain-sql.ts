@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
-import { splitSQLStatements, stripCommentsAndStrings } from "../utils/sql-parser.js";
+import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "../utils/sql-parser.js";
 import {
   explainAnalyzeKeyword,
   nonExecutingExplainOptions,
@@ -48,12 +48,25 @@ const ANALYZE_NOT_SUPPORTED =
  * statements past the single EXPLAIN we emit.
  */
 function validateExplainInput(sql: string, connectorType: ConnectorType): string | null {
-  const statements = splitSQLStatements(sql, connectorType);
-  if (statements.length !== 1) {
+  // Every reading of the dialect's string syntax must see one statement, since
+  // the server's setting (e.g. MySQL NO_BACKSLASH_ESCAPES) is not known here.
+  const variants = splitSQLStatementVariants(sql, connectorType);
+  if (variants.some((statements) => statements.length !== 1)) {
     return "explain_sql only supports a single SQL statement";
   }
 
-  const cleaned = stripCommentsAndStrings(statements[0], connectorType).trim();
+  for (const [statement] of variants) {
+    for (const cleaned of stripCommentsAndStringsVariants(statement, connectorType)) {
+      const error = validateCleanedExplainInput(cleaned.trim());
+      if (error) {
+        return error;
+      }
+    }
+  }
+  return null;
+}
+
+function validateCleanedExplainInput(cleaned: string): string | null {
   if (/^explain\b/i.test(cleaned)) {
     return "explain_sql input must not itself start with EXPLAIN";
   }

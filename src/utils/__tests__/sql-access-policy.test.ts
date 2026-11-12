@@ -119,3 +119,36 @@ describe("sqlVerdict", () => {
     expect(sqlVerdict(writable, "GRANT ALL ON t TO x", "postgres")).toBe("allow");
   });
 });
+
+describe("classifySQL with backslash-escaped quotes", () => {
+  it.each([
+    ["mysql", String.raw`SELECT '\' , '; DROP TABLE t; SELECT ''`, "ddl"],
+    ["mariadb", String.raw`SELECT '\' , '; DROP TABLE t; SELECT ''`, "ddl"],
+    ["mysql", String.raw`SELECT '\' , '; SELECT LOAD_FILE('/etc/passwd'); SELECT ''`, "admin"],
+    [
+      "mysql",
+      String.raw`SELECT '\' , '; SET SESSION transaction_read_only = 0; COMMIT; SELECT ''`,
+      "unknown",
+    ],
+    // NO_BACKSLASH_ESCAPES reading
+    ["mysql", String.raw`SELECT '\'; DROP TABLE t; SELECT ''`, "ddl"],
+    // ANSI_QUOTES reading
+    ["mariadb", String.raw`SELECT 1 AS "\" , '\' , '; DROP TABLE t; SELECT 1 AS "a"`, "ddl"],
+    ["postgres", String.raw`SELECT E'\' , '; DROP TABLE t; SELECT ''`, "ddl"],
+    ["postgres", String.raw`SELECT E'\' , '; SELECT pg_read_file('x'); SELECT ''`, "admin"],
+    ["postgres", "SELECT E''\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
+    ["postgres", "SELECT E''-- note\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
+    ["postgres", "SELECT E''\r'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
+  ] as const)("%s: %s is %s", (dialect, sql, expected) => {
+    expect(classifySQL(sql, dialect)).toBe(expected);
+  });
+
+  it.each([
+    ["mysql", String.raw`SELECT 'it\'s' AS a, 'C:\\Users\\me' AS p, "say \"hi\"" AS q`],
+    ["mysql", String.raw`SELECT '\\' AS a, '' AS b, X'41', N'abc'`],
+    ["mariadb", String.raw`SELECT 'it''s' AS a, 'C:\Users\me' AS p`],
+    ["postgres", String.raw`SELECT E'it\'s' AS a, 'C:\Users\' AS p, 'x' AS q`],
+  ] as const)("%s: %s stays read", (dialect, sql) => {
+    expect(classifySQL(sql, dialect)).toBe("read");
+  });
+});

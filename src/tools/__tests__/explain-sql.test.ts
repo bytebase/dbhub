@@ -79,6 +79,24 @@ describe('explain-sql tool', () => {
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['mysql', String.raw`SELECT '\' , '; DROP TABLE t; SELECT ''`],
+      // Hidden only when the server runs with NO_BACKSLASH_ESCAPES
+      ['mariadb', String.raw`SELECT '\'; DROP TABLE t; SELECT ''`],
+      ['postgres', String.raw`SELECT E'\' , '; DROP TABLE t; SELECT ''`],
+    ] satisfies [ConnectorType, string][])(
+      'rejects a %s statement hidden by a backslash-escaped quote',
+      async (dialect, sql) => {
+        mockConnector = createMockConnector(dialect, 'test_source');
+        mockGetCurrentConnector.mockReturnValue(mockConnector);
+        const handler = createExplainSqlToolHandler('test_source');
+        const result = await handler({ sql }, null);
+
+        expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
+        expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+      }
+    );
+
     it('rejects input already starting with EXPLAIN', async () => {
       const handler = createExplainSqlToolHandler('test_source');
       const result = await handler({ sql: 'EXPLAIN SELECT * FROM users' }, null);

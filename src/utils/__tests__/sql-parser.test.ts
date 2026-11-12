@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { stripCommentsAndStrings, splitSQLStatements, blankCommentsAndStrings } from "../sql-parser.js";
+import {
+  stripCommentsAndStrings,
+  stripCommentsAndStringsVariants,
+  splitSQLStatements,
+  splitSQLStatementVariants,
+  blankCommentsAndStrings,
+} from "../sql-parser.js";
 
 describe("stripCommentsAndStrings", () => {
   describe("single-line comments (--)", () => {
@@ -541,5 +547,82 @@ describe("blankCommentsAndStrings", () => {
     const result = blankCommentsAndStrings(sql, "sqlserver");
     expect(result).toHaveLength(sql.length);
     expect(result).toBe("SELECT         FROM      .       ");
+  });
+});
+
+describe("backslash escapes in string literals", () => {
+  const hidden = String.raw`SELECT '\' , '; DROP TABLE t; SELECT ''`;
+
+  it("ends a MySQL/MariaDB string only at an unescaped quote", () => {
+    for (const dialect of ["mysql", "mariadb"] as const) {
+      expect(splitSQLStatements(hidden, dialect)).toEqual([
+        String.raw`SELECT '\' , '`,
+        "DROP TABLE t",
+        "SELECT ''",
+      ]);
+      expect(stripCommentsAndStrings(hidden, dialect)).toContain("DROP TABLE t");
+    }
+    const doubleQuoted = String.raw`SELECT "\" , "; DROP TABLE t; SELECT ""`;
+    expect(splitSQLStatements(doubleQuoted, "mysql")).toHaveLength(3);
+  });
+
+  it("ends a PostgreSQL E string only at an unescaped quote", () => {
+    for (const prefix of ["E", "e"]) {
+      const sql = String.raw`SELECT ${prefix}'\' , '; DROP TABLE t; SELECT ''`;
+      expect(splitSQLStatements(sql, "postgres")).toHaveLength(3);
+      expect(stripCommentsAndStrings(sql, "postgres")).toContain("DROP TABLE t");
+    }
+  });
+
+  it("keeps PostgreSQL E string rules in a constant continued on the next line", () => {
+    const continued = "SELECT E''\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''";
+    expect(splitSQLStatements(continued, "postgres")).toHaveLength(4);
+    const withComment = "SELECT E'a'\n  -- note\n'\\' , '; DROP TABLE t; SELECT ''";
+    expect(splitSQLStatements(withComment, "postgres")).toHaveLength(3);
+    for (const gap of ["-- note\n", "\r", "\v\n", "\n\v"]) {
+      expect(splitSQLStatements(`SELECT E''${gap}'\\' , '; COMMIT; DROP TABLE t; SELECT ''`, "postgres")).toHaveLength(4);
+    }
+    // No newline between the parts: not a continuation.
+    expect(splitSQLStatements("SELECT E'a' 'b; c'", "postgres")).toHaveLength(1);
+  });
+
+  it("keeps a backslash ordinary in plain PostgreSQL, SQLite, SQL Server and ANSI strings", () => {
+    for (const dialect of ["postgres", "sqlite", "sqlserver", undefined] as const) {
+      expect(splitSQLStatements(hidden, dialect)).toEqual([hidden]);
+    }
+  });
+
+  it("does not take an identifier ending in e as an E string prefix", () => {
+    const sql = String.raw`SELECT type'\' , '; DROP TABLE t; SELECT ''`;
+    expect(splitSQLStatements(sql, "postgres")).toEqual([sql]);
+  });
+
+  it("keeps blanked output the same length with escapes and a trailing backslash", () => {
+    for (const sql of ["SELECT 'a\\", String.raw`SELECT 'it''s\'' ok' FROM t`]) {
+      expect(blankCommentsAndStrings(sql, "mysql")).toHaveLength(sql.length);
+    }
+    expect(blankCommentsAndStrings(String.raw`SELECT 'a\'b' FROM t`, "mysql")).toBe(
+      `SELECT${" ".repeat(8)}FROM t`
+    );
+  });
+
+  it("returns every MySQL/MariaDB reading, since sql_mode is not visible in the SQL", () => {
+    // Under NO_BACKSLASH_ESCAPES the string ends at the second quote and the DROP runs.
+    const noBackslash = String.raw`SELECT '\'; DROP TABLE t; SELECT ''`;
+    expect(splitSQLStatements(noBackslash, "mysql")).toHaveLength(1);
+    expect(splitSQLStatementVariants(noBackslash, "mysql").map((v) => v.length)).toEqual([1, 3, 1]);
+    // Under ANSI_QUOTES "..." is an identifier, so a backslash does not escape its quote.
+    const ansiQuotes = String.raw`SELECT 1 AS "\" , '\' , '; DROP TABLE t; SELECT 1 AS "a"`;
+    expect(splitSQLStatementVariants(ansiQuotes, "mariadb").map((v) => v.length)).toEqual([1, 1, 3]);
+    expect(
+      stripCommentsAndStringsVariants(ansiQuotes, "mariadb").some((s) => s.includes("DROP TABLE t"))
+    ).toBe(true);
+  });
+
+  it("returns one reading for dialects without a mode-dependent string syntax", () => {
+    expect(splitSQLStatementVariants("SELECT 1; SELECT 2", "postgres")).toEqual([
+      ["SELECT 1", "SELECT 2"],
+    ]);
+    expect(stripCommentsAndStringsVariants("SELECT 'a'", "sqlite")).toEqual(["SELECT  "]);
   });
 });

@@ -21,7 +21,7 @@ import {
   hasEscapeHatchFunction,
   sqlServerDynamicSqlPattern,
 } from "./allowed-keywords.js";
-import { splitSQLStatements, stripCommentsAndStrings } from "./sql-parser.js";
+import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "./sql-parser.js";
 
 /**
  * Statement classes, in increasing order of privilege:
@@ -94,10 +94,11 @@ export function classifyStatement(sql: string, connectorType: ConnectorType): St
   if (isReadOnlySQL(sql, connectorType)) {
     return "read";
   }
-  const stripped = stripCommentsAndStrings(sql, connectorType);
-  if (isAdminStatement(stripped, connectorType)) return "admin";
-  if (ddlPattern.test(stripped)) return "ddl";
-  if (dmlPattern.test(stripped)) return "dml";
+  // The most privileged class named by any reading of the string syntax wins.
+  const variants = stripCommentsAndStringsVariants(sql, connectorType);
+  if (variants.some((stripped) => isAdminStatement(stripped, connectorType))) return "admin";
+  if (variants.some((stripped) => ddlPattern.test(stripped))) return "ddl";
+  if (variants.some((stripped) => dmlPattern.test(stripped))) return "dml";
   return "unknown";
 }
 
@@ -107,10 +108,12 @@ export function classifyStatement(sql: string, connectorType: ConnectorType): St
  */
 export function classifySQL(sql: string, connectorType: ConnectorType): StatementClass {
   let strictest: StatementClass = "read";
-  for (const statement of splitSQLStatements(sql, connectorType)) {
-    const cls = classifyStatement(statement, connectorType);
-    if (CLASS_SEVERITY[cls] > CLASS_SEVERITY[strictest]) {
-      strictest = cls;
+  for (const statements of splitSQLStatementVariants(sql, connectorType)) {
+    for (const statement of statements) {
+      const cls = classifyStatement(statement, connectorType);
+      if (CLASS_SEVERITY[cls] > CLASS_SEVERITY[strictest]) {
+        strictest = cls;
+      }
     }
   }
   return strictest;
