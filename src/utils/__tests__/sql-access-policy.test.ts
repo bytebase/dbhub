@@ -137,6 +137,8 @@ describe("classifySQL with backslash-escaped quotes", () => {
     ["postgres", String.raw`SELECT E'\' , '; DROP TABLE t; SELECT ''`, "ddl"],
     ["postgres", String.raw`SELECT E'\' , '; SELECT pg_read_file('x'); SELECT ''`, "admin"],
     ["postgres", "SELECT E''\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
+    ["postgres", "SELECT E''-- note\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
+    ["postgres", "SELECT E''\r'\\' , '; COMMIT; DROP TABLE t; SELECT ''", "unknown"],
   ] as const)("%s: %s is %s", (dialect, sql, expected) => {
     expect(classifySQL(sql, dialect)).toBe(expected);
   });

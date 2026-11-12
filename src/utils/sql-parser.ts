@@ -141,21 +141,35 @@ function scanPostgresEscapeString(sql: string, i: number): SQLToken | null {
 
 /**
  * Position of the opening quote of a continued string constant after `j`, or -1.
- * PostgreSQL continues a constant when only whitespace with at least one newline
- * (and `--` comments, which end at a newline) sits between the two parts.
+ * Follows PostgreSQL's lexer (scan.l, quotecontinue): horizontal whitespace or
+ * `--` comments, then a newline (\n or \r), then any whitespace (including \v)
+ * or `--` comments that each end at a newline, then the quote.
  */
 function continuedQuote(sql: string, j: number): number {
-  let sawNewline = false;
+  const isNewline = (ch: string) => ch === "\n" || ch === "\r";
+  const skipComment = (k: number) => {
+    while (k < sql.length && !isNewline(sql[k])) { k++; }
+    return k;
+  };
+  // Horizontal whitespace and comments before the first newline.
   while (j < sql.length) {
     const ch = sql[j];
-    if (ch === "\n") { sawNewline = true; j++; }
-    else if (ch === " " || ch === "\t" || ch === "\r" || ch === "\f") { j++; }
-    else if (sawNewline && ch === "-" && sql[j + 1] === "-") {
-      while (j < sql.length && sql[j] !== "\n") { j++; }
+    if (ch === " " || ch === "\t" || ch === "\f" || ch === "\v") { j++; }
+    else if (ch === "-" && sql[j + 1] === "-") { j = skipComment(j); }
+    else { break; }
+  }
+  if (j >= sql.length || !isNewline(sql[j])) { return -1; }
+  // Any whitespace, and comments that end at a newline.
+  while (j < sql.length) {
+    const ch = sql[j];
+    if (ch === " " || ch === "\t" || ch === "\f" || ch === "\v" || isNewline(ch)) { j++; }
+    else if (ch === "-" && sql[j + 1] === "-") {
+      j = skipComment(j);
+      if (j >= sql.length) { return -1; }
     }
     else { break; }
   }
-  return sawNewline && sql[j] === "'" ? j : -1;
+  return sql[j] === "'" ? j : -1;
 }
 
 // Matches $$ or $tag$ where tag is [a-zA-Z_]\w* (digits after $ do NOT start a tag, so $1 is safe)

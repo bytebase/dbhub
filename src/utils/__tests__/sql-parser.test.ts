@@ -579,6 +579,9 @@ describe("backslash escapes in string literals", () => {
     expect(splitSQLStatements(continued, "postgres")).toHaveLength(4);
     const withComment = "SELECT E'a'\n  -- note\n'\\' , '; DROP TABLE t; SELECT ''";
     expect(splitSQLStatements(withComment, "postgres")).toHaveLength(3);
+    for (const gap of ["-- note\n", "\r", "\v\n", "\n\v"]) {
+      expect(splitSQLStatements(`SELECT E''${gap}'\\' , '; COMMIT; DROP TABLE t; SELECT ''`, "postgres")).toHaveLength(4);
+    }
     // No newline between the parts: not a continuation.
     expect(splitSQLStatements("SELECT E'a' 'b; c'", "postgres")).toHaveLength(1);
   });
