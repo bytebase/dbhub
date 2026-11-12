@@ -98,6 +98,39 @@ function scanDoubleQuotedString(sql: string, i: number): SQLToken | null {
   return { type: TokenType.QuotedBlock, end: j };
 }
 
+/**
+ * Quoted string in which a backslash escapes the next character, as in MySQL and
+ * MariaDB strings (unless NO_BACKSLASH_ESCAPES is set) and PostgreSQL E'...'
+ * strings. The plain scanners above end such a string at an escaped quote, so
+ * the rest of the string would be read as SQL and the SQL after it as a string.
+ */
+function scanBackslashQuoted(sql: string, i: number, quote: string): SQLToken {
+  let j = i + 1;
+  while (j < sql.length) {
+    if (sql[j] === "\\") { j += 2; }
+    else if (sql[j] === quote && sql[j + 1] === quote) { j += 2; }
+    else if (sql[j] === quote) { j++; break; }
+    else { j++; }
+  }
+  return { type: TokenType.QuotedBlock, end: Math.min(j, sql.length) };
+}
+
+function scanSingleQuotedStringBackslash(sql: string, i: number): SQLToken | null {
+  return sql[i] === "'" ? scanBackslashQuoted(sql, i, "'") : null;
+}
+
+function scanDoubleQuotedStringBackslash(sql: string, i: number): SQLToken | null {
+  return sql[i] === '"' ? scanBackslashQuoted(sql, i, '"') : null;
+}
+
+/** PostgreSQL escape string E'...'. An E that ends a longer identifier is not a prefix. */
+function scanPostgresEscapeString(sql: string, i: number): SQLToken | null {
+  if ((sql[i] !== "e" && sql[i] !== "E") || sql[i + 1] !== "'") { return null; }
+  const prev = i > 0 ? sql[i - 1] : "";
+  if (/[\w$]/.test(prev) || prev.charCodeAt(0) > 0x7f) { return null; }
+  return scanBackslashQuoted(sql, i + 1, "'");
+}
+
 // Matches $$ or $tag$ where tag is [a-zA-Z_]\w* (digits after $ do NOT start a tag, so $1 is safe)
 const dollarQuoteOpenRegex = /^\$([a-zA-Z_]\w*)?\$/;
 
@@ -149,6 +182,7 @@ function scanTokenAnsi(sql: string, i: number): SQLToken {
 function scanTokenPostgres(sql: string, i: number): SQLToken {
   return scanSingleLineComment(sql, i)
     ?? scanNestedMultiLineComment(sql, i)
+    ?? scanPostgresEscapeString(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)
     ?? scanDollarQuotedBlock(sql, i)
@@ -156,6 +190,29 @@ function scanTokenPostgres(sql: string, i: number): SQLToken {
 }
 
 function scanTokenMySQL(sql: string, i: number): SQLToken {
+  return scanSingleLineCommentMySQL(sql, i)
+    ?? scanMultiLineCommentMySQL(sql, i)
+    ?? scanSingleQuotedStringBackslash(sql, i)
+    ?? scanDoubleQuotedStringBackslash(sql, i)
+    ?? scanBacktickQuotedIdentifier(sql, i)
+    ?? plainToken(i);
+}
+
+/** MySQL/MariaDB with sql_mode ANSI_QUOTES: "..." is an identifier, with no backslash escapes. */
+function scanTokenMySQLAnsiQuotes(sql: string, i: number): SQLToken {
+  return scanSingleLineCommentMySQL(sql, i)
+    ?? scanMultiLineCommentMySQL(sql, i)
+    ?? scanSingleQuotedStringBackslash(sql, i)
+    ?? scanDoubleQuotedString(sql, i)
+    ?? scanBacktickQuotedIdentifier(sql, i)
+    ?? plainToken(i);
+}
+
+/**
+ * MySQL/MariaDB with sql_mode NO_BACKSLASH_ESCAPES: a backslash is an ordinary
+ * character. With ANSI_QUOTES as well, the scan is the same.
+ */
+function scanTokenMySQLNoBackslashEscapes(sql: string, i: number): SQLToken {
   return scanSingleLineCommentMySQL(sql, i)
     ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedString(sql, i)
@@ -226,11 +283,37 @@ function getScanner(dialect?: ConnectorType): TokenScanner {
 }
 
 /**
+ * Other readings of a dialect whose string syntax depends on a server setting
+ * that cannot be seen from the SQL text. The read-only checks scan every reading,
+ * so a statement hidden inside a string under one setting is still seen.
+ */
+const alternateScanners: Partial<Record<ConnectorType, TokenScanner[]>> = {
+  mysql: [scanTokenMySQLNoBackslashEscapes, scanTokenMySQLAnsiQuotes],
+  mariadb: [scanTokenMySQLNoBackslashEscapes, scanTokenMySQLAnsiQuotes],
+};
+
+function getAllScanners(dialect?: ConnectorType): TokenScanner[] {
+  return [getScanner(dialect), ...((dialect && alternateScanners[dialect]) || [])];
+}
+
+/**
  * Replace comments, string literals, and dialect-specific quoted blocks with a single space each.
  * When no dialect is specified, only ANSI SQL syntax is recognized.
  */
 export function stripCommentsAndStrings(sql: string, dialect?: ConnectorType): string {
-  const scanToken = getScanner(dialect);
+  return stripWith(sql, getScanner(dialect));
+}
+
+/**
+ * stripCommentsAndStrings under every reading of the dialect (see
+ * alternateScanners), the default reading first, duplicates removed. For
+ * read-only checks: a keyword counts if it is plain text in any reading.
+ */
+export function stripCommentsAndStringsVariants(sql: string, dialect?: ConnectorType): string[] {
+  return [...new Set(getAllScanners(dialect).map((scanToken) => stripWith(sql, scanToken)))];
+}
+
+function stripWith(sql: string, scanToken: TokenScanner): string {
   const parts: string[] = [];
   let plainStart = -1;
   let i = 0;
@@ -299,7 +382,19 @@ export const LEADING_SQL_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*/;
  * When no dialect is specified, only ANSI SQL syntax is recognized.
  */
 export function splitSQLStatements(sql: string, dialect?: ConnectorType): string[] {
-  const scanToken = getScanner(dialect);
+  return splitWith(sql, getScanner(dialect));
+}
+
+/**
+ * splitSQLStatements under every reading of the dialect (see alternateScanners),
+ * the default reading first. For read-only checks only: execution uses
+ * splitSQLStatements.
+ */
+export function splitSQLStatementVariants(sql: string, dialect?: ConnectorType): string[][] {
+  return getAllScanners(dialect).map((scanToken) => splitWith(sql, scanToken));
+}
+
+function splitWith(sql: string, scanToken: TokenScanner): string[] {
   const statements: string[] = [];
   let stmtStart = 0;
   let i = 0;

@@ -1,5 +1,5 @@
 import { ConnectorType } from "../connectors/interface.js";
-import { stripCommentsAndStrings } from "./sql-parser.js";
+import { stripCommentsAndStringsVariants } from "./sql-parser.js";
 
 /**
  * List of allowed keywords for SQL queries
@@ -360,9 +360,8 @@ function statementExecutedByExplain(afterExplain: string): string | null {
  * 4. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
-  return checkReadOnly(
-    stripCommentsAndStrings(sql, connectorType as ConnectorType).trim().toLowerCase(),
-    connectorType,
+  return stripCommentsAndStringsVariants(sql, connectorType as ConnectorType).every((cleaned) =>
+    checkReadOnly(cleaned.trim().toLowerCase(), connectorType)
   );
 }
 
