@@ -574,6 +574,15 @@ describe("backslash escapes in string literals", () => {
     }
   });
 
+  it("keeps PostgreSQL E string rules in a constant continued on the next line", () => {
+    const continued = "SELECT E''\n'\\' , '; COMMIT; DROP TABLE t; SELECT ''";
+    expect(splitSQLStatements(continued, "postgres")).toHaveLength(4);
+    const withComment = "SELECT E'a'\n  -- note\n'\\' , '; DROP TABLE t; SELECT ''";
+    expect(splitSQLStatements(withComment, "postgres")).toHaveLength(3);
+    // No newline between the parts: not a continuation.
+    expect(splitSQLStatements("SELECT E'a' 'b; c'", "postgres")).toHaveLength(1);
+  });
+
   it("keeps a backslash ordinary in plain PostgreSQL, SQLite, SQL Server and ANSI strings", () => {
     for (const dialect of ["postgres", "sqlite", "sqlserver", undefined] as const) {
       expect(splitSQLStatements(hidden, dialect)).toEqual([hidden]);

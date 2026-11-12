@@ -123,12 +123,39 @@ function scanDoubleQuotedStringBackslash(sql: string, i: number): SQLToken | nul
   return sql[i] === '"' ? scanBackslashQuoted(sql, i, '"') : null;
 }
 
-/** PostgreSQL escape string E'...'. An E that ends a longer identifier is not a prefix. */
+/**
+ * PostgreSQL escape string E'...'. An E that ends a longer identifier is not a prefix.
+ * A string continued after whitespace that holds a newline (E'a'\n'b') is one
+ * constant, and the E escape rules apply to every part of it.
+ */
 function scanPostgresEscapeString(sql: string, i: number): SQLToken | null {
   if ((sql[i] !== "e" && sql[i] !== "E") || sql[i + 1] !== "'") { return null; }
   const prev = i > 0 ? sql[i - 1] : "";
   if (/[\w$]/.test(prev) || prev.charCodeAt(0) > 0x7f) { return null; }
-  return scanBackslashQuoted(sql, i + 1, "'");
+  let token = scanBackslashQuoted(sql, i + 1, "'");
+  for (let next = continuedQuote(sql, token.end); next !== -1; next = continuedQuote(sql, token.end)) {
+    token = scanBackslashQuoted(sql, next, "'");
+  }
+  return token;
+}
+
+/**
+ * Position of the opening quote of a continued string constant after `j`, or -1.
+ * PostgreSQL continues a constant when only whitespace with at least one newline
+ * (and `--` comments, which end at a newline) sits between the two parts.
+ */
+function continuedQuote(sql: string, j: number): number {
+  let sawNewline = false;
+  while (j < sql.length) {
+    const ch = sql[j];
+    if (ch === "\n") { sawNewline = true; j++; }
+    else if (ch === " " || ch === "\t" || ch === "\r" || ch === "\f") { j++; }
+    else if (sawNewline && ch === "-" && sql[j + 1] === "-") {
+      while (j < sql.length && sql[j] !== "\n") { j++; }
+    }
+    else { break; }
+  }
+  return sawNewline && sql[j] === "'" ? j : -1;
 }
 
 // Matches $$ or $tag$ where tag is [a-zA-Z_]\w* (digits after $ do NOT start a tag, so $1 is safe)
