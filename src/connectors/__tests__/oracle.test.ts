@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import oracledb from 'oracledb';
 import { OracleConnector } from '../oracle/index.js';
 
 describe('OracleConnector.splitStatements', () => {
@@ -135,5 +136,46 @@ describe('OracleConnector.convertNumber', () => {
     expect(OracleConnector.convertNumber('1.5')).toBe(1.5);
     expect(OracleConnector.convertNumber('1E+125')).toBe(1e125);
     expect(OracleConnector.convertNumber(null)).toBeNull();
+  });
+});
+
+describe('OracleConnector session tags', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('sets module and action on every checkout of a reused pooled connection', async () => {
+    // One session handed out for every checkout, as a pool of size one would:
+    // node-oracledb does not reset module/action on release.
+    const seen: Array<{ sql: string; module?: string; action?: string }> = [];
+    const connection: Record<string, any> = {
+      execute: vi.fn(async (sql: string) => {
+        seen.push({ sql, module: connection.module, action: connection.action });
+        return { rows: [] };
+      }),
+      commit: vi.fn(async () => {}),
+      rollback: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+    const pool = {
+      getConnection: vi.fn(async () => connection),
+      close: vi.fn(async () => {}),
+    };
+    vi.spyOn(oracledb, 'createPool').mockResolvedValue(pool as unknown as oracledb.Pool);
+
+    const connector = new OracleConnector();
+    await connector.connect('oracle://app:secret@db/FREEPDB1');
+    await connector.executeSQL('SELECT 1 FROM dual', {});
+    await connector.getTables('APP');
+    await connector.executeSQL('SELECT 2 FROM dual', {});
+    await connector.disconnect();
+
+    expect(pool.getConnection).toHaveBeenCalledTimes(4);
+    expect(seen.map(({ module, action }) => ({ module, action }))).toEqual([
+      { module: 'connect', action: 'connect' },
+      { module: 'execute_sql', action: 'executeSQL' },
+      { module: 'search_objects', action: 'getTables' },
+      { module: 'execute_sql', action: 'executeSQL' },
+    ]);
   });
 });
