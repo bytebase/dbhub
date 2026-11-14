@@ -622,6 +622,7 @@ describe('DSN Parser - Oracle', () => {
       user: 'app',
       password: 'secret',
       connectString: 'db.example.com:1521/FREEPDB1',
+      program: 'dbhub',
       poolMin: 0,
       poolMax: 4,
     });
