@@ -34,10 +34,16 @@
  * plain transaction and always ROLLBACK instead of COMMIT: any DML the
  * classifier missed is discarded rather than persisted, while SELECT results are
  * unaffected. DDL on TiDB is stopped by the classifier alone.
+ *
+ * Apache Doris (see isDorisVersionComment) rejects the READ ONLY modifier too,
+ * and does not run queries inside an explicit transaction at all, so neither
+ * form applies: the batch runs unwrapped and the read-only classifier is the
+ * only guard. A least-privilege database account is the engine-level protection
+ * there.
  */
 
 import { isClientSideTimeout } from "./query-timeout.js";
-import { isTiDBVersion } from "./server-flavor.js";
+import { isDorisVersionComment, isTiDBVersion } from "./server-flavor.js";
 
 /** Minimal shape shared by the mysql2 and mariadb pool connections. */
 export interface ReadOnlyTransactionConnection {
@@ -57,10 +63,22 @@ export type ReadOnlyBackstop =
   /** Stock MySQL/MariaDB: session READ ONLY around a READ ONLY transaction. */
   | { kind: "session"; variable: ReadOnlyVariable }
   /** TiDB: plain transaction, always rolled back. */
-  | { kind: "rollback" };
+  | { kind: "rollback" }
+  /** Apache Doris: no transaction a query can run in; classifier only. */
+  | { kind: "none" };
 
-/** Pick the backstop from the server's `SELECT VERSION()` string. */
-export function detectReadOnlyBackstop(version: unknown): ReadOnlyBackstop {
+/**
+ * Pick the backstop from the server's `SELECT VERSION()` string and, when it
+ * could be read, `@@version_comment`. Only a positive Doris match drops the
+ * backstop: a missing or unrecognized comment keeps the transactional form.
+ */
+export function detectReadOnlyBackstop(
+  version: unknown,
+  versionComment?: unknown
+): ReadOnlyBackstop {
+  if (isDorisVersionComment(versionComment)) {
+    return { kind: "none" };
+  }
   if (isTiDBVersion(version)) {
     return { kind: "rollback" };
   }
@@ -83,6 +101,22 @@ function readOnlyVariableFor(version: unknown): ReadOnlyVariable {
     }
   }
   return "transaction_read_only";
+}
+
+/**
+ * The connect-time probe for `@@version_comment`. Kept apart from the
+ * `SELECT VERSION()` connection test so that a MySQL-protocol server without
+ * the variable still connects: the caller ignores a failure of this one.
+ */
+export const VERSION_COMMENT_QUERY = "SELECT @@version_comment AS version_comment";
+
+/** Logged once at connect time when a server has no engine-level backstop. */
+export function noBackstopWarning(connectorName: string, sourceId: string): string {
+  return (
+    `${connectorName} source "${sourceId}": Apache Doris detected. Doris cannot run queries inside a ` +
+    `read-only transaction, so read-only tools on this source are enforced by SQL validation alone. ` +
+    `Connect with a least-privilege, read-only database account.`
+  );
 }
 
 /** Reads the flag's current value, so it can be put back afterwards. */
@@ -138,8 +172,8 @@ function parseFlag(raw: unknown): 0 | 1 | undefined {
 /**
  * Run `execute` inside the read-only backstop.
  *
- * When `readonly` is false the callback runs untouched, so callers can wrap
- * unconditionally.
+ * When `readonly` is false, or the server has no backstop (Doris), the callback
+ * runs untouched, so callers can wrap unconditionally.
  *
  * @param conn Pool connection; must be the same connection the callback queries on.
  * @param readonly Whether read-only enforcement is active for this execution.
@@ -152,7 +186,7 @@ export async function withReadOnlyTransaction<T>(
   backstop: ReadOnlyBackstop,
   execute: () => Promise<T>
 ): Promise<T> {
-  if (!readonly) {
+  if (!readonly || backstop.kind === "none") {
     return execute();
   }
 

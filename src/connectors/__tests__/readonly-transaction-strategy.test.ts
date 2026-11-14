@@ -6,6 +6,7 @@ import {
   readOnlyClose,
   TIDB_OPEN,
   TIDB_CLOSE,
+  VERSION_COMMENT_QUERY,
 } from "../../utils/readonly-transaction.js";
 
 // MySQL 8 has transaction_read_only; MariaDB has tx_read_only. The fake pool
@@ -56,6 +57,9 @@ const { MariaDBConnector } = await import("../mariadb/index.js");
 const MYSQL_VERSION = "8.0.36";
 const MARIADB_VERSION = "11.4.2-MariaDB-ubu2404";
 const TIDB_VERSION = "8.0.11-TiDB-v7.5.0";
+// Doris reports a stock-looking VERSION(); only @@version_comment gives it away.
+const DORIS_VERSION = "5.7.99";
+const DORIS_VERSION_COMMENT = "Doris version doris-4.0.8-rc01-1234abcd";
 
 /**
  * Records every statement issued on the dedicated connection. `failOn` lets a
@@ -66,7 +70,9 @@ function makeFakePool(
   wrapResults: (rows: any[]) => any,
   failOn?: (sql: string) => Error | undefined,
   /** What the server reports for @@session.<flag> before the guard is raised. */
-  flag: unknown = 0
+  flag: unknown = 0,
+  /** What the connect-time @@version_comment probe answers; an Error makes it fail. */
+  versionComment: string | Error = "MySQL Community Server - GPL"
 ) {
   const statements: string[] = [];
   const conn = {
@@ -85,7 +91,13 @@ function makeFakePool(
   };
   const pool = {
     // Connect-time flavor probe.
-    query: vi.fn(async () => wrapResults([{ version }])),
+    query: vi.fn(async (sql: string) => {
+      if (sql === VERSION_COMMENT_QUERY) {
+        if (versionComment instanceof Error) throw versionComment;
+        return wrapResults([{ version_comment: versionComment }]);
+      }
+      return wrapResults([{ version }]);
+    }),
     getConnection: vi.fn(async () => conn),
     end: vi.fn(),
     // Connectors attach a pool 'error' listener at connect time.
@@ -208,6 +220,45 @@ describe("readonly transaction strategy", () => {
       expect(statements[0]).toBe(TIDB_OPEN);
       // ...and the transaction is discarded so any missed DML never persists.
       expect(statements[statements.length - 1]).toBe(TIDB_CLOSE);
+    });
+
+    it("runs unwrapped on Apache Doris, which has no transaction a query can run in", async () => {
+      const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { pool, statements } = makeFakePool(
+          DORIS_VERSION,
+          asMysql,
+          undefined,
+          0,
+          DORIS_VERSION_COMMENT
+        );
+        const connector = await connectMysql(pool);
+        await connector.executeSQL("SELECT 1 AS connection_ok", { readonly: true });
+
+        // No flag read, no SET SESSION, no START TRANSACTION, no COMMIT/ROLLBACK.
+        expect(statements).toEqual(["SELECT 1 AS connection_ok"]);
+        // The weaker guarantee is announced once, at connect time.
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toContain("Apache Doris detected");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("keeps the READ ONLY backstop when @@version_comment cannot be read", async () => {
+      // A server without the variable still connects, and fails closed: the
+      // stock-looking version alone is never enough to drop the backstop.
+      const { pool, statements } = makeFakePool(
+        DORIS_VERSION,
+        asMysql,
+        undefined,
+        0,
+        new Error("Unknown system variable 'version_comment'")
+      );
+      const connector = await connectMysql(pool);
+      await connector.executeSQL("SELECT 1", { readonly: true });
+
+      expect(statements).toEqual([READ_FLAG, READ_ONLY_OPEN, "SELECT 1", READ_ONLY_COMMIT]);
     });
 
     it("opens no transaction when readonly is off", async () => {
@@ -379,6 +430,26 @@ describe("readonly transaction strategy", () => {
       expect(statements.join("\n")).not.toContain("READ ONLY");
       expect(statements[0]).toBe(TIDB_OPEN);
       expect(statements[statements.length - 1]).toBe(TIDB_CLOSE);
+    });
+
+    it("runs unwrapped on Apache Doris", async () => {
+      const warn = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { pool, statements } = makeFakePool(
+          DORIS_VERSION,
+          asMariadb,
+          undefined,
+          0,
+          DORIS_VERSION_COMMENT
+        );
+        const connector = await connectMariadb(pool);
+        await connector.executeSQL("SELECT 1", { readonly: true });
+
+        expect(statements).toEqual(["SELECT 1"]);
+        expect(warn).toHaveBeenCalledTimes(1);
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 

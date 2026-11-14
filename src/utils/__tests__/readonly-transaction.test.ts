@@ -26,6 +26,23 @@ describe("detectReadOnlyBackstop", () => {
     expect(detectReadOnlyBackstop("8.0.11-TiDB-v7.5.0")).toEqual({ kind: "rollback" });
   });
 
+  it("drops the backstop only on a positive Apache Doris match", () => {
+    // Doris reports a stock-looking VERSION(); @@version_comment identifies it.
+    expect(detectReadOnlyBackstop("5.7.99", "Doris version doris-4.0.8-rc01")).toEqual({
+      kind: "none",
+    });
+  });
+
+  it.each([undefined, null, "", "MySQL Community Server - GPL", 42])(
+    "keeps the transactional backstop when @@version_comment is %j",
+    (comment) => {
+      expect(detectReadOnlyBackstop("5.7.99", comment)).toEqual({
+        kind: "session",
+        variable: "transaction_read_only",
+      });
+    }
+  );
+
   it("assumes a current MySQL when the version is unreadable", () => {
     expect(detectReadOnlyBackstop(undefined)).toEqual({
       kind: "session",
