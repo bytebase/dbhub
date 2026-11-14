@@ -161,7 +161,7 @@ describe('OracleConnector session tags', () => {
       getConnection: vi.fn(async () => connection),
       close: vi.fn(async () => {}),
     };
-    vi.spyOn(oracledb, 'createPool').mockResolvedValue(pool as unknown as oracledb.Pool);
+    vi.spyOn(oracledb, 'createPool').mockImplementation((async () => pool) as unknown as typeof oracledb.createPool);
 
     const connector = new OracleConnector();
     await connector.connect('oracle://app:secret@db/FREEPDB1');
