@@ -6,7 +6,8 @@ export interface ResultTab {
   result: QueryResult | null;
   error: string | null;
   executedSql: string;
-  executionTimeMs: number;
+  /** Request duration is available only on the first result of a batch. */
+  executionTimeMs?: number;
   /** 1-based position of this statement within its batch, when the batch had more than one. */
   statementIndex?: number;
   /** Total number of statements in the batch this tab's statement belongs to. */

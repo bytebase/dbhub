@@ -249,7 +249,7 @@ export default function ToolDetailView() {
         result,
         error: null,
         executedSql: result.sql ?? sqlToExecute,
-        executionTimeMs: index === 0 ? duration : 0,
+        executionTimeMs: index === 0 ? duration : undefined,
         statementIndex: isBatch ? index + 1 : undefined,
         statementTotal: isBatch ? queryResults.length : undefined,
       }));

@@ -174,6 +174,19 @@ Keep filtering visible, search across all columns, and offer Clear filter when
 there are no matches. Show row count and execution time beside the filter; put
 the executed SQL in a disclosure below the table.
 
+Result history uses a labeled tablist with one keyboard entry point. Left/Right
+arrows wrap between tabs; Home/End jump to the first/last tab. Delete closes the
+focused tab. Each tab has a separate, always-visible 44px close button; closing
+an active tab focuses its next neighbor, or the previous neighbor at the end.
+Closing the last result returns focus to the query inputs. Keep selection when
+closing an inactive result.
+
+Scroll the active tab and its close control into view horizontally without moving
+the page. Allow native horizontal scrolling on touch; desktop overflow arrows
+respect reduced motion. Label batch results with their statement position and
+failed results with visible text. Only the first result in a batch displays the
+request duration; other statements have no independently measured timing.
+
 ### Tool forms and controls
 
 Use associated labels with the parameter name and a quiet Required or Optional

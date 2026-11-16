@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useLayoutEffect, useCallback, useId, type KeyboardEvent } from 'react';
 import { AlertCircle, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ResultsTable } from './ResultsTable';
@@ -27,7 +27,7 @@ function formatTimestamp(date: Date): string {
 function formatTabLabel(tab: ResultTab): string {
   const time = formatTimestamp(tab.timestamp);
   if (tab.statementTotal && tab.statementTotal > 1) {
-    return `${time} (${tab.statementIndex}/${tab.statementTotal})`;
+    return `${time} · ${tab.statementIndex} of ${tab.statementTotal}`;
   }
   return time;
 }
@@ -40,7 +40,10 @@ export function ResultsTabs({
   isLoading,
   onEditQuery,
 }: ResultsTabsProps) {
+  const id = useId();
   const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingFocus = useRef<string | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -52,26 +55,74 @@ export function ResultsTabs({
   const updateScrollButtons = useCallback(() => {
     const container = tabsContainerRef.current;
     if (!container) return;
-
-    const { scrollLeft, scrollWidth, clientWidth } = container;
-    setCanScrollLeft(scrollLeft > 0);
-    setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 1);
+    setCanScrollLeft(container.scrollLeft > 1);
+    setCanScrollRight(container.scrollLeft + container.clientWidth < container.scrollWidth - 1);
   }, []);
 
-  useEffect(() => {
-    updateScrollButtons();
-    window.addEventListener('resize', updateScrollButtons);
-    return () => window.removeEventListener('resize', updateScrollButtons);
-  }, [updateScrollButtons, tabs]);
+  const revealTab = useCallback((tabId: string) => {
+    const container = tabsContainerRef.current;
+    const item = tabRefs.current.get(tabId)?.parentElement;
+    if (!container || !item) return;
+    const bounds = container.getBoundingClientRect();
+    const tabBounds = item.getBoundingClientRect();
+    const offset = tabBounds.left < bounds.left ? tabBounds.left - bounds.left
+      : tabBounds.right > bounds.right ? tabBounds.right - bounds.right : 0;
+    if (offset) container.scrollLeft += offset;
+  }, []);
+
+  useLayoutEffect(() => {
+    const container = tabsContainerRef.current;
+    if (!container) return;
+    if (pendingFocus.current) {
+      tabRefs.current.get(pendingFocus.current)?.focus({ preventScroll: true });
+      pendingFocus.current = null;
+    }
+    const update = () => {
+      if (activeTabId) revealTab(activeTabId);
+      updateScrollButtons();
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [activeTabId, tabs, revealTab, updateScrollButtons]);
+
+  const closeTab = (tabId: string) => {
+    const index = tabs.findIndex(tab => tab.id === tabId);
+    const remaining = tabs.filter(tab => tab.id !== tabId);
+    pendingFocus.current = tabId === activeTabId
+      ? remaining[Math.min(index, remaining.length - 1)]?.id ?? null
+      : activeTabId;
+    onTabClose(tabId);
+    if (!remaining.length) onEditQuery();
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number;
+    switch (event.key) {
+      case 'ArrowRight': nextIndex = (index + 1) % tabs.length; break;
+      case 'ArrowLeft': nextIndex = (index - 1 + tabs.length) % tabs.length; break;
+      case 'Home': nextIndex = 0; break;
+      case 'End': nextIndex = tabs.length - 1; break;
+      case 'Delete':
+        event.preventDefault();
+        closeTab(tabs[index].id);
+        return;
+      default: return;
+    }
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    tabRefs.current.get(nextTab.id)?.focus({ preventScroll: true });
+    revealTab(nextTab.id);
+    onTabSelect(nextTab.id);
+  };
 
   const scroll = (direction: 'left' | 'right') => {
     const container = tabsContainerRef.current;
     if (!container) return;
-
-    const scrollAmount = 150;
     container.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth',
+      left: (direction === 'left' ? -1 : 1) * container.clientWidth * 0.75,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     });
   };
 
@@ -99,93 +150,58 @@ export function ResultsTabs({
   return (
     <div className="space-y-3">
       {isLoading && progress}
-      {/* Tab bar */}
-      <div className="relative flex items-center border-b border-border">
-        {/* Left scroll button */}
-        {canScrollLeft && (
-          <button
-            type="button"
-            onClick={() => scroll('left')}
-            className="absolute left-0 z-10 flex items-center justify-center w-6 h-full bg-background hover:bg-muted cursor-pointer"
-            aria-label="Scroll tabs left"
-          >
-            <ChevronLeftIcon className="w-4 h-4 text-muted-foreground" />
+      <div className="flex min-w-0 items-start border-b border-border">
+        {(canScrollLeft || canScrollRight) && (
+          <button type="button" onClick={() => scroll('left')} disabled={!canScrollLeft}
+            className="hidden min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
+            aria-label="Scroll result tabs left" aria-controls={`${id}-list`}>
+            <ChevronLeftIcon className="size-4" aria-hidden="true" />
           </button>
         )}
-
-        {/* Tabs container */}
-        <div
-          ref={tabsContainerRef}
+        <div ref={tabsContainerRef} id={`${id}-list`} role="tablist" aria-label="Query results"
           onScroll={updateScrollButtons}
-          className={cn(
-            "flex items-center gap-1 overflow-hidden",
-            canScrollLeft && "pl-6",
-            canScrollRight && "pr-6"
-          )}
-        >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onTabSelect(tab.id)}
-              className={cn(
-                'group flex items-center gap-1.5 px-3 py-1.5 text-caption tabular-nums whitespace-nowrap',
-                'border-b-2 -mb-px transition-colors cursor-pointer',
-                tab.id === activeTabId
-                  ? 'border-primary text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <span>{formatTabLabel(tab)}</span>
-              {tab.error && (
-                <><AlertCircle className="size-3.5 text-destructive-foreground" aria-hidden="true" /><span className="sr-only">Failed</span></>
-              )}
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Close tab"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTabClose(tab.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.stopPropagation();
-                    onTabClose(tab.id);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
-              >
-                <XIcon className="w-3 h-3" />
-              </span>
-            </button>
-          ))}
+          className="flex min-w-0 flex-1 items-stretch overflow-x-auto overscroll-x-contain [scrollbar-width:thin]">
+          {tabs.map((tab, index) => {
+            const selected = tab.id === activeTabId;
+            const label = `Result at ${formatTimestamp(tab.timestamp)}${tab.statementTotal && tab.statementTotal > 1 ? `, statement ${tab.statementIndex} of ${tab.statementTotal}` : ''}${tab.error ? ', failed' : ''}`;
+            return (
+              <div key={tab.id} role="presentation" className={cn('flex shrink-0 items-stretch border-b-2', selected ? 'border-primary bg-selection/50' : 'border-transparent')}>
+                <button type="button" role="tab" id={`${id}-tab-${tab.id}`} aria-controls={`${id}-panel-${tab.id}`}
+                  aria-selected={selected} aria-label={label} title={label} tabIndex={selected ? 0 : -1}
+                  ref={node => { if (node) tabRefs.current.set(tab.id, node); else tabRefs.current.delete(tab.id); }}
+                  onClick={() => onTabSelect(tab.id)} onKeyDown={event => handleTabKeyDown(event, index)}
+                  onFocus={() => revealTab(tab.id)}
+                  className={cn('flex min-h-11 min-w-11 items-center gap-2 whitespace-nowrap px-3 text-caption tabular-nums touch-manipulation hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', selected ? 'text-foreground' : 'text-muted-foreground')}>
+                  <span>{formatTabLabel(tab)}</span>
+                  {tab.error && <span className="flex items-center gap-1 text-destructive-foreground"><AlertCircle className="size-3.5" aria-hidden="true" />Failed</span>}
+                </button>
+                <button type="button" tabIndex={selected ? 0 : -1} onClick={() => closeTab(tab.id)}
+                  aria-label={`Close ${label.toLowerCase()}`} title="Close result (Delete when tab is focused)"
+                  className="flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring touch-manipulation">
+                  <XIcon className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
         </div>
-
-        {/* Right scroll button */}
-        {canScrollRight && (
-          <button
-            type="button"
-            onClick={() => scroll('right')}
-            className="absolute right-0 z-10 flex items-center justify-center w-6 h-full bg-background hover:bg-muted cursor-pointer"
-            aria-label="Scroll tabs right"
-          >
-            <ChevronRightIcon className="w-4 h-4 text-muted-foreground" />
+        {(canScrollLeft || canScrollRight) && (
+          <button type="button" onClick={() => scroll('right')} disabled={!canScrollRight}
+            className="hidden min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
+            aria-label="Scroll result tabs right" aria-controls={`${id}-list`}>
+            <ChevronRightIcon className="size-4" aria-hidden="true" />
           </button>
         )}
       </div>
-
-      {/* Active tab content */}
-      {activeTab && (
-        <ResultsTable
-          key={activeTab.id}
-          result={activeTab.result}
-          error={activeTab.error}
-          onEditQuery={onEditQuery}
-          executedSql={activeTab.executedSql}
-          executionTimeMs={activeTab.executionTimeMs}
-        />
-      )}
+      {tabs.map(tab => (
+        <div key={tab.id} role="tabpanel" id={`${id}-panel-${tab.id}`} aria-labelledby={`${id}-tab-${tab.id}`}
+          hidden={tab.id !== activeTabId} tabIndex={0}
+          className="min-w-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          {tab.id === activeTabId && activeTab && (
+            <ResultsTable result={activeTab.result} error={activeTab.error} onEditQuery={onEditQuery}
+              executedSql={activeTab.executedSql} executionTimeMs={activeTab.executionTimeMs} />
+          )}
+        </div>
+      ))}
     </div>
   );
 }
