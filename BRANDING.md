@@ -99,7 +99,7 @@ inside sRGB; light-mode string text also lowers lightness to pass contrast on
 the selected surface. These editor accents stay readable against both the
 working surface and the active line; they do not replace the Zinc brand palette.
 
-### Type, spacing, radius, and elevation
+### Typography
 
 The workbench uses system sans-serif and monospace stacks without external font
 requests. Font smoothing is set once on the body. Apply `tabular-nums` to counts,
@@ -132,17 +132,88 @@ stay on one line.
 
 Use `text-caption` for helper text, timestamps, and compact tool navigation.
 Reserve 12px text for short badges, keyboard hints, and the collapsed source rail;
-do not reduce labels below that floor. Collapsed source names truncate on one line
-with a tooltip. Other truncated identifiers and column headings expose the full
-value through a title or detail view.
+do not reduce labels below that floor. Collapsed source names use up to two lines
+with a tooltip for the full value. Expanded source names and tool names wrap;
+prefer breaks after underscores, periods, and hyphens without changing the identifier.
+Other truncated identifiers and column headings expose the full value through a
+title or detail view.
 
 CodeMirror inherits the monospace stack and uses the code line height, with 16px
 text below `sm` and 14px above it. Result rows measure their rendered height so
 larger text preferences do not clip values or overlap rows.
 
+### Navigation
+
+The source rail is 96px collapsed and 224px expanded; the tool sidebar is 256px.
+Keep their headers aligned at 64px, with the full logo at 128px wide. Source
+context, Overview, and Tools form distinct groups. Use a leading border and the
+selection surface for the active item without changing its font weight.
+
+Navigation links have at least 44px targets, neutral inset focus outlines, and
+`aria-current` for the active source or page. Read-only tools include an accessible
+label alongside the lock icon. Source and tool lists scroll independently.
+Below 768px, a modal drawer holds navigation; the workbench keeps the available
+width. The drawer closes after navigation or Escape and returns focus to its
+trigger. A skip link moves keyboard users directly to the main content.
+
+### Query results
+
+Use one scroll container for the table header and rows, with a sticky header and
+row-number column. Share column widths across both; size from the column name and
+up to 100 returned values, with a cap for long text. Keep row virtualization and
+measure rendered heights so larger text settings remain usable.
+
+Right-align columns containing JSON numbers (ignoring nulls) and use tabular
+numerals. Keep strings unchanged, including decimal strings and identifiers with
+leading zeroes; the result API does not provide database column types. Show nulls
+as muted `NULL` and empty strings as `Empty string`. Render objects as JSON.
+
+Every cell opens a keyboard-accessible inspector with the full value and a Copy
+action. Preserve whitespace in strings and format JSON for reading and copying.
+Keep filtering visible, search across all columns, and offer Clear filter when
+there are no matches. Show row count and execution time beside the filter; put
+the executed SQL in a disclosure below the table.
+
+### Tool forms and controls
+
+Use associated labels with the parameter name and a quiet Required or Optional
+hint. Inputs and action buttons have a minimum 44px height; parameter inputs use
+16px text. Connect descriptions and inline errors to their fields. Checkbox
+labels include the gap and control in one clickable row. A required boolean can
+be false; untouched optional parameters retain the tool default.
+
+Validate on blur or Run, then clear an existing error as the user corrects it.
+Keep numeric drafts intact while typing and report fractional integer values
+instead of truncating them. Run remains available to explain missing values and
+focus the first invalid field. Enter submits parameter forms; Cmd/Ctrl+Enter
+runs from the SQL editor. Disable Run while a request is pending.
+
+Use a primary Run action and a quiet, consistently sized Copy SQL action. Announce
+copy success and display clipboard failures inline. Preserve parameter drafts
+when synchronizing the URL, and use schema types when submitting values.
+
+### Loading, empty, and error states
+
+Keep existing result tabs, filters, and scroll positions available while a query
+runs. Put a compact progress message above them; the first run uses the same
+minimum-height area as the initial results prompt. Announce progress with a live
+status. Skeletons reserve space while source, tool, and request pages load; stop
+skeleton and spinner animation when reduced motion is requested.
+
+Distinguish an unrun tool, a successful query returning no rows, affected-row
+counts, and a failed query. Keep the executed SQL and elapsed time available for
+empty results and failures. Errors combine an icon, a specific title, and the
+original error detail. The Edit query action returns focus to the inputs; it
+never executes a statement. Page-loading errors offer Try again for the read
+request. Discard late responses after the user navigates to another tool.
+
+### Spacing and surfaces
+
 Spacing uses Tailwind's 4px base (`--spacing: 0.25rem`): 4–8px within controls,
 12–16px between related controls, 24px between content groups, and 32–48px around
-page content. Use the existing spacing utilities rather than per-component pixel
+page content on desktop. On mobile, use 16px horizontal and 24px vertical page
+padding; desktop pages use 32px horizontal and 40px vertical padding. Keep page
+scrolling inside the main content pane and reserve its scrollbar gutter. Use the existing spacing utilities rather than per-component pixel
 values. Do not change the root font size to make the interface denser.
 
 `--radius` is the 8px control radius. It drives `rounded-sm` (4px), `rounded-md`
@@ -155,6 +226,14 @@ for the inner radius. Fully rounded badges keep `rounded-full`.
 raised shadow; `shadow-md` and `shadow-lg` use the floating shadow. Dark-mode
 elevations reduce to a quiet white ring. Keep actual borders on inputs and table
 dividers, and avoid stacking an elevation ring with a second heavy border.
+
+Source cards, parameter panels, and request lists use a 12px radius and
+`shadow-sm` without an additional border. Keep tool and parameter descriptions
+flat inside source cards, separated by spacing and rules. Required labels are
+neutral metadata, not error badges. Dialogs use the floating shadow without a
+second outer border or inset highlight. Retain real borders for inputs and result
+grids. Fine section and list dividers use `--border-hairline` (1px, or 0.5px at
+2× display density); keep input and focus outlines at their existing widths.
 
 Default transitions are 150ms with an ease-out curve. Name the properties that
 change, such as background color and box shadow; do not use `transition-all`.

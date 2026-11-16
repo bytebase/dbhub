@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { AlertCircle, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ResultsTable } from './ResultsTable';
 import type { ResultTab } from './types';
+import { Spinner } from '../ui/spinner';
 import XIcon from '../icons/XIcon';
 
 interface ResultsTabsProps {
@@ -11,6 +12,7 @@ interface ResultsTabsProps {
   onTabSelect: (id: string) => void;
   onTabClose: (id: string) => void;
   isLoading?: boolean;
+  onEditQuery: () => void;
 }
 
 function formatTimestamp(date: Date): string {
@@ -36,6 +38,7 @@ export function ResultsTabs({
   onTabSelect,
   onTabClose,
   isLoading,
+  onEditQuery,
 }: ResultsTabsProps) {
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -72,28 +75,30 @@ export function ResultsTabs({
     });
   };
 
-  // Loading state (no tabs yet)
-  if (isLoading && tabs.length === 0) {
-    return (
-      <div className="border border-border rounded-lg bg-card p-8 text-center">
-        <div className="text-muted-foreground">Running query...</div>
-      </div>
-    );
-  }
-
-  // Empty state
-  if (tabs.length === 0) {
-    return (
-      <div className="border border-border rounded-lg bg-card p-8 text-center">
-        <p className="text-muted-foreground text-sm">
-          Run a query to see results
+  const progress = (
+    <div role="status" className={cn("flex items-center gap-3 rounded-xl bg-card shadow-sm", tabs.length ? "p-4" : "min-h-32 p-6")}>
+      <Spinner aria-hidden="true" role="presentation" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="space-y-1">
+        <p className="text-label">Running query…</p>
+        <p className="text-caption text-muted-foreground">
+          {tabs.length ? 'Previous results remain available below.' : 'Waiting for the database to respond.'}
         </p>
+      </div>
+    </div>
+  );
+
+  if (tabs.length === 0) {
+    return isLoading ? progress : (
+      <div className="flex min-h-32 flex-col justify-center gap-2 rounded-xl bg-card p-6 shadow-sm">
+        <h2 className="text-label">Results appear here</h2>
+        <p className="max-w-prose text-sm text-muted-foreground">Enter a SQL statement or fill in the tool parameters, then select Run.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {isLoading && progress}
       {/* Tab bar */}
       <div className="relative flex items-center border-b border-border">
         {/* Left scroll button */}
@@ -133,7 +138,7 @@ export function ResultsTabs({
             >
               <span>{formatTabLabel(tab)}</span>
               {tab.error && (
-                <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-label="Error" />
+                <><AlertCircle className="size-3.5 text-destructive-foreground" aria-hidden="true" /><span className="sr-only">Failed</span></>
               )}
               <span
                 role="button"
@@ -173,9 +178,10 @@ export function ResultsTabs({
       {/* Active tab content */}
       {activeTab && (
         <ResultsTable
+          key={activeTab.id}
           result={activeTab.result}
           error={activeTab.error}
-          isLoading={isLoading}
+          onEditQuery={onEditQuery}
           executedSql={activeTab.executedSql}
           executionTimeMs={activeTab.executionTimeMs}
         />

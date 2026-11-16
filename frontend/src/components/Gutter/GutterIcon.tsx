@@ -13,38 +13,28 @@ interface GutterIconProps {
 export default function GutterIcon({ icon, tooltip, to, href, expanded }: GutterIconProps) {
   const location = useLocation();
   const isActive = to ? location.pathname === to : false;
-
-  const iconButton = (
-    <div
-      className={cn(
-        'w-full h-10 rounded-l-lg p-2 flex items-center transition-colors',
-        expanded ? 'justify-start gap-3' : 'justify-center',
-        isActive && 'bg-selection shadow-xs'
-      )}
-    >
-      {icon}
-      {expanded && <span className="text-sm">{tooltip}</span>}
-    </div>
+  const className = cn(
+    'flex min-h-11 w-full items-center rounded-md border-s-2 p-2 touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+    expanded ? 'justify-start gap-3' : 'justify-center',
+    isActive ? 'border-primary bg-selection text-selection-foreground' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
   );
-
-  const wrappedIcon = to ? (
-    <Link to={to} aria-label={tooltip}>
-      {iconButton}
-    </Link>
-  ) : href ? (
-    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={tooltip}>
-      {iconButton}
-    </a>
-  ) : (
-    iconButton
-  );
+  const content = <>
+    <span aria-hidden="true">{icon}</span>
+    {expanded && <span className="text-sm">{tooltip}</span>}
+  </>;
 
   return (
     <Tooltip>
-      <TooltipTrigger render={wrappedIcon} />
-      <TooltipPopup side="right" sideOffset={8}>
-        {tooltip}
-      </TooltipPopup>
+      <TooltipTrigger render={to ? (
+        <Link to={to} aria-label={tooltip} aria-current={isActive ? 'page' : undefined} className={className}>
+          {content}
+        </Link>
+      ) : (
+        <a href={href} target="_blank" rel="noopener noreferrer" aria-label={tooltip} className={className}>
+          {content}
+        </a>
+      )} />
+      <TooltipPopup side="right" sideOffset={8}>{tooltip}</TooltipPopup>
     </Tooltip>
   );
 }

@@ -32,8 +32,8 @@ export default class ErrorBoundary extends Component<Props, State> {
       const isApiError = error instanceof ApiError;
 
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background px-4">
-          <div className="max-w-md w-full">
+        <div className="flex h-dvh overflow-auto bg-background px-4 py-6">
+          <div className="m-auto w-full max-w-md shrink-0">
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
               <h1 className="text-2xl font-bold text-destructive mb-4">
                 Something went wrong

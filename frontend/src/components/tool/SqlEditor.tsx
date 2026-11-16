@@ -17,6 +17,7 @@ const sqlHighlightStyle = HighlightStyle.define([
 
 export interface SqlEditorHandle {
   getSelectedSql: () => string;
+  focus: () => void;
 }
 
 interface SqlEditorProps {
@@ -26,6 +27,8 @@ interface SqlEditorProps {
   disabled?: boolean;
   readOnly?: boolean;
   placeholder?: string;
+  ariaLabelledBy?: string;
+  error?: string;
 }
 
 export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function SqlEditor({
@@ -35,6 +38,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   disabled = false,
   readOnly = false,
   placeholder = 'Enter SQL statement...',
+  ariaLabelledBy,
+  error,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -49,6 +54,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
 
   // Expose method to get selected SQL (or full content if no selection)
   useImperativeHandle(ref, () => ({
+    focus: () => viewRef.current?.focus(),
     getSelectedSql: () => {
       const view = viewRef.current;
       if (!view) return '';
@@ -80,6 +86,11 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
 
     const extensions = [
       basicSetup,
+      EditorView.contentAttributes.of({
+        'aria-labelledby': ariaLabelledBy || '',
+        'aria-readonly': String(readOnly),
+        ...(readOnly ? { tabindex: '0' } : {}),
+      }),
       sql(),
       syntaxHighlighting(sqlHighlightStyle),
       keymap.of(defaultKeymap),
@@ -158,7 +169,15 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       view.destroy();
       viewRef.current = null;
     };
-  }, [readOnly, placeholder, onChange]);
+  }, [readOnly, placeholder, onChange, ariaLabelledBy]);
+
+  useEffect(() => {
+    const content = viewRef.current?.contentDOM;
+    if (!content) return;
+    content.setAttribute('aria-invalid', String(Boolean(error)));
+    if (error) content.setAttribute('aria-describedby', 'sql-statement-error');
+    else content.removeAttribute('aria-describedby');
+  }, [error, readOnly, placeholder, onChange, ariaLabelledBy]);
 
   // Update content when value prop changes externally
   useEffect(() => {

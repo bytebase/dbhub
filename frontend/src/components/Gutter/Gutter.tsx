@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipProvider, TooltipPopup, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,6 +17,7 @@ interface GutterProps {
 const EXPANDED_STORAGE_KEY = 'dbhub.navigation.expanded';
 
 export default function Gutter({ sources }: GutterProps) {
+  const sourceNavigationId = useId();
   const [preferExpanded, setPreferExpanded] = useState(() => {
     try {
       return window.localStorage.getItem(EXPANDED_STORAGE_KEY) === 'true';
@@ -39,39 +40,39 @@ export default function Gutter({ sources }: GutterProps) {
   };
 
   return (
-    <TooltipProvider>
+    <TooltipProvider delay={300}>
       <aside
         className={cn(
-          'shrink-0 h-screen flex flex-col items-center bg-card pl-2 py-4 pt-6',
-          expanded ? 'w-56' : 'w-16'
+          'shrink-0 min-h-0 flex flex-col bg-card border-e border-border',
+          expanded ? 'w-56' : 'w-24'
         )}
         aria-label="Main navigation"
       >
-        <Tooltip>
-          <TooltipTrigger render={
-            <Button
-              variant="ghost"
-              size="icon-lg"
-              className="hidden md:inline-flex self-start mb-2"
-              aria-label={toggleLabel}
-              aria-expanded={expanded}
-              aria-controls="source-navigation"
-              onClick={toggleExpanded}
-            >
-              {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
-            </Button>
-          } />
-          <TooltipPopup side="right" sideOffset={8}>{toggleLabel}</TooltipPopup>
-        </Tooltip>
-        <div id="source-navigation" className="w-full min-h-0 flex-1 flex flex-col justify-start items-start overflow-auto">
+        <div className="flex h-16 shrink-0 items-center justify-center border-b border-border px-2">
+          <Tooltip>
+            <TooltipTrigger render={
+              <Button
+                variant="ghost"
+                size="icon-xl"
+                className="hidden md:inline-flex touch-manipulation motion-reduce:transition-none"
+                aria-label={toggleLabel}
+                aria-expanded={expanded}
+                aria-controls={sourceNavigationId}
+                onClick={toggleExpanded}
+              >
+                {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
+              </Button>
+            } />
+            <TooltipPopup side="right" sideOffset={8}>{toggleLabel}</TooltipPopup>
+          </Tooltip>
+          <span className="text-caption text-muted-foreground md:hidden">Sources</span>
+        </div>
+        <nav id={sourceNavigationId} aria-label="Data sources" className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
           {sources.map((source) => (
             <GutterSourceItem key={source.id} source={source} expanded={expanded} />
           ))}
-        </div>
-        <div className={cn(
-          'w-full flex flex-col',
-          expanded ? 'mt-2 border-t border-border divide-y divide-border' : 'gap-2 items-center'
-        )}>
+        </nav>
+        <div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
           <GutterIcon icon={<ActivityIcon />} to="/requests" tooltip="Requests" expanded={expanded} />
           <GutterIcon icon={<HelpIcon />} href="https://dbhub.ai" tooltip="Help" expanded={expanded} />
         </div>

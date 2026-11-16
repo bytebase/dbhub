@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export default function NotFoundView() {
   return (
-    <div className="container mx-auto px-8 py-12 max-w-4xl">
+    <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-4xl">
       <div className="space-y-6">
         <div>
           <h1 className="text-page text-foreground mb-4">

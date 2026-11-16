@@ -5,6 +5,8 @@ import { fetchRequests } from '../../api/requests';
 import { fetchSources } from '../../api/sources';
 import { ApiError } from '../../api/errors';
 import { DB_LOGOS } from '../../lib/db-logos';
+import { PageLoading, PageLoadError } from '../WorkbenchState';
+import { Button } from '../ui/button';
 import LockIcon from '../icons/LockIcon';
 import type { Request } from '../../types/request';
 import type { DatabaseType } from '../../types/datasource';
@@ -104,7 +106,7 @@ function ErrorTooltip({ error, children }: { error: string; children: React.Reac
 function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   if (success) {
     return (
-      <span className="inline-flex items-center justify-center w-4 h-4 text-green-600 dark:text-green-400">
+      <span className="inline-flex items-center justify-center w-4 h-4 text-success-foreground">
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
@@ -113,7 +115,7 @@ function StatusBadge({ success, error }: { success: boolean; error?: string }) {
   }
 
   const errorIcon = (
-    <span className="inline-flex items-center justify-center w-4 h-4 text-red-600 dark:text-red-400 cursor-help">
+    <span className="inline-flex items-center justify-center w-4 h-4 text-destructive-foreground cursor-help">
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
       </svg>
@@ -132,12 +134,17 @@ export default function RequestView() {
   const [sourceTypes, setSourceTypes] = useState<Record<string, DatabaseType>>({});
   const [toolReadonly, setToolReadonly] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setError(null);
     Promise.all([fetchRequests(), fetchSources()])
       .then(([requestsData, sourcesData]) => {
+        if (!active) return;
         setRequests(requestsData.requests);
         const typeMap: Record<string, DatabaseType> = {};
         const readonlyMap: Record<string, boolean> = {};
@@ -154,12 +161,14 @@ export default function RequestView() {
         setIsLoading(false);
       })
       .catch((err) => {
+        if (!active) return;
         console.error('Failed to fetch data:', err);
         const message = err instanceof ApiError ? err.message : 'Failed to load data';
         setError(message);
         setIsLoading(false);
       });
-  }, []);
+    return () => { active = false; };
+  }, [loadAttempt]);
 
   // Get unique source IDs from requests
   const sourceIds = [...new Set(requests.map((r) => r.sourceId))].sort();
@@ -169,28 +178,13 @@ export default function RequestView() {
     ? requests.filter((r) => r.sourceId === selectedSource)
     : requests;
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-8 py-12">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
+  if (isLoading) return <PageLoading label="Loading recent requests…" layout="table" />;
 
-  if (error) {
-    return (
-      <div className="container mx-auto px-8 py-12">
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
-          <p className="text-destructive/90">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  if (error) return <PageLoadError title="Could not load recent requests" message={error} onRetry={() => setLoadAttempt(attempt => attempt + 1)} />;
 
   return (
     <TooltipProvider>
-    <div className="container mx-auto px-8 py-12 max-w-6xl">
+    <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-6xl">
       <div className="space-y-6">
         <div>
           <h1 className="text-page text-foreground mb-2">Recent Requests</h1>
@@ -237,10 +231,10 @@ export default function RequestView() {
                 );
               })}
             </div>
-            <div className="bg-card border border-border rounded-lg overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl bg-card shadow-sm">
               <table className="w-full">
               <thead>
-                <tr className="border-b border-border bg-muted/50">
+                <tr className="border-b-[length:var(--border-hairline)] border-border bg-muted">
                   <th className="px-4 py-3 text-start text-label text-muted-foreground whitespace-nowrap">
                     Time
                   </th>
@@ -258,9 +252,9 @@ export default function RequestView() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y-[length:var(--border-hairline)] divide-border">
                 {filteredRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={request.id} className="hover:bg-muted transition-colors">
                     <td className="px-4 py-2 text-caption tabular-nums text-muted-foreground whitespace-nowrap">
                       {formatDate(request.timestamp)} {formatTime(request.timestamp)}
                     </td>
@@ -300,10 +294,12 @@ export default function RequestView() {
         )}
 
         {requests.length === 0 && (
-          <div className="bg-card border border-border rounded-lg p-12 text-center">
-            <p className="text-body text-muted-foreground max-w-prose mx-auto text-pretty">
-              No requests have been made yet. Execute some SQL queries via the MCP endpoint to see them here.
+          <div className="space-y-3 rounded-xl bg-card p-6 shadow-sm sm:p-8">
+            <h2 className="text-label">No requests yet</h2>
+            <p className="text-sm text-muted-foreground max-w-prose text-pretty">
+              Run a tool in the workbench or through your MCP client. Its request will appear here when you return.
             </p>
+            <Button variant="outline" className="min-h-11" render={<Link to="/" />}>Open workbench</Button>
           </div>
         )}
       </div>

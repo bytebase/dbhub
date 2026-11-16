@@ -105,7 +105,7 @@ export async function executeTool(
     throw new ApiError(toolResult.error || 'Tool execution failed', 500);
   }
 
-  if (!toolResult.data || !toolResult.data.statements) {
+  if (!toolResult.data || !toolResult.data.statements?.length) {
     return [{ columns: [], rows: [], rowCount: 0 }];
   }
 

@@ -4,70 +4,58 @@ import { Lock } from 'lucide-react';
 import { fetchSource } from '../../api/sources';
 import { ApiError } from '../../api/errors';
 import type { DataSource } from '../../types/datasource';
+import { PageLoading, PageLoadError } from '../WorkbenchState';
 import { DB_LOGOS } from '../../lib/db-logos';
 
 export default function SourceDetailView() {
   const { sourceId } = useParams<{ sourceId: string }>();
   const [source, setSource] = useState<DataSource | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     if (!sourceId) return;
 
+    let active = true;
     setIsLoading(true);
     setError(null);
 
     fetchSource(sourceId)
       .then((data) => {
+        if (!active) return;
         setSource(data);
         setIsLoading(false);
       })
       .catch((err: ApiError) => {
+        if (!active) return;
         setError(err);
         setIsLoading(false);
       });
-  }, [sourceId]);
+    return () => { active = false; };
+  }, [sourceId, loadAttempt]);
 
   if (!sourceId) {
     return <Navigate to="/" replace />;
   }
 
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-8 py-12">
-        <div className="text-muted-foreground">Loading source details...</div>
-      </div>
-    );
-  }
+  if (isLoading) return <PageLoading label="Loading source details…" />;
 
   if (error) {
-    // If source not found, redirect to 404 page
-    if (error.status === 404) {
-      return <Navigate to="/404" replace />;
-    }
-
-    // For other errors, show error message
-    return (
-      <div className="container mx-auto px-8 py-12">
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-destructive mb-2">Error</h2>
-          <p className="text-destructive/90">{error.message}</p>
-        </div>
-      </div>
-    );
+    if (error.status === 404) return <Navigate to="/404" replace />;
+    return <PageLoadError title="Could not load this source" message={error.message} onRetry={() => setLoadAttempt(attempt => attempt + 1)} />;
   }
 
   if (!source) {
     return (
-      <div className="container mx-auto px-8 py-12">
+      <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <div className="text-muted-foreground">Source not found</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-8 py-12 max-w-4xl">
+    <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-4xl">
       <div className="space-y-6">
         <h1 className="flex items-start gap-3 text-page text-foreground">
           <img
@@ -78,7 +66,7 @@ export default function SourceDetailView() {
           <span className="min-w-0 [overflow-wrap:anywhere]">{source.id}</span>
         </h1>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
           <h2 className="text-section text-foreground mb-4">
             Connection Details
           </h2>
@@ -133,7 +121,7 @@ export default function SourceDetailView() {
 
 
         {source.ssh_tunnel?.enabled && (
-          <div className="bg-card border border-border rounded-lg p-6">
+          <div className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
             <h2 className="text-section text-foreground mb-4">
               SSH Tunnel
             </h2>
@@ -141,7 +129,7 @@ export default function SourceDetailView() {
               <div>
                 <dt className="text-label text-muted-foreground">Status</dt>
                 <dd className="mt-1 text-sm text-foreground">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-success/10 text-success-foreground">
                     Enabled
                   </span>
                 </dd>
@@ -177,26 +165,23 @@ export default function SourceDetailView() {
           </div>
         )}
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
           <h2 className="text-section text-foreground mb-4">
             Available Tools
           </h2>
           {source.tools.length > 0 ? (
-            <div className="space-y-4">
-              {source.tools.map((tool, index) => (
-                <div key={tool.name}>
-                  {index > 0 && (
-                    <div className="border-t border-border mb-4"></div>
-                  )}
-                  <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+            <div className="divide-y-[length:var(--border-hairline)] divide-border">
+              {source.tools.map((tool) => (
+                <div key={tool.name} className="py-6 first:pt-0 last:pb-0">
+                  <div className="space-y-4">
                     <div>
                       <div className="flex flex-wrap items-baseline gap-2">
                         <div className="flex min-w-0 items-center gap-1.5">
-                          <div className="text-label text-foreground font-mono [overflow-wrap:anywhere]">
+                          <h3 className="text-label text-foreground font-mono [overflow-wrap:anywhere]">
                             {tool.name}
-                          </div>
+                          </h3>
                           {tool.readonly && (
-                            <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                            <Lock className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-label="Read-only" />
                           )}
                         </div>
                         <div className="text-caption text-muted-foreground">
@@ -209,29 +194,23 @@ export default function SourceDetailView() {
                     </div>
 
                     {tool.parameters.length > 0 && (
-                      <div className="pt-2 border-t border-border/50">
-                        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
+                      <div className="space-y-3">
+                        <div className="text-label text-muted-foreground">
                           Parameters
                         </div>
                         <ul className="space-y-3">
                           {tool.parameters.map((param) => (
-                            <li key={param.name} className="text-sm bg-background/50 rounded p-2.5">
+                            <li key={param.name} className="text-sm">
                               <div className="flex flex-wrap items-baseline gap-2">
                                 <span className="font-mono text-foreground font-medium [overflow-wrap:anywhere]">
                                   {param.name}
                                 </span>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-primary/10 text-primary">
+                                <span className="text-caption font-mono text-muted-foreground">
                                   {param.type}
                                 </span>
-                                {param.required ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-destructive/10 text-destructive">
-                                    required
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-muted text-muted-foreground">
-                                    optional
-                                  </span>
-                                )}
+                                <span className="text-caption text-muted-foreground">
+                                  {param.required ? 'required' : 'optional'}
+                                </span>
                               </div>
                               {param.description && (
                                 <div className="mt-2 text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">

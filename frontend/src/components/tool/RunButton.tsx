@@ -4,35 +4,31 @@ import { Button } from '../ui/button';
 import { Spinner } from '../ui/spinner';
 
 interface RunButtonProps {
-  onClick: () => void;
+  onShortcut: () => void;
   disabled?: boolean;
   loading?: boolean;
 }
 
-export function RunButton({ onClick, disabled = false, loading = false }: RunButtonProps) {
-  const onClickRef = useRef(onClick);
+export function RunButton({ onShortcut, disabled = false, loading = false }: RunButtonProps) {
+  const onShortcutRef = useRef(onShortcut);
   const disabledRef = useRef(disabled);
   const loadingRef = useRef(loading);
 
-  // Keep refs updated
   useEffect(() => {
-    onClickRef.current = onClick;
+    onShortcutRef.current = onShortcut;
     disabledRef.current = disabled;
     loadingRef.current = loading;
-  }, [onClick, disabled, loading]);
+  }, [onShortcut, disabled, loading]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Cmd+Enter (Mac) or Ctrl+Enter (Windows/Linux)
-      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-        // Check if the event originated from CodeMirror editor
+      if (!event.defaultPrevented && (event.metaKey || event.ctrlKey) && event.key === 'Enter') {
         const target = event.target as HTMLElement;
-        const isInCodeMirror = target.closest('.cm-editor') !== null;
+        const isInEditorOrDialog = target.closest('.cm-editor, [role=dialog]') !== null;
 
-        // Only handle if NOT in CodeMirror (let SqlEditor handle it when focused)
-        if (!isInCodeMirror && !disabledRef.current && !loadingRef.current) {
+        if (!isInEditorOrDialog && !disabledRef.current && !loadingRef.current) {
           event.preventDefault();
-          onClickRef.current();
+          onShortcutRef.current();
         }
       }
     };
@@ -42,14 +38,13 @@ export function RunButton({ onClick, disabled = false, loading = false }: RunBut
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []); // Empty deps - listener is set up once
+  }, []);
 
-  // Detect OS for shortcut display
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
   const shortcutKey = isMac ? '⌘' : 'Ctrl';
 
   return (
-    <Button onClick={onClick} disabled={disabled || loading}>
+    <Button type="submit" disabled={disabled || loading} aria-busy={loading} className="min-h-11 min-w-40" title={`Run (${shortcutKey}+Enter)`}>
       {loading ? (
         <>
           <Spinner className="size-4" />

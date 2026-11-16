@@ -119,6 +119,7 @@
   --brand-zinc: oklch(0.319 0.007 286);
   --brand-white: oklch(1 0 0);
   --radius: 0.5rem;
+  --border-hairline: 1px;
 
   /* Surfaces: canvas → working surface → floating surface. */
   --canvas: var(--color-zinc-50);
@@ -215,7 +216,18 @@
   color-scheme: dark;
 }
 
+@media (min-resolution: 2dppx) {
+  :root {
+    --border-hairline: 0.5px;
+  }
+}
+
 @layer base {
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
   * {
     @apply border-border outline-ring/50;
   }

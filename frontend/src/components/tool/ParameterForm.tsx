@@ -1,131 +1,116 @@
+import { useId, useState } from 'react';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import type { ToolParameter } from '../../types/datasource';
-import { useEffect, useState } from 'react';
+
+export type ParameterValues = Record<string, string | number | boolean | string[] | undefined>;
 
 interface ParameterFormProps {
   parameters: ToolParameter[];
-  values: Record<string, any>;
-  onChange: (values: Record<string, any>) => void;
+  values: ParameterValues;
+  onChange: (values: ParameterValues) => void;
+}
+
+export function parseParameterValues(parameters: ToolParameter[], values: ParameterValues): ParameterValues {
+  return Object.fromEntries(parameters.flatMap(({ name, type, required }) => {
+    const value = values[name];
+    if (type === 'boolean') {
+      if (value === undefined && !required) return [];
+      return [[name, value === true || value === 'true']];
+    }
+    if (value === undefined || value === '') return [];
+    if (['integer', 'number', 'float'].includes(type)) return [[name, Number(value)]];
+    if (type === 'array') return [[name, String(value).split(',').map(item => item.trim()).filter(Boolean)]];
+    return [[name, value]];
+  }));
 }
 
 export function ParameterForm({ parameters, values, onChange }: ParameterFormProps) {
-  const handleChange = (name: string, value: any) => {
-    onChange({ ...values, [name]: value });
-  };
-
   return (
-    <div className="space-y-4">
-      {parameters.map((param) => (
-        <div key={param.name} className="space-y-1.5">
-          <label className="text-label text-foreground [overflow-wrap:anywhere]">
-            {param.name}
-            {param.required ? (
-              <span className="text-destructive ml-0.5">*</span>
-            ) : (
-              <span className="text-muted-foreground ml-1.5 font-normal">(optional)</span>
-            )}
-          </label>
-          <ParameterInput
-            parameter={param}
-            value={values[param.name]}
-            onChange={(value) => handleChange(param.name, value)}
-          />
-          {param.description && (
-            <p className="text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{param.description}</p>
-          )}
-        </div>
+    <div className="space-y-5">
+      {parameters.map(parameter => (
+        <ParameterInput
+          key={parameter.name}
+          parameter={parameter}
+          value={values[parameter.name]}
+          onChange={value => onChange({ ...values, [parameter.name]: value })}
+        />
       ))}
     </div>
   );
 }
 
-interface ParameterInputProps {
+function ParameterInput({ parameter, value, onChange }: {
   parameter: ToolParameter;
-  value: any;
-  onChange: (value: any) => void;
+  value: ParameterValues[string];
+  onChange: (value: ParameterValues[string]) => void;
+}) {
+  const id = useId();
+  const [error, setError] = useState('');
+  const { name, type, required, description } = parameter;
+  const isBoolean = type === 'boolean';
+  const isNumeric = ['integer', 'number', 'float'].includes(type);
+  const hint = [description, type === 'array' ? 'Separate values with commas.' : ''].filter(Boolean).join(' ');
+  const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
+  const label = (
+    <span className="min-w-0 text-label [overflow-wrap:anywhere]">
+      <span className="font-mono">{name}</span>
+      <span className="ml-2 text-caption font-normal text-muted-foreground">{' '}{required ? 'Required' : 'Optional'}</span>
+    </span>
+  );
+
+  return (
+    <div className="space-y-1.5">
+      {isBoolean ? (
+        <label htmlFor={id} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md">
+          <Checkbox id={id} name={name} checked={value === true || value === 'true'} onCheckedChange={onChange} aria-describedby={describedBy} />
+          {label}
+        </label>
+      ) : (
+        <>
+          <label htmlFor={id} className="block">{label}</label>
+          <Input
+            id={id}
+            name={name}
+            type={isNumeric ? 'number' : 'text'}
+            step="any"
+            inputMode={isNumeric ? (type === 'integer' ? 'numeric' : 'decimal') : undefined}
+            required={required}
+            value={Array.isArray(value) ? value.join(', ') : typeof value === 'boolean' ? String(value) : value ?? ''}
+            autoComplete="off"
+            spellCheck={false}
+            data-1p-ignore
+            aria-describedby={describedBy}
+            aria-invalid={error ? true : undefined}
+            className="[&_input]:min-h-11 sm:text-base"
+            onChange={event => {
+              const message = validateParameterInput(event.currentTarget, parameter);
+              if (error) setError(message);
+              onChange(event.currentTarget.value);
+            }}
+            onBlur={event => setError(validateParameterInput(event.currentTarget, parameter))}
+            onInvalid={event => {
+              event.preventDefault();
+              setError(validateParameterInput(event.currentTarget, parameter));
+            }}
+          />
+        </>
+      )}
+      {hint && <p id={`${id}-hint`} className="text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{hint}</p>}
+      {error && <p id={`${id}-error`} className="text-caption text-destructive-foreground" role="alert">{error}</p>}
+    </div>
+  );
 }
 
-function ParameterInput({ parameter, value, onChange }: ParameterInputProps) {
-  const { type, name } = parameter;
-
-  // Boolean type: checkbox
-  if (type === 'boolean') {
-    const [localChecked, setLocalChecked] = useState<boolean>(value === true || value === 'true');
-
-    // Sync local state when value prop changes
-    useEffect(() => {
-      const newChecked = value === true || value === 'true';
-      setLocalChecked(newChecked);
-    }, [value]);
-
-    return (
-      <div className="flex items-center h-10">
-        <Checkbox
-          checked={localChecked}
-          onCheckedChange={(checked) => {
-            setLocalChecked(checked);
-            onChange(checked);
-          }}
-        />
-      </div>
-    );
+export function validateParameterInput(input: HTMLInputElement, { type, required }: ToolParameter) {
+  input.setCustomValidity('');
+  if (required && type === 'array' && !input.value.split(',').some(item => item.trim())) {
+    input.setCustomValidity('Enter at least one value.');
   }
-
-  // Integer type: number input with step=1
-  if (type === 'integer') {
-    return (
-      <Input
-        type="number"
-        step={1}
-        value={value ?? ''}
-        onChange={(e) => {
-          const val = e.target.value;
-          onChange(val === '' ? undefined : parseInt(val, 10));
-        }}
-        placeholder={`Enter ${name}`}
-      />
-    );
+  if (type === 'integer' && input.value !== '' && !Number.isInteger(Number(input.value))) {
+    input.setCustomValidity('Enter a whole number.');
   }
-
-  // Float type: number input with step=any
-  if (type === 'float' || type === 'number') {
-    return (
-      <Input
-        type="number"
-        step="any"
-        value={value ?? ''}
-        onChange={(e) => {
-          const val = e.target.value;
-          onChange(val === '' ? undefined : parseFloat(val));
-        }}
-        placeholder={`Enter ${name}`}
-      />
-    );
-  }
-
-  // Array type: comma-separated text input
-  if (type === 'array') {
-    return (
-      <Input
-        type="text"
-        value={Array.isArray(value) ? value.join(', ') : ''}
-        onChange={(e) => {
-          const val = e.target.value;
-          onChange(val ? val.split(',').map((s) => s.trim()) : undefined);
-        }}
-        placeholder="Enter comma-separated values"
-      />
-    );
-  }
-
-  // Default: string text input
-  return (
-    <Input
-      type="text"
-      value={value ?? ''}
-      onChange={(e) => onChange(e.target.value || undefined)}
-      placeholder={`Enter ${name}`}
-    />
-  );
+  if (input.validity.badInput) return 'Enter a number.';
+  if (input.validity.valueMissing) return 'Enter a value.';
+  return input.validationMessage;
 }
