@@ -46,7 +46,8 @@ export class SQLServerDSNParser implements DSNParser {
       // Inspect the same raw query as SafeURL before it drops empty/malformed
       // pairs or collapses duplicates. Decode query keys as well as values.
       const queryStart = dsn.indexOf("?");
-      const sslmodes = new URLSearchParams(queryStart === -1 ? "" : dsn.substring(queryStart + 1)).getAll("sslmode");
+      const rawQuery = new URLSearchParams(queryStart === -1 ? "" : dsn.substring(queryStart + 1));
+      const sslmodes = rawQuery.getAll("sslmode");
       if (sslmodes.length > 1 || (sslmodes.length === 1 && !["disable", "require", "verify-full"].includes(sslmodes[0]))) {
         throw new Error("Invalid sslmode. Specify exactly one value: disable, require, verify-full");
       }
@@ -67,6 +68,16 @@ export class SQLServerDSNParser implements DSNParser {
           options.domain = value;
         }
       });
+
+      // ApplicationIntent=ReadOnly routes to a readable secondary. Key and value are
+      // case-insensitive, as in ADO.NET; an empty or repeated value is rejected, not dropped.
+      const intents = [...rawQuery]
+        .filter(([key]) => key.toLowerCase() === "applicationintent")
+        .map(([, value]) => value.toLowerCase());
+      if (intents.length > 1 || (intents.length === 1 && !["readonly", "readwrite"].includes(intents[0]))) {
+        throw new Error("Invalid applicationIntent. Specify exactly one value: ReadOnly, ReadWrite");
+      }
+      const readOnlyIntent = intents.length === 1 ? intents[0] === "readonly" : undefined;
 
       // Validate NTLM parameter consistency
       if (options.authentication === "ntlm" && !options.domain) {
@@ -106,6 +117,7 @@ export class SQLServerDSNParser implements DSNParser {
             requestTimeout: queryTimeoutSeconds * 1000
           }),
           instanceName: options.instanceName, // Add named instance support
+          ...(readOnlyIntent !== undefined && { readOnlyIntent }),
         },
       };
 

@@ -282,6 +282,15 @@ function getRawDSNQueryParam(dsn: string, key: string): string | null {
   if (key === "sslmode" && dsn.startsWith("sqlserver://")) {
     return new URLSearchParams(dsn.substring(queryStart + 1)).get(key);
   }
+  // SQL Server's applicationIntent key is also matched case-insensitively.
+  if (key === "applicationIntent" && dsn.startsWith("sqlserver://")) {
+    for (const [rawKey, value] of new URLSearchParams(dsn.substring(queryStart + 1))) {
+      if (rawKey.toLowerCase() === "applicationintent") {
+        return value;
+      }
+    }
+    return null;
+  }
   for (const pair of dsn.substring(queryStart + 1).split("&")) {
     if (pair === "") {
       continue;
@@ -344,7 +353,7 @@ function validateReadableFile(
  *
  * A DSN already encodes the connection identity (type/host/port/database/user/
  * password) and may carry query parameters (sslmode/sslrootcert/sslcert/sslkey plus the SQL
- * Server instanceName/authentication/domain). When the user also sets one of
+ * Server instanceName/authentication/domain/applicationIntent). When the user also sets one of
  * those as a standalone field with a different value, the DSN wins at connection
  * time (buildDSNFromSource returns the DSN), so the field would be silently
  * ignored — we fail fast here instead.
@@ -469,6 +478,16 @@ function validateDSNFieldConflicts(source: SourceConfig, configPath: string): vo
   const dsnDomain = getRawDSNQueryParam(source.dsn!, "domain");
   if (source.domain && dsnDomain !== null && dsnDomain !== source.domain) {
     conflict("domain", source.domain, dsnDomain);
+  }
+
+  // Case-insensitive, like the SQL Server DSN parser.
+  const dsnApplicationIntent = getRawDSNQueryParam(source.dsn!, "applicationIntent");
+  if (
+    source.applicationIntent &&
+    dsnApplicationIntent !== null &&
+    dsnApplicationIntent.toLowerCase() !== String(source.applicationIntent).toLowerCase()
+  ) {
+    conflict("applicationIntent", source.applicationIntent, dsnApplicationIntent);
   }
 
   // A repeated wallet parameter is ambiguous: this loader reads the first
@@ -698,7 +717,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Reject fields that contradict the DSN. A DSN already encodes the connection
   // identity (type/host/port/database/user/password) and may carry query params
-  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain). When the same value
+  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain/applicationIntent). When the same value
   // is also set as a standalone field with a different value, the field is
   // silently ignored at connection time, so we fail fast instead.
   if (source.dsn) {
@@ -800,6 +819,24 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has domain but authentication is set to '${source.authentication}'. ` +
           `Domain is only valid with authentication = "ntlm".`
+      );
+    }
+  }
+
+  // Validate applicationIntent field
+  if (source.applicationIntent !== undefined) {
+    if (source.type !== "sqlserver") {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has applicationIntent but it is only supported for SQL Server.`
+      );
+    }
+    if (
+      typeof source.applicationIntent !== "string" ||
+      !["readonly", "readwrite"].includes(source.applicationIntent.toLowerCase())
+    ) {
+      throw new Error(
+        `Configuration file ${configPath}: source '${source.id}' has invalid applicationIntent '${source.applicationIntent}'. ` +
+          `Valid values: ReadOnly, ReadWrite`
       );
     }
   }
@@ -1203,6 +1240,9 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
     if (source.domain && !hasParam("domain")) {
       additions.push(`domain=${encodeURIComponent(source.domain)}`);
     }
+    if (source.applicationIntent && !hasParam("applicationIntent")) {
+      additions.push(`applicationIntent=${encodeURIComponent(source.applicationIntent)}`);
+    }
   }
 
   if (source.sslmode && !hasParam("sslmode")) {
@@ -1282,7 +1322,7 @@ function oracleWalletParams(source: SourceConfig): Array<{ key: string; param: s
  */
 export function buildDSNFromSource(source: SourceConfig): string {
   // If DSN is already provided, use it — but merge in dual-home fields
-  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain) so they actually
+  // (sslmode/sslrootcert/sslcert/sslkey/instanceName/authentication/domain/applicationIntent) so they actually
   // affect the connection. Conflicts between the DSN query string and these
   // fields are rejected at validation time, so any param already present in the
   // DSN is guaranteed to match.
@@ -1357,6 +1397,9 @@ export function buildDSNFromSource(source: SourceConfig): string {
     }
     if (source.domain) {
       queryParams.push(`domain=${encodeURIComponent(source.domain)}`);
+    }
+    if (source.applicationIntent) {
+      queryParams.push(`applicationIntent=${encodeURIComponent(source.applicationIntent)}`);
     }
   }
 

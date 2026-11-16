@@ -430,6 +430,7 @@ pool_max_connections = ${value}
         ['sslcert/sslkey', 'mysql', 'sslmode = "require"\nsslcert = "/etc/ssl/client.crt"\nsslkey = "/etc/ssl/client.key"', 'sslcert/sslkey but they are only supported for PostgreSQL'],
         ['authentication', 'postgres', 'authentication = "ntlm"', 'authentication but it is only supported for SQL Server'],
         ['domain', 'postgres', 'domain = "MYDOMAIN"', 'domain but it is only supported for SQL Server'],
+        ['applicationIntent', 'mysql', 'applicationIntent = "ReadOnly"', 'applicationIntent but it is only supported for SQL Server'],
         ['aws_iam_auth', 'sqlserver', 'aws_iam_auth = true\naws_region = "eu-west-1"', 'only supported for postgres, mysql, and mariadb'],
         ['pool_max_connections', 'mariadb', 'pool_max_connections = 5', "'pool_max_connections' but it is only supported for PostgreSQL and MySQL"],
         ['search_path', 'mysql', 'search_path = "myschema"', "'search_path' but it is only supported for PostgreSQL"],
@@ -627,6 +628,10 @@ ${body.inline}
         ['type = "sqlite" against a non-SQLite DSN', 'type = "sqlite"\ndsn = "postgres://user:pass@localhost:5432/db"', 'conflicting type'],
         ['type = "postgres" against a SQLite DSN', 'type = "postgres"\ndsn = "sqlite:///path/to/db.sqlite"', 'conflicting type'],
         ['instanceName', 'dsn = "sqlserver://sa:pass@localhost:1433/db?instanceName=ENV1"\ninstanceName = "ENV2"', 'conflicting instanceName'],
+        ['applicationIntent', 'dsn = "sqlserver://sa:pass@localhost:1433/db?applicationIntent=ReadWrite"\napplicationIntent = "ReadOnly"', 'conflicting applicationIntent'],
+        // The SQL Server parser decodes query keys, so an encoded key must still count as present
+        ['applicationIntent against an ADO.NET-cased DSN key', 'dsn = "sqlserver://sa:pass@localhost:1433/db?ApplicationIntent=ReadWrite"\napplicationIntent = "ReadOnly"', 'conflicting applicationIntent'],
+        ['applicationIntent against a percent-encoded DSN key', 'dsn = "sqlserver://sa:pass@localhost:1433/db?%61pplicationIntent=ReadWrite"\napplicationIntent = "ReadOnly"', 'conflicting applicationIntent'],
         ['sslcert', 'dsn = "postgres://user:pass@localhost:5432/db?sslmode=require&sslcert=%2Fother.crt&sslkey=%2Fclient.key"\nsslcert = "/client.crt"\nsslkey = "/client.key"', 'conflicting sslcert'],
       ])('should reject a %s field that conflicts with the DSN', (_label, body, message) => {
         expect(() => loadToml(`
@@ -1015,10 +1020,29 @@ authentication = "azure-active-directory-access-token"
         ['NTLM authentication without domain', 'authentication = "ntlm"', "'domain' is not specified"],
         ['domain without authentication', 'domain = "MYDOMAIN"', 'authentication is not set'],
         ['domain with non-ntlm authentication', 'authentication = "azure-active-directory-access-token"\ndomain = "MYDOMAIN"', 'Domain is only valid with authentication = "ntlm"'],
+        ['an unknown applicationIntent value', 'applicationIntent = "Secondary"', "invalid applicationIntent 'Secondary'"],
+        ['a non-string applicationIntent', 'applicationIntent = true', "invalid applicationIntent 'true'"],
       ])('should reject %s', (_label, extra, message) => {
         writeSource(extra, 'sqlserver');
 
         expect(() => loadTomlConfig()).toThrow(message);
+      });
+
+      it.each(['ReadOnly', 'readwrite'])('should accept applicationIntent = "%s"', (intent) => {
+        writeSource(`applicationIntent = "${intent}"`, 'sqlserver');
+
+        expect(loadTomlConfig()?.sources[0].applicationIntent).toBe(intent);
+      });
+
+      it('should accept applicationIntent matching the DSN case-insensitively', () => {
+        const result = loadToml(`
+[[sources]]
+id = "test_db"
+dsn = "sqlserver://user:pass@localhost:1433/testdb?applicationIntent=readonly"
+applicationIntent = "ReadOnly"
+`);
+
+        expect(buildDSNFromSource(result!.sources[0])).toBe('sqlserver://user:pass@localhost:1433/testdb?applicationIntent=readonly');
       });
 
       it('should accept authentication with SQL Server DSN (no explicit type)', () => {
@@ -1124,6 +1148,16 @@ aws_iam_auth = true
         'merge authentication and domain fields into a SQL Server DSN',
         { type: 'sqlserver', dsn: 'sqlserver://user:pass@localhost:1433/db', authentication: 'ntlm', domain: 'CORP' },
         'sqlserver://user:pass@localhost:1433/db?authentication=ntlm&domain=CORP',
+      ],
+      [
+        'merge applicationIntent field into a SQL Server DSN that lacks it',
+        { type: 'sqlserver', dsn: 'sqlserver://user:pass@localhost:1433/db?sslmode=require', applicationIntent: 'ReadOnly' },
+        'sqlserver://user:pass@localhost:1433/db?sslmode=require&applicationIntent=ReadOnly',
+      ],
+      [
+        'not duplicate applicationIntent when the DSN spells the key ApplicationIntent',
+        { type: 'sqlserver', dsn: 'sqlserver://user:pass@localhost:1433/db?ApplicationIntent=ReadOnly', applicationIntent: 'ReadOnly' },
+        'sqlserver://user:pass@localhost:1433/db?ApplicationIntent=ReadOnly',
       ],
       [
         'merge Oracle wallet fields into an Oracle DSN',
@@ -1251,12 +1285,13 @@ aws_iam_auth = true
         instanceName: 'PROD',
         authentication: 'ntlm',
         domain: 'CORP',
+        applicationIntent: 'ReadOnly',
         sslmode: 'require'
       };
 
       const dsn = buildDSNFromSource(source);
 
-      expect(dsn).toBe('sqlserver://jsmith:secret@sqlserver.corp.local:1433/appdb?instanceName=PROD&authentication=ntlm&domain=CORP&sslmode=require');
+      expect(dsn).toBe('sqlserver://jsmith:secret@sqlserver.corp.local:1433/appdb?instanceName=PROD&authentication=ntlm&domain=CORP&applicationIntent=ReadOnly&sslmode=require');
     });
 
     it('should build SQLite DSN from database path', () => {

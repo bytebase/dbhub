@@ -531,6 +531,42 @@ describe('DSN Parser - SQL Server SSL/TLS Configuration', () => {
   });
 });
 
+describe('DSN Parser - SQL Server applicationIntent', () => {
+  const parser = new SQLServerConnector().dsnParser;
+
+  it.each([
+    ['ReadOnly', true],
+    ['readonly', true],
+    ['ReadWrite', false],
+    ['READWRITE', false],
+  ])('should map applicationIntent=%s to readOnlyIntent=%s', async (intent, expected) => {
+    const config = await parser.parse(
+      `sqlserver://user:pass@mi.database.windows.net:1433/db?sslmode=verify-full&applicationIntent=${intent}`
+    );
+
+    expect(config.options?.readOnlyIntent).toBe(expected);
+    expect(config.options?.encrypt).toBe(true);
+  });
+
+  it.each(['ApplicationIntent', 'APPLICATIONINTENT'])('should accept the %s key spelling', async (key) => {
+    const config = await parser.parse(`sqlserver://user:pass@localhost:1433/db?${key}=ReadOnly`);
+
+    expect(config.options?.readOnlyIntent).toBe(true);
+  });
+
+  it('should leave readOnlyIntent unset when applicationIntent is absent', async () => {
+    const config = await parser.parse('sqlserver://user:pass@localhost:1433/db');
+
+    expect(config.options).not.toHaveProperty('readOnlyIntent');
+  });
+
+  it.each(['applicationIntent=', 'applicationIntent=Read-Only', 'applicationIntent=secondary', 'applicationIntent=ReadOnly&applicationIntent=ReadWrite', 'applicationIntent=ReadOnly&ApplicationIntent=ReadOnly'])('should reject %j', async (intent) => {
+    await expect(
+      parser.parse(`sqlserver://user:pass@localhost:1433/db?${intent}`)
+    ).rejects.toThrow(/Invalid applicationIntent/);
+  });
+});
+
 describe('DSN Parser - SQL Server NTLM Authentication', () => {
   const connector = new SQLServerConnector();
   const parser = connector.dsnParser;

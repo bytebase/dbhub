@@ -234,7 +234,7 @@ Sources define database connections. Each source represents a database that DBHu
   </Tabs>
 
   <Note>
-  **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `instanceName`, `authentication`, `domain` — may be set alongside a `dsn` and are applied when the DSN omits them.
+  **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `instanceName`, `authentication`, `domain`, `applicationIntent` — may be set alongside a `dsn` and are applied when the DSN omits them.
 
   If such a field is set to a value that **contradicts** the DSN (e.g. `dsn = "...?sslmode=disable"` together with `sslmode = "require"`, or a `host`/`user`/`database` that differs from the DSN), DBHub rejects the configuration at startup rather than silently ignoring the field. Set each value in only one place, or make the two values match.
 
@@ -578,6 +578,29 @@ Sources define database connections. Each source represents a database that DBHu
   authentication = "ntlm"
   domain = "CORP"
   ```
+</ParamField>
+
+### applicationIntent
+
+<ParamField path="applicationIntent" type="string">
+  Application intent sent at login: `ReadOnly` or `ReadWrite` (default), case-insensitive. `ReadOnly` routes the connection to a readable secondary: an Always On availability group secondary (through the listener), an Azure SQL Database read scale-out replica (Premium, Business Critical, or Hyperscale with at least one secondary replica), or an Azure SQL Managed Instance read-only replica (Business Critical).
+
+  **SQL Server only.**
+
+  ```toml
+  [[sources]]
+  id = "sqlmi_replica"
+  dsn = "sqlserver://user:pass@myinstance.abc123.database.windows.net:1433/mydb?sslmode=verify-full"
+  applicationIntent = "ReadOnly"
+  ```
+
+  <Tip>
+  Can also be set via DSN query parameter: `?applicationIntent=ReadOnly` (the key is case-insensitive, so `ApplicationIntent` works too). To check where you landed, run `SELECT DATABASEPROPERTYEX(DB_NAME(), 'Updateability')` — a replica returns `READ_ONLY`.
+  </Tip>
+
+  <Note>
+  Routing does not make the source read-only in DBHub. Combine it with `readonly = true` on the `execute_sql` tool if write attempts should be blocked before they reach the server.
+  </Note>
 </ParamField>
 
 ### search_path
@@ -1002,6 +1025,7 @@ default = 10
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |
+| `applicationIntent` | string | ❌ | SQL Server: `ReadOnly` or `ReadWrite` |
 | `search_path` | string | ❌ | PostgreSQL schema search path (comma-separated) |
 | `timezone` | string | ❌ | MySQL/MariaDB: `Z`, `local`, or offset like `+09:00` |
 | `charset` | string | ❌ | MySQL/MariaDB: connection character set (`utf8mb4`) |
