@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { createHealthCheckToolHandler } from "../health-check.js";
 import { ConnectorManager } from "../../connectors/manager.js";
 import type { Connector, ConnectorType, HealthCheckResult } from "../../connectors/interface.js";
+import { getDorisHealthCheck } from "../../connectors/doris-health-check.js";
 
 vi.mock("../../connectors/manager.js");
 
@@ -94,6 +95,76 @@ describe("health-check tool", () => {
     expect(result.isError).toBe(true);
     const parsed = parseToolResponse(result);
     expect(parsed.code).toBe("UNSUPPORTED");
+  });
+
+  it("serializes native Doris nodes and unsupported metrics using shared JSON rules", async () => {
+    const connector = createMockConnector("mysql", "doris");
+    mockGetCurrentConnector.mockReturnValue(connector);
+    connector.getHealthCheck = () =>
+      getDorisHealthCheck(async (sql) => {
+        if (sql === "SHOW FRONTENDS") return [{ Name: "fe", Alive: "false", SmallId: 42n }];
+        if (sql === "SHOW BACKENDS")
+          return [{ BackendId: 9007199254740993n, TotalCapacity: "1.000 B" }];
+        return [{ total: "3", active: "1", idle: "2", longest_active_query_seconds: null }];
+      });
+    const parsed = parseToolResponse(await createHealthCheckToolHandler("doris")({}, null));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toMatchObject({
+      source_id: "doris",
+      connections: {
+        total: 3,
+        active: 1,
+        idle: 2,
+        idle_in_transaction: null,
+        max_connections: null,
+        longest_idle_in_transaction_seconds: null,
+        longest_active_query_seconds: null,
+      },
+      nodes: {
+        frontends: [{ Name: "fe", Alive: "false", SmallId: 42 }],
+        backends: [{ BackendId: "9007199254740993", TotalCapacity: "1.000 B" }],
+      },
+    });
+    expect(parsed.data).not.toHaveProperty("buffer_cache");
+    expect(parsed.data.notes.join(" ")).toContain("visible sessions");
+  });
+
+  it.each([
+    ["PROCESSLIST", "connections"],
+    ["SHOW FRONTENDS", "frontends"],
+    ["SHOW BACKENDS", "backends"],
+  ])("returns the Doris section label when %s fails", async (statement, section) => {
+    const connector = createMockConnector("mysql", "doris");
+    mockGetCurrentConnector.mockReturnValue(connector);
+    connector.getHealthCheck = () =>
+      getDorisHealthCheck(async (sql) => {
+        if (sql.includes(statement)) throw new Error("query denied");
+        return [];
+      });
+    const parsed = parseToolResponse(await createHealthCheckToolHandler("doris")({}, null));
+    expect(parsed).toMatchObject({
+      success: false,
+      code: "EXECUTION_ERROR",
+      error: `Doris health check ${section} failed: query denied`,
+    });
+  });
+
+  it.each([
+    ["mysql", { code: "ECONNRESET" }, "SOURCE_UNREACHABLE"],
+    ["mysql", { code: "ER_ACCESS_DENIED_ERROR" }, "AUTH_FAILED"],
+    ["mariadb", { errno: 1045 }, "AUTH_FAILED"],
+    ["mysql", { code: "ECONNRESET", __dbhubSSHTunnelError: true }, "TUNNEL_FAILED"],
+  ] as const)("classifies original %s Doris failures with %j", async (type, fields, code) => {
+    const connector = createMockConnector(type, "doris");
+    mockGetCurrentConnector.mockReturnValue(connector);
+    vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ type } as any);
+    connector.getHealthCheck = () =>
+      getDorisHealthCheck(async (sql) => {
+        if (sql === "SHOW BACKENDS") throw Object.assign(new Error("diagnostic failed"), fields);
+        return [];
+      });
+    const parsed = parseToolResponse(await createHealthCheckToolHandler("doris")({}, null));
+    expect(parsed).toMatchObject({ success: false, code, details: { source_id: "doris" } });
   });
 
   it("returns EXECUTION_ERROR when the connector throws", async () => {

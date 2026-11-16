@@ -98,7 +98,8 @@ export interface HealthCheckConnections {
   total: number;
   active: number;
   idle: number;
-  idleInTransaction: number;
+  /** Null when idle-in-transaction diagnostics are not collected */
+  idleInTransaction: number | null;
   /** Sessions in Postgres's "idle in transaction (aborted)" state; omitted on engines with no equivalent concept */
   idleInTransactionAborted?: number;
   /** Configured connection ceiling, when the engine exposes one */
@@ -120,6 +121,14 @@ export interface HealthCheckBufferCache {
 export interface HealthCheckResult {
   connections?: HealthCheckConnections;
   bufferCache?: HealthCheckBufferCache;
+  /**
+   * Native Doris FE/BE rows; columns and driver value types are not a cross-version contract.
+   * Shared JSON serialization emits safe BigInt values as numbers and larger values as strings.
+   */
+  nodes?: {
+    frontends: Record<string, unknown>[];
+    backends: Record<string, unknown>[];
+  };
   /** Caveats about reduced visibility (e.g. a metric degraded because the connected user lacks a privilege) */
   notes?: string[];
 }

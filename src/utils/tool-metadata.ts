@@ -240,15 +240,15 @@ export function getExplainSqlMetadata(sourceId: string): ToolMetadata {
  * @returns Tool metadata with name, description, and Zod schema
  */
 export function getHealthCheckMetadata(sourceId: string): ToolMetadata {
-  const { dbType, isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
+  const { isSingleSource, name, title, userDescPrefix } = resolveBuiltinToolNaming(
     sourceId,
     "health_check",
     "Health Check"
   );
 
   const description = isSingleSource
-    ? `${userDescPrefix}Report connection pool and buffer cache health metrics for the ${dbType} database (read-only).`
-    : `${userDescPrefix}Report connection pool and buffer cache health metrics for the '${sourceId}' ${dbType} database (read-only).`;
+    ? `${userDescPrefix}Collect available connection and buffer-cache diagnostics, or connection and native FE/BE node diagnostics for Doris (read-only). Success means collection succeeded, not that the database or cluster is healthy.`
+    : `${userDescPrefix}Collect available connection and buffer-cache diagnostics for '${sourceId}', or connection and native FE/BE node diagnostics for Doris (read-only). Success means collection succeeded, not that the database or cluster is healthy.`;
 
   const annotations = {
     title,

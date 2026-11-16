@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
+import { DorisHealthCheckError } from "../connectors/doris-health-check.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import {
   getEffectiveSourceId,
@@ -51,7 +52,8 @@ export function createHealthCheckToolHandler(sourceId?: string) {
                   ? { idle_in_transaction_aborted: health.connections.idleInTransactionAborted }
                   : {}),
                 max_connections: health.connections.maxConnections,
-                longest_idle_in_transaction_seconds: health.connections.longestIdleInTransactionSeconds,
+                longest_idle_in_transaction_seconds:
+                  health.connections.longestIdleInTransactionSeconds,
                 longest_active_query_seconds: health.connections.longestActiveQuerySeconds,
               },
             }
@@ -65,19 +67,25 @@ export function createHealthCheckToolHandler(sourceId?: string) {
               },
             }
           : {}),
+        ...(health.nodes ? { nodes: health.nodes } : {}),
         ...(health.notes && health.notes.length > 0 ? { notes: health.notes } : {}),
       });
     } catch (error) {
       success = false;
       errorMessage = (error as Error).message;
-      const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
+      const classified = tryClassifyConnectionError(
+        error instanceof DorisHealthCheckError ? error.originalError : error,
+        sourceId,
+        effectiveSourceId
+      );
       if (classified) return classified;
       return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
     } finally {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "health_check" : `health_check_${effectiveSourceId}`,
+          toolName:
+            effectiveSourceId === "default" ? "health_check" : `health_check_${effectiveSourceId}`,
           sql: "",
         },
         startTime,

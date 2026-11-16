@@ -294,8 +294,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # name = "explain_sql"
 # source = "local_pg"
 
-# 'health_check' is opt-in only, like explain_sql. It reports operational
-# metrics (connection pool state, buffer cache hit ratio) for the source.
+# 'health_check' is opt-in only, like explain_sql. It collects available
+# connection and buffer-cache diagnostics for the source.
 # Currently implemented for PostgreSQL, MySQL, MariaDB, SQL Server, and
 # Oracle; enabling it on other database types returns an "unsupported" error
 # rather than partial data. On MySQL/MariaDB, idle-in-transaction detection
@@ -305,6 +305,21 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # Without the right grant, the tool still returns what it can and adds a
 # `notes` entry explaining the reduced visibility instead of failing
 # outright. Always read-only, no readonly/max_rows options of its own.
+# Doris via MySQL/MariaDB reuses connect-time @@version_comment detection;
+# no extra probes are added, and unavailable detection retains existing behavior.
+# Detected Doris returns visible PROCESSLIST counts and native SHOW FRONTENDS /
+# SHOW BACKENDS rows. Idle-in-transaction and max-connections metrics are null;
+# buffer_cache is omitted. Null or omitted metrics do not mean zero.
+# The counting query excludes its own session, but other pooled/concurrent
+# diagnostic sessions may appear; counts are not cluster totals. Concurrent
+# queries do not form a point-in-time snapshot. Any Doris query failure fails
+# the whole call with a connections/frontends/backends section label; existing
+# connection-error classification is retained and may replace the label.
+# Success means collection succeeded, not that the database or cluster is healthy.
+# Native node fields/types vary by version and driver, not a stable schema.
+# Shared JSON rules emit safe BigInt values as numbers and larger ones as strings.
+# Cloud Mode disk capacity may be placeholder values; empty node arrays do not
+# establish health.
 # [[tools]]
 # name = "health_check"
 # source = "local_pg"

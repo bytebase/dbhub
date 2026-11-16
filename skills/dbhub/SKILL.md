@@ -16,13 +16,13 @@ DBHub provides two MCP tools by default, plus opt-in ones:
 | `search_objects` | Explore database structure — schemas, tables, columns, indexes, procedures, functions |
 | `execute_sql` | Run SQL statements against the database |
 | `explain_sql` (opt-in) | Show a query's execution plan without running it — only present if the source's config enables it |
-| `health_check` (opt-in) | Report connection pool state and buffer cache hit ratio — only present if the source's config enables it; PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle only |
+| `health_check` (opt-in) | Collect available connection and buffer-cache diagnostics for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle; automatically detected Doris sources instead return visible connection statistics and native FE/BE node diagnostics. Only available when enabled in the source's tool configuration. Success means collection succeeded, not that the database or cluster is healthy. |
 
 If multiple databases are configured, DBHub registers separate tools for each source (for example, `search_objects_prod_pg`, `execute_sql_staging_mysql`). Select the desired database by calling the correspondingly named tool.
 
 If `explain_sql` is available (check the tool list), prefer it over guessing whether a query will be efficient — it's always safe to call, even against a write-enabled or read-only source, since it never executes the statement.
 
-If `health_check` is available and a query seems slow or connections seem exhausted, call it before speculating — it reports live connection pool and cache-hit numbers instead of guessing at the cause.
+If `health_check` is available and a query seems slow or connections seem exhausted, collect its diagnostics before speculating about the cause. Automatically detected Doris through MySQL/MariaDB returns visible connection statistics and native FE/BE rows; unsupported connection metrics are null and buffer-cache diagnostics are omitted, which does not mean zero. Empty node arrays do not establish health, and Cloud Mode disk-capacity values may be placeholders. Concurrent diagnostics are not a point-in-time snapshot. Use the source-specific health-check tool in multi-source mode.
 
 ## The Explore-Then-Query Workflow
 

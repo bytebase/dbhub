@@ -12,6 +12,8 @@ import {
   ConnectorConfig,
   HealthCheckResult,
 } from "../interface.js";
+import { getDorisHealthCheck } from "../doris-health-check.js";
+import { isDorisVersionComment } from "../../utils/server-flavor.js";
 import { getMySQLFamilyHealthCheck } from "../mysql-family-health-check.js";
 import * as introspection from "../mysql-family-introspection.js";
 import type { MySQLFamilyQuery } from "../mysql-family-introspection.js";
@@ -165,6 +167,7 @@ export class MariaDBConnector implements Connector {
   // unless tidb_enable_noop_functions is on; Apache Doris has no transactional
   // backstop at all). Detected once at connect time.
   private readOnlyBackstop: ReadOnlyBackstop = { kind: "session", variable: "transaction_read_only" };
+  private isDoris = false;
 
   getId(): string {
     return this.sourceId;
@@ -175,6 +178,7 @@ export class MariaDBConnector implements Connector {
   }
 
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
+    this.isDoris = false;
     try {
       const connectionConfig = await this.dsnParser.parse(dsn, config);
       this.clientQueryTimeoutMs =
@@ -200,14 +204,14 @@ export class MariaDBConnector implements Connector {
 
       // Test the connection and detect the server flavor in the same round trip.
       const rows = await this.pool.query("SELECT VERSION() AS version");
-      this.readOnlyBackstop = detectReadOnlyBackstop(
-        rows?.[0]?.version,
-        await this.probeVersionComment()
-      );
+      const versionComment = await this.probeVersionComment();
+      this.isDoris = isDorisVersionComment(versionComment);
+      this.readOnlyBackstop = detectReadOnlyBackstop(rows?.[0]?.version, versionComment);
       if (this.readOnlyBackstop.kind === "none") {
         console.error(noBackstopWarning("MariaDB", this.sourceId));
       }
     } catch (err) {
+      this.isDoris = false;
       // Tear down the pool if it was created before the failure, otherwise it
       // strands sockets and keeps the event loop alive (see closeQuietly).
       if (this.pool) {
@@ -235,6 +239,7 @@ export class MariaDBConnector implements Connector {
   }
 
   async disconnect(): Promise<void> {
+    this.isDoris = false;
     if (this.pool) {
       await this.pool.end();
       this.pool = null;
@@ -285,7 +290,8 @@ export class MariaDBConnector implements Connector {
   }
 
   async getHealthCheck(): Promise<HealthCheckResult> {
-    return getMySQLFamilyHealthCheck(this.requireQuery());
+    const query = this.requireQuery();
+    return this.isDoris ? getDorisHealthCheck(query) : getMySQLFamilyHealthCheck(query);
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
