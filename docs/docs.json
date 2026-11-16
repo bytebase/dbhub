@@ -6,9 +6,9 @@
   },
   "name": "DBHub, Minimal Database MCP Server",
   "colors": {
-    "primary": "#335DFF",
-    "light": "#E8ECFF",
-    "dark": "#0A1633"
+    "primary": "#323236",
+    "light": "#FFFFFF",
+    "dark": "#323236"
   },
   "favicon": "/favicon.svg",
   "navigation": {

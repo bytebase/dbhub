@@ -1,5 +1,7 @@
 # DBHub Documentation
 
+See the [branding guide](../BRANDING.md) for the Zinc palette, logo variants, and asset update workflow.
+
 Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview documentation locally:
 
 ```bash

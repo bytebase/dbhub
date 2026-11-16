@@ -78,13 +78,37 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         '&': {
           fontSize: '14px',
           fontFamily: 'ui-monospace, monospace',
+          color: 'var(--foreground)',
+          backgroundColor: 'var(--background)',
         },
         '.cm-content': {
           padding: '12px',
           minHeight: '120px',
         },
-        '.cm-focused': {
-          outline: 'none',
+        '&.cm-focused': {
+          outline: '2px solid var(--ring)',
+          outlineOffset: '-2px',
+        },
+        '.cm-gutters': {
+          backgroundColor: 'var(--muted)',
+          color: 'var(--muted-foreground)',
+          borderColor: 'var(--border)',
+        },
+        '.cm-activeLine': {
+          backgroundColor: 'var(--muted)',
+        },
+        '.cm-activeLineGutter': {
+          backgroundColor: 'var(--accent)',
+          color: 'var(--accent-foreground)',
+        },
+        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+          backgroundColor: 'var(--accent)',
+        },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeftColor: 'var(--foreground)',
+        },
+        '.cm-placeholder': {
+          color: 'var(--muted-foreground)',
         },
         '.cm-scroller': {
           overflow: 'auto',

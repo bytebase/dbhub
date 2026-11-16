@@ -85,7 +85,7 @@ DBHub implements MCP tools for database operations:
 
 DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) for interacting with your database tools. It provides a visual way to execute queries, run custom tools, and view request traces without requiring an MCP client.
 
-![workbench](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/workbench/workbench.webp)
+![DBHub Workbench showing connection details and available tools](docs/images/workbench/workbench.webp)
 
 ## Installation
 
@@ -117,6 +117,8 @@ pnpm build && pnpm start --transport stdio --dsn "postgres://user:password@local
 ```
 
 See [Testing](.claude/skills/testing/SKILL.md) and [Debug](https://dbhub.ai/config/debug).
+
+See the [branding guide](BRANDING.md) for logo assets, the Zinc color theme, and the asset sync workflow.
 
 ## Contributors
 
