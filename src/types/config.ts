@@ -57,6 +57,7 @@ export interface ConnectionParams {
   // SQL Server authentication options
   authentication?: "ntlm" | "azure-active-directory-access-token";
   domain?: string; // Required for NTLM authentication
+  applicationIntent?: string; // SQL Server only: "ReadOnly" or "ReadWrite", case-insensitive; ReadOnly routes to a readable secondary
 }
 
 /**

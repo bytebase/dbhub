@@ -262,6 +262,7 @@ This page covers command-line flags and environment variables. For TOML configur
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
   | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
+  | `applicationIntent` | SQL Server | `ReadOnly` routes to a readable secondary (Always On AG, Azure SQL Database read scale-out, Managed Instance Business Critical); `ReadWrite` is the default. Key and value are case-insensitive | `?applicationIntent=ReadOnly` |
   | `sid` | Oracle | Connect by SID instead of service name | `?sid=ORCL` |
   | `wallet_location` | Oracle | Directory containing the PEM wallet (`ewallet.pem`) for mutual TLS (requires `require` or `verify-full`; `~/` is expanded) | `?wallet_location=~%2Fwallets%2Fadb` |
   | `wallet_password` | Oracle | Password of an encrypted `ewallet.pem` (requires `wallet_location`; masked in logs) | `?wallet_password=...` |
