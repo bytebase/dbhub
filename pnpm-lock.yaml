@@ -139,12 +139,18 @@ importers:
       '@codemirror/lang-sql':
         specifier: ^6.10.0
         version: 6.10.0
+      '@codemirror/language':
+        specifier: ^6.12.1
+        version: 6.12.1
       '@codemirror/state':
         specifier: ^6.5.3
         version: 6.5.3
       '@codemirror/view':
         specifier: ^6.39.5
         version: 6.39.5
+      '@lezer/highlight':
+        specifier: ^1.2.3
+        version: 1.2.3
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.1.18(vite@6.4.1(@types/node@22.15.31)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3)(yaml@2.8.0))

@@ -13,7 +13,7 @@ export default function Layout({ sources, isLoading }: LayoutProps) {
   const showSidebar = location.pathname.startsWith('/source/');
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-canvas">
       <Gutter sources={sources} />
       {showSidebar && <Sidebar sources={sources} isLoading={isLoading} />}
       <main className="flex-1 overflow-auto" aria-label="Main content">

@@ -23,7 +23,7 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
             className={cn(
               'w-full rounded-l-lg p-2 mt-1 flex items-center transition-colors',
               expanded ? 'gap-3 justify-start' : 'flex-col justify-center',
-              isActive && 'bg-accent shadow'
+              isActive && 'bg-selection shadow-xs'
             )}
           >
             <img

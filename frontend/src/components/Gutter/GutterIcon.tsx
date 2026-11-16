@@ -19,7 +19,7 @@ export default function GutterIcon({ icon, tooltip, to, href, expanded }: Gutter
       className={cn(
         'w-full h-10 rounded-l-lg p-2 flex items-center transition-colors',
         expanded ? 'justify-start gap-3' : 'justify-center',
-        isActive && 'bg-accent shadow'
+        isActive && 'bg-selection shadow-xs'
       )}
     >
       {icon}

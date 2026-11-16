@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -14,7 +14,63 @@
   }
 }
 
+/* Foundations extend Tailwind so existing utilities use the same scale. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --spacing: 0.25rem;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.25;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 1.2;
+  --text-page: 1.5rem;
+  --text-page--line-height: 1.25;
+  --text-page--letter-spacing: -0.025em;
+  --text-page--font-weight: 600;
+
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 @theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --shadow-xs: var(--elevation-control);
+  --shadow-sm: var(--elevation-raised);
+  --shadow-md: var(--elevation-floating);
+  --shadow-lg: var(--elevation-floating);
+  --color-canvas: var(--canvas);
+  --color-border-subtle: var(--border-subtle);
+  --color-selection: var(--selection);
+  --color-selection-foreground: var(--selection-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-disabled: var(--disabled);
+  --color-disabled-foreground: var(--disabled-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-accent: var(--selection);
+  --color-sidebar-accent-foreground: var(--selection-foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-ring: var(--ring);
   --animate-skeleton: skeleton 2s -1s infinite linear;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
@@ -49,63 +105,104 @@
 }
 
 :root {
-  /* Zinc from the logo pack (#323236), rounded to OKLCH. */
+  /* Brand artwork stays exact; UI roles use the supporting Zinc ramp. */
   --brand-zinc: oklch(0.319 0.007 286);
   --brand-white: oklch(1 0 0);
   --radius: 0.5rem;
-  --accent: var(--color-zinc-200);
-  --accent-foreground: var(--brand-zinc);
+
+  /* Surfaces: canvas → working surface → floating surface. */
+  --canvas: var(--color-zinc-50);
   --background: var(--brand-white);
-  --border: --alpha(var(--brand-zinc) / 12%);
   --card: var(--brand-white);
-  --card-foreground: var(--brand-zinc);
-  --destructive: var(--color-red-500);
-  --destructive-foreground: var(--color-red-700);
-  --foreground: var(--brand-zinc);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-700);
-  --input: --alpha(var(--brand-zinc) / 12%);
-  --muted: var(--color-zinc-100);
-  --muted-foreground: color-mix(in oklch, var(--color-zinc-500) 80%, var(--brand-zinc));
   --popover: var(--brand-white);
-  --popover-foreground: var(--brand-zinc);
+  --sidebar: var(--color-zinc-100);
+  --muted: var(--color-zinc-50);
+  --accent: var(--color-zinc-100);
+  --secondary: var(--color-zinc-100);
+  --selection: var(--color-zinc-200);
+
+  --foreground: var(--brand-zinc);
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --accent-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --selection-foreground: var(--foreground);
+  --muted-foreground: oklch(0.48 0.012 286);
+
+  /* Input edges and focus indicators are stronger than layout dividers. */
+  --border: oklch(0 0 0 / 0.08);
+  --border-subtle: oklch(0 0 0 / 0.05);
+  --input: oklch(0.65 0.01 286);
+  --ring: var(--color-zinc-600);
+
   --primary: var(--brand-zinc);
   --primary-foreground: var(--brand-white);
-  --ring: var(--color-zinc-500);
-  --secondary: var(--color-zinc-100);
-  --secondary-foreground: var(--brand-zinc);
+  --primary-hover: color-mix(in oklch, var(--primary) 90%, oklch(0 0 0));
+  --primary-active: color-mix(in oklch, var(--primary) 80%, oklch(0 0 0));
+  --disabled: var(--color-zinc-100);
+  --disabled-foreground: var(--color-zinc-500);
+
+  /* Status foregrounds are for text; the base colors are for fills. */
+  --destructive: var(--color-red-500);
+  --destructive-foreground: var(--color-red-700);
+  --info: var(--color-blue-500);
+  --info-foreground: var(--color-blue-700);
   --success: var(--color-emerald-500);
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
+
+  --syntax-keyword: oklch(0.46 0.12 300);
+  --syntax-string: oklch(0.49 0.1 165.612);
+  --syntax-number: var(--color-blue-700);
+
+  --elevation-control: 0 1px 2px oklch(0 0 0 / 0.04);
+  --elevation-raised:
+    0 0 0 1px oklch(0 0 0 / 0.05),
+    0 1px 3px oklch(0 0 0 / 0.04),
+    0 4px 10px -4px oklch(0 0 0 / 0.05);
+  --elevation-floating:
+    0 0 0 1px oklch(0 0 0 / 0.06),
+    0 4px 8px -2px oklch(0 0 0 / 0.06),
+    0 12px 24px -6px oklch(0 0 0 / 0.08);
+  color-scheme: light;
 }
 
 .dark {
-  --accent: var(--brand-zinc);
-  --accent-foreground: var(--color-zinc-100);
-  --background: var(--color-zinc-950);
-  --border: var(--color-zinc-700);
+  --canvas: var(--color-zinc-950);
+  --background: var(--color-zinc-900);
   --card: var(--color-zinc-900);
-  --card-foreground: var(--color-zinc-100);
-  --destructive: var(--color-red-500);
-  --destructive-foreground: var(--color-red-400);
+  --popover: var(--color-zinc-800);
+  --sidebar: var(--color-zinc-900);
+  --muted: var(--color-zinc-800);
+  --accent: var(--color-zinc-800);
+  --secondary: var(--color-zinc-800);
+  --selection: var(--brand-zinc);
+
   --foreground: var(--color-zinc-100);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-400);
-  --input: var(--color-zinc-700);
-  --muted: var(--color-zinc-900);
   --muted-foreground: var(--color-zinc-400);
-  --popover: var(--brand-zinc);
-  --popover-foreground: var(--color-zinc-100);
+  --border: var(--color-zinc-800);
+  --border-subtle: oklch(0.25 0.006 286);
+  --input: oklch(0.56 0.012 286);
+  --ring: var(--color-zinc-400);
   --primary: var(--brand-white);
   --primary-foreground: var(--brand-zinc);
-  --ring: var(--color-zinc-400);
-  --secondary: var(--brand-zinc);
-  --secondary-foreground: var(--color-zinc-100);
-  --success: var(--color-emerald-500);
+  --disabled: var(--color-zinc-800);
+  --disabled-foreground: var(--color-zinc-400);
+
+  --destructive-foreground: var(--color-red-400);
+  --info-foreground: var(--color-blue-400);
   --success-foreground: var(--color-emerald-400);
-  --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-400);
+
+  --syntax-keyword: oklch(0.78 0.1 300);
+  --syntax-string: oklch(0.765 0.164 163.223);
+  --syntax-number: oklch(0.809 0.098 251.813);
+
+  --elevation-control: 0 0 0 1px oklch(1 0 0 / 0.06);
+  --elevation-raised: 0 0 0 1px oklch(1 0 0 / 0.08);
+  --elevation-floating: 0 0 0 1px oklch(1 0 0 / 0.1);
+  color-scheme: dark;
 }
 
 @layer base {
@@ -113,6 +210,17 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-canvas text-foreground antialiased;
+    font-synthesis: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: var(--selection);
+    color: var(--selection-foreground);
   }
 }

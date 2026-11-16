@@ -130,7 +130,7 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
           aria-label="Filter table results"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="text-sm px-3 py-1 border border-border rounded bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
+          className="text-base sm:text-sm px-3 py-1 border border-input rounded bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
         />
         <div className="text-sm text-muted-foreground">
           {searchTerm.trim() && filteredRows.length !== result.rowCount

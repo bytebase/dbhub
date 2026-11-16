@@ -2,8 +2,18 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { EditorState, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as placeholderExt } from '@codemirror/view';
 import { sql } from '@codemirror/lang-sql';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { defaultKeymap } from '@codemirror/commands';
 import { basicSetup } from 'codemirror';
+
+const sqlHighlightStyle = HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--syntax-keyword)' },
+  { tag: tags.string, color: 'var(--syntax-string)' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'var(--syntax-number)' },
+  { tag: tags.comment, color: 'var(--muted-foreground)' },
+  { tag: tags.invalid, color: 'var(--destructive-foreground)' },
+]);
 
 export interface SqlEditorHandle {
   getSelectedSql: () => string;
@@ -71,13 +81,14 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
     const extensions = [
       basicSetup,
       sql(),
+      syntaxHighlighting(sqlHighlightStyle),
       keymap.of(defaultKeymap),
       placeholderExt(placeholder),
       runShortcutKeymap, // Add at the end with highest precedence
       EditorView.theme({
         '&': {
-          fontSize: '14px',
-          fontFamily: 'ui-monospace, monospace',
+          fontSize: 'var(--text-sm)',
+          fontFamily: 'var(--font-mono)',
           color: 'var(--foreground)',
           backgroundColor: 'var(--background)',
         },
@@ -102,7 +113,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
           color: 'var(--accent-foreground)',
         },
         '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
-          backgroundColor: 'var(--accent)',
+          backgroundColor: 'var(--selection)',
         },
         '.cm-cursor, .cm-dropCursor': {
           borderLeftColor: 'var(--foreground)',
@@ -167,7 +178,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   return (
     <div
       ref={containerRef}
-      className="border border-border rounded-lg bg-background overflow-hidden"
+      className="border border-input rounded-lg bg-background overflow-hidden"
     />
   );
 });

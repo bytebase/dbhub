@@ -15,7 +15,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
 
   return (
     <aside
-      className="w-[200px] sm:w-[220px] md:w-[240px] lg:w-[280px] border-r border-border bg-muted flex flex-col"
+      className="w-[200px] sm:w-[220px] md:w-[240px] lg:w-[280px] border-r border-border bg-sidebar flex flex-col"
       aria-label="Data sources sidebar"
     >
       <Logo />
@@ -31,8 +31,8 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               className={cn(
                 'flex items-center gap-2 px-2 py-2 text-sm font-medium transition-colors rounded-md',
                 toolName
-                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                  : 'bg-accent text-accent-foreground'
+                  ? 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  : 'bg-selection text-selection-foreground'
               )}
             >
               <span className="truncate">{currentSource.id}</span>
@@ -47,8 +47,8 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                     className={cn(
                       'flex items-center gap-2 px-4 py-2 text-sm transition-colors rounded-md',
                       toolName === tool.name
-                        ? 'bg-accent text-accent-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                        ? 'bg-selection text-selection-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
                     <span className="truncate font-mono text-xs">{tool.name}</span>

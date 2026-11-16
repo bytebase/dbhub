@@ -324,7 +324,7 @@ export default function ToolDetailView() {
       <div className="container mx-auto px-8 py-12 max-w-4xl">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+            <h1 className="text-page text-foreground font-mono">{tool.name}</h1>
             {tool.readonly && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                 <LockIcon className="w-3 h-3" />
@@ -349,7 +349,7 @@ export default function ToolDetailView() {
         {/* Header */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground font-mono">{tool.name}</h1>
+            <h1 className="text-page text-foreground font-mono">{tool.name}</h1>
             {tool.readonly && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                 <LockIcon className="w-3 h-3" />

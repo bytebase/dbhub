@@ -59,7 +59,7 @@ export function RunButton({ onClick, disabled = false, loading = false }: RunBut
         <>
           <PlayIcon className="size-4" />
           Run
-          <span className="ml-2 text-xs text-muted-foreground">
+          <span className="ml-2 text-xs opacity-80">
             {shortcutKey}+Enter
           </span>
         </>

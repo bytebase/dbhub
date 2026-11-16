@@ -55,23 +55,90 @@ instead of adding raw colors to components:
 
 | Role | Light mode | Dark mode |
 | --- | --- | --- |
-| Background | White | Zinc 950 |
-| Card | White | Zinc 900 |
-| Popover | White | Brand Zinc |
+| Canvas | Zinc 50 | Zinc 950 |
+| Working background / card | White | Zinc 900 |
+| Popover | White | Zinc 800 |
+| Sidebar | Zinc 100 | Zinc 900 |
 | Foreground | Brand Zinc | Zinc 100 |
 | Primary / primary foreground | Brand Zinc / white | White / brand Zinc |
-| Muted surface | Zinc 100 | Zinc 900 |
-| Accent surface | Zinc 200 | Brand Zinc |
-| Secondary surface | Zinc 100 | Brand Zinc |
-| Muted text | Zinc 500 mixed 80% with brand Zinc | Zinc 400 |
-| Focus ring | Zinc 500 | Zinc 400 |
-| Border and input | Brand Zinc at 12% opacity | Zinc 700 |
+| Muted surface | Zinc 50 | Zinc 800 |
+| Hover and secondary surfaces | Zinc 100 | Zinc 800 |
+| Selected surface | Zinc 200 | Brand Zinc |
+| Muted text | `oklch(0.48 0.012 286)` | Zinc 400 |
+| Focus ring | Zinc 600 | Zinc 400 |
+| Divider | Black at 8% opacity | Zinc 800 |
+| Subtle divider | Black at 5% opacity | `oklch(0.25 0.006 286)` |
+| Input edge | `oklch(0.65 0.01 286)` | `oklch(0.56 0.012 286)` |
+| Disabled surface / text | Zinc 100 / Zinc 500 | Zinc 800 / Zinc 400 |
 
-Supporting Zinc shades come from Tailwind's existing OKLCH palette. Dark surfaces
-become lighter as they rise above the canvas. Use `bg-muted` for the sidebar and
-the matching light/dark logo variant. The workbench's `.dark` class controls the
-theme; the logo follows that class. Browser favicons follow the OS color scheme.
-The SQL editor uses the same surface, selection, cursor, and focus tokens.
+Supporting Zinc shades come from Tailwind's existing OKLCH palette. Use
+`bg-canvas` for the workspace, `bg-background` for an editable working surface,
+`bg-card` for contained content, and `bg-popover` for floating content. Dark
+surfaces become lighter as they rise above the canvas.
+
+Use `bg-sidebar` for navigation, `bg-accent` for hover, and `bg-selection` with
+`text-selection-foreground` for persistent selection. Hover and selection have
+separate tokens so changing one does not erase the other. Primary hover and
+pressed fills mix 90% and 80% of `--primary` with black in OKLCH; their labels
+continue to use `--primary-foreground`.
+
+Use `border-border` for layout separation, `border-border-subtle` for quiet row
+separators, `border-input` for control edges, and `ring-ring` for keyboard focus.
+Inputs and focus indicators have stronger contrast than decorative dividers.
+Use the disabled surface/text pair instead of fading the entire button. Disabled
+controls are exempt from normal text-contrast requirements; keep their labels
+readable and preserve the native disabled state.
+
+The workbench's `.dark` class controls the theme; logo variants follow that class.
+Browser favicons follow the OS color scheme. The SQL editor shares the input,
+surface, selection, cursor, focus, and monospace font tokens.
+Syntax tokens give keywords a restrained purple (`oklch(0.46 0.12 300)` in light
+mode, `oklch(0.78 0.1 300)` in dark mode), strings emerald, and numbers blue.
+Comments use muted text. Syntax accents reduce chroma where needed to stay
+inside sRGB; light-mode string text also lowers lightness to pass contrast on
+the selected surface. These editor accents stay readable against both the
+working surface and the active line; they do not replace the Zinc brand palette.
+
+### Type, spacing, radius, and elevation
+
+The workbench uses system sans-serif and monospace stacks without external font
+requests. Font smoothing is set once on the body; tabular numerals keep counts,
+timestamps, and timings stable. Use monospace for SQL, identifiers, and results.
+
+| Utility | Size / line height | Use |
+| --- | --- | --- |
+| `text-xs` | 12px / 1.5 | Compact badges and short metadata |
+| `text-caption` | 13px / 1.5 | Supporting captions |
+| `text-sm` | 14px / 1.5 | Dense controls, navigation, tables |
+| `text-base` | 16px / 1.5 | Descriptions and mobile input text |
+| `text-lg` | 18px / 1.4 | Small section titles |
+| `text-xl` | 20px / 1.3 | Section titles |
+| `text-2xl` | 24px / 1.25 | Large section titles |
+| `text-3xl` | 28px / 1.2 | Occasional display emphasis |
+| `text-page` | 24px / 1.25, weight 600, tracking −0.025em | Workbench page titles |
+
+Sizes are expressed in rem so browser font preferences still apply. Keep inputs
+at `text-base` below the `sm` breakpoint; use `sm:text-sm` for desktop density.
+Keep descriptions near 65 characters per line where a reading column is needed.
+
+Spacing uses Tailwind's 4px base (`--spacing: 0.25rem`): 4–8px within controls,
+12–16px between related controls, 24px between content groups, and 32–48px around
+page content. Use the existing spacing utilities rather than per-component pixel
+values. Do not change the root font size to make the interface denser.
+
+`--radius` is the 8px control radius. It drives `rounded-sm` (4px), `rounded-md`
+(6px), `rounded-lg` (8px), `rounded-xl` (12px), and `rounded-2xl` (16px).
+Use small radii for navigation, 8px for controls, and 12–16px for larger panels.
+When rounded surfaces nest closely, subtract the padding from the outer radius
+for the inner radius. Fully rounded badges keep `rounded-full`.
+
+`shadow-xs` uses the control elevation token; `shadow-sm` uses a three-layer
+raised shadow; `shadow-md` and `shadow-lg` use the floating shadow. Dark-mode
+elevations reduce to a quiet white ring. Keep actual borders on inputs and table
+dividers, and avoid stacking an elevation ring with a second heavy border.
+
+Default transitions are 150ms with an ease-out curve. Name the properties that
+change, such as background color and box shadow; do not use `transition-all`.
 
 Reserve red for destructive actions and errors, emerald for success, amber for
 warnings, and blue for informational states. These functional colors remain

@@ -69,7 +69,7 @@ export default function SourceDetailView() {
   return (
     <div className="container mx-auto px-8 py-12 max-w-4xl">
       <div className="space-y-6">
-        <h1 className="flex items-center gap-3 text-3xl font-bold text-foreground">
+        <h1 className="flex items-center gap-3 text-page text-foreground">
           <img
             src={DB_LOGOS[source.type]}
             alt={`${source.type} logo`}
