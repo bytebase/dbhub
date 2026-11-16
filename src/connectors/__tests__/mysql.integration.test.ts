@@ -603,6 +603,33 @@ describe('MySQL Connector Integration Tests', () => {
         await connector.disconnect();
       }
     }, 20_000);
+
+    it('should stop waiting for a free connection after connection_timeout', async () => {
+      const connector = new MySQLConnector();
+      try {
+        await connector.connect(mysqlTest.connectionString, undefined, {
+          poolMaxConnections: 1,
+          connectionTimeoutSeconds: 1,
+        });
+
+        const busy = connector.executeSQL('SELECT SLEEP(3)', {});
+        const waiting = await settle(connector.executeSQL('SELECT 1 AS ok', {}));
+
+        expect(waiting.error?.message).toBe(
+          'Timed out after 1000 ms waiting for a free connection from the pool'
+        );
+        expect(waiting.elapsedMs).toBeGreaterThanOrEqual(900);
+        expect(waiting.elapsedMs).toBeLessThan(2500);
+
+        // The abandoned request gets the connection once SLEEP(3) ends and
+        // hands it straight back, so the pool of one is still usable.
+        await busy;
+        const after = await connector.executeSQL('SELECT 1 AS ok', {});
+        expect(Number(after.resultSets[0].rows[0].ok)).toBe(1);
+      } finally {
+        await connector.disconnect();
+      }
+    }, 20_000);
   });
 
   describe('query_timeout', () => {
