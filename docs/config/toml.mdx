@@ -284,6 +284,8 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="connection_timeout" type="number">
   Connection timeout in seconds. The maximum time to wait when establishing a database connection.
 
+  On PostgreSQL and MySQL it also limits how long a query waits for a free connection when every connection in the pool is in use (see [`pool_max_connections`](#pool_max_connections)); the query then fails instead of waiting. Without it, the query waits until a connection is free.
+
   Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
 
   ```toml
@@ -342,6 +344,8 @@ Sources define database connections. Each source represents a database that DBHu
   ```
 
   When omitted, the driver default of 10 is unchanged. This limit applies per DBHub process and per source, so include every running process and source when budgeting database connections.
+
+  When every connection is in use, a new query waits for a free one, for at most [`connection_timeout`](#connection_timeout) if it is set.
 
   <Note>
   This option is not supported as a DSN query parameter.

@@ -194,6 +194,42 @@ export function applyOnEveryConnection(pool: mysql.Pool, statement: string): voi
 }
 
 /**
+ * Take a connection from the pool, giving up after `timeoutMs` when every
+ * connection is in use, as pg-pool does with connectionTimeoutMillis. mysql2
+ * has no limit of its own: a caller beyond connectionLimit waits in the pool's
+ * queue indefinitely. The request stays queued after a timeout, so the
+ * connection it is eventually handed goes straight back to the pool.
+ */
+export async function getConnectionWithin(
+  pool: mysql.Pool,
+  timeoutMs: number | undefined
+): Promise<mysql.PoolConnection> {
+  const pending = pool.getConnection();
+  if (timeoutMs === undefined) {
+    return pending;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  let timedOut = false;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(`Timed out after ${timeoutMs} ms waiting for a free connection from the pool`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([pending, timeout]);
+  } finally {
+    clearTimeout(timer);
+    if (timedOut) {
+      pending.then(
+        (conn) => conn.release(),
+        () => {}
+      );
+    }
+  }
+}
+
+/**
  * MySQL Connector Implementation
  */
 export class MySQLConnector implements Connector {
@@ -205,6 +241,8 @@ export class MySQLConnector implements Connector {
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
   private queryTimeoutMs?: number;
+  // connection_timeout also bounds the wait for a free pool connection
+  private connectionTimeoutMs?: number;
   // How the read-only backstop takes effect on this server (which session
   // variable to save/restore; TiDB rejects `START TRANSACTION READ ONLY`
   // unless tidb_enable_noop_functions is on; Apache Doris has no transactional
@@ -223,6 +261,10 @@ export class MySQLConnector implements Connector {
     try {
       const connectionOptions = await this.dsnParser.parse(dsn, config);
       this.pool = mysql.createPool(connectionOptions);
+      this.connectionTimeoutMs =
+        config?.connectionTimeoutSeconds !== undefined
+          ? config.connectionTimeoutSeconds * 1000
+          : undefined;
 
       if (config?.queryTimeoutSeconds !== undefined) {
         const queryTimeoutMs = Math.ceil(config.queryTimeoutSeconds * 1000);
@@ -371,7 +413,7 @@ export class MySQLConnector implements Connector {
 
     // Get a dedicated connection from the pool to ensure session consistency
     // This is critical for session-specific features like LAST_INSERT_ID()
-    const conn = await this.pool.getConnection();
+    const conn = await getConnectionWithin(this.pool, this.connectionTimeoutMs);
     // Captured up front, before a timeout can lead to conn.destroy() below.
     const threadId = conn.threadId;
     let isConnectionDiscarded = false;
