@@ -21,6 +21,7 @@ out/
 /dbhub.toml
 docs/plans/
 docs/testing/
+docs/superpowers
 .env
 .env.local
 .env.development.local
@@ -67,6 +68,7 @@ htmlcov/
 coverage/
 .nyc_output/
 *.tsbuildinfo
+.worktrees
 
 # OS files
 .DS_Store
