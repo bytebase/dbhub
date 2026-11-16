@@ -33,8 +33,8 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
             />
             <span className={cn(
               expanded
-                ? 'min-w-0 text-sm text-left leading-snug [overflow-wrap:anywhere]'
-                : 'text-[10px] w-full text-center mt-1 leading-tight break-words line-clamp-2',
+                ? 'min-w-0 text-sm text-start truncate'
+                : 'text-xs w-full text-center mt-1 truncate',
               isActive ? 'text-foreground' : 'text-muted-foreground'
             )}>
               {source.id}

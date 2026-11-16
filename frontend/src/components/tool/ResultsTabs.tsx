@@ -124,7 +124,7 @@ export function ResultsTabs({
               type="button"
               onClick={() => onTabSelect(tab.id)}
               className={cn(
-                'group flex items-center gap-1.5 px-3 py-1.5 text-sm whitespace-nowrap',
+                'group flex items-center gap-1.5 px-3 py-1.5 text-caption tabular-nums whitespace-nowrap',
                 'border-b-2 -mb-px transition-colors cursor-pointer',
                 tab.id === activeTabId
                   ? 'border-primary text-foreground'

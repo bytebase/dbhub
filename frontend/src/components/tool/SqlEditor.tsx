@@ -87,7 +87,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
       runShortcutKeymap, // Add at the end with highest precedence
       EditorView.theme({
         '&': {
-          fontSize: 'var(--text-sm)',
+          fontSize: 'inherit',
           fontFamily: 'var(--font-mono)',
           color: 'var(--foreground)',
           backgroundColor: 'var(--background)',
@@ -123,6 +123,8 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
         },
         '.cm-scroller': {
           overflow: 'auto',
+          fontFamily: 'inherit',
+          lineHeight: 'var(--text-code--line-height)',
         },
       }),
     ];
@@ -178,7 +180,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   return (
     <div
       ref={containerRef}
-      className="border border-input rounded-lg bg-background overflow-hidden"
+      className="border border-input rounded-lg bg-background overflow-hidden text-base sm:text-code"
     />
   );
 });

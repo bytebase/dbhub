@@ -76,7 +76,7 @@ function SqlTooltip({ sql, children }: { sql: string; children: React.ReactEleme
     <Tooltip>
       <TooltipTrigger render={children} />
       <TooltipPopup
-        className="whitespace-pre-wrap break-all max-w-md"
+        className="whitespace-pre-wrap [overflow-wrap:anywhere] max-w-md text-caption"
         sideOffset={5}
       >
         {sql}
@@ -90,7 +90,7 @@ function ErrorTooltip({ error, children }: { error: string; children: React.Reac
     <Tooltip>
       <TooltipTrigger render={children} />
       <TooltipPopup
-        className="whitespace-pre-wrap break-all max-w-md"
+        className="whitespace-pre-wrap [overflow-wrap:anywhere] max-w-md text-caption"
         sideOffset={5}
         side="top"
         align="end"
@@ -194,7 +194,7 @@ export default function RequestView() {
       <div className="space-y-6">
         <div>
           <h1 className="text-page text-foreground mb-2">Recent Requests</h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-body max-w-prose text-pretty">
             Up to 100 requests per source
           </p>
         </div>
@@ -204,7 +204,7 @@ export default function RequestView() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedSource(null)}
-                className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${
+                className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-full transition-colors ${
                   selectedSource === null
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -219,7 +219,7 @@ export default function RequestView() {
                   <button
                     key={sourceId}
                     onClick={() => setSelectedSource(sourceId)}
-                    className={`px-3 py-1 text-sm font-medium rounded-full transition-colors flex items-center gap-1.5 ${
+                    className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-full transition-colors flex items-center gap-1.5 ${
                       selectedSource === sourceId
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -241,19 +241,19 @@ export default function RequestView() {
               <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  <th className="px-4 py-3 text-start text-label text-muted-foreground whitespace-nowrap">
                     Time
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  <th className="px-4 py-3 text-start text-label text-muted-foreground whitespace-nowrap">
                     Tool
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider w-full">
+                  <th className="px-4 py-3 text-start text-label text-muted-foreground w-full">
                     SQL
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  <th className="px-4 py-3 text-start text-label text-muted-foreground whitespace-nowrap">
                     Result
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                  <th className="px-4 py-3 text-start text-label text-muted-foreground whitespace-nowrap">
                     Client
                   </th>
                 </tr>
@@ -261,13 +261,13 @@ export default function RequestView() {
               <tbody className="divide-y divide-border">
                 {filteredRequests.map((request) => (
                   <tr key={request.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-2 text-caption tabular-nums text-muted-foreground whitespace-nowrap">
                       {formatDate(request.timestamp)} {formatTime(request.timestamp)}
                     </td>
                     <td className="px-4 py-2 text-sm whitespace-nowrap">
                       <Link
                         to={`/source/${request.sourceId}`}
-                        className="text-primary hover:underline inline-flex items-center gap-1"
+                        className="font-mono text-caption text-primary hover:underline underline-offset-4 decoration-from-font inline-flex items-center gap-1"
                       >
                         {request.toolName}
                         {toolReadonly[request.toolName] && (
@@ -275,7 +275,7 @@ export default function RequestView() {
                         )}
                       </Link>
                     </td>
-                    <td className="px-4 py-2 text-sm font-mono text-foreground max-w-0">
+                    <td className="px-4 py-2 text-code font-mono text-foreground max-w-0">
                       <SqlTooltip sql={request.sql}>
                         <span className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help">
                           {request.sql}
@@ -285,10 +285,10 @@ export default function RequestView() {
                     <td className="px-4 py-2 text-sm">
                       <div className="flex items-center gap-2">
                         <StatusBadge success={request.success} error={request.error} />
-                        <span className="text-muted-foreground">{request.durationMs}ms</span>
+                        <span className="text-caption tabular-nums whitespace-nowrap text-muted-foreground">{request.durationMs}&nbsp;ms</span>
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    <td title={request.client} className="px-4 py-2 text-caption text-muted-foreground whitespace-nowrap">
                       {parseUserAgent(request.client)}
                     </td>
                   </tr>
@@ -301,7 +301,7 @@ export default function RequestView() {
 
         {requests.length === 0 && (
           <div className="bg-card border border-border rounded-lg p-12 text-center">
-            <p className="text-muted-foreground">
+            <p className="text-body text-muted-foreground max-w-prose mx-auto text-pretty">
               No requests have been made yet. Execute some SQL queries via the MCP endpoint to see them here.
             </p>
           </div>

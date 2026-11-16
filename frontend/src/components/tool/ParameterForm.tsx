@@ -18,7 +18,7 @@ export function ParameterForm({ parameters, values, onChange }: ParameterFormPro
     <div className="space-y-4">
       {parameters.map((param) => (
         <div key={param.name} className="space-y-1.5">
-          <label className="text-sm font-medium text-foreground">
+          <label className="text-label text-foreground [overflow-wrap:anywhere]">
             {param.name}
             {param.required ? (
               <span className="text-destructive ml-0.5">*</span>
@@ -32,7 +32,7 @@ export function ParameterForm({ parameters, values, onChange }: ParameterFormPro
             onChange={(value) => handleChange(param.name, value)}
           />
           {param.description && (
-            <p className="text-xs text-muted-foreground">{param.description}</p>
+            <p className="text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{param.description}</p>
           )}
         </div>
       ))}

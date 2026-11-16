@@ -76,6 +76,7 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
     count: filteredRows.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
+    measureElement: (element) => element.getBoundingClientRect().height,
     overscan: 10,
   });
 
@@ -123,7 +124,7 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
           placeholder="Filter results..."
@@ -132,7 +133,7 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
           onChange={(e) => setSearchTerm(e.target.value)}
           className="text-base sm:text-sm px-3 py-1 border border-input rounded bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
         />
-        <div className="text-sm text-muted-foreground">
+        <div className="text-caption tabular-nums whitespace-nowrap text-muted-foreground">
           {searchTerm.trim() && filteredRows.length !== result.rowCount
             ? `${filteredRows.length} of ${result.rowCount} row${result.rowCount !== 1 ? 's' : ''}`
             : `${result.rowCount} row${result.rowCount !== 1 ? 's' : ''}`}
@@ -146,7 +147,8 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
           {result.columns.map((col) => (
             <div
               key={col}
-              className="flex-1 min-w-[120px] px-3 py-2 text-sm font-medium text-foreground truncate"
+              title={col}
+              className="flex-1 min-w-[120px] px-3 py-2 text-label font-mono text-foreground truncate"
             >
               {col}
             </div>
@@ -170,19 +172,21 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
               return (
                 <div
                   key={virtualRow.index}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
                   className="flex absolute w-full border-b border-border/50 last:border-b-0"
                   style={{
-                    height: `${ROW_HEIGHT}px`,
+                    minHeight: `${ROW_HEIGHT}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <div className="w-16 px-3 py-2 text-sm text-muted-foreground flex-shrink-0">
+                  <div className="w-16 px-3 py-2 text-code tabular-nums text-muted-foreground flex-shrink-0">
                     {virtualRow.index + 1}
                   </div>
                   {row.map((cell, cellIndex) => (
                     <div
                       key={cellIndex}
-                      className="flex-1 min-w-[120px] px-3 py-2 text-sm text-foreground truncate font-mono"
+                      className="flex-1 min-w-[120px] px-3 py-2 text-code text-foreground truncate font-mono"
                       title={String(cell ?? '')}
                     >
                       {cell === null ? (
@@ -199,9 +203,9 @@ export function ResultsTable({ result, error, isLoading, executedSql, executionT
         </div>
       </div>
       {executedSql && executionTimeMs !== undefined && (
-        <div className="flex justify-between items-center text-sm text-muted-foreground">
-          <span>{executedSql}</span>
-          <span>Executed in {formatExecutionTime(executionTimeMs)}</span>
+        <div className="flex flex-wrap justify-between items-baseline gap-x-4 gap-y-1 text-caption text-muted-foreground">
+          <span className="min-w-0 flex-1 font-mono [overflow-wrap:anywhere]">{executedSql}</span>
+          <span className="tabular-nums whitespace-nowrap">Executed in {formatExecutionTime(executionTimeMs)}</span>
         </div>
       )}
     </div>

@@ -40,6 +40,16 @@
   --text-page--line-height: 1.25;
   --text-page--letter-spacing: -0.025em;
   --text-page--font-weight: 600;
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.4;
+  --text-section--font-weight: 600;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.5;
+  --text-label--font-weight: 500;
+  --text-code: 0.875rem;
+  --text-code--line-height: 1.6;
 
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -212,7 +222,6 @@
   body {
     @apply bg-canvas text-foreground antialiased;
     font-synthesis: none;
-    font-variant-numeric: tabular-nums;
   }
 
   h1, h2, h3 {

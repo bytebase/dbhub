@@ -35,7 +35,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                   : 'bg-selection text-selection-foreground'
               )}
             >
-              <span className="truncate">{currentSource.id}</span>
+              <span className="truncate" title={currentSource.id}>{currentSource.id}</span>
             </Link>
             <div className="flex-1 overflow-auto">
               {currentSource.tools
@@ -51,7 +51,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                         : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                     )}
                   >
-                    <span className="truncate font-mono text-xs">{tool.name}</span>
+                    <span className="truncate font-mono text-caption" title={tool.name}>{tool.name}</span>
                     {tool.readonly && (
                       <LockIcon className="w-3 h-3 ml-auto flex-shrink-0" />
                     )}

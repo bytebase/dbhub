@@ -102,8 +102,10 @@ working surface and the active line; they do not replace the Zinc brand palette.
 ### Type, spacing, radius, and elevation
 
 The workbench uses system sans-serif and monospace stacks without external font
-requests. Font smoothing is set once on the body; tabular numerals keep counts,
-timestamps, and timings stable. Use monospace for SQL, identifiers, and results.
+requests. Font smoothing is set once on the body. Apply `tabular-nums` to counts,
+timestamps, and timings; prose keeps the font's natural numerals. Use monospace
+for SQL, tool and parameter identifiers, and results. Keep normal tracking on
+monospace titles so identifiers retain their character spacing.
 
 | Utility | Size / line height | Use |
 | --- | --- | --- |
@@ -116,10 +118,27 @@ timestamps, and timings stable. Use monospace for SQL, identifiers, and results.
 | `text-2xl` | 24px / 1.25 | Large section titles |
 | `text-3xl` | 28px / 1.2 | Occasional display emphasis |
 | `text-page` | 24px / 1.25, weight 600, tracking −0.025em | Workbench page titles |
+| `text-section` | 18px / 1.4, weight 600 | Sections within a page |
+| `text-body` | 16px / 1.6 | Tool descriptions and explanatory copy |
+| `text-label` | 14px / 1.5, weight 500 | Field labels and table headings |
+| `text-code` | 14px / 1.6 | SQL and result values; pair with `font-mono` |
 
 Sizes are expressed in rem so browser font preferences still apply. Keep inputs
 at `text-base` below the `sm` breakpoint; use `sm:text-sm` for desktop density.
-Keep descriptions near 65 characters per line where a reading column is needed.
+Use `max-w-prose text-pretty` on descriptions to keep reading columns near 65
+characters. Page headings balance their lines; long identifiers and connection
+values may wrap anywhere instead of escaping their container. Badges and timings
+stay on one line.
+
+Use `text-caption` for helper text, timestamps, and compact tool navigation.
+Reserve 12px text for short badges, keyboard hints, and the collapsed source rail;
+do not reduce labels below that floor. Collapsed source names truncate on one line
+with a tooltip. Other truncated identifiers and column headings expose the full
+value through a title or detail view.
+
+CodeMirror inherits the monospace stack and uses the code line height, with 16px
+text below `sm` and 14px above it. Result rows measure their rendered height so
+larger text preferences do not clip values or overlap rows.
 
 Spacing uses Tailwind's 4px base (`--spacing: 0.25rem`): 4–8px within controls,
 12–16px between related controls, 24px between content groups, and 32–48px around

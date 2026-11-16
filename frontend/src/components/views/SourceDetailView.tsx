@@ -69,58 +69,58 @@ export default function SourceDetailView() {
   return (
     <div className="container mx-auto px-8 py-12 max-w-4xl">
       <div className="space-y-6">
-        <h1 className="flex items-center gap-3 text-page text-foreground">
+        <h1 className="flex items-start gap-3 text-page text-foreground">
           <img
             src={DB_LOGOS[source.type]}
             alt={`${source.type} logo`}
-            className="w-8 h-8"
+            className="w-8 h-8 shrink-0"
           />
-          {source.id}
+          <span className="min-w-0 [overflow-wrap:anywhere]">{source.id}</span>
         </h1>
 
         <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
+          <h2 className="text-section text-foreground mb-4">
             Connection Details
           </h2>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <dt className="text-sm font-medium text-muted-foreground">Database Type</dt>
-              <dd className="mt-1 text-sm text-foreground font-mono">{source.type}</dd>
+              <dt className="text-label text-muted-foreground">Database Type</dt>
+              <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.type}</dd>
             </div>
 
             {source.host && (
               <div>
-                <dt className="text-sm font-medium text-muted-foreground">Host</dt>
-                <dd className="mt-1 text-sm text-foreground font-mono">{source.host}</dd>
+                <dt className="text-label text-muted-foreground">Host</dt>
+                <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.host}</dd>
               </div>
             )}
 
             {source.port && (
               <div>
-                <dt className="text-sm font-medium text-muted-foreground">Port</dt>
-                <dd className="mt-1 text-sm text-foreground font-mono">{source.port}</dd>
+                <dt className="text-label text-muted-foreground">Port</dt>
+                <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.port}</dd>
               </div>
             )}
 
             {source.database && (
               <div>
-                <dt className="text-sm font-medium text-muted-foreground">Database</dt>
-                <dd className="mt-1 text-sm text-foreground font-mono">{source.database}</dd>
+                <dt className="text-label text-muted-foreground">Database</dt>
+                <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.database}</dd>
               </div>
             )}
 
             {source.user && (
               <div>
-                <dt className="text-sm font-medium text-muted-foreground">User</dt>
-                <dd className="mt-1 text-sm text-foreground font-mono">{source.user}</dd>
+                <dt className="text-label text-muted-foreground">User</dt>
+                <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.user}</dd>
               </div>
             )}
 
             <div>
-              <dt className="text-sm font-medium text-muted-foreground">Default Source</dt>
+              <dt className="text-label text-muted-foreground">Default Source</dt>
               <dd className="mt-1 text-sm text-foreground">
                 {source.is_default ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-primary/10 text-primary">
                     Yes
                   </span>
                 ) : (
@@ -134,14 +134,14 @@ export default function SourceDetailView() {
 
         {source.ssh_tunnel?.enabled && (
           <div className="bg-card border border-border rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-foreground mb-4">
+            <h2 className="text-section text-foreground mb-4">
               SSH Tunnel
             </h2>
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <dt className="text-sm font-medium text-muted-foreground">Status</dt>
+                <dt className="text-label text-muted-foreground">Status</dt>
                 <dd className="mt-1 text-sm text-foreground">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400">
                     Enabled
                   </span>
                 </dd>
@@ -149,8 +149,8 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_host && (
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">SSH Host</dt>
-                  <dd className="mt-1 text-sm text-foreground font-mono">
+                  <dt className="text-label text-muted-foreground">SSH Host</dt>
+                  <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_host}
                   </dd>
                 </div>
@@ -158,8 +158,8 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_port && (
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">SSH Port</dt>
-                  <dd className="mt-1 text-sm text-foreground font-mono">
+                  <dt className="text-label text-muted-foreground">SSH Port</dt>
+                  <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_port}
                   </dd>
                 </div>
@@ -167,8 +167,8 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_user && (
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">SSH User</dt>
-                  <dd className="mt-1 text-sm text-foreground font-mono">
+                  <dt className="text-label text-muted-foreground">SSH User</dt>
+                  <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_user}
                   </dd>
                 </div>
@@ -178,7 +178,7 @@ export default function SourceDetailView() {
         )}
 
         <div className="bg-card border border-border rounded-lg p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">
+          <h2 className="text-section text-foreground mb-4">
             Available Tools
           </h2>
           {source.tools.length > 0 ? (
@@ -190,20 +190,20 @@ export default function SourceDetailView() {
                   )}
                   <div className="bg-muted/30 rounded-lg p-4 space-y-3">
                     <div>
-                      <div className="flex items-baseline gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <div className="text-sm font-semibold text-foreground font-mono">
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <div className="text-label text-foreground font-mono [overflow-wrap:anywhere]">
                             {tool.name}
                           </div>
                           {tool.readonly && (
                             <Lock className="w-3.5 h-3.5 text-muted-foreground" />
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-caption text-muted-foreground">
                           ({tool.parameters.length} {tool.parameters.length === 1 ? 'parameter' : 'parameters'})
                         </div>
                       </div>
-                      <div className="mt-1.5 text-sm text-muted-foreground leading-relaxed">
+                      <div className="mt-1.5 text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">
                         {tool.description}
                       </div>
                     </div>
@@ -216,25 +216,25 @@ export default function SourceDetailView() {
                         <ul className="space-y-3">
                           {tool.parameters.map((param) => (
                             <li key={param.name} className="text-sm bg-background/50 rounded p-2.5">
-                              <div className="flex items-baseline gap-2 flex-wrap">
-                                <span className="font-mono text-foreground font-medium">
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="font-mono text-foreground font-medium [overflow-wrap:anywhere]">
                                   {param.name}
                                 </span>
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-primary/10 text-primary">
                                   {param.type}
                                 </span>
                                 {param.required ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/10 text-destructive">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-destructive/10 text-destructive">
                                     required
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded whitespace-nowrap text-xs font-medium bg-muted text-muted-foreground">
                                     optional
                                   </span>
                                 )}
                               </div>
                               {param.description && (
-                                <div className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                                <div className="mt-2 text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">
                                   {param.description}
                                 </div>
                               )}

@@ -323,16 +323,16 @@ export default function ToolDetailView() {
     return (
       <div className="container mx-auto px-8 py-12 max-w-4xl">
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-page text-foreground font-mono">{tool.name}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-page text-foreground font-mono tracking-normal [overflow-wrap:anywhere]">{tool.name}</h1>
             {tool.readonly && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                 <LockIcon className="w-3 h-3" />
                 Read-Only
               </span>
             )}
           </div>
-          <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
+          <p className="text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{tool.description}</p>
           <div className="border border-border rounded-lg bg-card p-8 text-center">
             <p className="text-muted-foreground">
               Interactive UI for this tool is coming soon.
@@ -348,22 +348,22 @@ export default function ToolDetailView() {
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-page text-foreground font-mono">{tool.name}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-page text-foreground font-mono tracking-normal [overflow-wrap:anywhere]">{tool.name}</h1>
             {tool.readonly && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
                 <LockIcon className="w-3 h-3" />
                 Read-Only
               </span>
             )}
           </div>
-          <p className="text-muted-foreground leading-relaxed">{tool.description}</p>
+          <p className="text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{tool.description}</p>
         </div>
 
         {/* Parameter Form (custom tools only, show before SQL) */}
         {toolType === 'custom' && tool.parameters.length > 0 && (
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Parameters</label>
+            <label className="text-label text-foreground">Parameters</label>
             <div className="border border-border rounded-lg bg-card p-4">
               <ParameterForm
                 parameters={tool.parameters}
@@ -377,12 +377,12 @@ export default function ToolDetailView() {
         {/* SQL Editor */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-foreground">
+            <label className="text-label text-foreground">
               SQL Statement
             </label>
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded cursor-pointer transition-colors"
               title="Copy SQL"
             >
               {copied ? (
