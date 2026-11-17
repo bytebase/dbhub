@@ -52,7 +52,7 @@ Note the trade-off: here the DSN lives in a config file, not the OS keychain. Fo
 
 ## Read-only by design
 
-The bundled configuration sets `readonly = true` and `max_rows = 1000` on `execute_sql`: mutating statements are rejected, and the database session is additionally set to read-only at the engine level. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone.
+The bundled configuration sets `readonly = true` and `max_rows = 1000` on `execute_sql`: mutating statements are rejected, and the database session is additionally set to read-only at the engine level. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone. See [Read-Only Mode](/config/read-only-mode) for what the setting does and does not cover.
 
 <Note>
 The machine running the MCP client connects **directly** to the database, so the database must be reachable from it (VPN or network allow-list). AWS IAM and Azure AD authentication are not included in the bundle; repackage with those drivers added if you need them.

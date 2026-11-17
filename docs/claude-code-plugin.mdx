@@ -30,7 +30,7 @@ Requires Node.js >= 22.5.0 on the machine running Claude Code — `npx` fetches 
 
 ## Read-only by design
 
-The plugin ships the same bundled read-only policy as the [MCP Bundle](/mcpb#read-only-by-design): `readonly = true` and `max_rows = 1000` on `execute_sql`, plus engine-level read-only enforcement. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone.
+The plugin ships the same bundled read-only policy as the [MCP Bundle](/mcpb#read-only-by-design): `readonly = true` and `max_rows = 1000` on `execute_sql`, plus engine-level read-only enforcement. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone. See [Read-Only Mode](/config/read-only-mode) for what the setting does and does not cover.
 
 ## When to use the plugin vs. `claude mcp add`
 

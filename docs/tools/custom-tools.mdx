@@ -245,7 +245,7 @@ Always use parameter placeholders. Never concatenate user input into SQL stateme
 
 ### Readonly Mode
 
-The `readonly` field is only valid on `execute_sql`; configuring it on a custom tool is a startup validation error. Custom tools always execute their statement — DBHub still analyzes the statement to classify it as read or write, but that classification only sets the tool's `readOnlyHint` annotation (a hint for MCP clients), it does not block writes.
+The `readonly` field is only valid on `execute_sql`; configuring it on a custom tool is a startup validation error. Custom tools always execute their statement — DBHub still analyzes the statement to classify it as read or write, but that classification only sets the tool's `readOnlyHint` annotation (a hint for MCP clients), it does not block writes. See [Read-Only Mode](/config/read-only-mode) for how `execute_sql` enforces it.
 
 ```toml
 # Configure execute_sql as read-only
