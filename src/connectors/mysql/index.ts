@@ -246,7 +246,8 @@ export class MySQLConnector implements Connector {
   // How the read-only backstop takes effect on this server (which session
   // variable to save/restore; TiDB rejects `START TRANSACTION READ ONLY`
   // unless tidb_enable_noop_functions is on; Apache Doris has no transactional
-  // backstop at all). Detected once at connect time.
+  // backstop at all). Detected once at connect time. MySQL-compatible servers
+  // are special-cased here only: the MariaDB connector does no such detection.
   private readOnlyBackstop: ReadOnlyBackstop = { kind: "session", variable: "transaction_read_only" };
 
   getId(): string {
@@ -306,7 +307,7 @@ export class MySQLConnector implements Connector {
         await this.probeVersionComment()
       );
       if (this.readOnlyBackstop.kind === "none") {
-        console.error(noBackstopWarning("MySQL", this.sourceId));
+        console.error(noBackstopWarning(this.sourceId));
       }
     } catch (err) {
       // Tear down the pool if it was created before the failure, otherwise it

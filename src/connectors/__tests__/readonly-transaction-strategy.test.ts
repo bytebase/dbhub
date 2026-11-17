@@ -29,6 +29,10 @@ const MARIADB_COMMIT = readOnlyClose("tx_read_only", "COMMIT", 0);
  *   MySQL/MariaDB -> read flag; SET SESSION TRANSACTION READ ONLY; START TRANSACTION READ ONLY
  *                    ... COMMIT; SET SESSION <flag> = <value read>
  *   TiDB          -> START TRANSACTION ... ROLLBACK   (writes discarded)
+ *   Apache Doris  -> no wrapping at all               (classifier only)
+ *
+ * TiDB and Doris are detected by the MySQL connector only. The MariaDB
+ * connector does no server detection and always takes the first form.
  *
  * The session-level READ ONLY is what stops DDL, which commits implicitly and
  * would otherwise escape the transaction; the flag is restored to the value the
@@ -422,31 +426,23 @@ describe("readonly transaction strategy", () => {
       expect(statements).toEqual([MARIADB_READ_FLAG, READ_ONLY_OPEN, "SELECT 1", MARIADB_COMMIT]);
     });
 
-    it("falls back to a plain transaction + ROLLBACK on TiDB", async () => {
-      const { pool, statements } = makeFakePool(TIDB_VERSION, asMariadb);
-      const connector = await connectMariadb(pool);
-      await connector.executeSQL("SELECT 1", { readonly: true });
-
-      expect(statements.join("\n")).not.toContain("READ ONLY");
-      expect(statements[0]).toBe(TIDB_OPEN);
-      expect(statements[statements.length - 1]).toBe(TIDB_CLOSE);
-    });
-
-    it("runs unwrapped on Apache Doris", async () => {
+    // MySQL-compatible servers are special-cased on the MySQL connector only;
+    // they are not expected to be reached through `mariadb://`.
+    it.each([
+      ["TiDB", TIDB_VERSION, undefined],
+      ["Apache Doris", DORIS_VERSION, DORIS_VERSION_COMMENT],
+    ])("does not special-case %s", async (_name, version, versionComment) => {
       const warn = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
-        const { pool, statements } = makeFakePool(
-          DORIS_VERSION,
-          asMariadb,
-          undefined,
-          0,
-          DORIS_VERSION_COMMENT
-        );
+        const { pool, statements } = makeFakePool(version, asMariadb, undefined, 0, versionComment);
         const connector = await connectMariadb(pool);
         await connector.executeSQL("SELECT 1", { readonly: true });
 
-        expect(statements).toEqual(["SELECT 1"]);
-        expect(warn).toHaveBeenCalledTimes(1);
+        // Same form as stock MariaDB, and no probing of the server at connect time.
+        expect(statements).toEqual([MARIADB_READ_FLAG, READ_ONLY_OPEN, "SELECT 1", MARIADB_COMMIT]);
+        expect(pool.query).not.toHaveBeenCalledWith(VERSION_COMMENT_QUERY);
+        expect(pool.query).not.toHaveBeenCalledWith(expect.stringContaining("VERSION()"));
+        expect(warn).not.toHaveBeenCalled();
       } finally {
         warn.mockRestore();
       }

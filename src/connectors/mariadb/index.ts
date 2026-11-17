@@ -23,10 +23,7 @@ import { parseQueryResultSets } from "../../utils/multi-statement-result-parser.
 import { splitSQLStatements } from "../../utils/sql-parser.js";
 import {
   withReadOnlyTransaction,
-  detectReadOnlyBackstop,
-  noBackstopWarning,
-  VERSION_COMMENT_QUERY,
-  type ReadOnlyBackstop,
+  MARIADB_READ_ONLY_BACKSTOP,
 } from "../../utils/readonly-transaction.js";
 import {
   clientQueryTimeoutMs,
@@ -160,11 +157,6 @@ export class MariaDBConnector implements Connector {
   // Client-side fallback deadline; the mariadb driver has no client-side
   // timer of its own (see query-timeout.ts).
   private clientQueryTimeoutMs?: number;
-  // How the read-only backstop takes effect on this server (which session
-  // variable to save/restore; TiDB rejects `START TRANSACTION READ ONLY`
-  // unless tidb_enable_noop_functions is on; Apache Doris has no transactional
-  // backstop at all). Detected once at connect time.
-  private readOnlyBackstop: ReadOnlyBackstop = { kind: "session", variable: "transaction_read_only" };
 
   getId(): string {
     return this.sourceId;
@@ -198,15 +190,10 @@ export class MariaDBConnector implements Connector {
         );
       });
 
-      // Test the connection and detect the server flavor in the same round trip.
-      const rows = await this.pool.query("SELECT VERSION() AS version");
-      this.readOnlyBackstop = detectReadOnlyBackstop(
-        rows?.[0]?.version,
-        await this.probeVersionComment()
-      );
-      if (this.readOnlyBackstop.kind === "none") {
-        console.error(noBackstopWarning("MariaDB", this.sourceId));
-      }
+      // Test the connection. No server detection here: MySQL-compatible
+      // servers (TiDB, Apache Doris, ...) are special-cased on the MySQL
+      // connector only, and are expected to be reached through `mysql://`.
+      await this.pool.query("SELECT 1");
     } catch (err) {
       // Tear down the pool if it was created before the failure, otherwise it
       // strands sockets and keeps the event loop alive (see closeQuietly).
@@ -217,20 +204,6 @@ export class MariaDBConnector implements Connector {
       }
       console.error("Failed to connect to MariaDB database:", err);
       throw err;
-    }
-  }
-
-  /**
-   * Reads `@@version_comment`, which identifies MySQL-protocol servers whose
-   * `VERSION()` looks stock (Apache Doris). Best effort: a server without the
-   * variable yields undefined, which keeps the default read-only backstop.
-   */
-  private async probeVersionComment(): Promise<unknown> {
-    try {
-      const rows = await this.pool!.query(VERSION_COMMENT_QUERY);
-      return rows?.[0]?.version_comment;
-    } catch {
-      return undefined;
     }
   }
 
@@ -311,11 +284,11 @@ export class MariaDBConnector implements Connector {
     let isConnectionDiscarded = false;
     try {
       // Engine-level read-only backstop (shared with MySQL); see
-      // withReadOnlyTransaction for the semantics and the TiDB/Doris caveats.
+      // withReadOnlyTransaction for the semantics.
       return await withReadOnlyTransaction(
         conn,
         options.readonly,
-        this.readOnlyBackstop,
+        MARIADB_READ_ONLY_BACKSTOP,
         async () => {
           // Split up front so the original statement text is available for
           // attribution below, whether or not maxRows needs to rewrite it.
