@@ -264,6 +264,10 @@ This page covers command-line flags and environment variables. For TOML configur
       [TOML file](/config/toml). The startup output prints the absolute path
       DBHub opened.
 
+      A `?` ends the path, so write a literal `?` in a file or directory name
+      as `%3F` (and a literal `%3F` or `%25` as `%253F` / `%2525`). Spaces and
+      other characters are written as they are.
+
       If the file does not exist, DBHub creates an empty database there and
       prints a warning naming it. If the file cannot be opened at all, startup
       fails with an error naming the path and what is missing.
