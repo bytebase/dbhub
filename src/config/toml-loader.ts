@@ -1203,16 +1203,8 @@ function expandHomeDir(filePath: string): string {
  * or as a DSN query parameter) into an existing DSN. Only appends a param when
  * the DSN does not already specify it; conflicting values are rejected earlier
  * by validateSourceConfig, so any param already present is guaranteed to match.
- *
- * This mirrors the query parameters built by the connection-params path of
- * buildDSNFromSource so both paths produce equivalent DSNs.
  */
 function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
-  // SQLite DSNs never carry these parameters
-  if (source.type === "sqlite") {
-    return dsn;
-  }
-
   try {
     // Parse only to validate the DSN; if it can't be parsed, leave it untouched
     // and let the connector surface the error.
@@ -1227,30 +1219,9 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
   // conflicting field is set.
   const hasParam = (key: string): boolean => getRawDSNQueryParam(dsn, key) !== null;
 
-  const additions: string[] = [];
-
-  // SQL Server query parameters
-  if (source.type === "sqlserver") {
-    if (source.instanceName && !hasParam("instanceName")) {
-      additions.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
-    }
-    if (source.authentication && !hasParam("authentication")) {
-      additions.push(`authentication=${encodeURIComponent(source.authentication)}`);
-    }
-    if (source.domain && !hasParam("domain")) {
-      additions.push(`domain=${encodeURIComponent(source.domain)}`);
-    }
-    if (source.applicationIntent && !hasParam("applicationIntent")) {
-      additions.push(`applicationIntent=${encodeURIComponent(source.applicationIntent)}`);
-    }
-  }
-
-  if (source.sslmode && !hasParam("sslmode")) {
-    additions.push(`sslmode=${source.sslmode}`);
-  }
-
-  additions.push(...postgresSslFileParams(source).filter(({ key }) => !hasParam(key)).map(({ param }) => param));
-  additions.push(...oracleWalletParams(source).filter(({ key }) => !hasParam(key)).map(({ param }) => param));
+  const additions = dualHomeQueryParams(source)
+    .filter(({ key }) => !hasParam(key))
+    .map(({ param }) => param);
 
   if (additions.length === 0) {
     return dsn;
@@ -1270,6 +1241,40 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
   return `${dsn}${separator}${additions.join("&")}`;
 }
 
+/** A DSN query parameter derived from a TOML source field: its key and the encoded `key=value` pair. */
+type SourceQueryParam = { key: string; param: string };
+
+/** SQL Server fields that are passed through as DSN query parameters of the same name. */
+const SQLSERVER_QUERY_FIELDS = ["instanceName", "authentication", "domain", "applicationIntent"] as const;
+
+/**
+ * Every "dual-home" field of a source (settable as a TOML field or as a DSN
+ * query parameter) rendered as a DSN query parameter, in emission order. The
+ * single source for both DSN paths of buildDSNFromSource: building a DSN from
+ * connection parameters uses all of them, merging into a user-supplied DSN
+ * skips the ones that DSN already carries.
+ */
+function dualHomeQueryParams(source: SourceConfig): SourceQueryParam[] {
+  // SQLite DSNs never carry these parameters
+  if (source.type === "sqlite") {
+    return [];
+  }
+  const params: SourceQueryParam[] = [];
+  if (source.type === "sqlserver") {
+    for (const key of SQLSERVER_QUERY_FIELDS) {
+      const value = source[key];
+      if (value) {
+        params.push({ key, param: `${key}=${encodeURIComponent(value)}` });
+      }
+    }
+  }
+  if (source.sslmode) {
+    params.push({ key: "sslmode", param: `sslmode=${source.sslmode}` });
+  }
+  params.push(...postgresSslFileParams(source), ...oracleWalletParams(source));
+  return params;
+}
+
 /**
  * PostgreSQL SSL file parameters (sslrootcert/sslcert/sslkey) to append to a
  * DSN query string, with `~/` expanded and the path percent-encoded. Only the
@@ -1277,11 +1282,11 @@ function mergeSourceFieldsIntoDSN(dsn: string, source: SourceConfig): string {
  * verify-* modes, sslcert/sslkey for require/verify-ca/verify-full
  * (disable or an unset sslmode is rejected by validation).
  */
-function postgresSslFileParams(source: SourceConfig): Array<{ key: string; param: string }> {
+function postgresSslFileParams(source: SourceConfig): SourceQueryParam[] {
   if (source.type !== "postgres") {
     return [];
   }
-  const params: Array<{ key: string; param: string }> = [];
+  const params: SourceQueryParam[] = [];
   const push = (key: "sslrootcert" | "sslcert" | "sslkey"): void => {
     params.push({ key, param: `${key}=${encodeURIComponent(expandHomeDir(source[key]!))}` });
   };
@@ -1301,11 +1306,11 @@ function postgresSslFileParams(source: SourceConfig): Array<{ key: string; param
  * `~/` expanded in wallet_location. Validation already restricts them to Oracle
  * sources with sslmode require or verify-full.
  */
-function oracleWalletParams(source: SourceConfig): Array<{ key: string; param: string }> {
+function oracleWalletParams(source: SourceConfig): SourceQueryParam[] {
   if (source.type !== "oracle") {
     return [];
   }
-  const params: Array<{ key: string; param: string }> = [];
+  const params: SourceQueryParam[] = [];
   for (const key of ORACLE_WALLET_FIELDS) {
     const value = source[key];
     if (value) {
@@ -1384,32 +1389,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
   // Build base DSN
   let dsn = `${source.type}://${encodedUser}:${encodedPassword}@${source.host}:${port}/${encodedDatabase}`;
 
-  // Collect query parameters
-  const queryParams: string[] = [];
-
-  // Add SQL Server specific parameters
-  if (source.type === "sqlserver") {
-    if (source.instanceName) {
-      queryParams.push(`instanceName=${encodeURIComponent(source.instanceName)}`);
-    }
-    if (source.authentication) {
-      queryParams.push(`authentication=${encodeURIComponent(source.authentication)}`);
-    }
-    if (source.domain) {
-      queryParams.push(`domain=${encodeURIComponent(source.domain)}`);
-    }
-    if (source.applicationIntent) {
-      queryParams.push(`applicationIntent=${encodeURIComponent(source.applicationIntent)}`);
-    }
-  }
-
-  // Add sslmode for network databases (not sqlite)
-  if (source.sslmode && source.type !== "sqlite") {
-    queryParams.push(`sslmode=${source.sslmode}`);
-  }
-
-  queryParams.push(...postgresSslFileParams(source).map(({ param }) => param));
-  queryParams.push(...oracleWalletParams(source).map(({ param }) => param));
+  const queryParams = dualHomeQueryParams(source).map(({ param }) => param);
 
   // Append query string if any params exist
   if (queryParams.length > 0) {
