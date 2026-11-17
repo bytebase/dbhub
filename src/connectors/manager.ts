@@ -13,6 +13,8 @@ import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
 const AWS_IAM_TOKEN_REFRESH_MS = 14 * 60 * 1000; // refresh before 15-minute token expiry
+// How long a pool replaced by an IAM refresh gets to close before it is abandoned.
+const REPLACED_CONNECTION_CLOSE_TIMEOUT_MS = 30 * 1000;
 
 /**
  * Manages database connectors and provides a unified interface to work with them
@@ -308,7 +310,9 @@ export class ConnectorManager {
       await connector.connect(actualDSN, source.init_script, config);
     } catch (error) {
       if (tunnel) {
-        this.sshTunnels.delete(sourceId);
+        if (this.sshTunnels.get(sourceId) === tunnel) {
+          this.sshTunnels.delete(sourceId);
+        }
         try {
           await tunnel.close();
         } catch (closeError) {
@@ -621,44 +625,81 @@ export class ConnectorManager {
     this.iamRefreshTimers.set(sourceId, timer);
   }
 
+  /**
+   * Replace a source's pool with one authenticated by a fresh IAM token.
+   *
+   * The replacement is connected before the old pool is touched, and the old pool is
+   * then closed in the background. Closing first left the source unusable for as long
+   * as the close took, and lost it for good when the close threw: the closed connector
+   * stayed registered and every later refresh failed on it again.
+   */
   private async refreshIamSourceConnection(source: SourceConfig): Promise<void> {
     const sourceId = source.id;
-    if (this.isDisconnecting || !source.aws_iam_auth || !this.connectors.has(sourceId)) {
+    const existingConnector = this.connectors.get(sourceId);
+    if (this.isDisconnecting || !source.aws_iam_auth || !existingConnector || !this.ownsSource(source)) {
       return;
     }
 
     console.error(`Refreshing AWS IAM auth connection for source '${sourceId}'...`);
 
-    const existingConnector = this.connectors.get(sourceId);
-    if (existingConnector) {
-      await existingConnector.disconnect();
-      this.connectors.delete(sourceId);
-    }
-
+    // connectSource() registers the new connector (and tunnel) under the same id, so
+    // hold on to the pair being replaced.
     const existingTunnel = this.sshTunnels.get(sourceId);
-    if (existingTunnel) {
-      await existingTunnel.close();
-      this.sshTunnels.delete(sourceId);
-    }
-
-    // removeSource() may have run while we were awaiting above (e.g. a config reload
-    // dropped or replaced this source). Reconnecting now would resurrect it, or clobber
-    // its replacement, so stop here.
-    if (this.isDisconnecting || !this.ownsSource(source)) {
-      return;
-    }
 
     try {
       await this.connectSource(source);
     } catch (error) {
-      // The old connector is already gone. Register the source for lazy reconnection so
-      // the next tool call retries (e.g. after the user re-authenticates) instead of
-      // failing forever with "Source not found".
+      // The old pool's token is about to expire, so do not keep serving from it.
+      // Register the source for lazy reconnection so the next tool call retries (e.g.
+      // after the user re-authenticates) and reports the real cause.
+      if (this.connectors.get(sourceId) === existingConnector) {
+        this.connectors.delete(sourceId);
+      }
+      if (this.sshTunnels.get(sourceId) === existingTunnel) {
+        this.sshTunnels.delete(sourceId);
+      }
       if (!this.isDisconnecting && this.ownsSource(source)) {
         this.lazySources.set(sourceId, source);
       }
+      this.closeReplacedConnection(sourceId, existingConnector, existingTunnel);
       throw error;
     }
+
+    this.closeReplacedConnection(sourceId, existingConnector, existingTunnel);
+  }
+
+  /**
+   * Close a connector (and its tunnel) that is no longer registered, without making
+   * the caller wait. A pool can take hours to close when one of its connections is
+   * stuck, so the close is abandoned after a time limit; a failure is only logged.
+   */
+  private closeReplacedConnection(sourceId: string, connector: Connector, tunnel?: SSHTunnel): void {
+    void (async () => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        const timeLimit = new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`timed out after ${REPLACED_CONNECTION_CLOSE_TIMEOUT_MS / 1000} s`)),
+            REPLACED_CONNECTION_CLOSE_TIMEOUT_MS
+          );
+          timer.unref?.();
+        });
+        await Promise.race([connector.disconnect(), timeLimit]);
+      } catch (error) {
+        console.error(`Error closing the replaced connection for source '${sourceId}':`, error);
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // Closed after the pool, which was connected through it.
+      if (tunnel) {
+        try {
+          await tunnel.close();
+        } catch (error) {
+          console.error(`Error closing the replaced SSH tunnel for source '${sourceId}':`, error);
+        }
+      }
+    })();
   }
 
   /**

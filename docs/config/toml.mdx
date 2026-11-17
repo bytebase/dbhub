@@ -257,8 +257,10 @@ Sources define database connections. Each source represents a database that DBHu
 
   PostgreSQL fetches a fresh token whenever it opens a new connection, so
   established connections are never rotated. MySQL and MariaDB refresh their
-  pool before the token expires. If credentials have expired (e.g. an AWS SSO
-  session), run `aws sso login --profile <profile>` and retry the request.
+  pool before the token expires: a new pool is connected first and the old one
+  is closed afterwards, so the source can briefly hold connections from both
+  pools. If credentials have expired (e.g. an AWS SSO session), run
+  `aws sso login --profile <profile>` and retry the request.
 
   ```toml
   [[sources]]

@@ -350,6 +350,133 @@ describe("ConnectorManager IAM refresh recovery", () => {
     await manager.disconnect();
   });
 
+  it("should keep serving through a refresh when closing the old pool hangs", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValue("token");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+    // mysql2's pool.end() never settles while one of its connections is stuck.
+    instances[0].disconnect.mockReturnValue(new Promise<void>(() => {}));
+
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+
+    // The replacement is already serving; the stuck close does not hold the source.
+    expect(instances).toHaveLength(2);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[1]);
+
+    // The close is abandoned after its time limit instead of being awaited forever.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error closing the replaced connection for source 'mysql_iam':",
+      expect.objectContaining({ message: expect.stringContaining("timed out") })
+    );
+
+    // Rotation carries on from the replacement.
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances).toHaveLength(3);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[2]);
+
+    await manager.disconnect();
+  });
+
+  it("should not lose the source when closing the old pool throws", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValue("token");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+    instances[0].disconnect.mockRejectedValue(new Error("Connection lost: The server closed the connection."));
+
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+
+    expect(instances).toHaveLength(2);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[1]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error closing the replaced connection for source 'mysql_iam':",
+      expect.objectContaining({ message: expect.stringContaining("Connection lost") })
+    );
+
+    // Later refreshes rotate the live connector; the broken one is never closed again.
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(instances).toHaveLength(3);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[2]);
+
+    await manager.disconnect();
+  });
+
+  it("should fall back to lazy reconnection when the refresh fails and the old pool will not close", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-1");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([makeIamSource()]);
+    instances[0].disconnect.mockReturnValue(new Promise<void>(() => {}));
+
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+
+    // The old pool is retired without waiting for it, so the next tool call can
+    // reconnect straight away.
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    mocks.generateRdsAuthToken.mockResolvedValueOnce("token-2");
+    await manager.ensureConnected("mysql_iam");
+    expect(instances).toHaveLength(2);
+    expect(manager.getConnector("mysql_iam")).toBe(instances[1]);
+
+    await manager.disconnect();
+  });
+
+  it("should open the replacement SSH tunnel before closing the old one", async () => {
+    const instances = stubConnectorRegistry();
+    mocks.generateRdsAuthToken.mockResolvedValue("token");
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    const tunnels: SSHTunnel[] = [];
+    vi.spyOn(SSHTunnel.prototype, "establish").mockImplementation(async function (this: SSHTunnel) {
+      tunnels.push(this);
+      return { localPort: 55000 + tunnels.length, targetHost: "mydb", targetPort: 3306 };
+    });
+    const closed: SSHTunnel[] = [];
+    vi.spyOn(SSHTunnel.prototype, "close").mockImplementation(async function (this: SSHTunnel) {
+      closed.push(this);
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([{
+      ...makeIamSource(),
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_password: "secret",
+    }]);
+    instances[0].disconnect.mockRejectedValue(new Error("Connection lost"));
+
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+
+    // The new connector goes through the new tunnel; the old tunnel is closed even
+    // though the old pool failed to close, and the new tunnel stays registered.
+    expect(tunnels).toHaveLength(2);
+    expect(instances[1].connect.mock.calls[0][0]).toContain("127.0.0.1:55002");
+    expect(manager.getConnector("mysql_iam")).toBe(instances[1]);
+    expect(closed).toEqual([tunnels[0]]);
+    expect((manager as any).sshTunnels.get("mysql_iam")).toBe(tunnels[1]);
+
+    // A failed refresh closes both its own tunnel and the one it was replacing.
+    mocks.generateRdsAuthToken.mockRejectedValueOnce(new Error("SSO session expired"));
+    await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
+    expect(closed).toEqual([tunnels[0], tunnels[1]]);
+    expect((manager as any).sshTunnels.size).toBe(0);
+
+    await manager.disconnect();
+  });
+
   it("should close the SSH tunnel when the database connection fails so a retry does not leak it", async () => {
     const instances = stubConnectorRegistry();
     mocks.looksLikeSSHAlias.mockReturnValue(false);
@@ -641,20 +768,23 @@ describe("ConnectorManager IAM refresh racing with removeSource", () => {
     return { id: "mysql_iam", type: "mysql", dsn, aws_iam_auth: true, aws_region: "eu-west-1" };
   }
 
-  /** Connector stubs; the first one's disconnect() blocks until the test releases it. */
-  function stubSlowDisconnectRegistry() {
+  /**
+   * Connector stubs; the second one's connect() blocks until the test releases it.
+   * The second one is the refresh's replacement, so this parks the refresh mid-flight.
+   */
+  function stubSlowReconnectRegistry() {
     const instances: Array<{ connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn>; release: () => void }> = [];
     const prototype = {
       id: "mysql",
       clone: () => {
         let release: () => void = () => {};
-        const disconnect = instances.length === 0
+        const connect = instances.length === 1
           ? vi.fn().mockImplementation(() => new Promise<void>(resolve => { release = resolve; }))
           : vi.fn().mockResolvedValue(undefined);
         const instance = {
           id: "mysql",
-          connect: vi.fn().mockResolvedValue(undefined),
-          disconnect,
+          connect,
+          disconnect: vi.fn().mockResolvedValue(undefined),
           release: () => release(),
         };
         instances.push(instance);
@@ -677,22 +807,27 @@ describe("ConnectorManager IAM refresh racing with removeSource", () => {
   });
 
   it("does not resurrect a source removed while its IAM refresh was in flight", async () => {
-    const instances = stubSlowDisconnectRegistry();
+    const instances = stubSlowReconnectRegistry();
     const manager = new ConnectorManager();
     await manager.connectWithSources([makeIamSource()]);
 
-    // Refresh fires and blocks inside the old connector's disconnect().
+    // Refresh fires and blocks inside the replacement connector's connect(), with the
+    // old connector still serving.
     await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
-    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(instances).toHaveLength(2);
+    expect(instances[1].connect).toHaveBeenCalledTimes(1);
+    expect(instances[0].disconnect).not.toHaveBeenCalled();
+    expect(manager.getConnector("mysql_iam")).toBe(instances[0]);
 
     // Config reload drops the source while the refresh is parked.
     const removal = manager.removeSource("mysql_iam");
-    instances[0].release();
+    instances[1].release();
     await removal;
     await vi.advanceTimersByTimeAsync(0);
 
-    // The refresh finished its reconnect, and removal then tore that connector down too.
+    // The refresh finished its swap, and removal then tore the new connector down too.
     expect(instances).toHaveLength(2);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
     expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
     expect(manager.getSourceIds()).toEqual([]);
     expect(() => manager.getConnector("mysql_iam")).toThrow();
@@ -703,25 +838,26 @@ describe("ConnectorManager IAM refresh racing with removeSource", () => {
   });
 
   it("does not clobber a same-id replacement added while the old refresh was in flight", async () => {
-    const instances = stubSlowDisconnectRegistry();
+    const instances = stubSlowReconnectRegistry();
     const manager = new ConnectorManager();
     await manager.connectWithSources([makeIamSource()]);
 
     await vi.advanceTimersByTimeAsync(AWS_IAM_TOKEN_REFRESH_MS);
-    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(instances[1].connect).toHaveBeenCalledTimes(1);
 
     const replacement = makeIamSource("mysql://dbuser:ignored@other.abc123.eu-west-1.rds.amazonaws.com:3306/mydb");
     const swap = (async () => {
       await manager.removeSource("mysql_iam");
       await manager.addSource(replacement);
     })();
-    instances[0].release();
+    instances[1].release();
     await swap;
     await vi.advanceTimersByTimeAsync(0);
 
     // instances[1] is the refresh's reconnect of the old config, torn down by removeSource;
     // instances[2] is the replacement and is what the manager serves.
     expect(instances).toHaveLength(3);
+    expect(instances[0].disconnect).toHaveBeenCalledTimes(1);
     expect(instances[1].disconnect).toHaveBeenCalledTimes(1);
     expect(manager.getConnector("mysql_iam")).toBe(instances[2]);
     expect(manager.getSourceConfig("mysql_iam")).toBe(replacement);
