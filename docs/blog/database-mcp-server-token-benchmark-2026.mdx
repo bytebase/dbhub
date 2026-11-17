@@ -1,0 +1,89 @@
+---
+title: "Database MCP Server Token Benchmark (2026)"
+description: "We measured how many tokens three database MCP servers add to a Claude Code session. DBHub uses 468, MCP Toolbox uses 7,674, and Supabase MCP uses about 11,600."
+---
+
+*November 17, 2026*
+
+Every MCP server's tool definitions occupy the agent's context window, leaving less room for your schema, query results, and code. DBHub is built to keep them small.
+
+This post repeats our [December 2025](/blog/postgres-mcp-server-review-dbhub#token-efficiency) benchmark, almost a year later, with current versions.
+
+## Results
+
+We added each server to Claude Code in its default configuration and read the token count of its tool definitions from the `/context` command.
+
+| MCP Server | Tools | Tokens | Compared with DBHub |
+|------------|-------|--------|---------------------|
+| **DBHub** 1.7.0 | 2 | **468** | |
+| MCP Toolbox 1.17.0 | 29 | 7,674 | 16 times more |
+| Supabase MCP 0.17.0 | 36 | 11,600 | 25 times more |
+
+[MCP Toolbox](https://github.com/googleapis/genai-toolbox) is the other popular multi-database server, and [Supabase MCP](https://github.com/supabase-community/supabase-mcp) is the most popular vendor-specific one.
+
+## Why DBHub uses fewer tokens
+
+DBHub's individual tool definitions are not shorter. The average tool costs about the same in all three servers:
+
+| MCP Server | Tokens per tool |
+|------------|-----------------|
+| DBHub | 234 |
+| MCP Toolbox | 265 |
+| Supabase MCP | 322 |
+
+The difference is the default tool count. DBHub has two:
+
+- `execute_sql` runs SQL statements.
+- `search_objects` finds schemas, tables, columns, indexes, and procedures. It uses [progressive disclosure](https://www.anthropic.com/engineering/code-execution-with-mcp#progressive-disclosure): you pass a name pattern and a detail level, so one tool covers every object type.
+
+The other two servers expose one tool per operation. MCP Toolbox has a tool per object type (`list_tables`, `list_views`, `list_indexes`, `list_triggers`) plus database administration tools. Supabase MCP covers the whole Supabase platform: projects, branches, edge functions, and notebooks. Its `create_notebook` tool alone uses 1,700 tokens, more than three times DBHub's total.
+
+Both servers do more than DBHub, and both let you disable tools. The numbers above are for the default configuration.
+
+## Why all three numbers are lower than last year
+
+| MCP Server | December 2025 | November 2026 |
+|------------|---------------|---------------|
+| DBHub | ~1,400 | 468 |
+| MCP Toolbox | ~19,000 | 7,674 |
+| Supabase MCP | ~19,300 | 11,600 |
+
+DBHub itself barely changed: its two tool definitions shrank 12%, from 1,664 characters to 1,468, while the reported token count fell by two thirds. Most of the drop comes from two changes in Claude Code.
+
+The first is token accounting. In December 2025, `/context` reported 607 tokens for a 496-character `execute_sql` definition. A definition cannot have more tokens than characters, so that figure included per-tool overhead. Today the same tool is reported at 119 tokens, and MCP Toolbox dropped by a similar amount, about 400 tokens per tool.
+
+The second is [MCP tool search](https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search), now enabled by default. It applies [deferred tool loading](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#deferred-tool-loading): only tool names and server instructions load at session start, and a definition enters the context window when the agent discovers the tool through search.
+
+Deferral postpones the cost; it does not remove it. Once the agent works with the database, the definitions load: 468 tokens for all of DBHub, thousands for the other two if the agent uses all their tools. With [`ENABLE_TOOL_SEARCH=false`](https://code.claude.com/docs/en/mcp#configure-tool-search), or in an MCP client without tool search, every definition loads upfront.
+
+DBHub's lead has also grown, from about 14 times for both servers in December 2025 to 16 and 25 times today.
+
+## How to reproduce
+
+We used Claude Code 2.1.326. These commands add the three servers and print the context report:
+
+```bash
+claude mcp add dbhub -- npx -y @bytebase/dbhub@1.7.0 --transport stdio --demo
+
+claude mcp add toolbox \
+  -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 -e POSTGRES_DATABASE=postgres \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+  -- npx -y @toolbox-sdk/server@1.17.0 --prebuilt postgres --stdio
+
+claude mcp add supabase -- npx -y @supabase/mcp-server-supabase@0.17.0 --access-token <token>
+
+claude -p "/context"
+```
+
+MCP Toolbox connects to PostgreSQL at startup, so it needs a reachable database. For Supabase MCP we used the local npm server, not the hosted one.
+
+To try DBHub, see the [installation guide](/installation).
+
+## References
+
+- [Scale with MCP tool search](https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search), Claude Code documentation
+- [Tool search tool: deferred tool loading](https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool#deferred-tool-loading), Claude API documentation
+- [Code execution with MCP: progressive disclosure](https://www.anthropic.com/engineering/code-execution-with-mcp#progressive-disclosure), Anthropic
+- [MCP Toolbox for Databases](https://github.com/googleapis/genai-toolbox)
+- [Supabase MCP](https://github.com/supabase-community/supabase-mcp)
+- [December 2025 benchmark](/blog/postgres-mcp-server-review-dbhub#token-efficiency)
