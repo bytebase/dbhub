@@ -1,0 +1,78 @@
+---
+title: "Database MCP Server Token Benchmark: DBHub vs MCP Toolbox vs Supabase MCP"
+description: "How many tokens three database MCP servers add to a Claude Code session, measured in November 2026. DBHub: 0.5k. MCP Toolbox: 7.7k. Supabase MCP: 11.6k."
+---
+
+*November 17, 2026*
+
+DBHub's pitch is token efficiency. Every token a server spends describing its tools is a token your agent cannot spend on your schema, your query results, or your code. We last put a number on that in [December 2025](/blog/postgres-mcp-server-review-dbhub#token-efficiency). This post repeats the measurement with current versions.
+
+## Results
+
+Each server in its default configuration, measured in the same Claude Code session:
+
+| MCP Server | Tokens | Tools | vs DBHub |
+|------------|--------|-------|----------|
+| **DBHub** 1.7.0 | **468** | 2 | |
+| MCP Toolbox 1.17.0 | 7,674 | 29 | 16x |
+| Supabase MCP 0.17.0 | 11.6k | 36 | 25x |
+
+We picked these two on purpose. [MCP Toolbox](/blog/postgres-mcp-server-review-mcp-toolbox) is the other popular multi-database server, and [Supabase MCP](/blog/postgres-mcp-server-review-supabase-mcp) is the most popular vendor-specific one.
+
+## Where the difference comes from
+
+Not from shorter descriptions. Per tool, the three servers are close:
+
+| MCP Server | Tokens per tool |
+|------------|-----------------|
+| DBHub | 234 |
+| MCP Toolbox | 265 |
+| Supabase MCP | 322 |
+
+The difference is the number of tools. DBHub has two:
+
+- `execute_sql` runs SQL.
+- `search_objects` explores the schema. One tool covers schemas, tables, columns, indexes and procedures, with a pattern to narrow the search and a detail level to control how much comes back.
+
+MCP Toolbox's prebuilt PostgreSQL set takes the other approach, with a tool per object type (`list_tables`, `list_views`, `list_indexes`, `list_schemas`, `list_sequences`, `list_triggers`) plus a set of DBA diagnostics. Supabase MCP covers the whole Supabase platform: projects, branches, edge functions, notebooks, logs. A single one of its tools, `create_notebook`, costs 1.7k tokens, more than three times DBHub's entire tool surface.
+
+Both servers do more than DBHub, and both can be trimmed with configuration. The default is what you get out of the box.
+
+## Why every number is lower than in 2025
+
+| MCP Server | December 2025 | November 2026 |
+|------------|---------------|---------------|
+| DBHub | 1.4k | 0.5k |
+| MCP Toolbox | 19.0k | 7.7k |
+| Supabase MCP | 19.3k | 11.6k |
+
+DBHub did not get three times leaner. Its two tool definitions were 1,664 characters of JSON in December 2025 and are 1,468 today, 12% smaller. The rest of the drop comes from Claude Code, in two ways.
+
+**Counting.** In December 2025, `/context` reported 607 tokens for an `execute_sql` definition that was 496 characters long. A count higher than the character count means it included overhead beyond the definition itself. Today the same tool is reported at 119 tokens. MCP Toolbox fell by a similar amount, about 400 tokens per tool.
+
+**Deferred loading.** Claude Code now lists MCP tools as deferred. A definition is loaded when the agent needs the tool, and does not count against the context window before that.
+
+Deferred loading postpones the cost. It does not remove it. The first time your agent touches the database, it loads the definitions it needs. With DBHub the whole server costs 468 tokens. The others cost thousands, or leave the agent searching for the right tool among dozens. Clients without deferred loading send every definition with every request.
+
+The gap has not closed either. It was 13-14x in December 2025 and is 16-25x now.
+
+## Reproduce it
+
+Measured with Claude Code 2.1.326. Register the three servers and print the context report:
+
+```bash
+claude mcp add dbhub -- npx -y @bytebase/dbhub@1.7.0 --transport stdio --demo
+
+claude mcp add toolbox \
+  -e POSTGRES_HOST=127.0.0.1 -e POSTGRES_PORT=5432 -e POSTGRES_DATABASE=postgres \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+  -- npx -y @toolbox-sdk/server@1.17.0 --prebuilt postgres --stdio
+
+claude mcp add supabase -- npx -y @supabase/mcp-server-supabase@0.17.0 --access-token <token>
+
+claude -p "/context"
+```
+
+MCP Toolbox needs a reachable PostgreSQL to start. Supabase MCP was measured with its local server.
+
+Two tools, 468 tokens. [Install DBHub](/installation).
