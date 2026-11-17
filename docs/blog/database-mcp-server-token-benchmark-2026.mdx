@@ -7,7 +7,7 @@ description: "We measured how many tokens three database MCP servers add to a Cl
 
 Every MCP server's tool definitions occupy the agent's context window, leaving less room for your schema, query results, and code. DBHub is built to keep them small.
 
-This post repeats our [December 2025](/blog/postgres-mcp-server-review-dbhub#token-efficiency) benchmark with current versions.
+This post repeats our [December 2025](/blog/postgres-mcp-server-review-dbhub#token-efficiency) benchmark, almost a year later, with current versions.
 
 ## Results
 
@@ -31,7 +31,7 @@ DBHub's individual tool definitions are not shorter. The average tool costs abou
 | MCP Toolbox | 265 |
 | Supabase MCP | 322 |
 
-The difference is the tool count. DBHub has two:
+The difference is the default tool count. DBHub has two:
 
 - `execute_sql` runs SQL statements.
 - `search_objects` finds schemas, tables, columns, indexes, and procedures. It uses [progressive disclosure](https://www.anthropic.com/engineering/code-execution-with-mcp#progressive-disclosure): you pass a name pattern and a detail level, so one tool covers every object type.
@@ -44,9 +44,9 @@ Both servers do more than DBHub, and both let you disable tools. The numbers abo
 
 | MCP Server | December 2025 | November 2026 |
 |------------|---------------|---------------|
-| DBHub | 1,400 | 468 |
-| MCP Toolbox | 19,000 | 7,674 |
-| Supabase MCP | 19,300 | 11,600 |
+| DBHub | ~1,400 | 468 |
+| MCP Toolbox | ~19,000 | 7,674 |
+| Supabase MCP | ~19,300 | 11,600 |
 
 DBHub itself barely changed: its two tool definitions shrank 12%, from 1,664 characters to 1,468, while the reported token count fell by two thirds. Most of the drop comes from two changes in Claude Code.
 
