@@ -67,6 +67,8 @@ DBHub loads just 2 tools by default at **1.4k tokens** — 13-14x fewer than alt
 - **Multi-Database Consolidation**: Replace separate MCP servers for each database with a single DBHub process
 - **Production Troubleshooting**: Read-only diagnostics with guardrails against runaway queries
 
+> Read-only mode is a guardrail, not a permission boundary. Always connect with a least-privilege, read-only database user. See [execute_sql → Read-Only Mode](https://dbhub.ai/tools/execute-sql#read-only-mode).
+
 ## Supported Databases
 
 PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, and SQLite.

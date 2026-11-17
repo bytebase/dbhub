@@ -127,6 +127,8 @@ In read-only mode, DBHub enforces read-only access in two layers:
 - **PostgreSQL** — runs inside a `BEGIN READ ONLY` transaction
 - **SQLite** — runs with `PRAGMA query_only = ON`
 - **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`, with the session itself set `READ ONLY` for the duration so DDL, which commits implicitly and would end the transaction, is rejected too
+- **SQL Server** — has no read-only transaction mode, so the statement runs inside a transaction that is always rolled back. Constructs that would escape the rollback are rejected before the transaction opens: `COMMIT`/`ROLLBACK`, dynamic SQL (`EXEC`, `sp_executesql`, `xp_cmdshell`) and pass-through data sources (`OPENQUERY`, `OPENROWSET`, `OPENDATASOURCE`)
+- **Oracle** — runs inside a `SET TRANSACTION READ ONLY` transaction, which rejects DML. DDL is not covered: it commits implicitly, which ends the read-only transaction, so DDL is stopped by the keyword classifier alone
 - **TiDB** (via the MySQL connector, `mysql://`) — rejects `READ ONLY` transactions, so the statement runs in a plain transaction that is always rolled back
 - **Apache Doris** (via the MySQL connector, `mysql://`) — no engine-level enforcement. Doris does not run queries inside a transaction, so read-only mode there rests on the keyword classifier alone; DBHub logs a warning when it connects to Doris. A least-privilege database account is the only database-enforced protection
 
@@ -135,7 +137,9 @@ Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the
 </Note>
 
 <Warning>
-Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction.
+Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. Every supported engine has functions or packages that a plain `SELECT` can call to read or write server files, open network connections or reach other servers — for example `lo_export` and `dblink` on PostgreSQL, `LOAD_FILE` on MySQL/MariaDB, `OPENROWSET` on SQL Server, and `UTL_HTTP` on Oracle. These are gated by database privileges, not by transaction mode, so a read-only transaction does not stop them.
+
+DBHub rejects a [per-dialect list of well-known ones](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) by name, but that matching is best-effort and not exhaustive ([#377](https://github.com/bytebase/dbhub/issues/377)). The database account's privileges are the real boundary.
 
 For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
 </Warning>
