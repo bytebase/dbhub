@@ -11,11 +11,11 @@ DBHub's pitch is token efficiency. Every token a server spends describing its to
 
 Each server in its default configuration, measured in the same Claude Code session:
 
-| MCP Server | Tokens | Tools | vs DBHub | December 2025 |
-|------------|--------|-------|----------|---------------|
-| **DBHub** 1.7.0 | **468** | 2 | | 1.4k |
-| MCP Toolbox 1.17.0 | 7,674 | 29 | 16x | 19.0k |
-| Supabase MCP 0.17.0 | 11.6k | 36 | 25x | 19.3k |
+| MCP Server | Tokens | Tools | vs DBHub |
+|------------|--------|-------|----------|
+| **DBHub** 1.7.0 | **468** | 2 | |
+| MCP Toolbox 1.17.0 | 7,674 | 29 | 16x |
+| Supabase MCP 0.17.0 | 11.6k | 36 | 25x |
 
 We picked these two on purpose. [MCP Toolbox](/blog/postgres-mcp-server-review-mcp-toolbox) is the other popular multi-database server, and [Supabase MCP](/blog/postgres-mcp-server-review-supabase-mcp) is the most popular vendor-specific one.
 
@@ -39,6 +39,12 @@ MCP Toolbox's prebuilt PostgreSQL set takes the other approach, with a tool per 
 Both servers do more than DBHub, and both can be trimmed with configuration. The default is what you get out of the box.
 
 ## Why every number is lower than in 2025
+
+| MCP Server | December 2025 | November 2026 |
+|------------|---------------|---------------|
+| DBHub | 1.4k | 0.5k |
+| MCP Toolbox | 19.0k | 7.7k |
+| Supabase MCP | 19.3k | 11.6k |
 
 DBHub did not get three times leaner. Its two tool definitions were 1,664 characters of JSON in December 2025 and are 1,468 today, 12% smaller. The rest of the drop comes from Claude Code, in two ways.
 
