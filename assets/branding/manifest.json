@@ -1,0 +1,153 @@
+{
+  "brand": "DBHub",
+  "design": "Aurora Bloom",
+  "figmaFileKey": "AEbNos6CJJ4X2kkNHcKkFF",
+  "pngWidths": [
+    512,
+    1024,
+    2048
+  ],
+  "assets": [
+    {
+      "name": "dbhub-icon-transparent",
+      "id": "3288:246",
+      "kind": "icon",
+      "background": "transparent",
+      "width": 512,
+      "height": 512,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3288-246",
+      "svg": "svg/dbhub-icon-transparent.svg",
+      "png": [
+        "png/512w/dbhub-icon-transparent-512w.png",
+        "png/1024w/dbhub-icon-transparent-1024w.png",
+        "png/2048w/dbhub-icon-transparent-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-icon-white-background",
+      "id": "3288:245",
+      "kind": "icon",
+      "background": "#FFFFFF",
+      "width": 512,
+      "height": 512,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3288-245",
+      "svg": "svg/dbhub-icon-white-background.svg",
+      "png": [
+        "png/512w/dbhub-icon-white-background-512w.png",
+        "png/1024w/dbhub-icon-white-background-1024w.png",
+        "png/2048w/dbhub-icon-white-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-icon-zinc-background",
+      "id": "3288:257",
+      "kind": "icon",
+      "background": "#323236",
+      "width": 512,
+      "height": 512,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3288-257",
+      "svg": "svg/dbhub-icon-zinc-background.svg",
+      "png": [
+        "png/512w/dbhub-icon-zinc-background-512w.png",
+        "png/1024w/dbhub-icon-zinc-background-1024w.png",
+        "png/2048w/dbhub-icon-zinc-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-logo-for-light-background",
+      "id": "3290:245",
+      "kind": "logo",
+      "background": "transparent",
+      "wordmark": "#323236",
+      "width": 546.5894165039062,
+      "height": 132,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-245",
+      "svg": "svg/dbhub-logo-for-light-background.svg",
+      "png": [
+        "png/512w/dbhub-logo-for-light-background-512w.png",
+        "png/1024w/dbhub-logo-for-light-background-1024w.png",
+        "png/2048w/dbhub-logo-for-light-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-logo-for-dark-background",
+      "id": "3290:265",
+      "kind": "logo",
+      "background": "transparent",
+      "wordmark": "#FFFFFF",
+      "width": 546.5894165039062,
+      "height": 132,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-265",
+      "svg": "svg/dbhub-logo-for-dark-background.svg",
+      "png": [
+        "png/512w/dbhub-logo-for-dark-background-512w.png",
+        "png/1024w/dbhub-logo-for-dark-background-1024w.png",
+        "png/2048w/dbhub-logo-for-dark-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-logo-white-background",
+      "id": "3290:244",
+      "kind": "logo",
+      "background": "#FFFFFF",
+      "wordmark": "#323236",
+      "width": 1104,
+      "height": 300,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-244",
+      "svg": "svg/dbhub-logo-white-background.svg",
+      "png": [
+        "png/512w/dbhub-logo-white-background-512w.png",
+        "png/1024w/dbhub-logo-white-background-1024w.png",
+        "png/2048w/dbhub-logo-white-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-logo-zinc-background",
+      "id": "3290:264",
+      "kind": "logo",
+      "background": "#323236",
+      "wordmark": "#FFFFFF",
+      "width": 1104,
+      "height": 300,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-264",
+      "svg": "svg/dbhub-logo-zinc-background.svg",
+      "png": [
+        "png/512w/dbhub-logo-zinc-background-512w.png",
+        "png/1024w/dbhub-logo-zinc-background-1024w.png",
+        "png/2048w/dbhub-logo-zinc-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-wordmark-for-light-background",
+      "id": "3290:253",
+      "kind": "wordmark",
+      "background": "transparent",
+      "wordmark": "#323236",
+      "width": 393,
+      "height": 103,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-253",
+      "svg": "svg/dbhub-wordmark-for-light-background.svg",
+      "png": [
+        "png/512w/dbhub-wordmark-for-light-background-512w.png",
+        "png/1024w/dbhub-wordmark-for-light-background-1024w.png",
+        "png/2048w/dbhub-wordmark-for-light-background-2048w.png"
+      ]
+    },
+    {
+      "name": "dbhub-wordmark-for-dark-background",
+      "id": "3290:273",
+      "kind": "wordmark",
+      "background": "transparent",
+      "wordmark": "#FFFFFF",
+      "width": 393,
+      "height": 103,
+      "sourceUrl": "https://www.figma.com/design/AEbNos6CJJ4X2kkNHcKkFF/Logo---Asset?node-id=3290-273",
+      "svg": "svg/dbhub-wordmark-for-dark-background.svg",
+      "png": [
+        "png/512w/dbhub-wordmark-for-dark-background-512w.png",
+        "png/1024w/dbhub-wordmark-for-dark-background-1024w.png",
+        "png/2048w/dbhub-wordmark-for-dark-background-2048w.png"
+      ]
+    }
+  ]
+}

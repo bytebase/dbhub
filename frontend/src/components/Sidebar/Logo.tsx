@@ -11,15 +11,15 @@ export default function Logo() {
         <img
           src="/logo-full-light.svg"
           alt=""
-          width={556}
-          height={146}
+          width={547}
+          height={132}
           className="block w-32 max-w-full h-auto dark:hidden"
         />
         <img
           src="/logo-full-dark.svg"
           alt=""
-          width={556}
-          height={146}
+          width={547}
+          height={132}
           className="hidden w-32 max-w-full h-auto dark:block"
         />
       </Link>

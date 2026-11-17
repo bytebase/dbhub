@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useId, useLayoutEffect } from 'react';
+import { useRef, useState, useMemo, useCallback, useId, useLayoutEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import type { QueryResult } from '../../api/tools';
@@ -71,10 +71,12 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
     .map((values, index) => ({ values, index }))
     .filter(({ values }) => !query || values.some((cell) => formatValue(cell).toLowerCase().includes(query))) ?? [], [result, query]);
 
+  const getItemKey = useCallback((index: number) => filteredRows[index].index, [filteredRows]);
+
   const rowVirtualizer = useVirtualizer({
     count: filteredRows.length,
     getScrollElement: () => parentRef.current,
-    getItemKey: (index) => filteredRows[index].index,
+    getItemKey,
     estimateSize: () => ROW_HEIGHT + 1,
     measureElement: (element) => element.getBoundingClientRect().height,
     scrollMargin: headerHeight,

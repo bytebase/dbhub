@@ -1,6 +1,6 @@
 # DBHub Documentation
 
-See the [branding guide](../BRANDING.md) for the Zinc palette, logo variants, and asset update workflow.
+See the [branding guide](../BRANDING.md) for the Aurora Bloom logo variants, the Zinc interface palette, and the asset update workflow.
 
 Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview documentation locally:
 

@@ -1,50 +1,75 @@
 # DBHub branding
 
-DBHub uses a starfish symbol and an outlined wordmark in Zinc and white. The
-starfish's five arms and small cutouts remain part of the artwork at every size.
+DBHub uses the Aurora Bloom starfish — a five-armed, smiling starfish filled with
+a mint-to-violet radial gradient — beside an outlined wordmark in Zinc or white.
+The gradient and the face remain part of the artwork at every size.
 
-![DBHub logo on light and dark backgrounds](assets/branding/preview.png)
+![DBHub logo on light and dark backgrounds](assets/branding/previews/dbhub-full-logo-light-dark.png)
 
 ## Source assets
 
-The complete logo pack lives in [`assets/branding/`](assets/branding/). It contains
-six SVGs, 22 transparent PNGs, a preview, and the original export notes. These are
-the source files for the copies used by the website, workbench, and MCP bundle.
-The pack was exported on November 16, 2026; its Figma source is recorded in
-[`README.txt`](assets/branding/README.txt).
+The complete logo set lives in [`assets/branding/`](assets/branding/). It contains
+nine SVGs, the same nine assets as PNGs at three widths (27 files), two preview
+sheets, a [`manifest.json`](assets/branding/manifest.json) recording Figma node
+IDs and dimensions, and the original export notes. These are the source files
+for the copies used by the website, workbench, and MCP bundle. The Figma sources
+are recorded in [`README.txt`](assets/branding/README.txt).
 
 | Use | Light background | Dark background |
 | --- | --- | --- |
-| Full logo | `svg/dbhub-logo-light.svg` | `svg/dbhub-logo-dark.svg` |
-| Starfish icon | `svg/dbhub-icon-light.svg` | `svg/dbhub-icon-dark.svg` |
-| Wordmark | `svg/dbhub-wordmark-light.svg` | `svg/dbhub-wordmark-dark.svg` |
+| Full logo | `svg/dbhub-logo-for-light-background.svg` | `svg/dbhub-logo-for-dark-background.svg` |
+| Starfish icon | `svg/dbhub-icon-transparent.svg` | `svg/dbhub-icon-transparent.svg` |
+| Wordmark | `svg/dbhub-wordmark-for-light-background.svg` | `svg/dbhub-wordmark-for-dark-background.svg` |
 
-Names refer to the **background**: `light` files contain Zinc artwork; `dark`
-files contain white artwork. Prefer SVG for the web. The lettering is outlined
-and does not require a font. PNG logos are available at 512, 1024, and 2048 pixels
-wide; icons at 32–1024 pixels square; wordmarks at 512 and 1024 pixels wide.
+Names refer to the **background**: `for-light-background` files contain Zinc
+lettering; `for-dark-background` files contain white lettering. The starfish is
+identical in both, and the transparent icon works on either background. Files
+named `white-background` or `zinc-background` (icon and full logo) bake in that
+background and padding, for places that cannot guarantee the surface behind the
+image.
+
+Prefer SVG for the web. The lettering is outlined and does not require a font.
+Every asset is also available as a PNG at 512, 1024, and 2048 pixels wide under
+`png/512w/`, `png/1024w/`, and `png/2048w/`; heights preserve each aspect ratio.
+Transparent PNGs keep their alpha channel; background variants are opaque.
 
 ## Logo placement
 
 - Use the complete logo asset when displaying the symbol and wordmark together.
-  Keep its original proportions, spacing, and optical alignment.
+  Keep its original proportions, spacing, and alignment.
 - Leave clear space of at least one quarter of the starfish's height on all sides.
-  The SVG does not include this external clear space; provide it in the layout.
-- The source starfish is 136 units tall, the lettering is 103 units tall, and the
-  gap is 24 units. The starfish is optically raised by 5 units.
+  The transparent SVGs do not include this external clear space; provide it in
+  the layout. The `white-background` and `zinc-background` variants include
+  their own padding.
+- The source starfish is 132 units tall, the lettering is 103 units tall, and the
+  gap is 20 units. Both are vertically centered; the transparent full logo is
+  547 × 132 units.
 - Use the icon alone for favicons and app icons. Prefer the full logo where the
   name needs to be readable; use the icon if the available space is too small.
-- Keep the artwork flat and monochrome. Do not stretch, rotate, recolor, add
-  shadows, fill the cutouts, or recreate the wordmark with live text.
+- Keep the artwork as exported. Do not stretch, rotate, recolor or flatten the
+  gradient, alter the face, add shadows or outlines, or recreate the wordmark
+  with live text.
 - Give standalone logo images `alt="DBHub"`. For a linked home logo, label the
   link `DBHub home` and use empty image alt text to avoid duplicate announcements.
+
+## Logo colors
+
+The Aurora Bloom colors belong to the starfish artwork only. They are not
+interface colors; the workbench and documentation keep the Zinc theme below.
+
+| Color | Value | Role |
+| --- | --- | --- |
+| Aurora Bloom gradient | Radial: `#B2FCCB` (0%), `#19DECD` (25%), `#2AA1FE` (62%), `#955BFE` (100%) | Starfish fill |
+| Ink | `#19253C` | Eyes and smile |
+| Zinc | `#323236` | Lettering on light backgrounds |
+| White | `#FFFFFF` | Lettering on dark backgrounds |
 
 ## Color theme
 
 | Color | Value | Role |
 | --- | --- | --- |
-| Zinc | `#323236` / RGB `50, 50, 54` | Logo on light backgrounds; primary actions and text |
-| White | `#FFFFFF` / RGB `255, 255, 255` | Logo on dark backgrounds; light canvas and inverse text |
+| Zinc | `#323236` / RGB `50, 50, 54` | Logo lettering on light backgrounds; primary actions and text |
+| White | `#FFFFFF` / RGB `255, 255, 255` | Logo lettering on dark backgrounds; light canvas and inverse text |
 
 The workbench expresses Zinc as `oklch(0.319 0.007 286)` and white as
 `oklch(1 0 0)`. Zinc is rounded to three decimals; the exported SVG and PNG files
@@ -90,14 +115,15 @@ controls are exempt from normal text-contrast requirements; keep their labels
 readable and preserve the native disabled state.
 
 The workbench's `.dark` class controls the theme; logo variants follow that class.
-Browser favicons follow the OS color scheme. The SQL editor shares the input,
+Browser favicons use the transparent starfish icon, which reads on light and
+dark browser chrome without a per-scheme variant. The SQL editor shares the input,
 surface, selection, cursor, focus, and monospace font tokens.
 Syntax tokens give keywords a restrained purple (`oklch(0.46 0.12 300)` in light
 mode, `oklch(0.78 0.1 300)` in dark mode), strings emerald, and numbers blue.
 Comments use muted text. Syntax accents reduce chroma where needed to stay
 inside sRGB; light-mode string text also lowers lightness to pass contrast on
 the selected surface. These editor accents stay readable against both the
-working surface and the active line; they do not replace the Zinc brand palette.
+working surface and the active line; they do not replace the Zinc interface palette.
 
 ### Typography
 
@@ -253,7 +279,8 @@ change, such as background color and box shadow; do not use `transition-all`.
 
 Reserve red for destructive actions and errors, emerald for success, amber for
 warnings, and blue for informational states. These functional colors remain
-distinct from the monochrome brand. Pair status colors with text or icons. Check
+distinct from the Zinc interface palette and from the logo's gradient. Pair
+status colors with text or icons. Check
 body text at 4.5:1 contrast or better and visible focus indicators at 3:1 or better.
 
 The documentation site's [`docs/docs.json`](docs/docs.json) uses Zinc for
@@ -266,14 +293,19 @@ workbench; the custom logo lettering is artwork, not a UI typeface.
 ## Updating assets
 
 1. Replace the files in `assets/branding/` with the new export, preserving names.
+   If the export renames files, update the mapping in
+   [`scripts/sync-branding.mjs`](scripts/sync-branding.mjs) and the table above.
 2. Run `pnpm run sync:branding` to update all published copies.
-3. If the palette changes, update the semantic theme and `docs/docs.json`, then
+3. If the full logo's dimensions change, update the `width` and `height` in
+   [`frontend/src/components/Sidebar/Logo.tsx`](frontend/src/components/Sidebar/Logo.tsx).
+4. If the palette changes, update the semantic theme and `docs/docs.json`, then
    update this guide.
-4. Run `pnpm run build:frontend` and inspect light and dark logo variants,
+5. Run `pnpm run build:frontend` and inspect light and dark logo variants,
    favicons, navigation, text, buttons, and focus states.
 
 The sync script maintains the existing `docs/images/logo/` URLs used by the
-README and documentation, the workbench's public assets, and `mcpb/icon.png`
-(the 512-pixel Zinc icon). It also adds dark-mode styling to the two favicons
-without changing the source SVG geometry. Do not edit these generated copies by
-hand; rerunning the command will overwrite them.
+README and documentation, the workbench's public assets, the two favicons, and
+`mcpb/icon.png` (the 512-pixel transparent icon). `docs/images/logo/icon.svg`
+and `icon-dark.svg` are kept as separate URLs but now hold the same transparent
+icon. Do not edit these generated copies by hand; rerunning the command will
+overwrite them.
