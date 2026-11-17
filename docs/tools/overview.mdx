@@ -27,6 +27,8 @@ dsn = "sqlite:///./dev.db"
 # No [[tools]] entries = both execute_sql and search_objects enabled
 ```
 
+Once a source has any `[[tools]]` entry, only the tools listed for it are enabled.
+
 ### Selective Tool Exposure
 
 Control which tools are exposed for each database source:
@@ -43,10 +45,6 @@ source = "production"
 ```
 
 This is useful when you want to restrict AI models to read-only schema exploration without allowing SQL execution.
-
-<Warning>
-The same rule applies when you list a tool only to configure it. Once a source has any `[[tools]]` entry, it gets only the tools listed for it, so an `execute_sql` entry on its own (to set `readonly`, say) removes `search_objects`. List both, as in the next example.
-</Warning>
 
 ### Per-Tool Settings
 

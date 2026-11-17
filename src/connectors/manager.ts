@@ -286,8 +286,7 @@ export class ConnectorManager {
       // because a single source connection may be shared by both read-only and
       // writable tools. ConnectorConfig.readonly (connection-level) remains supported
       // for direct connector use but is intentionally not wired from source config.
-      // What is wired is narrower: when no tool on a SQLite source can write, a
-      // missing database file is an error rather than something to create.
+      // A SQLite file that no tool can write to must already exist.
       if (source.tools_read_only) {
         config.requireExistingFile = true;
       }

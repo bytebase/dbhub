@@ -657,7 +657,6 @@ describe('SQLite Connector Integration Tests', () => {
       });
 
       it('should not create the file for a source whose tools are all read-only', async () => {
-        // The marker the TOML loader sets is what turns the option on
         const dbPath = path.join(os.tmpdir(), `dbhub-readonly-source-${Date.now()}.db`);
         const manager = new ConnectorManager();
 

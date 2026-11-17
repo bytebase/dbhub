@@ -226,10 +226,8 @@ export class SQLiteConnector implements Connector {
       dbOptions.readOnly = true;
     }
 
-    // Opening a writable connection to a missing file creates it. That is how
-    // SQLite works, but a mistyped path then "connects" to an empty database.
-    // When nothing could ever fill that database, report the missing file
-    // instead; otherwise create it and say which file was created.
+    // Opening a writable connection to a missing file creates it. Refuse when
+    // the file is required to exist; otherwise say which file was created.
     const existed = isMemory || fs.existsSync(this.dbPath);
     if (!existed && config?.requireExistingFile) {
       throw openFailure(

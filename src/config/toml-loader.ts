@@ -62,11 +62,8 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     const sources = processSourceConfigs(parsedToml.sources, configPath);
     validateTomlConfig({ ...parsedToml, sources }, configPath);
 
-    // A SQLite file that nothing can write to is only useful if it already
-    // exists, so the connector reports a missing one instead of creating it.
-    // Limited to file-backed SQLite so that toggling `readonly` on a tool does
-    // not change, and thereby reconnect, any other source on a config reload.
-    // That matters most for `:memory:`, whose data a reconnect would discard.
+    // Not set for `:memory:`: the marker changes the source config, and a
+    // config reload reconnects a changed source, discarding in-memory data.
     for (const source of sources) {
       if (
         source.type === "sqlite" &&

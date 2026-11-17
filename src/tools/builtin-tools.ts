@@ -16,8 +16,8 @@ export const BUILTIN_TOOLS = [
   BUILTIN_TOOL_SEARCH_OBJECTS,
 ] as const;
 
-// Built-in tools that never write, whatever their configuration. execute_sql
-// and custom tools are read-only only when configured with `readonly = true`.
+// Built-in tools that never write. execute_sql and custom tools are read-only
+// only with `readonly = true`.
 const ALWAYS_READ_ONLY_TOOL_NAMES: readonly string[] = [
   BUILTIN_TOOL_SEARCH_OBJECTS,
   BUILTIN_TOOL_EXPLAIN_SQL,
@@ -25,10 +25,8 @@ const ALWAYS_READ_ONLY_TOOL_NAMES: readonly string[] = [
 ];
 
 /**
- * Whether no tool configured for a source can write to it.
- *
- * A source with no [[tools]] entries gets the default pair, whose execute_sql
- * is writable, so it is never read-only.
+ * Whether no tool configured for a source can write to it. A source with no
+ * [[tools]] entries gets the default, writable execute_sql.
  */
 export function toolsAreReadOnly(
   sourceId: string,

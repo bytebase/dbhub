@@ -97,9 +97,7 @@ DBHub supports three configuration methods:
   user = "root"
   password = "secret"
 
-  # Tool configuration (readonly, max_rows are tool-level settings).
-  # A source with any [[tools]] entry gets only the tools listed for it,
-  # so search_objects is listed too; staging_mysql keeps both defaults.
+  # Tool configuration (readonly, max_rows are tool-level settings)
   [[tools]]
   name = "execute_sql"
   source = "prod_pg"

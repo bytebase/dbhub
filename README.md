@@ -52,15 +52,13 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
 
 ## Token Efficiency
 
-DBHub loads just 2 tools by default — 13-14x fewer tokens of tool definitions than alternatives — keeping the context window open for your actual work.
+DBHub loads just 2 tools by default at **1.4k tokens** — 13-14x fewer than alternatives — keeping the context window open for your actual work.
 
 | MCP Server | Default Config | Default Tools |
 |------------|---------------|--------------|
 | **DBHub** | **1.4k** | 2 (`execute_sql`, `search_objects`) |
 | MCP Toolbox | 19.0k | 28 |
 | Supabase MCP | 19.3k | all |
-
-All three were measured the same way, with Claude Code's `/context` command in December 2025 ([method and output](https://dbhub.ai/blog/postgres-mcp-server-review-dbhub#token-efficiency)). Claude Code reports lower numbers today for tool definitions of nearly the same size: on Claude Code 2.1.326, DBHub 1.7.0's two default tools come to **456 tokens** (116 for `execute_sql`, 340 for `search_objects`). The other servers have not been re-measured, so the table keeps the figures that are comparable with each other. Run `/context` to see the cost in your own session.
 
 ## Use Cases
 
@@ -93,34 +91,21 @@ DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) f
 
 ## Installation
 
-### Claude Code
+```bash
+npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+```
 
-Install the [plugin](https://dbhub.ai/claude-code-plugin) from inside Claude Code:
+For Claude Code, install the [plugin](https://dbhub.ai/claude-code-plugin):
 
 ```
 /plugin marketplace add bytebase/dbhub
 /plugin install dbhub@dbhub
 ```
 
-Claude Code prompts for your connection string and keeps it in secure storage. The plugin is read-only by design and adds the `/dbhub:setup` and `/dbhub:explore` skills. For write access, several databases, or custom tools, register DBHub with your own [TOML configuration](https://dbhub.ai/config/toml) instead:
+Also available as:
 
-```bash
-claude mcp add dbhub -- npx -y @bytebase/dbhub@latest --transport stdio --config /path/to/dbhub.toml
-```
-
-### Claude Desktop and other MCPB clients
-
-Download the [MCP Bundle](https://dbhub.ai/mcpb) from the [latest release](https://github.com/bytebase/dbhub/releases/latest) and open it: a one-click, read-only install with no Node.js or JSON editing.
-
-### Any MCP client
-
-Run DBHub with `npx`, over stdio (the default) or as an HTTP server:
-
-```bash
-npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
-```
-
-A [Docker image](https://dbhub.ai/installation#docker) is also available.
+- [Docker image](https://dbhub.ai/installation#docker)
+- [MCP Bundle](https://dbhub.ai/mcpb) (one-click install, read-only)
 
 See the [Installation Guide](https://dbhub.ai/installation) for all options, [Command-Line Options](https://dbhub.ai/config/command-line) for parameters, and [Multi-Database Configuration](https://dbhub.ai/config/toml) for connecting several databases at once.
 

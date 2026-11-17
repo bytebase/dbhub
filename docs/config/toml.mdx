@@ -101,8 +101,7 @@ connection_timeout = 60
 id = "staging"
 dsn = "mysql://root:pass@localhost:3306/myapp"
 
-# Configure tools for each source. A source with [[tools]] entries gets
-# only the tools listed for it, so search_objects is listed as well.
+# Configure tools for each source
 [[tools]]
 name = "execute_sql"
 source = "production"
@@ -112,9 +111,6 @@ max_rows = 1000
 [[tools]]
 name = "search_objects"
 source = "production"
-
-# staging has no [[tools]] entries: it gets the default execute_sql
-# (writable) and search_objects
 ```
 
 Start DBHub:
@@ -758,10 +754,6 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
 <Warning>
 **Tool options cannot be set via command-line flags.** They are **only available in TOML configuration** in the `[[tools]]` section.
 </Warning>
-
-<Note>
-A source with no `[[tools]]` entries gets `execute_sql` and `search_objects`. Once a source has any `[[tools]]` entry, it gets only the tools listed for it, so list `search_objects` alongside a configured `execute_sql` to keep schema search. See [Tool Configuration](/tools/overview#tool-configuration).
-</Note>
 
 ### name
 

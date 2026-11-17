@@ -217,7 +217,7 @@ ${tools}`);
         expect(result?.sources[0].tools_read_only).toBeUndefined();
       });
 
-      it('should not mark other databases, so toggling readonly does not reconnect them on reload', () => {
+      it('should not mark other databases', () => {
         const result = loadToml(`
 [[sources]]
 id = "pg"
@@ -230,7 +230,7 @@ ${readOnlyTool('pg')}`);
       it.each([
         ['dsn = "sqlite:///:memory:"'],
         ['type = "sqlite"\ndatabase = ":memory:"'],
-      ])('should not mark an in-memory source (%s), whose data a reconnect would discard', (connection) => {
+      ])('should not mark an in-memory source (%s)', (connection) => {
         const result = loadToml(`
 [[sources]]
 id = "mem"
@@ -241,8 +241,6 @@ ${readOnlyTool('mem')}`);
       });
 
       it('should load an in-memory source identically whether or not its tool is read-only', () => {
-        // A config reload reconnects a source whose config changed, and
-        // reconnecting an in-memory database empties it.
         const source = '\n[[sources]]\nid = "mem"\ndsn = "sqlite:///:memory:"\n';
         const writable = loadToml(`${source}\n[[tools]]\nname = "execute_sql"\nsource = "mem"\n`);
         const readOnly = loadToml(`${source}${readOnlyTool('mem')}`);
