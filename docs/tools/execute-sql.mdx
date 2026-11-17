@@ -109,6 +109,12 @@ dsn = "postgres://user:pass@localhost:5432/mydb"
 name = "execute_sql"
 source = "production"
 readonly = true
+
+# Listing execute_sql replaces the default tools for this source,
+# so list search_objects too to keep schema search
+[[tools]]
+name = "search_objects"
+source = "production"
 ```
 </CodeGroup>
 

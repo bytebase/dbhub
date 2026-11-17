@@ -97,12 +97,18 @@ DBHub supports three configuration methods:
   user = "root"
   password = "secret"
 
-  # Tool configuration (readonly, max_rows are tool-level settings)
+  # Tool configuration (readonly, max_rows are tool-level settings).
+  # A source with any [[tools]] entry gets only the tools listed for it,
+  # so search_objects is listed too; staging_mysql keeps both defaults.
   [[tools]]
   name = "execute_sql"
   source = "prod_pg"
   readonly = true
   max_rows = 1000
+
+  [[tools]]
+  name = "search_objects"
+  source = "prod_pg"
   ```
 - Key files:
   - `src/types/config.ts`: TypeScript interfaces for TOML structure

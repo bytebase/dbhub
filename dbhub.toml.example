@@ -280,6 +280,9 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #
 # By default, all sources get 'execute_sql' and 'search_objects' tools enabled.
 # Use [[tools]] entries to customize behavior per source.
+#
+# Once a source has any [[tools]] entry, it gets ONLY the tools listed for it.
+# To configure execute_sql and keep schema search, list search_objects as well.
 
 # [[tools]]
 # name = "execute_sql"

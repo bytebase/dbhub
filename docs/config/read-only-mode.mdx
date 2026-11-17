@@ -18,7 +18,15 @@ dsn = "postgres://user:pass@localhost:5432/mydb"
 name = "execute_sql"
 source = "production"
 readonly = true
+
+[[tools]]
+name = "search_objects"
+source = "production"
 ```
+
+<Note>
+Keep the `search_objects` entry. A source with no `[[tools]]` entries gets both default tools, but once it has one, it gets only the tools listed for it: configuring `execute_sql` alone removes schema search. See [Tool Configuration](/tools/overview#tool-configuration).
+</Note>
 
 The [MCP Bundle](/mcpb) and the [Claude Code Plugin](/claude-code-plugin) ship with this already set.
 
@@ -26,6 +34,8 @@ The [MCP Bundle](/mcpb) and the [Claude Code Plugin](/claude-code-plugin) ship w
 
 - [Custom tools](/tools/custom-tools#readonly-mode) cannot set it and always execute their statement. Keep the statement of a custom tool read-only yourself
 - [explain_sql](/tools/explain-sql) and [health_check](/tools/health-check) are always read-only and take no `readonly` option
+
+On SQLite, a source whose tools are all read-only must point at a database file that already exists. DBHub normally creates a missing SQLite file, but an empty database that no tool can write to would only hide a mistyped path, so it reports the missing file instead.
 
 ## How It Is Enforced
 

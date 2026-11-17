@@ -39,13 +39,15 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
 
 ## Token Efficiency
 
-DBHub loads just 2 tools by default at **1.4k tokens** — 13-14x fewer than alternatives — keeping the context window open for your actual work.
+DBHub loads just 2 tools by default — 13-14x fewer tokens of tool definitions than alternatives — keeping the context window open for your actual work.
 
 | MCP Server | Default Config | Default Tools |
 |------------|---------------|--------------|
 | **DBHub** | **1.4k** | 2 (`execute_sql`, `search_objects`) |
 | MCP Toolbox | 19.0k | 28 |
 | Supabase MCP | 19.3k | all |
+
+All three were measured the same way, with Claude Code's `/context` command in December 2025 ([method and output](/blog/postgres-mcp-server-review-dbhub#token-efficiency)). Claude Code reports lower numbers today for tool definitions of nearly the same size: on Claude Code 2.1.326, DBHub 1.7.0's two default tools come to **456 tokens** (116 for `execute_sql`, 340 for `search_objects`). The other servers have not been re-measured, so the table keeps the figures that are comparable with each other. Run `/context` to see the cost in your own session.
 
 ## Use Cases
 
