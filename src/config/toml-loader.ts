@@ -6,6 +6,12 @@ import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import {
+  SQLITE_DSN_PREFIX,
+  buildSqliteDSN,
+  normalizeSqliteDsn,
+  resolveSqliteFilePath,
+} from "../utils/sqlite-dsn.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
 import { validateSessionSettings } from "../utils/session-settings.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
@@ -995,46 +1001,13 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
  * rather than process.cwd(), so a config names the same database no matter
  * where the server was launched from.
  *
- * Separators are normalised to forward slashes: path.resolve yields backslashes
- * on Windows, and the drive-letter branch of SQLiteDSNParser only matches
- * `C:/...`, so a backslash path would survive the DSN round-trip with a spurious
- * leading slash.
+ * Separators are normalised to forward slashes, so a Windows path reads the
+ * same in the DSN, the startup table and API responses.
  *
  * `:memory:` is a sentinel rather than a path and is passed through untouched.
  */
 function resolveSqliteDatabasePath(database: string, configPath: string): string {
-  if (database === ":memory:") {
-    return database;
-  }
-
-  const expanded = expandHomeDir(database);
-  const absolute = path.isAbsolute(expanded)
-    ? expanded
-    : path.resolve(path.dirname(configPath), expanded);
-
-  return absolute.replace(/\\/g, "/");
-}
-
-/**
- * Encode a SQLite database path as a DSN that SQLiteDSNParser decodes back to
- * the same path.
- *
- * The parser reads the path positionally, so the slash count is load-bearing.
- * `sqlite://` followed by a leading-slash path yields pathname `/<path>`, which
- * the parser returns unchanged for POSIX paths and de-prefixes for `C:/` drive
- * letters. Prefixing three slashes unconditionally instead turns
- * `/var/lib/x.db` into `sqlite:////var/lib/x.db`, whose pathname starts with
- * `//` and loses its leading slash on the way back out — silently converting an
- * absolute path into a relative one.
- *
- * `database` is expected to already be resolved (see resolveSqliteDatabasePath).
- */
-function buildSqliteDSN(database: string): string {
-  if (database === ":memory:") {
-    return "sqlite:///:memory:";
-  }
-
-  return `sqlite://${database.startsWith("/") ? database : `/${database}`}`;
+  return resolveSqliteFilePath(database, path.dirname(configPath)).replace(/\\/g, "/");
 }
 
 /**
@@ -1072,9 +1045,17 @@ function processSourceConfigs(
       processed.database = resolveSqliteDatabasePath(processed.database, configPath);
     }
 
-    // Expand ~ in DSN for SQLite
-    if (processed.dsn && processed.dsn.startsWith("sqlite:///~")) {
-      processed.dsn = `sqlite:///${expandHomeDir(processed.dsn.substring(11))}`;
+    // Expand ~ and resolve a relative path in a SQLite DSN, against the config
+    // file's directory like the `database` field above
+    if (processed.dsn && processed.dsn.startsWith(SQLITE_DSN_PREFIX)) {
+      try {
+        processed.dsn = normalizeSqliteDsn(processed.dsn, path.dirname(configPath));
+      } catch (error) {
+        throw new Error(
+          `Configuration file ${configPath}: source '${source.id}' has an invalid SQLite DSN: ` +
+            `${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
     // Parse DSN to populate connection info fields (if not already set)

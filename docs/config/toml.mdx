@@ -170,8 +170,10 @@ Sources define database connections. Each source represents a database that DBHu
 
       [[sources]]
       id = "local"
-      dsn = "sqlite:///./dev.db"
+      dsn = "sqlite:///./dev.db"  # relative to this config file
       ```
+
+      A relative SQLite path (`sqlite:///./dev.db`) is resolved against the directory holding the config file, so the config names the same database wherever DBHub is started from. Without the `./`, the path is absolute: `sqlite:///dev.db` is `/dev.db`. See the [SQLite DSN formats](/config/command-line#--dsn).
     </Tab>
 
     <Tab title="Individual Parameters">

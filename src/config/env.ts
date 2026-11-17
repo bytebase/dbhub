@@ -9,6 +9,7 @@ import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { obfuscateDSNPassword, parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { buildSqliteDSN, normalizeSqliteDsn, resolveSqliteFilePath } from "../utils/sqlite-dsn.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -213,8 +214,9 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
         break;
       case 'sqlite':
         // SQLite doesn't use host/port, handle differently
+        // DB_NAME is a file path: relative to the working directory unless absolute
         return {
-          dsn: `sqlite:///${dbName}`,
+          dsn: buildSqliteDSN(resolveSqliteFilePath(dbName)),
           source: 'individual environment variables'
         };
       default:
@@ -796,15 +798,30 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     const idData = resolveId();
     const sourceId = idData?.id || "default";
 
+    // A SQLite DSN may name a relative path. Resolve it against the working
+    // directory now, so the startup output and API responses show the file
+    // that is actually opened.
+    let dsn = dsnResult.dsn;
+    if (dbType === 'sqlite') {
+      try {
+        dsn = normalizeSqliteDsn(dsn);
+      } catch (error) {
+        throw new Error(
+          `Invalid SQLite DSN: ${error instanceof Error ? error.message : String(error)}. ` +
+            `Expected format: sqlite:///path/to/database.db`
+        );
+      }
+    }
+
     // Create a single source config from the resolved DSN
     const source: SourceConfig = {
       id: sourceId,
       type: dbType,
-      dsn: dsnResult.dsn,
+      dsn,
     };
 
     // Parse DSN to populate connection info fields for API responses
-    const connectionInfo = parseConnectionInfoFromDSN(dsnResult.dsn);
+    const connectionInfo = parseConnectionInfoFromDSN(dsn);
     if (connectionInfo) {
       if (connectionInfo.host) {
         source.host = connectionInfo.host;
