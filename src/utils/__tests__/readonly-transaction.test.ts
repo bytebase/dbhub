@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   detectReadOnlyBackstop,
+  MARIADB_READ_ONLY_BACKSTOP,
+  noBackstopWarning,
   readOnlyFlagQuery,
   readOnlyClose,
   READ_ONLY_OPEN,
@@ -48,6 +50,18 @@ describe("detectReadOnlyBackstop", () => {
       kind: "session",
       variable: "transaction_read_only",
     });
+  });
+});
+
+describe("MARIADB_READ_ONLY_BACKSTOP", () => {
+  it("is the session form on tx_read_only, with no server detection", () => {
+    expect(MARIADB_READ_ONLY_BACKSTOP).toEqual({ kind: "session", variable: "tx_read_only" });
+  });
+});
+
+describe("noBackstopWarning", () => {
+  it("names the MySQL source, the only connector that detects Doris", () => {
+    expect(noBackstopWarning("analytics")).toContain('MySQL source "analytics": Apache Doris detected');
   });
 });
 

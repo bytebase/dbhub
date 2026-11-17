@@ -30,6 +30,11 @@
  * current value, a read-only execution costs three round trips beyond the query
  * itself.
  *
+ * MySQL-compatible servers that cannot take this form are handled on the MySQL
+ * connector only (detectReadOnlyBackstop), since `mysql://` is the path they
+ * are reached through. The MariaDB connector does no server detection and
+ * always uses MARIADB_READ_ONLY_BACKSTOP.
+ *
  * TiDB rejects the READ ONLY modifier (see isTiDBVersion), so there we open a
  * plain transaction and always ROLLBACK instead of COMMIT: any DML the
  * classifier missed is discarded rather than persisted, while SELECT results are
@@ -58,19 +63,33 @@ export interface ReadOnlyTransactionConnection {
  */
 export type ReadOnlyVariable = "transaction_read_only" | "tx_read_only";
 
-/** How the backstop takes effect on this server, detected once at connect time. */
+/**
+ * How the backstop takes effect on a server. The MySQL connector detects it
+ * once at connect time; the MariaDB connector always uses the session form.
+ */
 export type ReadOnlyBackstop =
   /** Stock MySQL/MariaDB: session READ ONLY around a READ ONLY transaction. */
   | { kind: "session"; variable: ReadOnlyVariable }
-  /** TiDB: plain transaction, always rolled back. */
+  /** TiDB (MySQL connector only): plain transaction, always rolled back. */
   | { kind: "rollback" }
-  /** Apache Doris: no transaction a query can run in; classifier only. */
+  /** Apache Doris (MySQL connector only): no transaction a query can run in; classifier only. */
   | { kind: "none" };
 
 /**
- * Pick the backstop from the server's `SELECT VERSION()` string and, when it
- * could be read, `@@version_comment`. Only a positive Doris match drops the
- * backstop: a missing or unrecognized comment keeps the transactional form.
+ * The MariaDB connector's backstop. Fixed rather than detected: that connector
+ * is only expected to reach MariaDB servers, which have `tx_read_only`
+ * throughout. MySQL-compatible servers go through the MySQL connector.
+ */
+export const MARIADB_READ_ONLY_BACKSTOP: ReadOnlyBackstop = {
+  kind: "session",
+  variable: "tx_read_only",
+};
+
+/**
+ * MySQL connector only. Pick the backstop from the server's `SELECT VERSION()`
+ * string and, when it could be read, `@@version_comment`. Only a positive Doris
+ * match drops the backstop: a missing or unrecognized comment keeps the
+ * transactional form.
  */
 export function detectReadOnlyBackstop(
   version: unknown,
@@ -111,9 +130,9 @@ function readOnlyVariableFor(version: unknown): ReadOnlyVariable {
 export const VERSION_COMMENT_QUERY = "SELECT @@version_comment AS version_comment";
 
 /** Logged once at connect time when a server has no engine-level backstop. */
-export function noBackstopWarning(connectorName: string, sourceId: string): string {
+export function noBackstopWarning(sourceId: string): string {
   return (
-    `${connectorName} source "${sourceId}": Apache Doris detected. Doris cannot run queries inside a ` +
+    `MySQL source "${sourceId}": Apache Doris detected. Doris cannot run queries inside a ` +
     `read-only transaction, so read-only tools on this source are enforced by SQL validation alone. ` +
     `Connect with a least-privilege, read-only database account.`
   );
@@ -177,7 +196,8 @@ function parseFlag(raw: unknown): 0 | 1 | undefined {
  *
  * @param conn Pool connection; must be the same connection the callback queries on.
  * @param readonly Whether read-only enforcement is active for this execution.
- * @param backstop The server's backstop form, from detectReadOnlyBackstop.
+ * @param backstop The server's backstop form: detectReadOnlyBackstop on MySQL,
+ *   MARIADB_READ_ONLY_BACKSTOP on MariaDB.
  * @param execute Driver-specific query + result parsing.
  */
 export async function withReadOnlyTransaction<T>(
