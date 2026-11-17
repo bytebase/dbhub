@@ -50,6 +50,20 @@ function unescapePath(filePath: string): string {
   return filePath.replace(/%(25|3F)/gi, (escape) => (escape === "%25" ? "%" : "?"));
 }
 
+/**
+ * Whether what follows the third slash reads as something other than a path
+ * rooted at that slash: a drive letter, a UNC share, an explicitly relative or
+ * home path, or another slash (`sqlite:////abs/path.db`).
+ */
+function overridesRoot(afterSlash: string): boolean {
+  return (
+    afterSlash.startsWith("/") ||
+    UNC_PATH.test(afterSlash) ||
+    WINDOWS_DRIVE_PATH.test(afterSlash) ||
+    EXPLICITLY_RELATIVE_PATH.test(afterSlash)
+  );
+}
+
 /** Split a SQLite DSN into its path part and its query string (with the `?`). */
 function splitQuery(dsn: string): { body: string; query: string } {
   const queryStart = dsn.indexOf("?");
@@ -75,21 +89,10 @@ export function parseSqliteDsnPath(dsn: string): string {
     return SQLITE_MEMORY_PATH;
   }
 
-  let written = rest;
-  if (rest.startsWith("/")) {
-    // Three-slash form. The third slash roots the path unless what follows is
-    // itself unambiguous: a drive letter, an explicitly relative or home path,
-    // another slash (`sqlite:////abs/path.db`) or a backslash UNC share.
-    const afterSlash = rest.substring(1);
-    if (
-      afterSlash.startsWith("/") ||
-      UNC_PATH.test(afterSlash) ||
-      WINDOWS_DRIVE_PATH.test(afterSlash) ||
-      EXPLICITLY_RELATIVE_PATH.test(afterSlash)
-    ) {
-      written = afterSlash;
-    }
-  }
+  // Three-slash form: the third slash roots the path unless what follows is
+  // itself unambiguous.
+  const written =
+    rest.startsWith("/") && overridesRoot(rest.substring(1)) ? rest.substring(1) : rest;
 
   if (written === "" || written === "/") {
     throw new Error("the DSN does not name a database file");
@@ -128,20 +131,25 @@ export function resolveSqliteDsnPath(dsn: string, baseDir: string = process.cwd(
  * Encode an already-resolved SQLite database path as a DSN that
  * parseSqliteDsnPath decodes back to the same path.
  *
- * A path that itself starts with two slashes (a UNC share) takes the full
- * three-slash prefix; with fewer, one of its own slashes would be read as part
- * of the prefix. `?` and `%` are escaped so that a path containing them is not
- * cut short at what would read as a query string.
+ * A POSIX path is written straight after `sqlite://`, giving the familiar
+ * three-slash form. Anything else takes the full `sqlite:///` prefix, which
+ * the parser strips again: a drive-letter or UNC path, and the rare absolute
+ * path whose first segment would otherwise be read as something else
+ * (`/~/app.db` as a home path, `/C:/app.db` as a drive, `/:memory:` as the
+ * in-memory database). `?` and `%` are escaped so that a path containing them
+ * is not cut short at what would read as a query string.
  */
 export function buildSqliteDSN(database: string): string {
   if (database === SQLITE_MEMORY_PATH) {
     return `${SQLITE_DSN_PREFIX}/${SQLITE_MEMORY_PATH}`;
   }
+
   const escaped = escapePath(database);
-  if (UNC_PATH.test(escaped) || !escaped.startsWith("/")) {
-    return `${SQLITE_DSN_PREFIX}/${escaped}`;
-  }
-  return `${SQLITE_DSN_PREFIX}${escaped}`;
+  const afterSlash = escaped.substring(1);
+  const readsAsRooted =
+    escaped.startsWith("/") && !overridesRoot(afterSlash) && afterSlash !== SQLITE_MEMORY_PATH;
+
+  return readsAsRooted ? `${SQLITE_DSN_PREFIX}${escaped}` : `${SQLITE_DSN_PREFIX}/${escaped}`;
 }
 
 /**

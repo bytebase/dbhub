@@ -120,6 +120,19 @@ describe('Environment Configuration Tests', () => {
       expect(result?.dsn).toBe(buildSqliteDSN(path.resolve(process.cwd(), 'data', 'app.db')));
     });
 
+    it('should ignore DB_HOST, DB_PORT and credentials left in the environment for SQLite', () => {
+      // An inherited DB_PORT used to skip the SQLite branch and produce
+      // `sqlite://user:pass@host:5432/shop.db`.
+      process.env.DB_TYPE = 'sqlite';
+      process.env.DB_NAME = '/path/to/database.db';
+      process.env.DB_HOST = 'localhost';
+      process.env.DB_PORT = '5432';
+      process.env.DB_USER = 'postgres';
+      process.env.DB_PASSWORD = 'secret';
+
+      expect(buildDSNFromEnvParams()?.dsn).toBe('sqlite:///path/to/database.db');
+    });
+
     it('should handle SQLite with special characters in file path', () => {
       process.env.DB_TYPE = 'sqlite';
       process.env.DB_NAME = '/tmp/test_db@#$.db';

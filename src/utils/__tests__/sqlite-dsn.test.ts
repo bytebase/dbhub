@@ -111,6 +111,13 @@ describe('buildSqliteDSN', () => {
     ['/tmp/project?copy/data.db', 'sqlite:///tmp/project%3Fcopy/data.db'],
     ['/tmp/100%/data.db', 'sqlite:///tmp/100%25/data.db'],
     ['/tmp/literal%3F/data.db', 'sqlite:///tmp/literal%253F/data.db'],
+    // Absolute paths whose first segment would read as something else after
+    // three slashes: a home path, a relative path, a drive, the in-memory database
+    ['/~/app.db', 'sqlite:////~/app.db'],
+    ['/./app.db', 'sqlite:////./app.db'],
+    ['/../app.db', 'sqlite:////../app.db'],
+    ['/C:/app.db', 'sqlite:////C:/app.db'],
+    ['/:memory:', 'sqlite:////:memory:'],
     [':memory:', 'sqlite:///:memory:'],
   ])('encodes %s as %s and decodes it back', (database, dsn) => {
     expect(buildSqliteDSN(database)).toBe(dsn);

@@ -194,6 +194,17 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
     throw new Error(`Unsupported DB_TYPE: ${dbType}. Supported types: ${supportedTypes.join(', ')}`);
   }
 
+  // SQLite is a file, not a network endpoint: DB_NAME is its path (relative to
+  // the working directory unless absolute). Handled before the port logic so a
+  // DB_HOST / DB_PORT / DB_USER left over in the environment cannot turn it
+  // into a network-style DSN.
+  if (dbType.toLowerCase() === 'sqlite') {
+    return {
+      dsn: buildSqliteDSN(resolveSqliteFilePath(dbName as string)),
+      source: 'individual environment variables'
+    };
+  }
+
   // Determine default port based on database type
   let port = dbPort;
   if (!port) {
@@ -212,13 +223,6 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
       case 'oracle':
         port = '1521';
         break;
-      case 'sqlite':
-        // SQLite doesn't use host/port, handle differently
-        // DB_NAME is a file path: relative to the working directory unless absolute
-        return {
-          dsn: buildSqliteDSN(resolveSqliteFilePath(dbName)),
-          source: 'individual environment variables'
-        };
       default:
         throw new Error(`Unknown database type for port determination: ${dbType}`);
     }
