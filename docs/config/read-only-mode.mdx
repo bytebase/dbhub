@@ -1,0 +1,62 @@
+---
+title: "Read-Only Mode"
+description: "How DBHub restricts execute_sql to read-only statements on each database, and where that protection ends"
+---
+
+Read-only mode restricts the [`execute_sql`](/tools/execute-sql) tool to statements that read data. It is a guardrail against accidental and agent-initiated writes, **not a permission boundary**: what a connection can ultimately do is decided by the database account DBHub connects with.
+
+## Enabling
+
+Set `readonly = true` on the `execute_sql` tool of a source:
+
+```toml
+[[sources]]
+id = "production"
+dsn = "postgres://user:pass@localhost:5432/mydb"
+
+[[tools]]
+name = "execute_sql"
+source = "production"
+readonly = true
+```
+
+The [MCP Bundle](/mcpb) and the [Claude Code Plugin](/claude-code-plugin) ship with this already set.
+
+`readonly` is a per-tool setting and is only valid on `execute_sql`:
+
+- [Custom tools](/tools/custom-tools#readonly-mode) cannot set it and always execute their statement. Keep the statement of a custom tool read-only yourself
+- [explain_sql](/tools/explain-sql) and [health_check](/tools/health-check) are always read-only and take no `readonly` option
+
+## How It Is Enforced
+
+A statement goes through two layers.
+
+**1. Keyword classifier.** Before anything reaches the database, DBHub strips comments and string literals and checks each statement against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) for the dialect: `SELECT`, `WITH` and `EXPLAIN` everywhere, plus `SHOW` (PostgreSQL, MySQL, MariaDB), `DESCRIBE` (MySQL, MariaDB) and `PRAGMA` (SQLite). When several statements are sent together, every one of them must pass.
+
+**2. Engine-level backstop.** The statement then runs under the database's own read-only mechanism, so the database rejects or discards a write even if the classifier is evaded:
+
+| Database | Backstop | Left to the classifier alone |
+| -------- | -------- | ---------------------------- |
+| PostgreSQL | `BEGIN READ ONLY` transaction | — |
+| MySQL / MariaDB | Session set `READ ONLY` around a `START TRANSACTION READ ONLY` | — |
+| SQL Server | Transaction that is always rolled back (SQL Server has no read-only transaction mode) | — |
+| Oracle | `SET TRANSACTION READ ONLY` transaction | DDL |
+| SQLite | `PRAGMA query_only = ON` | — |
+| TiDB (`mysql://`) | Transaction that is always rolled back (TiDB rejects `READ ONLY` transactions) | DDL |
+| Apache Doris (`mysql://`) | None. Doris does not run queries inside a transaction; DBHub logs a warning when it connects | Everything |
+
+On SQL Server, statements that would end the transaction or run outside it are rejected before it opens: `COMMIT`/`ROLLBACK`, dynamic SQL such as `EXEC`, and pass-through data sources such as `OPENQUERY`.
+
+<Note>
+Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.
+</Note>
+
+## What It Does Not Cover
+
+Read-only mode prevents data modification (DML/DDL). It cannot constrain everything a **privileged database role** can do through *functions*. Every supported engine has functions or packages that a plain `SELECT` can call to read or write server files, open network connections or reach other servers — for example `lo_export` and `dblink` on PostgreSQL, `LOAD_FILE` on MySQL/MariaDB, `OPENROWSET` on SQL Server, and `UTL_HTTP` on Oracle. These are gated by database privileges, not by transaction mode, so a read-only transaction does not stop them.
+
+DBHub rejects a [per-dialect list of well-known ones](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) by name, but that matching is best-effort and not exhaustive ([#377](https://github.com/bytebase/dbhub/issues/377)).
+
+<Warning>
+For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
+</Warning>

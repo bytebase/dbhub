@@ -9,7 +9,7 @@ Execute SQL queries and statements on your database with support for transaction
 - **Single statements**: Execute a single SQL query or command
 - **Multiple statements**: Separate multiple statements with semicolons (`;`)
 - **Transactions**: Wrap operations in `BEGIN`/`COMMIT` blocks for atomic execution
-- **Read-only mode**: Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode
+- **[Read-only mode](/config/read-only-mode)**: Configure a tool with `readonly = true` to restrict execution to read-only operations, enforced by both a keyword classifier and the database's own read-only mode
 - **Row limiting**: Configure `max_rows` per tool via TOML `[[tools]]` to limit SELECT query results
 
 ## Single Query
@@ -112,32 +112,10 @@ readonly = true
 ```
 </CodeGroup>
 
-In read-only mode, DBHub enforces read-only access in two layers:
-
-**1. Keyword classifier.** Each statement is checked against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) after stripping comments and strings:
-
-- `SELECT` queries
-- `SHOW` commands
-- `DESCRIBE` commands
-- `EXPLAIN` queries
-- Other read-only operations
-
-**2. Engine-level enforcement.** The statement is then executed under the database's own read-only mechanism, so the database rejects writes even if the classifier is evaded:
-
-- **PostgreSQL** — runs inside a `BEGIN READ ONLY` transaction
-- **SQLite** — runs with `PRAGMA query_only = ON`
-- **MySQL / MariaDB** — runs inside a `START TRANSACTION READ ONLY`, with the session itself set `READ ONLY` for the duration so DDL, which commits implicitly and would end the transaction, is rejected too
-- **TiDB** (via the MySQL connector, `mysql://`) — rejects `READ ONLY` transactions, so the statement runs in a plain transaction that is always rolled back
-- **Apache Doris** (via the MySQL connector, `mysql://`) — no engine-level enforcement. Doris does not run queries inside a transaction, so read-only mode there rests on the keyword classifier alone; DBHub logs a warning when it connects to Doris. A least-privilege database account is the only database-enforced protection
-
-<Note>
-Engine-level enforcement was added in **0.22.6**. Earlier versions relied on the keyword classifier alone.
-</Note>
+In read-only mode, each statement must pass a keyword classifier (`SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN` and other read-only statements), and is then executed under the database's own read-only mechanism where the engine has one. See [Read-Only Mode](/config/read-only-mode) for how it is enforced on each database and what it does not cover.
 
 <Warning>
-Read-only mode prevents data modification (DML/DDL), but it cannot constrain everything a **privileged database role** can do through *functions*. On PostgreSQL, a superuser or specially-privileged role can still read or write server files and run commands via `pg_read_file`, `lo_export`, `dblink`, and `COPY ... TO PROGRAM` — these are not blocked by a read-only transaction.
-
-For untrusted or agent-driven environments, **always connect DBHub with a least-privilege, read-only database user** scoped to the data it needs. Do not point a read-only tool at an admin/superuser DSN and rely on read-only mode alone.
+Read-only mode is a guardrail, not a permission boundary. Always connect DBHub with a least-privilege, read-only database user.
 </Warning>
 
 ## Row Limiting

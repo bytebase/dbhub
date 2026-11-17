@@ -37,7 +37,7 @@
           },
           {
             "group": "Configuration",
-            "pages": ["config/command-line", "config/toml", "config/debug"]
+            "pages": ["config/command-line", "config/toml", "config/read-only-mode", "config/debug"]
           }
         ]
       },
