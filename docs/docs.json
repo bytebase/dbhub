@@ -18,7 +18,16 @@
         "groups": [
           {
             "group": "Getting Started",
-            "pages": ["index", "installation", "quickstart", "mcpb", "claude-code-plugin"]
+            "pages": [
+              "index",
+              {
+                "group": "Installation",
+                "root": "installation",
+                "expanded": true,
+                "pages": ["mcpb", "claude-code-plugin"]
+              },
+              "quickstart"
+            ]
           },
           {
             "group": "MCP Tools",
