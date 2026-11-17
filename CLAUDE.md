@@ -103,6 +103,10 @@ DBHub supports three configuration methods:
   source = "prod_pg"
   readonly = true
   max_rows = 1000
+
+  [[tools]]
+  name = "search_objects"
+  source = "prod_pg"
   ```
 - Key files:
   - `src/types/config.ts`: TypeScript interfaces for TOML structure

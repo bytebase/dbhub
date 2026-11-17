@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars, findUnresolvedEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
+import { sourceConfigEquals } from '../../utils/config-watcher.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
 import { MAX_QUERY_TIMEOUT_SECONDS } from '../../utils/query-timeout.js';
 import { SQLServerConnector } from '../../connectors/sqlserver/index.js';
@@ -179,6 +180,86 @@ dsn = "sqlite:///~/databases/local.db"
 id = "empty"
 dsn = "sqlite://"
 `)).toThrow(/source 'empty' has an invalid SQLite DSN/);
+    });
+
+    describe('tools_read_only marker', () => {
+      const readOnlyTool = (source: string): string => `
+[[tools]]
+name = "execute_sql"
+source = "${source}"
+readonly = true
+`;
+
+      it('should mark a SQLite source whose tools are all read-only', () => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+${readOnlyTool('shop')}
+[[tools]]
+name = "search_objects"
+source = "shop"
+`);
+
+        expect(result?.sources[0].tools_read_only).toBe(true);
+      });
+
+      it.each([
+        ['has no [[tools]] entries', ''],
+        ['has a writable execute_sql', '\n[[tools]]\nname = "execute_sql"\nsource = "shop"\n'],
+      ])('should not mark a SQLite source that %s', (_label, tools) => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+${tools}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it('should not mark other databases', () => {
+        const result = loadToml(`
+[[sources]]
+id = "pg"
+dsn = "postgres://user:pass@localhost:5432/db"
+${readOnlyTool('pg')}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it.each([
+        ['dsn = "sqlite:///:memory:"'],
+        ['type = "sqlite"\ndatabase = ":memory:"'],
+        // The DSN is what gets opened, whatever `database` says
+        ['dsn = "sqlite:///:memory:"\ndatabase = "shop.db"'],
+      ])('should not mark an in-memory source (%s)', (connection) => {
+        const result = loadToml(`
+[[sources]]
+id = "mem"
+${connection}
+${readOnlyTool('mem')}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it('should load an in-memory source identically whether or not its tool is read-only', () => {
+        const source = '\n[[sources]]\nid = "mem"\ndsn = "sqlite:///:memory:"\n';
+        const writable = loadToml(`${source}\n[[tools]]\nname = "execute_sql"\nsource = "mem"\n`);
+        const readOnly = loadToml(`${source}${readOnlyTool('mem')}`);
+
+        expect(sourceConfigEquals(writable!.sources[0], readOnly!.sources[0])).toBe(true);
+      });
+
+      it('should not take the marker from the file', () => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+tools_read_only = true
+`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
     });
 
     it('should leave an absolute sqlite database path unchanged', () => {

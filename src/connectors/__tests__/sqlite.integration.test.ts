@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { SQLiteConnector } from '../sqlite/index.js';
+import { ConnectorManager } from '../manager.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import type { Connector } from '../interface.js';
 import fs from 'fs';
@@ -625,6 +626,49 @@ describe('SQLite Connector Integration Tests', () => {
           expect(errorSpy).not.toHaveBeenCalled();
         } finally {
           await connector.disconnect();
+          fs.rmSync(dbPath, { force: true });
+        }
+      });
+
+      it('should not create the file when it is required to exist', async () => {
+        const dbPath = path.join(os.tmpdir(), `dbhub-required-${Date.now()}.db`);
+
+        await expect(
+          new SQLiteConnector().connect(`sqlite://${dbPath}`, undefined, { requireExistingFile: true })
+        ).rejects.toThrow(
+          `Unable to open SQLite database file '${dbPath}': the file does not exist. ` +
+            'It was not created because no tool on this source can write to it.'
+        );
+        expect(fs.existsSync(dbPath)).toBe(false);
+      });
+
+      it('should open an existing file that is required to exist', async () => {
+        const dbPath = path.join(os.tmpdir(), `dbhub-required-${Date.now()}.db`);
+        fs.writeFileSync(dbPath, '');
+        const connector = new SQLiteConnector();
+
+        try {
+          await connector.connect(`sqlite://${dbPath}`, undefined, { requireExistingFile: true });
+          expect(errorSpy).not.toHaveBeenCalled();
+        } finally {
+          await connector.disconnect();
+          fs.rmSync(dbPath, { force: true });
+        }
+      });
+
+      it('should not create the file for a source whose tools are all read-only', async () => {
+        const dbPath = path.join(os.tmpdir(), `dbhub-readonly-source-${Date.now()}.db`);
+        const manager = new ConnectorManager();
+
+        try {
+          await expect(
+            manager.connectWithSources([
+              { id: 'shop', type: 'sqlite', dsn: `sqlite://${dbPath}`, tools_read_only: true },
+            ])
+          ).rejects.toThrow('the file does not exist');
+          expect(fs.existsSync(dbPath)).toBe(false);
+        } finally {
+          await manager.disconnect();
           fs.rmSync(dbPath, { force: true });
         }
       });

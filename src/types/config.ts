@@ -77,6 +77,11 @@ export interface SourceConfig extends ConnectionParams, SSHConfig {
   charset?: string; // MySQL/MariaDB: connection character set (e.g., "utf8mb4"). May be combined with collation; when both are set, collation takes precedence (it implies its character set).
   collation?: string; // MySQL/MariaDB: connection collation (e.g., "utf8mb4_0900_ai_ci"). Takes precedence over charset when both are set.
   session?: SessionSettings; // MySQL/PostgreSQL: [sources.session] settings applied to every new connection (e.g., lock_timeout = "5s")
+  /**
+   * Internal, not a TOML option: no tool on this SQLite source can write, so
+   * its database file must already exist.
+   */
+  tools_read_only?: boolean;
 }
 
 /**

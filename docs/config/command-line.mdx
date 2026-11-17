@@ -269,8 +269,10 @@ This page covers command-line flags and environment variables. For TOML configur
       other characters are written as they are.
 
       If the file does not exist, DBHub creates an empty database there and
-      prints a warning naming it. If the file cannot be opened at all, startup
-      fails with an error naming the path and what is missing.
+      prints a warning naming it, unless every tool on the source is
+      [read-only](/config/read-only-mode), in which case startup fails. If the
+      file cannot be opened at all, startup fails with an error naming the
+      path and what is missing.
     </Tab>
   </Tabs>
 

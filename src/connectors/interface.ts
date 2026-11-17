@@ -155,6 +155,8 @@ export interface ConnectorConfig {
    * Note: Application-level validation is done via ExecuteOptions.readonly
    */
   readonly?: boolean;
+  /** SQLite: fail instead of creating the database file when it does not exist. */
+  requireExistingFile?: boolean;
   /**
    * PostgreSQL search_path setting.
    * Comma-separated list of schema names (e.g., "myschema,public").

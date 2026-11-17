@@ -95,11 +95,17 @@ DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) f
 npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:password@localhost:5432/dbname?sslmode=disable"
 ```
 
+For Claude Code, install the [plugin](https://dbhub.ai/claude-code-plugin):
+
+```
+/plugin marketplace add bytebase/dbhub
+/plugin install dbhub@dbhub
+```
+
 Also available as:
 
 - [Docker image](https://dbhub.ai/installation#docker)
 - [MCP Bundle](https://dbhub.ai/mcpb) (one-click install, read-only)
-- [Claude Code plugin](https://dbhub.ai/claude-code-plugin)
 
 See the [Installation Guide](https://dbhub.ai/installation) for all options, [Command-Line Options](https://dbhub.ai/config/command-line) for parameters, and [Multi-Database Configuration](https://dbhub.ai/config/toml) for connecting several databases at once.
 
