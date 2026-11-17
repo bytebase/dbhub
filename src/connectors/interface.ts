@@ -156,6 +156,12 @@ export interface ConnectorConfig {
    */
   readonly?: boolean;
   /**
+   * SQLite: fail instead of creating the database file when it does not exist.
+   * Set when no tool on the source can write, so the new database could never
+   * be given any content.
+   */
+  requireExistingFile?: boolean;
+  /**
    * PostgreSQL search_path setting.
    * Comma-separated list of schema names (e.g., "myschema,public").
    * Sets the session search_path and uses the first schema as default for discovery methods.

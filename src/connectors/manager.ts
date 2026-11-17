@@ -286,6 +286,11 @@ export class ConnectorManager {
       // because a single source connection may be shared by both read-only and
       // writable tools. ConnectorConfig.readonly (connection-level) remains supported
       // for direct connector use but is intentionally not wired from source config.
+      // What is wired is narrower: when no tool on a SQLite source can write, a
+      // missing database file is an error rather than something to create.
+      if (source.tools_read_only) {
+        config.requireExistingFile = true;
+      }
       // Pass search_path for PostgreSQL
       if (source.search_path) {
         config.searchPath = source.search_path;

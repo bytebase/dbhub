@@ -181,6 +181,63 @@ dsn = "sqlite://"
 `)).toThrow(/source 'empty' has an invalid SQLite DSN/);
     });
 
+    describe('tools_read_only marker', () => {
+      const readOnlyTool = (source: string): string => `
+[[tools]]
+name = "execute_sql"
+source = "${source}"
+readonly = true
+`;
+
+      it('should mark a SQLite source whose tools are all read-only', () => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+${readOnlyTool('shop')}
+[[tools]]
+name = "search_objects"
+source = "shop"
+`);
+
+        expect(result?.sources[0].tools_read_only).toBe(true);
+      });
+
+      it.each([
+        ['has no [[tools]] entries', ''],
+        ['has a writable execute_sql', '\n[[tools]]\nname = "execute_sql"\nsource = "shop"\n'],
+      ])('should not mark a SQLite source that %s', (_label, tools) => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+${tools}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it('should not mark other databases, so toggling readonly does not reconnect them on reload', () => {
+        const result = loadToml(`
+[[sources]]
+id = "pg"
+dsn = "postgres://user:pass@localhost:5432/db"
+${readOnlyTool('pg')}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it('should not take the marker from the file', () => {
+        const result = loadToml(`
+[[sources]]
+id = "shop"
+dsn = "sqlite:///./shop.db"
+tools_read_only = true
+`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+    });
+
     it('should leave an absolute sqlite database path unchanged', () => {
       const absolute = path.join(tempDir, 'elsewhere', 'app.db').replace(/\\/g, '/');
       const result = loadToml(`

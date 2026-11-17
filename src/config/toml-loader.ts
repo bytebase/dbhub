@@ -14,7 +14,7 @@ import {
 } from "../utils/sqlite-dsn.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
 import { validateSessionSettings } from "../utils/session-settings.js";
-import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES } from "../tools/builtin-tools.js";
+import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES, toolsAreReadOnly } from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
@@ -60,6 +60,16 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     // Process first to populate fields from DSN (like type), then validate
     const sources = processSourceConfigs(parsedToml.sources, configPath);
     validateTomlConfig({ ...parsedToml, sources }, configPath);
+
+    // A SQLite file that nothing can write to is only useful if it already
+    // exists, so the connector reports a missing one instead of creating it.
+    // Limited to SQLite so that toggling `readonly` on a tool does not change,
+    // and thereby reconnect, any other kind of source on a config reload.
+    for (const source of sources) {
+      if (source.type === "sqlite" && toolsAreReadOnly(source.id, parsedToml.tools)) {
+        source.tools_read_only = true;
+      }
+    }
 
     return {
       sources,
@@ -1025,8 +1035,9 @@ function processSourceConfigs(
       processed.ssh_key = expandHomeDir(processed.ssh_key);
     }
 
-    // Internal marker set by the CLI/env path; never taken from TOML
+    // Internal markers; never taken from TOML
     delete processed.ssh_key_discovered;
+    delete processed.tools_read_only;
 
     // Expand ~ in SSH agent socket path (other types are rejected by validation)
     if (typeof processed.ssh_agent === "string" && processed.ssh_agent) {

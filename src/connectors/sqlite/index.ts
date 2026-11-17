@@ -84,7 +84,7 @@ class SQLiteDSNParser implements DSNParser {
  * the resolved path. SQLite itself only reports "unable to open database file",
  * which says neither which file nor why.
  */
-function openFailure(dbPath: string, error: unknown): Error {
+function openFailure(dbPath: string, error?: unknown, missingFileNote = ""): Error {
   const prefix = `Unable to open SQLite database file '${dbPath}'`;
   const pathHint =
     "A SQLite DSN path is absolute after three slashes (sqlite:///path/to/database.db); " +
@@ -95,7 +95,7 @@ function openFailure(dbPath: string, error: unknown): Error {
     return new Error(`${prefix}: directory '${directory}' does not exist. ${pathHint}`);
   }
   if (!fs.existsSync(dbPath)) {
-    return new Error(`${prefix}: the file does not exist. ${pathHint}`);
+    return new Error(`${prefix}: the file does not exist.${missingFileNote} ${pathHint}`);
   }
   return new Error(`${prefix}: ${error instanceof Error ? error.message : String(error)}`, {
     cause: error,
@@ -227,9 +227,17 @@ export class SQLiteConnector implements Connector {
     }
 
     // Opening a writable connection to a missing file creates it. That is how
-    // SQLite works, but a mistyped path then "connects" to an empty database,
-    // so say which file was created.
+    // SQLite works, but a mistyped path then "connects" to an empty database.
+    // When nothing could ever fill that database, report the missing file
+    // instead; otherwise create it and say which file was created.
     const existed = isMemory || fs.existsSync(this.dbPath);
+    if (!existed && config?.requireExistingFile) {
+      throw openFailure(
+        this.dbPath,
+        undefined,
+        " It was not created because no tool on this source can write to it."
+      );
+    }
 
     try {
       this.db = new DatabaseSync(this.dbPath, dbOptions);
