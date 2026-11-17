@@ -230,6 +230,8 @@ ${readOnlyTool('pg')}`);
       it.each([
         ['dsn = "sqlite:///:memory:"'],
         ['type = "sqlite"\ndatabase = ":memory:"'],
+        // The DSN is what gets opened, whatever `database` says
+        ['dsn = "sqlite:///:memory:"\ndatabase = "shop.db"'],
       ])('should not mark an in-memory source (%s)', (connection) => {
         const result = loadToml(`
 [[sources]]

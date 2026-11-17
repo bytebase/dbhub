@@ -11,6 +11,7 @@ import {
   SQLITE_MEMORY_PATH,
   buildSqliteDSN,
   normalizeSqliteDsn,
+  parseSqliteDsnPath,
   resolveSqliteFilePath,
 } from "../utils/sqlite-dsn.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
@@ -67,7 +68,7 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
     for (const source of sources) {
       if (
         source.type === "sqlite" &&
-        source.database !== SQLITE_MEMORY_PATH &&
+        parseSqliteDsnPath(buildDSNFromSource(source)) !== SQLITE_MEMORY_PATH &&
         toolsAreReadOnly(source.id, parsedToml.tools)
       ) {
         source.tools_read_only = true;
