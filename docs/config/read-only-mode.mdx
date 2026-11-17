@@ -26,9 +26,9 @@ source = "production"
 
 The [MCP Bundle](/mcpb) and the [Claude Code Plugin](/claude-code-plugin) ship with this already set.
 
-`readonly` is a per-tool setting and is only valid on `execute_sql`:
+`readonly` is a per-tool setting:
 
-- [Custom tools](/tools/custom-tools#readonly-mode) cannot set it and always execute their statement. Keep the statement of a custom tool read-only yourself
+- [Custom tools](/tools/custom-tools#readonly-mode) take their own `readonly`; the setting on `execute_sql` does not apply to them
 - [explain_sql](/tools/explain-sql) and [health_check](/tools/health-check) are always read-only and take no `readonly` option
 
 ## How It Is Enforced

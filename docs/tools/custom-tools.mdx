@@ -245,47 +245,32 @@ Always use parameter placeholders. Never concatenate user input into SQL stateme
 
 ### Readonly Mode
 
-The `readonly` field is only valid on `execute_sql`; configuring it on a custom tool is a startup validation error. Custom tools always execute their statement — DBHub still analyzes the statement to classify it as read or write, but that classification only sets the tool's `readOnlyHint` annotation (a hint for MCP clients), it does not block writes. See [Read-Only Mode](/config/read-only-mode) for how `execute_sql` enforces it.
+Set `readonly = true` on a custom tool to restrict its statement to read-only SQL. It is enforced the same way as for `execute_sql`; see [Read-Only Mode](/config/read-only-mode). The `readonly` setting of `execute_sql` does not apply to custom tools.
 
 ```toml
-# Configure execute_sql as read-only
-[[tools]]
-name = "execute_sql"
-source = "prod_pg"
-readonly = true
-
-# Custom tools cannot set `readonly` and are unaffected by execute_sql's setting
 [[tools]]
 name = "get_user_by_id"
 source = "prod_pg"
 description = "Get user details"
 statement = "SELECT * FROM users WHERE id = $1"
+readonly = true
 [[tools.parameters]]
 name = "user_id"
 type = "integer"
 description = "User ID"
 ```
 
-<Warning>
-If you need a custom tool restricted to reads, keep its `statement` read-only yourself — DBHub does not enforce this for custom tools.
-</Warning>
-
 ### Max Rows Enforcement
 
-For custom tools with parameterized LIMIT clauses, the connector's `max_rows` setting still applies:
+Set `max_rows` on a custom tool to cap its results, including when the statement has a parameterized `LIMIT`. The `max_rows` setting of `execute_sql` does not apply to custom tools.
 
 ```toml
-[[tools]]
-name = "execute_sql"
-source = "prod_pg"
-max_rows = 1000  # Hard limit on SELECT results
-
 [[tools]]
 name = "search_users"
 source = "prod_pg"
 description = "Search users with limit"
 statement = "SELECT * FROM users WHERE active = $1 LIMIT $2"
-# Even if $2 is 5000, max_rows=1000 will cap the results
+max_rows = 1000  # Even if $2 is 5000, results are capped at 1000
 ```
 
 ### Startup Validation
