@@ -1,6 +1,7 @@
 import type { SSHTunnelConfig } from '../types/ssh.js';
 import type { ConnectorType } from '../connectors/interface.js';
 import { SafeURL } from './safe-url.js';
+import { parseSqliteDsnPath } from './sqlite-dsn.js';
 
 /**
  * Parsed connection information from a DSN string
@@ -34,24 +35,12 @@ export function parseConnectionInfoFromDSN(dsn: string): ParsedConnectionInfo | 
 
     // Handle SQLite specially - it only has a database path
     if (type === 'sqlite') {
-      // SQLite DSN format: sqlite:///path
-      const prefix = 'sqlite:///';
-      if (dsn.length > prefix.length) {
-        const rawPath = dsn.substring(prefix.length);
-        // Add leading '/' for Unix absolute paths only
-        // Don't add '/' for:
-        // - Memory database: starts with ':'
-        // - Relative paths: starts with '.' or '~'
-        // - Windows absolute: second char is ':' (e.g., C:/path)
-        const firstChar = rawPath[0];
-        const isWindowsDrive = rawPath.length > 1 && rawPath[1] === ':';
-        const isSpecialPath = firstChar === ':' || firstChar === '.' || firstChar === '~' || isWindowsDrive;
-        return {
-          type,
-          database: isSpecialPath ? rawPath : '/' + rawPath,
-        };
+      // The path as written in the DSN; a DSN that names no path yields none
+      try {
+        return { type, database: parseSqliteDsnPath(dsn) };
+      } catch {
+        return { type };
       }
-      return { type };
     }
 
     // Parse other database DSNs using SafeURL

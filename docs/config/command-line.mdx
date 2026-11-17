@@ -237,17 +237,40 @@ This page covers command-line flags and environment variables. For TOML configur
 
     <Tab title="SQLite">
       ```bash
-      # Format: sqlite:///[path/to/database.db] or sqlite:///:memory:
-
-      # Unix/Linux/macOS
+      # Absolute path (Unix/Linux/macOS)
       sqlite:///var/lib/data/mydb.db
 
-      # Windows
+      # Absolute path (Windows)
       sqlite:///C:/Users/YourName/data/database.db
+
+      # Relative path
+      sqlite:///./data/mydb.db
+
+      # Home directory
+      sqlite:///~/data/mydb.db
 
       # In-memory
       sqlite:///:memory:
       ```
+
+      <Warning>
+        After three slashes the path is **absolute**: `sqlite:///mydb.db` is
+        `/mydb.db` at the root of the filesystem, not `mydb.db` in the current
+        folder. For a file next to you, write `sqlite:///./mydb.db`.
+      </Warning>
+
+      A relative path is resolved against the directory DBHub is started from,
+      or against the config file's directory when the DSN comes from a
+      [TOML file](/config/toml). The startup output prints the absolute path
+      DBHub opened.
+
+      A `?` ends the path, so write a literal `?` in a file or directory name
+      as `%3F` (and a literal `%3F` or `%25` as `%253F` / `%2525`). Spaces and
+      other characters are written as they are.
+
+      If the file does not exist, DBHub creates an empty database there and
+      prints a warning naming it. If the file cannot be opened at all, startup
+      fails with an error naming the path and what is missing.
     </Tab>
   </Tabs>
 
@@ -311,7 +334,7 @@ This page covers command-line flags and environment variables. For TOML configur
   | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`), Oracle (`1521`) |
   | `DB_USER` | string | Database username (not needed for SQLite) |
   | `DB_PASSWORD` | string | Database password (not needed for SQLite). Supports special characters without URL encoding. |
-  | `DB_NAME` | string | Database name or SQLite file path |
+  | `DB_NAME` | string | Database name, or the SQLite file path (a relative path is resolved against the working directory) |
 
   ```bash
   export DB_TYPE=postgres

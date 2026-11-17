@@ -7,6 +7,8 @@
  * To use this connector: Set DSN=sqlite:///path/to/database.db in your .env file
  */
 
+import fs from "fs";
+import path from "path";
 import type { DatabaseSync as SqliteDatabase, StatementSync } from "node:sqlite";
 import { suppressSqliteExperimentalWarning } from "./suppress-experimental-warning.js";
 import {
@@ -23,19 +25,27 @@ import {
   ConnectorConfig,
 } from "../interface.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
-import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 import { objectRows } from "../../utils/result-columns.js";
+import {
+  SQLITE_DSN_PREFIX,
+  SQLITE_MEMORY_PATH,
+  resolveSqliteDsnPath,
+} from "../../utils/sqlite-dsn.js";
 
 /**
  * SQLite DSN Parser
  * Handles DSN strings like:
  * - sqlite:///path/to/database.db (absolute path)
- * - sqlite://./relative/path/to/database.db (relative path)
+ * - sqlite:///./relative/path/to/database.db (relative to the working directory)
  * - sqlite:///:memory: (in-memory database)
+ *
+ * The full set of accepted forms is documented in utils/sqlite-dsn.ts. The
+ * returned dbPath is always absolute (or `:memory:`), so it names the file that
+ * is actually opened.
  *
  * Note: SQLite is a local file-based database and does not support connection timeouts.
  * The config parameter is accepted for interface compliance but ignored.
@@ -52,31 +62,7 @@ class SQLiteDSNParser implements DSNParser {
     }
 
     try {
-      // Use SafeURL helper to handle special characters properly
-      const url = new SafeURL(dsn);
-      let dbPath: string;
-
-      // Handle in-memory database
-      if (url.hostname === "" && url.pathname === "/:memory:") {
-        dbPath = ":memory:";
-      }
-      // Handle file paths
-      else {
-        // Get the path part, handling both relative and absolute paths
-        if (url.pathname.startsWith("//")) {
-          // Unix absolute path: sqlite:///path/to/db.sqlite
-          dbPath = url.pathname.substring(2); // Remove leading //
-        } else if (url.pathname.match(/^\/[A-Za-z]:\//)) {
-          // Windows absolute path: sqlite:///C:/path/to/db.sqlite
-          // URL parser adds leading slash to drive letter paths, so strip it
-          dbPath = url.pathname.substring(1);
-        } else {
-          // Relative path: sqlite://./path/to/db.sqlite
-          dbPath = url.pathname;
-        }
-      }
-
-      return { dbPath };
+      return { dbPath: resolveSqliteDsnPath(dsn) };
     } catch (error) {
       throw new Error(
         `Failed to parse SQLite DSN: ${error instanceof Error ? error.message : String(error)}`
@@ -89,12 +75,31 @@ class SQLiteDSNParser implements DSNParser {
   }
 
   isValidDSN(dsn: string): boolean {
-    try {
-      return dsn.startsWith('sqlite://');
-    } catch (error) {
-      return false;
-    }
+    return typeof dsn === "string" && dsn.startsWith(SQLITE_DSN_PREFIX);
   }
+}
+
+/**
+ * Build the error for a SQLite database file that could not be opened, naming
+ * the resolved path. SQLite itself only reports "unable to open database file",
+ * which says neither which file nor why.
+ */
+function openFailure(dbPath: string, error: unknown): Error {
+  const prefix = `Unable to open SQLite database file '${dbPath}'`;
+  const pathHint =
+    "A SQLite DSN path is absolute after three slashes (sqlite:///path/to/database.db); " +
+    "write sqlite:///./database.db for a relative path.";
+
+  const directory = path.dirname(dbPath);
+  if (!fs.existsSync(directory)) {
+    return new Error(`${prefix}: directory '${directory}' does not exist. ${pathHint}`);
+  }
+  if (!fs.existsSync(dbPath)) {
+    return new Error(`${prefix}: the file does not exist. ${pathHint}`);
+  }
+  return new Error(`${prefix}: ${error instanceof Error ? error.message : String(error)}`, {
+    cause: error,
+  });
 }
 
 interface SQLiteTableInfo {
@@ -200,40 +205,54 @@ export class SQLiteConnector implements Connector {
     const parsedConfig = await this.dsnParser.parse(dsn, config);
     this.dbPath = parsedConfig.dbPath;
 
+    const isMemory = this.dbPath === SQLITE_MEMORY_PATH;
+
+    // Install the experimental-warning hook before node:sqlite is loaded, then
+    // import it lazily. Doing both here keeps the global process.emitWarning
+    // patch scoped to processes that actually use SQLite (node:sqlite emits the
+    // warning at module-load time, so the hook must precede the import).
+    suppressSqliteExperimentalWarning();
+    const { DatabaseSync } = await import("node:sqlite");
+
+    // SDK-level readonly enforcement: Pass readOnly option to node:sqlite
+    // Note: In-memory databases (:memory:) cannot be opened in readonly mode
+    const dbOptions: ConstructorParameters<typeof DatabaseSync>[1] = {
+      // node:sqlite enables foreign key constraints by default, whereas
+      // better-sqlite3 (and SQLite's own default) leaves them off. Preserve
+      // the historical behavior; callers can opt in via `PRAGMA foreign_keys = ON`.
+      enableForeignKeyConstraints: false,
+    };
+    if (config?.readonly && !isMemory) {
+      dbOptions.readOnly = true;
+    }
+
+    // Opening a writable connection to a missing file creates it. That is how
+    // SQLite works, but a mistyped path then "connects" to an empty database,
+    // so say which file was created.
+    const existed = isMemory || fs.existsSync(this.dbPath);
+
     try {
-      // Install the experimental-warning hook before node:sqlite is loaded, then
-      // import it lazily. Doing both here keeps the global process.emitWarning
-      // patch scoped to processes that actually use SQLite (node:sqlite emits the
-      // warning at module-load time, so the hook must precede the import).
-      suppressSqliteExperimentalWarning();
-      const { DatabaseSync } = await import("node:sqlite");
-
-      // SDK-level readonly enforcement: Pass readOnly option to node:sqlite
-      // Note: In-memory databases (:memory:) cannot be opened in readonly mode
-      const dbOptions: ConstructorParameters<typeof DatabaseSync>[1] = {
-        // node:sqlite enables foreign key constraints by default, whereas
-        // better-sqlite3 (and SQLite's own default) leaves them off. Preserve
-        // the historical behavior; callers can opt in via `PRAGMA foreign_keys = ON`.
-        enableForeignKeyConstraints: false,
-      };
-      if (config?.readonly && this.dbPath !== ':memory:') {
-        dbOptions.readOnly = true;
-      }
-
       this.db = new DatabaseSync(this.dbPath, dbOptions);
+    } catch (error) {
+      throw openFailure(this.dbPath, error);
+    }
 
+    if (!existed) {
+      console.error(
+        `Warning: SQLite database file '${this.dbPath}' did not exist; created a new, empty database.`
+      );
+    }
+
+    try {
       // If an initialization script is provided, run it
       if (initScript) {
         this.db.exec(initScript);
       }
     } catch (error) {
-      // Close the handle if it was opened before the failure (e.g. a throwing
-      // init script), otherwise the database file stays locked (see closeQuietly).
-      if (this.db) {
-        const db = this.db;
-        this.db = null;
-        await closeQuietly(() => db.close());
-      }
+      // Close the handle, otherwise the database file stays locked (see closeQuietly).
+      const db = this.db;
+      this.db = null;
+      await closeQuietly(() => db.close());
       console.error("Failed to connect to SQLite database:", error);
       throw error;
     }

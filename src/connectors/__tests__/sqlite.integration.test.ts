@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { SQLiteConnector } from '../sqlite/index.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import type { Connector } from '../interface.js';
@@ -544,39 +544,109 @@ describe('SQLite Connector Integration Tests', () => {
       }
     });
 
-    it('should parse relative paths correctly', async () => {
-      const connector = new SQLiteConnector();
-      // Use tmpdir to ensure the directory exists
-      const tempDir = os.tmpdir();
-      const fileName = `test_relative_${Date.now()}.db`;
-      const fullPath = path.join(tempDir, fileName);
+    describe('relative paths', () => {
+      // Run from a scratch directory that is not the filesystem root, so a path
+      // that is wrongly rooted (the old behaviour) cannot be mistaken for one
+      // resolved against the working directory.
+      const originalCwd = process.cwd();
+      let workDir: string;
 
-      // Create a relative path from current working directory
-      const relativePath = path.relative(process.cwd(), fullPath);
+      beforeEach(() => {
+        workDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-sqlite-rel-')));
+        fs.mkdirSync(path.join(workDir, 'data'));
+        process.chdir(workDir);
+      });
 
-      try {
-        const dsn = `sqlite://${relativePath}`;
+      afterEach(() => {
+        process.chdir(originalCwd);
+        fs.rmSync(workDir, { recursive: true, force: true });
+      });
 
-        // Should successfully connect without errors
+      it.each([
+        ['sqlite:///./shop.db', 'shop.db'],
+        ['sqlite://./shop.db', 'shop.db'],
+        ['sqlite://shop.db', 'shop.db'],
+        ['sqlite://data/shop.db', path.join('data', 'shop.db')],
+        ['sqlite:///./data/shop.db', path.join('data', 'shop.db')],
+      ])('should open %s inside the working directory', async (dsn, relativePath) => {
+        const expected = path.join(workDir, relativePath);
+        const connector = new SQLiteConnector();
+
+        expect((await connector.dsnParser.parse(dsn)).dbPath).toBe(expected);
+
         await connector.connect(dsn);
-
-        // Verify we can execute queries
-        await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
-        const result = await connector.executeSQL('SELECT * FROM test', {});
-        expect(result.resultSets[0].rows).toEqual([]);
-
-        await connector.disconnect();
-      } finally {
-        // Cleanup
-        if (fs.existsSync(fullPath)) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 10));
-            fs.unlinkSync(fullPath);
-          } catch (error) {
-            console.warn(`Failed to cleanup test database: ${error}`);
-          }
+        try {
+          await connector.executeSQL('CREATE TABLE test (id INTEGER PRIMARY KEY)', {});
+        } finally {
+          await connector.disconnect();
         }
-      }
+        expect(fs.existsSync(expected)).toBe(true);
+      });
+    });
+
+    describe('opening a file that is not there', () => {
+      let errorSpy: MockInstance<typeof console.error>;
+
+      beforeEach(() => {
+        errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      });
+
+      afterEach(() => {
+        errorSpy.mockRestore();
+      });
+
+      it('should name the resolved path and the missing directory', async () => {
+        const missingDir = path.join(os.tmpdir(), `dbhub-missing-${Date.now()}`);
+        const dbPath = path.join(missingDir, 'shop.db');
+
+        const failure = new SQLiteConnector().connect(`sqlite://${dbPath}`);
+
+        // SQLite on its own says only "unable to open database file"
+        await expect(failure).rejects.toThrow(
+          `Unable to open SQLite database file '${dbPath}': directory '${missingDir}' does not exist`
+        );
+        await expect(failure).rejects.toThrow('sqlite:///./database.db for a relative path');
+      });
+
+      it('should say so when it creates a new database file', async () => {
+        const dbPath = path.join(os.tmpdir(), `dbhub-created-${Date.now()}.db`);
+        const connector = new SQLiteConnector();
+
+        try {
+          await connector.connect(`sqlite://${dbPath}`);
+          expect(errorSpy).toHaveBeenCalledWith(
+            `Warning: SQLite database file '${dbPath}' did not exist; created a new, empty database.`
+          );
+
+          // Reconnecting to the file that now exists is silent
+          await connector.disconnect();
+          errorSpy.mockClear();
+          await connector.connect(`sqlite://${dbPath}`);
+          expect(errorSpy).not.toHaveBeenCalled();
+        } finally {
+          await connector.disconnect();
+          fs.rmSync(dbPath, { force: true });
+        }
+      });
+
+      it('should stay silent for an in-memory database', async () => {
+        const connector = new SQLiteConnector();
+        await connector.connect('sqlite:///:memory:');
+        await connector.disconnect();
+
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should keep a four-slash path absolute', async () => {
+      const parser = new SQLiteConnector().dsnParser;
+      expect((await parser.parse('sqlite:////var/lib/app.db')).dbPath).toBe('/var/lib/app.db');
+    });
+
+    it('should reject a DSN that names no file instead of opening a temporary database', async () => {
+      await expect(new SQLiteConnector().connect('sqlite://')).rejects.toThrow(
+        'does not name a database file'
+      );
     });
 
     it('should parse :memory: database correctly', async () => {
@@ -657,15 +727,18 @@ describe('SQLite Connector Integration Tests', () => {
       await connector.disconnect();
     });
 
-    it('should fail to open non-existent file in readonly mode', async () => {
+    it('should fail to open non-existent file in readonly mode, naming the file', async () => {
       const connector = new SQLiteConnector();
-      const nonExistentPath = `/tmp/nonexistent_${Date.now()}.db`;
-      const dsn = `sqlite:///${nonExistentPath}`;
+      const nonExistentPath = path.join(os.tmpdir(), `nonexistent_${Date.now()}.db`);
+      const dsn = `sqlite://${nonExistentPath}`;
 
       // Should fail because file doesn't exist and we're in readonly mode
       await expect(
         connector.connect(dsn, undefined, { readonly: true })
-      ).rejects.toThrow();
+      ).rejects.toThrow(
+        `Unable to open SQLite database file '${nonExistentPath}': the file does not exist`
+      );
+      expect(fs.existsSync(nonExistentPath)).toBe(false);
     });
   });
 

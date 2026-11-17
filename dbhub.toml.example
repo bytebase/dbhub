@@ -258,10 +258,16 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # SQLITE (Local file or in-memory)
 # ============================================================================
 
-# File-based SQLite
+# File-based SQLite. After three slashes the path is absolute:
+# sqlite:///path/to/database.db is /path/to/database.db.
 # [[sources]]
 # id = "local_sqlite"
 # dsn = "sqlite:///path/to/database.db"
+
+# SQLite file relative to this config file (note the ./)
+# [[sources]]
+# id = "project_sqlite"
+# dsn = "sqlite:///./data/database.db"
 
 # In-memory SQLite (great for testing)
 # [[sources]]
@@ -417,7 +423,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MariaDB:     mariadb://user:pass@host:3306/database
 #   SQL Server:  sqlserver://user:pass@host:1433/database
 #   Oracle:      oracle://user:pass@host:1521/service_name  (or ?sid=ORCL)
-#   SQLite:      sqlite:///path/to/file.db  or  sqlite:///:memory:
+#   SQLite:      sqlite:///path/to/file.db (absolute), sqlite:///./file.db (relative)  or  sqlite:///:memory:
 #
 # Default Ports:
 #   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433 | Oracle: 1521

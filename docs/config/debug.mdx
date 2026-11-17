@@ -36,6 +36,18 @@ If you can't connect to DBHub:
 3. Ensure no firewall is blocking the connection
 4. Test the endpoint directly: `curl http://localhost:8080/mcp`
 
+### Server Fails to Start in an MCP Client
+
+With the stdio transport, DBHub exits if it cannot connect to a database at startup. The client only sees the process end, so it reports something generic such as `Failed to connect` or `CONNECTION_CLOSED`. The actual reason is in DBHub's stderr output.
+
+Run the same command the client runs in a terminal to see it. For Claude Code, `claude mcp get dbhub` prints that command:
+
+```bash
+npx @bytebase/dbhub@latest --transport stdio --dsn "sqlite:///./shop.db"
+```
+
+A common cause with SQLite is the path: `sqlite:///shop.db` is `/shop.db` at the root of the filesystem. Use `sqlite:///./shop.db` for a relative path. The startup output prints the absolute path DBHub opened, and the error names the file it could not open. See the [SQLite DSN formats](/config/command-line#--dsn).
+
 ### Database Connection Errors
 
 If DBHub connects but database queries fail:

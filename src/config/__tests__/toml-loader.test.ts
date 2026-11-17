@@ -139,6 +139,48 @@ database = "data/app.db"
       );
     });
 
+    it.each([
+      ['sqlite:///./data/app.db'],
+      ['sqlite://./data/app.db'],
+      ['sqlite://data/app.db'],
+    ])('should resolve the relative path in dsn = "%s" against the config file directory', async (dsn) => {
+      // Same layout as the `database` test above: config dir and cwd differ.
+      const confDir = path.join(tempDir, 'conf');
+      fs.mkdirSync(path.join(confDir, 'data'), { recursive: true });
+      const configPath = path.join(confDir, 'dbhub.toml');
+      fs.writeFileSync(configPath, `\n[[sources]]\nid = "rel"\ndsn = "${dsn}"\n`);
+      process.argv = ['node', 'test', '--config', configPath];
+
+      const source = loadTomlConfig()!.sources[0];
+      const expected = path.join(confDir, 'data', 'app.db');
+
+      expect(source.database).toBe(expected);
+      // What matters is the file the connector ends up opening
+      const { dbPath } = await new SQLiteConnector().dsnParser.parse(buildDSNFromSource(source));
+      expect(dbPath).toBe(expected);
+    });
+
+    it('should expand ~ in a sqlite dsn', async () => {
+      const source = loadToml(`
+[[sources]]
+id = "home"
+dsn = "sqlite:///~/databases/local.db"
+`)!.sources[0];
+      const expected = path.join(os.homedir(), 'databases', 'local.db');
+
+      expect(source.database).toBe(expected);
+      const { dbPath } = await new SQLiteConnector().dsnParser.parse(buildDSNFromSource(source));
+      expect(dbPath).toBe(expected);
+    });
+
+    it('should reject a sqlite dsn that names no file', () => {
+      expect(() => loadToml(`
+[[sources]]
+id = "empty"
+dsn = "sqlite://"
+`)).toThrow(/source 'empty' has an invalid SQLite DSN/);
+    });
+
     it('should leave an absolute sqlite database path unchanged', () => {
       const absolute = path.join(tempDir, 'elsewhere', 'app.db').replace(/\\/g, '/');
       const result = loadToml(`

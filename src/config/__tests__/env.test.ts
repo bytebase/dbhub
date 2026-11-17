@@ -11,6 +11,7 @@ import {
   resolveSourceConfigs,
 } from '../env.js';
 import { loadTomlConfig } from '../toml-loader.js';
+import { buildSqliteDSN } from '../../utils/sqlite-dsn.js';
 
 // Mock toml-loader to prevent it from loading dbhub.toml during tests
 vi.mock('../toml-loader.js', () => ({
@@ -104,9 +105,32 @@ describe('Environment Configuration Tests', () => {
       const result = buildDSNFromEnvParams();
 
       expect(result).toEqual({
-        dsn: 'sqlite:////path/to/database.db',
+        dsn: 'sqlite:///path/to/database.db',
         source: 'individual environment variables'
       });
+    });
+
+    it('should resolve a relative SQLite DB_NAME against the working directory', () => {
+      process.env.DB_TYPE = 'sqlite';
+      process.env.DB_NAME = 'data/app.db';
+
+      const result = buildDSNFromEnvParams();
+
+      // Was `sqlite:///data/app.db`, i.e. /data/app.db at the filesystem root
+      expect(result?.dsn).toBe(buildSqliteDSN(path.resolve(process.cwd(), 'data', 'app.db')));
+    });
+
+    it('should ignore DB_HOST, DB_PORT and credentials left in the environment for SQLite', () => {
+      // An inherited DB_PORT used to skip the SQLite branch and produce
+      // `sqlite://user:pass@host:5432/shop.db`.
+      process.env.DB_TYPE = 'sqlite';
+      process.env.DB_NAME = '/path/to/database.db';
+      process.env.DB_HOST = 'localhost';
+      process.env.DB_PORT = '5432';
+      process.env.DB_USER = 'postgres';
+      process.env.DB_PASSWORD = 'secret';
+
+      expect(buildDSNFromEnvParams()?.dsn).toBe('sqlite:///path/to/database.db');
     });
 
     it('should handle SQLite with special characters in file path', () => {
@@ -116,7 +140,7 @@ describe('Environment Configuration Tests', () => {
       const result = buildDSNFromEnvParams();
 
       expect(result).toEqual({
-        dsn: 'sqlite:////tmp/test_db@#$.db',
+        dsn: 'sqlite:///tmp/test_db@#$.db',
         source: 'individual environment variables'
       });
     });
@@ -224,6 +248,41 @@ describe('Environment Configuration Tests', () => {
       expect(message).toMatch(/Invalid DSN format/);
       expect(message).toContain('<redacted DSN>');
       expect(message).not.toContain('hunter2');
+    });
+  });
+
+  describe('resolveSourceConfigs with a SQLite DSN', () => {
+    it.each([
+      ['sqlite:///./shop.db'],
+      ['sqlite://./shop.db'],
+      ['sqlite://shop.db'],
+    ])('should resolve the relative path in %s against the working directory', async (dsn) => {
+      process.argv = ['node', 'script.js', `--dsn=${dsn}`];
+      const expected = path.resolve(process.cwd(), 'shop.db');
+
+      const result = await resolveSourceConfigs();
+
+      // The source carries the absolute path, so the startup table and API
+      // responses name the file that is actually opened.
+      expect(result!.sources[0]).toMatchObject({
+        type: 'sqlite',
+        dsn: buildSqliteDSN(expected),
+        database: expected,
+      });
+    });
+
+    it('should leave an absolute path and the in-memory database alone', async () => {
+      process.argv = ['node', 'script.js', '--dsn=sqlite:///var/lib/app.db'];
+      expect((await resolveSourceConfigs())!.sources[0].dsn).toBe('sqlite:///var/lib/app.db');
+
+      process.argv = ['node', 'script.js', '--dsn=sqlite:///:memory:'];
+      expect((await resolveSourceConfigs())!.sources[0].dsn).toBe('sqlite:///:memory:');
+    });
+
+    it('should reject a DSN that names no file', async () => {
+      process.argv = ['node', 'script.js', '--dsn=sqlite://'];
+
+      await expect(resolveSourceConfigs()).rejects.toThrow(/Invalid SQLite DSN.*does not name a database file/);
     });
   });
 

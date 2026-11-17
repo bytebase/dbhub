@@ -9,6 +9,7 @@ import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { obfuscateDSNPassword, parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { buildSqliteDSN, normalizeSqliteDsn, resolveSqliteFilePath } from "../utils/sqlite-dsn.js";
 
 // Create __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -193,6 +194,17 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
     throw new Error(`Unsupported DB_TYPE: ${dbType}. Supported types: ${supportedTypes.join(', ')}`);
   }
 
+  // SQLite is a file, not a network endpoint: DB_NAME is its path (relative to
+  // the working directory unless absolute). Handled before the port logic so a
+  // DB_HOST / DB_PORT / DB_USER left over in the environment cannot turn it
+  // into a network-style DSN.
+  if (dbType.toLowerCase() === 'sqlite') {
+    return {
+      dsn: buildSqliteDSN(resolveSqliteFilePath(dbName as string)),
+      source: 'individual environment variables'
+    };
+  }
+
   // Determine default port based on database type
   let port = dbPort;
   if (!port) {
@@ -211,12 +223,6 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
       case 'oracle':
         port = '1521';
         break;
-      case 'sqlite':
-        // SQLite doesn't use host/port, handle differently
-        return {
-          dsn: `sqlite:///${dbName}`,
-          source: 'individual environment variables'
-        };
       default:
         throw new Error(`Unknown database type for port determination: ${dbType}`);
     }
@@ -796,15 +802,30 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     const idData = resolveId();
     const sourceId = idData?.id || "default";
 
+    // A SQLite DSN may name a relative path. Resolve it against the working
+    // directory now, so the startup output and API responses show the file
+    // that is actually opened.
+    let dsn = dsnResult.dsn;
+    if (dbType === 'sqlite') {
+      try {
+        dsn = normalizeSqliteDsn(dsn);
+      } catch (error) {
+        throw new Error(
+          `Invalid SQLite DSN: ${error instanceof Error ? error.message : String(error)}. ` +
+            `Expected format: sqlite:///path/to/database.db`
+        );
+      }
+    }
+
     // Create a single source config from the resolved DSN
     const source: SourceConfig = {
       id: sourceId,
       type: dbType,
-      dsn: dsnResult.dsn,
+      dsn,
     };
 
     // Parse DSN to populate connection info fields for API responses
-    const connectionInfo = parseConnectionInfoFromDSN(dsnResult.dsn);
+    const connectionInfo = parseConnectionInfoFromDSN(dsn);
     if (connectionInfo) {
       if (connectionInfo.host) {
         source.host = connectionInfo.host;
