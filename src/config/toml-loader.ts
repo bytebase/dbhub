@@ -8,6 +8,7 @@ import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-
 import { SafeURL } from "../utils/safe-url.js";
 import {
   SQLITE_DSN_PREFIX,
+  SQLITE_MEMORY_PATH,
   buildSqliteDSN,
   normalizeSqliteDsn,
   resolveSqliteFilePath,
@@ -63,10 +64,15 @@ export function loadTomlConfig(): { sources: SourceConfig[]; tools?: TomlConfig[
 
     // A SQLite file that nothing can write to is only useful if it already
     // exists, so the connector reports a missing one instead of creating it.
-    // Limited to SQLite so that toggling `readonly` on a tool does not change,
-    // and thereby reconnect, any other kind of source on a config reload.
+    // Limited to file-backed SQLite so that toggling `readonly` on a tool does
+    // not change, and thereby reconnect, any other source on a config reload.
+    // That matters most for `:memory:`, whose data a reconnect would discard.
     for (const source of sources) {
-      if (source.type === "sqlite" && toolsAreReadOnly(source.id, parsedToml.tools)) {
+      if (
+        source.type === "sqlite" &&
+        source.database !== SQLITE_MEMORY_PATH &&
+        toolsAreReadOnly(source.id, parsedToml.tools)
+      ) {
         source.tools_read_only = true;
       }
     }

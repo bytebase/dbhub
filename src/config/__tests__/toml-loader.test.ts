@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars, findUnresolvedEnvVars } from '../toml-loader.js';
 import type { SourceConfig } from '../../types/config.js';
+import { sourceConfigEquals } from '../../utils/config-watcher.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
 import { MAX_QUERY_TIMEOUT_SECONDS } from '../../utils/query-timeout.js';
 import { SQLServerConnector } from '../../connectors/sqlserver/index.js';
@@ -224,6 +225,29 @@ dsn = "postgres://user:pass@localhost:5432/db"
 ${readOnlyTool('pg')}`);
 
         expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it.each([
+        ['dsn = "sqlite:///:memory:"'],
+        ['type = "sqlite"\ndatabase = ":memory:"'],
+      ])('should not mark an in-memory source (%s), whose data a reconnect would discard', (connection) => {
+        const result = loadToml(`
+[[sources]]
+id = "mem"
+${connection}
+${readOnlyTool('mem')}`);
+
+        expect(result?.sources[0].tools_read_only).toBeUndefined();
+      });
+
+      it('should load an in-memory source identically whether or not its tool is read-only', () => {
+        // A config reload reconnects a source whose config changed, and
+        // reconnecting an in-memory database empties it.
+        const source = '\n[[sources]]\nid = "mem"\ndsn = "sqlite:///:memory:"\n';
+        const writable = loadToml(`${source}\n[[tools]]\nname = "execute_sql"\nsource = "mem"\n`);
+        const readOnly = loadToml(`${source}${readOnlyTool('mem')}`);
+
+        expect(sourceConfigEquals(writable!.sources[0], readOnly!.sources[0])).toBe(true);
       });
 
       it('should not take the marker from the file', () => {
