@@ -1,9 +1,13 @@
 # Workflow to build and publish Docker images for DBHub
 #
 # This workflow:
-# 1. Always pushes to the 'latest' tag when changes are pushed to the main branch
-# 2. If package.json version changes, also pushes a version-specific tag
-# 3. Builds for both amd64 and arm64 architectures
+# 1. Builds each architecture (amd64, arm64) on a runner of that architecture.
+#    arm64 used to be built under QEMU emulation on an amd64 runner, where
+#    `pnpm install` intermittently hung until the 6-hour job limit.
+# 2. Pushes each build by digest, then publishes one multi-arch manifest.
+# 3. Always moves the 'latest' tag when changes are pushed to the main branch.
+# 4. Also publishes the package.json version as a tag if Docker Hub does not
+#    have it yet, so a failed release run is repaired by the next push.
 
 name: Publish to docker hub
 
@@ -15,38 +19,72 @@ env:
   IMAGE_NAME: bytebase/dbhub
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    # A native build takes a few minutes; fail fast instead of holding a runner.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
-          fetch-depth: 2 # Fetch two commits to detect changes in package.json
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Check for package.json version changes
-        id: check-version
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          # Get current and previous package.json content
-          git show HEAD:package.json > package.json.current
-          git show HEAD~1:package.json > package.json.previous 2>/dev/null || cp package.json.current package.json.previous
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
 
-          # Extract versions
-          CURRENT_VERSION=$(jq -r '.version' package.json.current)
-          PREVIOUS_VERSION=$(jq -r '.version' package.json.previous)
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
-          echo "Current version: $CURRENT_VERSION"
-          echo "Previous version: $PREVIOUS_VERSION"
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
-          # Set output based on whether version changed
-          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
-            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
-            echo "VERSION_CHANGED=true" >> $GITHUB_OUTPUT
-            echo "VERSION=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          else
-            echo "Version unchanged: $CURRENT_VERSION"
-            echo "VERSION_CHANGED=false" >> $GITHUB_OUTPUT
-          fi
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -60,26 +98,33 @@ jobs:
       - name: Prepare Docker tags
         id: prep
         run: |
-          # Always include latest tag
-          TAGS="${{ env.IMAGE_NAME }}:latest"
+          VERSION=$(jq -r '.version' package.json)
 
-          # Add version tag if version changed
-          if [[ "${{ steps.check-version.outputs.VERSION_CHANGED }}" == "true" ]]; then
-            VERSION="${{ steps.check-version.outputs.VERSION }}"
-            TAGS="$TAGS,${{ env.IMAGE_NAME }}:$VERSION"
-            echo "Publishing with tags: latest, $VERSION"
+          # Always include latest tag
+          TAGS="--tag ${IMAGE_NAME}:latest"
+
+          # Add the version tag unless Docker Hub already has it. A version tag
+          # is published once and never moved afterwards.
+          if OUTPUT=$(docker buildx imagetools inspect "${IMAGE_NAME}:${VERSION}" 2>&1); then
+            echo "Tag ${VERSION} already published. Publishing with tag: latest only"
+          elif grep -q "not found" <<< "${OUTPUT}"; then
+            TAGS="${TAGS} --tag ${IMAGE_NAME}:${VERSION}"
+            echo "Publishing with tags: latest, ${VERSION}"
           else
-            echo "Publishing with tag: latest only"
+            # Not a clean "not found": don't guess, or a registry hiccup could
+            # move an existing version tag.
+            echo "${OUTPUT}"
+            echo "::error::Could not determine whether ${IMAGE_NAME}:${VERSION} exists"
+            exit 1
           fi
 
-          echo "TAGS=$TAGS" >> $GITHUB_OUTPUT
+          echo "TAGS=${TAGS}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.prep.outputs.TAGS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Create and push multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create ${{ steps.prep.outputs.TAGS }} \
+            $(printf "${IMAGE_NAME}@sha256:%s " *)
+
+      - name: Inspect published image
+        run: docker buildx imagetools inspect "${IMAGE_NAME}:latest"
