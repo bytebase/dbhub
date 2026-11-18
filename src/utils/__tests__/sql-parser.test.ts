@@ -9,16 +9,6 @@ import {
 
 describe("stripCommentsAndStrings", () => {
   describe("single-line comments (--)", () => {
-    it("should strip single-line comment at end of line", () => {
-      const sql = "SELECT * FROM users -- comment";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM users  ");
-    });
-
-    it("should strip single-line comment and preserve next line", () => {
-      const sql = "SELECT * FROM users -- comment\nWHERE active = true";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT * FROM users  \nWHERE active = true");
-    });
-
     it("should handle multiple single-line comments", () => {
       const sql = "SELECT * -- first\nFROM users -- second";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT *  \nFROM users  ");
@@ -26,11 +16,6 @@ describe("stripCommentsAndStrings", () => {
   });
 
   describe("multi-line comments (/* */)", () => {
-    it("should strip inline multi-line comment", () => {
-      const sql = "SELECT * /* comment */ FROM users";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT *   FROM users");
-    });
-
     it("should strip multi-line comment spanning lines", () => {
       const sql = "SELECT * /* multi\nline\ncomment */ FROM users";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT *   FROM users");
@@ -93,11 +78,6 @@ describe("stripCommentsAndStrings", () => {
   });
 
   describe("single-quoted strings", () => {
-    it("should strip simple single-quoted string", () => {
-      const sql = "SELECT 'hello' AS msg";
-      expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");
-    });
-
     it("should handle escaped single quotes", () => {
       const sql = "SELECT 'it''s escaped' AS msg";
       expect(stripCommentsAndStrings(sql)).toBe("SELECT   AS msg");

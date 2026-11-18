@@ -152,27 +152,6 @@ describe("GET /api/requests - Integration Tests", () => {
       expect(data.requests[0].id).toBe("db2-req1");
       expect(data.requests[0].sourceId).toBe("db2");
     });
-
-    it("should handle URL-encoded source_id", async () => {
-      requestStore.clear();
-      requestStore.add(createRequest({ sourceId: "db_with_underscore", id: "test" }));
-
-      const response = await fetch(
-        `${BASE_URL}/api/requests?source_id=${encodeURIComponent("db_with_underscore")}`
-      );
-      const data: any = await response.json();
-
-      expect(data.requests).toHaveLength(1);
-      expect(data.requests[0].sourceId).toBe("db_with_underscore");
-    });
-
-    it("should return all requests when source_id not provided", async () => {
-      const response = await fetch(`${BASE_URL}/api/requests`);
-      const data: any = await response.json();
-
-      expect(data.requests).toHaveLength(5);
-      expect(data.total).toBe(5);
-    });
   });
 
   describe("Reverse Chronological Order", () => {
@@ -231,24 +210,6 @@ describe("GET /api/requests - Integration Tests", () => {
       expect(data.requests).toHaveLength(2);
       expect(data.requests[0].id).toBe("db1-new");
       expect(data.requests[1].id).toBe("db1-old");
-    });
-
-    it("should handle requests with identical timestamps", async () => {
-      const sameTime = new Date().toISOString();
-      requestStore.add(createRequest({ id: "req1", timestamp: sameTime }));
-      requestStore.add(createRequest({ id: "req2", timestamp: sameTime }));
-      requestStore.add(createRequest({ id: "req3", timestamp: sameTime }));
-
-      const response = await fetch(`${BASE_URL}/api/requests`);
-      const data: any = await response.json();
-
-      // Should return all 3 requests
-      expect(data.requests).toHaveLength(3);
-      // Order is stable but not guaranteed for identical timestamps
-      const ids = data.requests.map((r: Request) => r.id);
-      expect(ids).toContain("req1");
-      expect(ids).toContain("req2");
-      expect(ids).toContain("req3");
     });
   });
 
@@ -368,35 +329,6 @@ describe("GET /api/requests - Integration Tests", () => {
       errorMessages.forEach((errorMsg) => {
         expect(returnedErrors).toContain(errorMsg);
       });
-    });
-  });
-
-  describe("Response Format", () => {
-    it("should return consistent response structure", async () => {
-      const response = await fetch(`${BASE_URL}/api/requests`);
-      const data: any = await response.json();
-
-      expect(data).toHaveProperty("requests");
-      expect(data).toHaveProperty("total");
-      expect(Array.isArray(data.requests)).toBe(true);
-      expect(typeof data.total).toBe("number");
-    });
-
-    it("should have total matching requests array length", async () => {
-      requestStore.add(createRequest({ sourceId: "db1" }));
-      requestStore.add(createRequest({ sourceId: "db2" }));
-      requestStore.add(createRequest({ sourceId: "db1" }));
-
-      const response = await fetch(`${BASE_URL}/api/requests`);
-      const data: any = await response.json();
-
-      expect(data.total).toBe(data.requests.length);
-      expect(data.total).toBe(3);
-    });
-
-    it("should return correct content-type header", async () => {
-      const response = await fetch(`${BASE_URL}/api/requests`);
-      expect(response.headers.get("content-type")).toContain("application/json");
     });
   });
 

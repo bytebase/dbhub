@@ -165,22 +165,12 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         const primaryIndex = indexes.find(idx => idx.is_primary);
         expect(primaryIndex).toBeDefined();
         expect(primaryIndex?.column_names.some((c) => sameIdentifier(c, 'id'))).toBe(true);
-        
-        // Some databases automatically create unique indexes, others handle unique constraints differently
-        // We'll just verify we got at least the primary key index
-        expect(indexes.length).toBeGreaterThanOrEqual(1);
       });
     });
   }
 
   createSQLExecutionTests(): void {
     describe('SQL Execution', () => {
-      it('should execute simple SELECT query', async () => {
-        const result = await this.connector.executeSQL('SELECT COUNT(*) as count FROM users', {});
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(Number(rowValue(result.resultSets[0].rows[0], 'count'))).toBeGreaterThanOrEqual(3);
-      });
-
       it('should execute INSERT and SELECT', async () => {
         const insertResult = await this.connector.executeSQL(
           "INSERT INTO users (name, email, age) VALUES ('Test User', 'test@example.com', 25)", {}

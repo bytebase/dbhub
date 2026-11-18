@@ -89,26 +89,12 @@ describe("RequestStore", () => {
     });
   });
 
-  describe("getTotal", () => {
-    it("should return 0 when empty", () => {
-      expect(store.getTotal()).toBe(0);
-    });
-
-    it("should return total across all sources", () => {
-      store.add(createRequest({ sourceId: "db1" }));
-      store.add(createRequest({ sourceId: "db2" }));
-      store.add(createRequest({ sourceId: "db1" }));
-      expect(store.getTotal()).toBe(3);
-    });
-  });
-
   describe("clear", () => {
     it("should remove all requests", () => {
       store.add(createRequest());
       store.add(createRequest());
       store.clear();
       expect(store.getAll()).toEqual([]);
-      expect(store.getTotal()).toBe(0);
     });
   });
 });

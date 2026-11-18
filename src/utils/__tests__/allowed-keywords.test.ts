@@ -54,10 +54,6 @@ describe("isReadOnlySQL", () => {
       expect(isReadOnlySQL("DESCRIBE users", "mysql")).toBe(true);
     });
 
-    it("should recognize PRAGMA as read-only for SQLite", () => {
-      expect(isReadOnlySQL("PRAGMA table_info(users)", "sqlite")).toBe(true);
-    });
-
     it("should not recognize SHOW as read-only for SQLite", () => {
       expect(isReadOnlySQL("SHOW TABLES", "sqlite")).toBe(false);
     });

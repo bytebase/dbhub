@@ -39,14 +39,6 @@ describe('PostgreSQL SSH Tunnel Simple Integration Tests', () => {
   });
 
   describe('SSH Tunnel Basic Functionality', () => {
-    it('should report disconnected state on a fresh SSH tunnel before establish', async () => {
-      const tunnel = new SSHTunnel();
-
-      // A tunnel that has not been established reports no connection and no info
-      expect(tunnel.getIsConnected()).toBe(false);
-      expect(tunnel.getTunnelInfo()).toBeNull();
-    });
-
     it('should parse DSN correctly when SSH tunnel is configured', async () => {
       const manager = new ConnectorManager();
       

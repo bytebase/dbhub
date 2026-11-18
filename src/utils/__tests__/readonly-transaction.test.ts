@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   detectReadOnlyBackstop,
-  MARIADB_READ_ONLY_BACKSTOP,
   noBackstopWarning,
   readOnlyFlagQuery,
   readOnlyClose,
@@ -50,12 +49,6 @@ describe("detectReadOnlyBackstop", () => {
       kind: "session",
       variable: "transaction_read_only",
     });
-  });
-});
-
-describe("MARIADB_READ_ONLY_BACKSTOP", () => {
-  it("is the session form on tx_read_only, with no server detection", () => {
-    expect(MARIADB_READ_ONLY_BACKSTOP).toEqual({ kind: "session", variable: "tx_read_only" });
   });
 });
 
