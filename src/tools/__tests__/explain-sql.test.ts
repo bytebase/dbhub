@@ -1,38 +1,44 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExplainSqlToolHandler } from '../explain-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
-import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
+import { createMockConnector, describeRequestTracking, parseToolResponse } from './helpers.js';
 
 vi.mock('../../connectors/manager.js');
 
-const createMockConnector = (id: ConnectorType = 'sqlite', sourceId: string = 'default'): Connector => ({
-  id,
-  name: 'Mock Connector',
-  getId: () => sourceId,
-  dsnParser: {} as any,
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  clone: vi.fn(),
-  getSchemas: vi.fn(),
-  getTables: vi.fn(),
-  getViews: vi.fn(),
-  getTableSchema: vi.fn(),
-  getTableIndexes: vi.fn(),
-  getStoredProcedures: vi.fn(),
-  getStoredProcedureDetail: vi.fn(),
-  executeSQL: vi.fn(),
-});
-
-const parseToolResponse = (response: any) => JSON.parse(response.content[0].text);
+const planResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
 
 describe('explain-sql tool', () => {
-  const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+  let mockConnector: Connector;
+
+  // Bind the mocked manager to a connector of the given dialect
+  const useConnector = (dialect: ConnectorType, sourceId: string = 'test_source') => {
+    mockConnector = createMockConnector(dialect, sourceId);
+    vi.mocked(mockConnector.executeSQL).mockResolvedValue(planResult);
+    vi.mocked(ConnectorManager.getCurrentConnector).mockReturnValue(mockConnector);
+  };
+
+  const explain = async (sql: string) => {
+    const result: any = await createExplainSqlToolHandler('test_source')({ sql }, null);
+    return { result, parsed: parseToolResponse(result) };
+  };
+
+  // The input must be refused, for the stated reason, before anything
+  // reaches the database
+  const expectInvalidInput = async (sql: string, messagePart: string) => {
+    const { result, parsed } = await explain(sql);
+
+    expect(result.isError).toBe(true);
+    expect(parsed.code).toBe('INVALID_INPUT');
+    expect(parsed.error).toContain(messagePart);
+    expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+  };
 
   beforeEach(() => {
     // Single-source by default, so resolveTrackedToolName resolves to the
     // bare tool name; multi-source naming is covered separately below.
     vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['test_source']);
+    useConnector('postgres');
   });
 
   afterEach(() => {
@@ -46,15 +52,10 @@ describe('explain-sql tool', () => {
       ['mariadb', 'EXPLAIN SELECT * FROM users'],
       ['sqlserver', 'EXPLAIN SELECT * FROM users'],
       ['sqlite', 'EXPLAIN QUERY PLAN SELECT * FROM users'],
-    ] satisfies [ConnectorType, string][])('builds "%s" as expected for %s', async (dialect, expected) => {
-      const mockConnector = createMockConnector(dialect, 'test_source');
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+    ] satisfies [ConnectorType, string][])('on %s, runs "%s" read-only', async (dialect, expected) => {
+      useConnector(dialect);
 
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'SELECT * FROM users' }, null);
-      const parsed = parseToolResponse(result);
+      const { parsed } = await explain('SELECT * FROM users');
 
       expect(parsed.success).toBe(true);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(expected, { readonly: true });
@@ -62,21 +63,8 @@ describe('explain-sql tool', () => {
   });
 
   describe('input validation', () => {
-    let mockConnector: Connector;
-
-    beforeEach(() => {
-      mockConnector = createMockConnector('postgres', 'test_source');
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-    });
-
     it('rejects multiple statements', async () => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'SELECT 1; SELECT 2' }, null);
-
-      expect(result.isError).toBe(true);
-      const parsed = parseToolResponse(result);
-      expect(parsed.code).toBe('INVALID_INPUT');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+      await expectInvalidInput('SELECT 1; SELECT 2', 'single SQL statement');
     });
 
     it.each([
@@ -87,51 +75,26 @@ describe('explain-sql tool', () => {
     ] satisfies [ConnectorType, string][])(
       'rejects a %s statement hidden by a backslash-escaped quote',
       async (dialect, sql) => {
-        mockConnector = createMockConnector(dialect, 'test_source');
-        mockGetCurrentConnector.mockReturnValue(mockConnector);
-        const handler = createExplainSqlToolHandler('test_source');
-        const result = await handler({ sql }, null);
-
-        expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
-        expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+        useConnector(dialect);
+        await expectInvalidInput(sql, 'single SQL statement');
       }
     );
 
     it('rejects input already starting with EXPLAIN', async () => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'EXPLAIN SELECT * FROM users' }, null);
-
-      expect(result.isError).toBe(true);
-      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+      await expectInvalidInput('EXPLAIN SELECT * FROM users', 'must not itself start with EXPLAIN');
     });
 
-    it('rejects input starting with ANALYZE to prevent smuggled execution', async () => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'ANALYZE DELETE FROM users' }, null);
-
-      expect(result.isError).toBe(true);
-      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
-    });
-
+    // Our own EXPLAIN prefix must never combine with the input into a form
+    // that executes the statement.
     it.each([
+      'ANALYZE DELETE FROM users',
+      // ...in a leading parenthesized option list
       '(ANALYZE) DELETE FROM users',
       '(ANALYZE, VERBOSE) DELETE FROM users',
       '(VERBOSE,ANALYZE)DELETE FROM users',
       '-- comment\n(ANALYZE) DELETE FROM users',
-    ])('rejects a leading parenthesized option list containing ANALYZE: %s', async (sql) => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql }, null);
-
-      expect(result.isError).toBe(true);
-      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
-    });
-
-    // PostgreSQL accepts ANALYSE as a synonym, and reads the keyword even when
-    // it is glued to the parenthesis that follows (#501).
-    it.each([
+      // PostgreSQL accepts ANALYSE as a synonym, and reads the keyword even
+      // when it is glued to the parenthesis that follows (#501).
       'ANALYSE SELECT * FROM users',
       'ANALYSE VERBOSE SELECT * FROM users',
       'analyse DELETE FROM users',
@@ -140,15 +103,8 @@ describe('explain-sql tool', () => {
       '(ANALYSE) SELECT * FROM users',
       '(VERBOSE, ANALYSE true) SELECT * FROM users',
       '(ANALYZE false) SELECT * FROM users',
-    ])('rejects ANALYZE in either spelling: %s', async (sql) => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql }, null);
-
-      expect(result.isError).toBe(true);
-      const parsed = parseToolResponse(result);
-      expect(parsed.code).toBe('INVALID_INPUT');
-      expect(parsed.error).toContain('ANALYZE');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+    ])('rejects ANALYZE in any position or spelling: %s', async (sql) => {
+      await expectInvalidInput(sql, 'ANALYZE');
     });
 
     // A quoted option name is still the option to PostgreSQL, so an option
@@ -161,103 +117,31 @@ describe('explain-sql tool', () => {
       '(RUN_IT) SELECT * FROM users',
       '() SELECT * FROM users',
     ])('rejects a leading option list with an unrecognized option: %s', async (sql) => {
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql }, null);
-
-      expect(result.isError).toBe(true);
-      expect(parseToolResponse(result).code).toBe('INVALID_INPUT');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+      await expectInvalidInput(sql, 'only accepts these EXPLAIN options');
     });
 
     it.each([
+      // Only looks like an option list or ANALYZE
       '(SELECT id FROM users) UNION (SELECT id FROM admins)',
       '(SELECT id, "analyze" FROM users) UNION (SELECT 1, 2)',
       '((SELECT 1)) UNION (SELECT 2)',
       '(VALUES (1)) UNION (VALUES (2))',
       'VERBOSE SELECT * FROM users',
       'SELECT analyse FROM users',
-    ])('allows input that only looks like an option list or ANALYZE: %s', async (sql) => {
-      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
+      // A leading option list that does not contain ANALYZE
+      '(FORMAT JSON) SELECT * FROM users',
+      // A write statement: plain EXPLAIN never executes it
+      'DELETE FROM users WHERE id = 1',
+    ])('allows: %s', async (sql) => {
+      const { parsed } = await explain(sql);
 
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql }, null);
-
-      expect(parseToolResponse(result).success).toBe(true);
+      expect(parsed.success).toBe(true);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(`EXPLAIN ${sql}`, { readonly: true });
     });
-
-    it('allows a leading parenthesized option list that does not contain ANALYZE', async () => {
-      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
-
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: '(FORMAT JSON) SELECT * FROM users' }, null);
-
-      expect(parseToolResponse(result).success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
-        'EXPLAIN (FORMAT JSON) SELECT * FROM users',
-        { readonly: true }
-      );
-    });
-
-    it('allows explaining a write statement (plain EXPLAIN never executes it)', async () => {
-      const mockResult: SQLResult = { resultSets: [{ rows: [{ plan: 'x' }], rowCount: 1 }] };
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(mockResult);
-
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'DELETE FROM users WHERE id = 1' }, null);
-
-      expect(parseToolResponse(result).success).toBe(true);
-      expect(mockConnector.executeSQL).toHaveBeenCalledWith(
-        'EXPLAIN DELETE FROM users WHERE id = 1',
-        { readonly: true }
-      );
-    });
   });
 
-  describe('request tracking', () => {
-    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
-      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
-      const mockConnector = createMockConnector('postgres', 'prod');
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
-      const addSpy = vi.spyOn(requestStore, 'add');
-
-      const handler = createExplainSqlToolHandler('prod');
-      await handler({ sql: 'SELECT 1' }, null);
-
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql' }));
-    });
-
-    it('tracks the normalized, suffixed tool name for a multi-source id with special characters', async () => {
-      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
-      const mockConnector = createMockConnector('postgres', 'prod-pg');
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
-      const addSpy = vi.spyOn(requestStore, 'add');
-
-      const handler = createExplainSqlToolHandler('prod-pg');
-      await handler({ sql: 'SELECT 1' }, null);
-
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'explain_sql_prod_pg' }));
-    });
-  });
-
-  describe('error handling', () => {
-    it('returns EXECUTION_ERROR when the connector throws', async () => {
-      const mockConnector = createMockConnector('postgres', 'test_source');
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.executeSQL).mockRejectedValue(new Error('boom'));
-
-      const handler = createExplainSqlToolHandler('test_source');
-      const result = await handler({ sql: 'SELECT 1' }, null);
-
-      expect(result.isError).toBe(true);
-      const parsed = parseToolResponse(result);
-      expect(parsed.success).toBe(false);
-      expect(parsed.error).toBe('boom');
-      expect(parsed.code).toBe('EXECUTION_ERROR');
-    });
+  describeRequestTracking('explain_sql', async (sourceId) => {
+    useConnector('postgres', sourceId);
+    await createExplainSqlToolHandler(sourceId)({ sql: 'SELECT 1' }, null);
   });
 });

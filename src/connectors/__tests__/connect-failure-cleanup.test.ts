@@ -49,6 +49,7 @@ vi.mock("mssql", () => ({
 const { MySQLConnector } = await import("../mysql/index.js");
 const { MariaDBConnector } = await import("../mariadb/index.js");
 const { PostgresConnector } = await import("../postgres/index.js");
+const { SQLServerConnector } = await import("../sqlserver/index.js");
 
 const PROBE_FAILURE = new Error("ECONNREFUSED");
 
@@ -65,48 +66,22 @@ describe("connect() failure cleanup", () => {
     vi.restoreAllMocks();
   });
 
-  it("MySQL closes the pool when the version probe fails", async () => {
-    const end = vi.fn();
-    mysqlCreatePool.mockReturnValue({
-      query: vi.fn().mockRejectedValue(PROBE_FAILURE),
-      end,
-    });
-
-    const connector = new MySQLConnector();
-    await expect(connector.connect("mysql://u:p@localhost:3306/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
-    expect(end).toHaveBeenCalledTimes(1);
-  });
-
-  it("MariaDB closes the pool when the version probe fails", async () => {
-    const end = vi.fn();
-    mariadbCreatePool.mockReturnValue({
-      query: vi.fn().mockRejectedValue(PROBE_FAILURE),
-      end,
+  // Each driver's pool factory, the pool method connect() probes with, and the one that closes it.
+  it.each([
+    ["MySQL", MySQLConnector, mysqlCreatePool, "query", "end", "mysql://u:p@localhost:3306/db"],
+    ["MariaDB", MariaDBConnector, mariadbCreatePool, "query", "end", "mariadb://u:p@localhost:3306/db"],
+    ["PostgreSQL", PostgresConnector, pgPoolCtor, "connect", "end", "postgres://u:p@localhost:5432/db"],
+    ["SQL Server", SQLServerConnector, mssqlPoolCtor, "connect", "close", "sqlserver://u:p@localhost:1433/db"],
+  ])("%s closes the pool when the connection probe fails", async (_name, Connector, poolFactory, probe, closer, dsn) => {
+    const close = vi.fn();
+    poolFactory.mockReturnValue({
+      [probe]: vi.fn().mockRejectedValue(PROBE_FAILURE),
+      [closer]: close,
       on: vi.fn(),
     });
 
-    const connector = new MariaDBConnector();
-    await expect(connector.connect("mariadb://u:p@localhost:3306/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
-    expect(end).toHaveBeenCalledTimes(1);
-  });
-
-  it("PostgreSQL closes the pool when the connection probe fails", async () => {
-    const end = vi.fn();
-    pgPoolCtor.mockReturnValue({
-      connect: vi.fn().mockRejectedValue(PROBE_FAILURE),
-      end,
-      on: vi.fn(),
-    });
-
-    const connector = new PostgresConnector();
-    await expect(connector.connect("postgres://u:p@localhost:5432/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
-    expect(end).toHaveBeenCalledTimes(1);
+    await expect(new Connector().connect(dsn)).rejects.toThrow("ECONNREFUSED");
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces the original error even when teardown itself fails", async () => {
@@ -122,21 +97,6 @@ describe("connect() failure cleanup", () => {
       "ECONNREFUSED"
     );
     expect(end).toHaveBeenCalledTimes(1);
-  });
-
-  it("SQL Server closes the pool when the connection probe fails", async () => {
-    const { SQLServerConnector } = await import("../sqlserver/index.js");
-    const close = vi.fn();
-    mssqlPoolCtor.mockReturnValue({
-      connect: vi.fn().mockRejectedValue(PROBE_FAILURE),
-      close,
-    });
-
-    const connector = new SQLServerConnector();
-    await expect(connector.connect("sqlserver://u:p@localhost:1433/db")).rejects.toThrow(
-      "ECONNREFUSED"
-    );
-    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("SQLite releases the handle when the init script fails", async () => {

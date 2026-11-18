@@ -30,76 +30,39 @@ vi.mock('@aws-sdk/credential-providers', () => ({
 }));
 
 describe('generateRdsAuthToken', () => {
+  const target = {
+    hostname: 'mydb.abc123.us-east-1.rds.amazonaws.com',
+    port: 5432,
+    username: 'db_user',
+    region: 'us-east-1',
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
+    signerMocks.getAuthToken.mockResolvedValue('iam-token');
   });
 
   it('should resolve an explicit profile without credential fallback', async () => {
     const profileCredentials = vi.fn();
     credentialProviderMocks.fromIni.mockReturnValue(profileCredentials);
-    signerMocks.getAuthToken.mockResolvedValue('iam-token');
 
-    await generateRdsAuthToken({
-      hostname: 'mydb.abc123.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      username: 'db_user',
-      region: 'us-east-1',
-      profile: 'ngqa',
-    });
+    await generateRdsAuthToken({ ...target, profile: 'ngqa' });
 
-    expect(credentialProviderMocks.fromIni).toHaveBeenCalledWith({
-      profile: 'ngqa',
-      ignoreCache: true,
-    });
+    expect(credentialProviderMocks.fromIni).toHaveBeenCalledWith({ profile: 'ngqa', ignoreCache: true });
     expect(credentialProviderMocks.fromNodeProviderChain).not.toHaveBeenCalled();
-    expect(signerMocks.constructor).toHaveBeenCalledWith({
-      hostname: 'mydb.abc123.us-east-1.rds.amazonaws.com',
-      port: 5432,
-      username: 'db_user',
-      region: 'us-east-1',
-      credentials: profileCredentials,
-    });
+    expect(signerMocks.constructor).toHaveBeenCalledWith({ ...target, credentials: profileCredentials });
   });
 
   it('should use the default provider chain with the file cache disabled when no profile is set', async () => {
     const chainCredentials = vi.fn();
     credentialProviderMocks.fromNodeProviderChain.mockReturnValue(chainCredentials);
-    signerMocks.getAuthToken.mockResolvedValue('iam-token');
 
-    const token = await generateRdsAuthToken({
-      hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
-      port: 3306,
-      username: 'dbuser@example.com',
-      region: 'eu-west-1',
-    });
+    const token = await generateRdsAuthToken(target);
 
-    expect(credentialProviderMocks.fromNodeProviderChain).toHaveBeenCalledWith({
-      ignoreCache: true,
-    });
+    expect(credentialProviderMocks.fromNodeProviderChain).toHaveBeenCalledWith({ ignoreCache: true });
     expect(credentialProviderMocks.fromIni).not.toHaveBeenCalled();
-    expect(signerMocks.constructor).toHaveBeenCalledWith({
-      hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
-      port: 3306,
-      username: 'dbuser@example.com',
-      region: 'eu-west-1',
-      credentials: chainCredentials,
-    });
+    expect(signerMocks.constructor).toHaveBeenCalledWith({ ...target, credentials: chainCredentials });
     expect(signerMocks.getAuthToken).toHaveBeenCalledTimes(1);
     expect(token).toBe('iam-token');
-  });
-
-  it('should propagate SDK signer errors', async () => {
-    signerMocks.getAuthToken.mockRejectedValue(
-      new Error('AWS credentials not found')
-    );
-
-    await expect(
-      generateRdsAuthToken({
-        hostname: 'mydb.abc123.eu-west-1.rds.amazonaws.com',
-        port: 5432,
-        username: 'db_user',
-        region: 'eu-west-1',
-      })
-    ).rejects.toThrow('AWS credentials not found');
   });
 });

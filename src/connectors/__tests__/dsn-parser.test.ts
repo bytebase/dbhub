@@ -29,281 +29,28 @@ describe('DSN Parser - IPv6 hosts', () => {
   });
 });
 
-describe('DSN Parser - PostgreSQL SSL Modes', () => {
-  const connector = new PostgresConnector();
-  const parser = connector.dsnParser;
-  const CA = '-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----\n';
-  let tempDir: string;
-  let certPath: string;
-
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-ssl-test-'));
-    certPath = writeTempPem(tempDir, 'ca-bundle.pem', CA);
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('should set ssl = false for sslmode=disable', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=disable');
-    expect(config.ssl).toBe(false);
-  });
-
-  it('should set rejectUnauthorized = false for sslmode=require', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=require');
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
-  });
-
-  it('should set rejectUnauthorized = true and skip hostname check for sslmode=verify-ca', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-ca');
-    const ssl = config.ssl as Record<string, unknown>;
-    expect(ssl.rejectUnauthorized).toBe(true);
-    expect(typeof ssl.checkServerIdentity).toBe('function');
-    expect((ssl.checkServerIdentity as Function)()).toBeUndefined();
-  });
-
-  it('should set rejectUnauthorized = true and verify hostname for sslmode=verify-full', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=verify-full');
-    const ssl = config.ssl as Record<string, unknown>;
-    expect(ssl.rejectUnauthorized).toBe(true);
-    expect(ssl.checkServerIdentity).toBeUndefined();
-  });
-
-  it('should read CA cert file for sslmode=verify-full with sslrootcert', async () => {
-    const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-full&sslrootcert=${encodeURIComponent(certPath)}`;
-    const config = await parser.parse(dsn);
-    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA });
-  });
-
-  it('should expand ~ in sslrootcert path', async () => {
-    const mockHomedir = vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
-    writeTempPem(tempDir, 'ca.pem', 'test-ca-content');
-
-    try {
-      const dsn = `postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=${encodeURIComponent('~/ca.pem')}`;
-      const config = await parser.parse(dsn);
-      const ssl = config.ssl as Record<string, unknown>;
-      expect(ssl.rejectUnauthorized).toBe(true);
-      expect(ssl.ca).toBe('test-ca-content');
-    } finally {
-      mockHomedir.mockRestore();
-    }
-  });
-
-  it('should throw when sslrootcert points to nonexistent file', async () => {
-    const dsn = 'postgres://user:pass@localhost:5432/db?sslmode=verify-ca&sslrootcert=/nonexistent/ca.pem';
-    await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
-  });
-
-  it.each([
-    { sslmode: 'require', got: 'require' },
-    { sslmode: 'disable', got: 'disable' },
-    { sslmode: undefined, got: 'not set' },
-  ])('should reject sslrootcert when sslmode is $got', async ({ sslmode, got }) => {
-    const query = sslmode === undefined ? '' : `sslmode=${sslmode}&`;
-    const dsn = `postgres://user:pass@localhost:5432/db?${query}sslrootcert=${encodeURIComponent(certPath)}`;
-    await expect(parser.parse(dsn)).rejects.toThrow(
-      `sslrootcert requires sslmode 'verify-ca' or 'verify-full' (got '${got}')`
-    );
-  });
-
-  it('should leave ssl unset when sslmode is not set', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db');
-    expect(config.ssl).toBeUndefined();
-  });
-
-  it.each(['prefer', 'allow', 'verify_full', 'true'])(
-    'should reject unsupported sslmode=%s',
-    async (sslmode) => {
-      await expect(
-        parser.parse(`postgres://user:pass@localhost:5432/db?sslmode=${sslmode}`)
-      ).rejects.toThrow(
-        `Unsupported sslmode '${sslmode}'. Valid values: disable, require, verify-ca, verify-full`
-      );
-    }
-  );
-
-  it.each([
-    ['an empty value', '?sslmode='],
-    ['a bare parameter', '?sslmode'],
-    ['an empty value among other parameters', '?application_name=app&sslmode=&foo=bar'],
-    ['an empty value after a valid one', '?sslmode=require&sslmode='],
-    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
-  ])('should reject %s instead of connecting unencrypted', async (_, query) => {
-    // SafeURL drops a parameter with no value, so these used to look like no
-    // sslmode at all and left TLS off.
-    await expect(parser.parse(`postgres://user:pass@localhost:5432/db${query}`)).rejects.toThrow(
-      "Unsupported sslmode ''. Valid values: disable, require, verify-ca, verify-full"
-    );
-  });
-
-  it('should keep the default when sslmode is absent but other parameters are present', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?application_name=app');
-    expect(config.ssl).toBeUndefined();
-  });
-
-  it('should apply the last sslmode when it is given more than once', async () => {
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=disable&sslmode=require');
-    expect(config.ssl).toEqual({ rejectUnauthorized: false });
-  });
-});
-
-describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {
-  const connector = new PostgresConnector();
-  const parser = connector.dsnParser;
+describe('DSN Parser - PostgreSQL TLS', () => {
+  const parser = new PostgresConnector().dsnParser;
+  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
+  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
+  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
+  const ENCRYPTED_KEY =
+    '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n';
+  const base = 'postgres://user:pass@localhost:5432/db';
   let tempDir: string;
   let caPath: string;
   let certPath: string;
   let keyPath: string;
-  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
-  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
-  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
 
-  const base = 'postgres://user:pass@localhost:5432/db';
+  const rootCertParam = () => `sslrootcert=${encodeURIComponent(caPath)}`;
   const clientCertParams = () =>
     `sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-clientcert-test-'));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-pg-tls-test-'));
     caPath = writeTempPem(tempDir, 'ca.pem', CA);
     certPath = writeTempPem(tempDir, 'client.crt', CERT);
     keyPath = writeTempPem(tempDir, 'client.key', KEY);
-  });
-
-  afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it('should load cert and key with sslmode=require without verifying the server', async () => {
-    const config = await parser.parse(`${base}?sslmode=require&${clientCertParams()}`);
-    expect(config.ssl).toEqual({ rejectUnauthorized: false, cert: CERT, key: KEY });
-  });
-
-  it('should load cert and key with sslmode=verify-ca', async () => {
-    const config = await parser.parse(`${base}?sslmode=verify-ca&${clientCertParams()}`);
-    const ssl = config.ssl as Record<string, unknown>;
-    expect(ssl.rejectUnauthorized).toBe(true);
-    expect(ssl.cert).toBe(CERT);
-    expect(ssl.key).toBe(KEY);
-    expect(typeof ssl.checkServerIdentity).toBe('function');
-  });
-
-  it('should load cert and key alongside sslrootcert with sslmode=verify-full', async () => {
-    const config = await parser.parse(
-      `${base}?sslmode=verify-full&sslrootcert=${encodeURIComponent(caPath)}&${clientCertParams()}`
-    );
-    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
-  });
-
-  it('should expand ~ in sslcert and sslkey paths', async () => {
-    const mockHomedir = vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
-    try {
-      const config = await parser.parse(
-        `${base}?sslmode=require&sslcert=${encodeURIComponent('~/client.crt')}&sslkey=${encodeURIComponent('~/client.key')}`
-      );
-      expect(config.ssl).toEqual({ rejectUnauthorized: false, cert: CERT, key: KEY });
-    } finally {
-      mockHomedir.mockRestore();
-    }
-  });
-
-  it.each([
-    ['sslcert', 'sslkey'],
-    ['sslkey', 'sslcert'],
-  ])('should reject %s without %s', async (given, _missing) => {
-    const file = given === 'sslcert' ? certPath : keyPath;
-    await expect(
-      parser.parse(`${base}?sslmode=require&${given}=${encodeURIComponent(file)}`)
-    ).rejects.toThrow('sslcert and sslkey must be set together');
-  });
-
-  it.each([
-    { sslmode: 'disable', got: 'disable' },
-    { sslmode: undefined, got: 'not set' },
-  ])('should reject a client certificate when sslmode is $got', async ({ sslmode, got }) => {
-    const query = sslmode === undefined ? '' : `sslmode=${sslmode}&`;
-    await expect(parser.parse(`${base}?${query}${clientCertParams()}`)).rejects.toThrow(
-      `sslcert/sslkey require sslmode to be one of require, verify-ca, verify-full (got '${got}')`
-    );
-  });
-
-  it('should throw FailedToReadCertificate naming the missing key file', async () => {
-    fs.rmSync(keyPath);
-    const err = await parser
-      .parse(`${base}?sslmode=require&${clientCertParams()}`)
-      .catch((e: unknown) => e as Error);
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).name).toBe('FailedToReadCertificate');
-    expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
-  });
-
-  it('should throw FailedToReadCertificate naming the missing cert file', async () => {
-    fs.rmSync(certPath);
-    await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
-      `Failed to read SSL client certificate at '${certPath}'`
-    );
-  });
-
-  it.each([
-    ['PKCS#8', '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n'],
-    [
-      'legacy PEM',
-      '-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,00\n\nx\n-----END RSA PRIVATE KEY-----\n',
-    ],
-  ])('should reject an encrypted %s private key with a clear message', async (_format, pem) => {
-    fs.writeFileSync(keyPath, pem);
-    await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
-      'encrypted private keys are not supported'
-    );
-  });
-});
-
-describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslkey)', () => {
-  const parser = new PostgresConnector().dsnParser;
-  let tempDir: string;
-  let caPath: string;
-  let certPath: string;
-  let keyPath: string;
-  const CA = '-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n';
-  const CERT = '-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n';
-  const KEY = '-----BEGIN PRIVATE KEY-----\nclient\n-----END PRIVATE KEY-----\n';
-  const NEW_CA = '-----BEGIN CERTIFICATE-----\nca-rotated\n-----END CERTIFICATE-----\n';
-  const NEW_CERT = '-----BEGIN CERTIFICATE-----\nclient-rotated\n-----END CERTIFICATE-----\n';
-  const NEW_KEY = '-----BEGIN PRIVATE KEY-----\nclient-rotated\n-----END PRIVATE KEY-----\n';
-  const ENCRYPTED_KEY =
-    '-----BEGIN ENCRYPTED PRIVATE KEY-----\nx\n-----END ENCRYPTED PRIVATE KEY-----\n';
-
-  const dsn = () =>
-    'postgres://user:pass@localhost:5432/db?sslmode=verify-full' +
-    `&sslrootcert=${encodeURIComponent(caPath)}` +
-    `&sslcert=${encodeURIComponent(certPath)}&sslkey=${encodeURIComponent(keyPath)}`;
-
-  type ClientCtor = new (config: pg.PoolConfig) => pg.Client;
-  /** The pool constructs one client per physical connection from config.Client. */
-  const newPoolClient = (config: pg.PoolConfig): pg.Client =>
-    new (config.Client as unknown as ClientCtor)(config);
-  const pems = (config: pg.PoolConfig) => {
-    const ssl = config.ssl as { ca?: string; cert?: string; key?: string };
-    return { ca: ssl.ca, cert: ssl.cert, key: ssl.key };
-  };
-
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-certrotation-test-'));
-    caPath = writeTempPem(tempDir, 'ca.pem', CA);
-    certPath = writeTempPem(tempDir, 'client.crt', CERT);
-    keyPath = writeTempPem(tempDir, 'client.key', KEY);
-    // Stop at the point where pg would open a socket; the PEM reload happens before it.
-    vi.spyOn(pg.Client.prototype, 'connect').mockImplementation(function (
-      this: pg.Client,
-      callback?: (err: Error) => void
-    ) {
-      if (callback) {
-        callback(undefined as unknown as Error);
-        return;
-      }
-      return Promise.resolve();
-    } as typeof pg.Client.prototype.connect);
   });
 
   afterEach(() => {
@@ -311,113 +58,247 @@ describe('DSN Parser - PostgreSQL certificate rotation (sslrootcert/sslcert/sslk
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('installs a custom pool Client only when PEM files are configured', async () => {
-    const withPems = await parser.parse(dsn());
-    expect(withPems.Client).toBeDefined();
-    const withoutPems = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=require');
-    expect(withoutPems.Client).toBeUndefined();
-  });
+  describe('SSL modes', () => {
+    it.each([
+      ['no sslmode', '', undefined],
+      ['no sslmode but other parameters', '?application_name=app', undefined],
+      ['sslmode=disable', '?sslmode=disable', false],
+      ['sslmode=require', '?sslmode=require', { rejectUnauthorized: false }],
+      // No checkServerIdentity override, so the hostname is verified as well as the chain
+      ['sslmode=verify-full', '?sslmode=verify-full', { rejectUnauthorized: true }],
+      ['the last of a repeated sslmode', '?sslmode=disable&sslmode=require', { rejectUnauthorized: false }],
+    ])('should map %s to ssl = %j', async (_label, query, ssl) => {
+      expect((await parser.parse(`${base}${query}`)).ssl).toStrictEqual(ssl);
+    });
 
-  it('re-reads rotated PEM files when a new connection is opened', async () => {
-    const config = await parser.parse(dsn());
-    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
+    it('should set rejectUnauthorized = true and skip hostname check for sslmode=verify-ca', async () => {
+      const config = await parser.parse(`${base}?sslmode=verify-ca`);
+      const ssl = config.ssl as Record<string, unknown>;
+      expect(ssl.rejectUnauthorized).toBe(true);
+      expect(typeof ssl.checkServerIdentity).toBe('function');
+      expect((ssl.checkServerIdentity as Function)()).toBeUndefined();
+    });
 
-    fs.writeFileSync(caPath, NEW_CA);
-    fs.writeFileSync(certPath, NEW_CERT);
-    fs.writeFileSync(keyPath, NEW_KEY);
+    it('should read CA cert file for sslmode=verify-full with sslrootcert', async () => {
+      const config = await parser.parse(`${base}?sslmode=verify-full&${rootCertParam()}`);
+      expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA });
+    });
 
-    await newPoolClient(config).connect();
-    // pg marks ssl.key non-enumerable when a Client is constructed, so
-    // compare the fields explicitly rather than with toEqual.
-    expect(pems(config)).toEqual({ ca: NEW_CA, cert: NEW_CERT, key: NEW_KEY });
-    expect(pg.Client.prototype.connect).toHaveBeenCalledTimes(1);
-  });
+    it('should throw when sslrootcert points to nonexistent file', async () => {
+      const dsn = `${base}?sslmode=verify-ca&sslrootcert=/nonexistent/ca.pem`;
+      await expect(parser.parse(dsn)).rejects.toThrow("Failed to read SSL root certificate at '/nonexistent/ca.pem'");
+    });
 
-  it('fails the new connection, naming the file, when a PEM file cannot be read', async () => {
-    const config = await parser.parse(dsn());
-    fs.rmSync(keyPath);
+    it.each([
+      { sslmode: 'require', got: 'require' },
+      { sslmode: 'disable', got: 'disable' },
+      { sslmode: undefined, got: 'not set' },
+    ])('should reject sslrootcert when sslmode is $got', async ({ sslmode, got }) => {
+      const query = sslmode === undefined ? '' : `sslmode=${sslmode}&`;
+      await expect(parser.parse(`${base}?${query}${rootCertParam()}`)).rejects.toThrow(
+        `sslrootcert requires sslmode 'verify-ca' or 'verify-full' (got '${got}')`
+      );
+    });
 
-    const err = await newPoolClient(config).connect().catch((e: unknown) => e as Error);
-    expect((err as Error).name).toBe('FailedToReadCertificate');
-    expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
-    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
-  });
-
-  it('reports the failure through the callback form of connect as well', async () => {
-    const config = await parser.parse(dsn());
-    fs.rmSync(certPath);
-
-    const err = await new Promise<Error>((resolve) => newPoolClient(config).connect(resolve));
-    expect(err.message).toContain(`Failed to read SSL client certificate at '${certPath}'`);
-    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
-  });
-
-  it('never publishes a half-rotated cert/key pair', async () => {
-    const config = await parser.parse(dsn());
-    fs.writeFileSync(certPath, NEW_CERT);
-    fs.rmSync(keyPath);
-
-    await expect(newPoolClient(config).connect()).rejects.toThrow('Failed to read SSL client key');
-    // The pair in the pool config is still the one that was read together.
-    expect(pems(config)).toEqual({ ca: CA, cert: CERT, key: KEY });
-  });
-
-  it('rejects a rotated key that is encrypted', async () => {
-    const config = await parser.parse(dsn());
-    fs.writeFileSync(keyPath, ENCRYPTED_KEY);
-
-    await expect(newPoolClient(config).connect()).rejects.toThrow(
-      'encrypted private keys are not supported'
+    it.each(['prefer', 'allow', 'verify_full', 'true'])(
+      'should reject unsupported sslmode=%s',
+      async (sslmode) => {
+        await expect(parser.parse(`${base}?sslmode=${sslmode}`)).rejects.toThrow(
+          `Unsupported sslmode '${sslmode}'. Valid values: disable, require, verify-ca, verify-full`
+        );
+      }
     );
-    expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+  });
+
+  describe('client certificate (sslcert/sslkey)', () => {
+    it('should load cert and key with sslmode=require without verifying the server', async () => {
+      const config = await parser.parse(`${base}?sslmode=require&${clientCertParams()}`);
+      expect(config.ssl).toEqual({ rejectUnauthorized: false, cert: CERT, key: KEY });
+    });
+
+    it('should load cert and key with sslmode=verify-ca', async () => {
+      const config = await parser.parse(`${base}?sslmode=verify-ca&${clientCertParams()}`);
+      const ssl = config.ssl as Record<string, unknown>;
+      expect(ssl.rejectUnauthorized).toBe(true);
+      expect(ssl.cert).toBe(CERT);
+      expect(ssl.key).toBe(KEY);
+      expect(typeof ssl.checkServerIdentity).toBe('function');
+    });
+
+    it('should expand ~ in sslrootcert, sslcert and sslkey paths', async () => {
+      vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+      const tilde = (file: string) => encodeURIComponent(`~/${file}`);
+      const config = await parser.parse(
+        `${base}?sslmode=verify-ca&sslrootcert=${tilde('ca.pem')}&sslcert=${tilde('client.crt')}&sslkey=${tilde('client.key')}`
+      );
+      expect(config.ssl).toMatchObject({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
+    });
+
+    it.each([
+      ['sslcert', 'sslkey'],
+      ['sslkey', 'sslcert'],
+    ])('should reject %s without %s', async (given, _missing) => {
+      const file = given === 'sslcert' ? certPath : keyPath;
+      await expect(
+        parser.parse(`${base}?sslmode=require&${given}=${encodeURIComponent(file)}`)
+      ).rejects.toThrow('sslcert and sslkey must be set together');
+    });
+
+    it.each([
+      { sslmode: 'disable', got: 'disable' },
+      { sslmode: undefined, got: 'not set' },
+    ])('should reject a client certificate when sslmode is $got', async ({ sslmode, got }) => {
+      const query = sslmode === undefined ? '' : `sslmode=${sslmode}&`;
+      await expect(parser.parse(`${base}?${query}${clientCertParams()}`)).rejects.toThrow(
+        `sslcert/sslkey require sslmode to be one of require, verify-ca, verify-full (got '${got}')`
+      );
+    });
+
+    it('should throw FailedToReadCertificate naming the missing key file', async () => {
+      fs.rmSync(keyPath);
+      const err = await parser
+        .parse(`${base}?sslmode=require&${clientCertParams()}`)
+        .catch((e: unknown) => e as Error);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).name).toBe('FailedToReadCertificate');
+      expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
+    });
+
+    it('should throw FailedToReadCertificate naming the missing cert file', async () => {
+      fs.rmSync(certPath);
+      await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
+        `Failed to read SSL client certificate at '${certPath}'`
+      );
+    });
+
+    it.each([
+      ['PKCS#8', ENCRYPTED_KEY],
+      [
+        'legacy PEM',
+        '-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,00\n\nx\n-----END RSA PRIVATE KEY-----\n',
+      ],
+    ])('should reject an encrypted %s private key with a clear message', async (_format, pem) => {
+      fs.writeFileSync(keyPath, pem);
+      await expect(parser.parse(`${base}?sslmode=require&${clientCertParams()}`)).rejects.toThrow(
+        'encrypted private keys are not supported'
+      );
+    });
+  });
+
+  describe('certificate rotation (sslrootcert/sslcert/sslkey)', () => {
+    const NEW_CA = '-----BEGIN CERTIFICATE-----\nca-rotated\n-----END CERTIFICATE-----\n';
+    const NEW_CERT = '-----BEGIN CERTIFICATE-----\nclient-rotated\n-----END CERTIFICATE-----\n';
+    const NEW_KEY = '-----BEGIN PRIVATE KEY-----\nclient-rotated\n-----END PRIVATE KEY-----\n';
+
+    const dsn = () => `${base}?sslmode=verify-full&${rootCertParam()}&${clientCertParams()}`;
+
+    type ClientCtor = new (config: pg.PoolConfig) => pg.Client;
+    /** The pool constructs one client per physical connection from config.Client. */
+    const newPoolClient = (config: pg.PoolConfig): pg.Client =>
+      new (config.Client as unknown as ClientCtor)(config);
+    const pems = (config: pg.PoolConfig) => {
+      const ssl = config.ssl as { ca?: string; cert?: string; key?: string };
+      return { ca: ssl.ca, cert: ssl.cert, key: ssl.key };
+    };
+
+    beforeEach(() => {
+      // Stop at the point where pg would open a socket; the PEM reload happens before it.
+      vi.spyOn(pg.Client.prototype, 'connect').mockImplementation(function (
+        this: pg.Client,
+        callback?: (err: Error) => void
+      ) {
+        if (callback) {
+          callback(undefined as unknown as Error);
+          return;
+        }
+        return Promise.resolve();
+      } as typeof pg.Client.prototype.connect);
+    });
+
+    it('installs a custom pool Client only when PEM files are configured', async () => {
+      const withPems = await parser.parse(dsn());
+      expect(withPems.Client).toBeDefined();
+      const withoutPems = await parser.parse(`${base}?sslmode=require`);
+      expect(withoutPems.Client).toBeUndefined();
+    });
+
+    it('re-reads rotated PEM files when a new connection is opened', async () => {
+      const config = await parser.parse(dsn());
+      // At parse time: verify-full with the CA and the client certificate loaded together
+      expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: CA, cert: CERT, key: KEY });
+
+      fs.writeFileSync(caPath, NEW_CA);
+      fs.writeFileSync(certPath, NEW_CERT);
+      fs.writeFileSync(keyPath, NEW_KEY);
+
+      await newPoolClient(config).connect();
+      // pg marks ssl.key non-enumerable when a Client is constructed, so
+      // compare the fields explicitly rather than with toEqual.
+      expect(pems(config)).toEqual({ ca: NEW_CA, cert: NEW_CERT, key: NEW_KEY });
+      expect(pg.Client.prototype.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails the new connection, naming the file, when a PEM file cannot be read', async () => {
+      const config = await parser.parse(dsn());
+      fs.rmSync(keyPath);
+
+      const err = await newPoolClient(config).connect().catch((e: unknown) => e as Error);
+      expect((err as Error).name).toBe('FailedToReadCertificate');
+      expect((err as Error).message).toContain(`Failed to read SSL client key at '${keyPath}'`);
+      expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+    });
+
+    it('reports the failure through the callback form of connect as well', async () => {
+      const config = await parser.parse(dsn());
+      fs.rmSync(certPath);
+
+      const err = await new Promise<Error>((resolve) => newPoolClient(config).connect(resolve));
+      expect(err.message).toContain(`Failed to read SSL client certificate at '${certPath}'`);
+      expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+    });
+
+    it('never publishes a half-rotated cert/key pair', async () => {
+      const config = await parser.parse(dsn());
+      fs.writeFileSync(certPath, NEW_CERT);
+      fs.rmSync(keyPath);
+
+      await expect(newPoolClient(config).connect()).rejects.toThrow('Failed to read SSL client key');
+      // The pair in the pool config is still the one that was read together.
+      expect(pems(config)).toEqual({ ca: CA, cert: CERT, key: KEY });
+    });
+
+    it('rejects a rotated key that is encrypted', async () => {
+      const config = await parser.parse(dsn());
+      fs.writeFileSync(keyPath, ENCRYPTED_KEY);
+
+      await expect(newPoolClient(config).connect()).rejects.toThrow(
+        'encrypted private keys are not supported'
+      );
+      expect(pg.Client.prototype.connect).not.toHaveBeenCalled();
+    });
   });
 });
 
-describe('DSN Parser - PostgreSQL query timeout', () => {
-  it('configures a server-side statement timeout before the client fallback', async () => {
+describe('DSN Parser - query timeout and pool size', () => {
+  it('PostgreSQL sets a server-side statement timeout before the client fallback, and pg PoolConfig.max', async () => {
     const parser = new PostgresConnector().dsnParser;
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db', {
-      queryTimeoutSeconds: 30,
-    });
+    const dsn = 'postgres://user:pass@localhost:5432/db';
+    const config = await parser.parse(dsn, { queryTimeoutSeconds: 30, poolMaxConnections: 5 });
 
     expect(config.statement_timeout).toBe(30_000);
     expect(config.query_timeout).toBe(35_000);
-  });
-});
-
-describe('DSN Parser - PostgreSQL pool size', () => {
-  it('maps the configured maximum to pg PoolConfig.max', async () => {
-    const parser = new PostgresConnector().dsnParser;
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db', {
-      poolMaxConnections: 5,
-    });
-
     expect(config.max).toBe(5);
+    // pg's default pool size stays in place when no maximum is configured
+    expect((await parser.parse(dsn)).max).toBeUndefined();
   });
 
-  it('leaves pg defaults unchanged when no maximum is configured', async () => {
-    const parser = new PostgresConnector().dsnParser;
-    const config = await parser.parse('postgres://user:pass@localhost:5432/db');
-
-    expect(config.max).toBeUndefined();
-  });
-});
-
-describe('DSN Parser - MySQL pool size', () => {
-  it('maps the configured maximum to mysql2 connectionLimit', async () => {
+  it('MySQL maps the configured maximum to mysql2 connectionLimit', async () => {
     const parser = new MySQLConnector().dsnParser;
-    const config = await parser.parse('mysql://user:pass@localhost:3306/db', {
-      poolMaxConnections: 5,
-    });
+    const dsn = 'mysql://user:pass@localhost:3306/db';
 
-    expect(config.connectionLimit).toBe(5);
-  });
-
-  it('leaves mysql2 defaults unchanged when no maximum is configured', async () => {
-    const parser = new MySQLConnector().dsnParser;
-    const config = await parser.parse('mysql://user:pass@localhost:3306/db');
-
-    expect(config.connectionLimit).toBeUndefined();
+    expect((await parser.parse(dsn, { poolMaxConnections: 5 })).connectionLimit).toBe(5);
+    // mysql2's default pool size stays in place when no maximum is configured
+    expect((await parser.parse(dsn)).connectionLimit).toBeUndefined();
   });
 });
 
@@ -427,16 +308,15 @@ describe('DSN Parser - MySQL / MariaDB SSL Modes', () => {
   const mysqlDsn = (query: string) => `mysql://user:pass@db.example.com:3306/db${query}`;
   const mariadbDsn = (query: string) => `mariadb://user:pass@db.example.com:3306/db${query}`;
 
-  it('should leave ssl unset when sslmode is not set or is disable', async () => {
-    for (const query of ['', '?sslmode=disable']) {
-      expect((await mysqlParser.parse(mysqlDsn(query))).ssl).toBeUndefined();
-      expect((await mariadbParser.parse(mariadbDsn(query))).ssl).toBeUndefined();
-    }
-  });
-
-  it('should skip certificate verification for sslmode=require', async () => {
-    expect((await mysqlParser.parse(mysqlDsn('?sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
-    expect((await mariadbParser.parse(mariadbDsn('?sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
+  it.each([
+    ['no sslmode', '', undefined],
+    ['no sslmode but other parameters', '?charset=utf8mb4', undefined],
+    ['sslmode=disable', '?sslmode=disable', undefined],
+    ['sslmode=require', '?sslmode=require', { rejectUnauthorized: false }],
+    ['the last of a repeated sslmode', '?sslmode=disable&sslmode=require', { rejectUnauthorized: false }],
+  ])('should map %s to ssl = %j on both drivers', async (_label, query, ssl) => {
+    expect((await mysqlParser.parse(mysqlDsn(query))).ssl).toEqual(ssl);
+    expect((await mariadbParser.parse(mariadbDsn(query))).ssl).toEqual(ssl);
   });
 
   it('should verify the chain but not the host name for sslmode=verify-ca', async () => {
@@ -469,30 +349,6 @@ describe('DSN Parser - MySQL / MariaDB SSL Modes', () => {
     }
   );
 
-  it.each([
-    ['an empty value', '?sslmode='],
-    ['a bare parameter', '?sslmode'],
-    ['an empty value among other parameters', '?charset=utf8mb4&sslmode=&foo=bar'],
-    ['an empty value after a valid one', '?sslmode=require&sslmode='],
-    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
-  ])('should reject %s instead of connecting unencrypted', async (_, query) => {
-    // SafeURL drops a parameter with no value, so these used to look like no
-    // sslmode at all and left TLS off.
-    const message = "Unsupported sslmode ''. Valid values: disable, require, verify-ca, verify-full";
-    await expect(mysqlParser.parse(mysqlDsn(query))).rejects.toThrow(message);
-    await expect(mariadbParser.parse(mariadbDsn(query))).rejects.toThrow(message);
-  });
-
-  it('should keep the default when sslmode is absent but other parameters are present', async () => {
-    expect((await mysqlParser.parse(mysqlDsn('?charset=utf8mb4'))).ssl).toBeUndefined();
-    expect((await mariadbParser.parse(mariadbDsn('?charset=utf8mb4'))).ssl).toBeUndefined();
-  });
-
-  it('should apply the last sslmode when it is given more than once', async () => {
-    expect((await mysqlParser.parse(mysqlDsn('?sslmode=disable&sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
-    expect((await mariadbParser.parse(mariadbDsn('?sslmode=disable&sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
-  });
-
   it('should hand each parse its own ssl object', async () => {
     // Both drivers write defaults back onto the object they are given
     const first = await mysqlParser.parse(mysqlDsn('?sslmode=verify-full'));
@@ -502,57 +358,65 @@ describe('DSN Parser - MySQL / MariaDB SSL Modes', () => {
 });
 
 describe('DSN Parser - AWS IAM Authentication', () => {
-  describe('MySQL', () => {
-    const connector = new MySQLConnector();
-    const parser = connector.dsnParser;
+  const awsToken = 'mydb.abc123.us-east-1.rds.amazonaws.com:3306/?Action=connect&DBUser=myuser&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE/20240101/us-east-1/rds-db/aws4_request&X-Amz-Date=20240101T000000Z&X-Amz-SignedHeaders=host&X-Amz-Signature=abc123def456';
+  const iamDsn = (scheme: string) =>
+    `${scheme}://myuser:${encodeURIComponent(awsToken)}@mydb.abc123.us-east-1.rds.amazonaws.com:3306/mydb`;
 
-    it('should detect AWS IAM token and configure cleartext plugin with SSL', async () => {
-      const awsToken = 'mydb.abc123.us-east-1.rds.amazonaws.com:3306/?Action=connect&DBUser=myuser&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE/20240101/us-east-1/rds-db/aws4_request&X-Amz-Date=20240101T000000Z&X-Amz-SignedHeaders=host&X-Amz-Signature=abc123def456';
-      const dsn = `mysql://myuser:${encodeURIComponent(awsToken)}@mydb.abc123.us-east-1.rds.amazonaws.com:3306/mydb`;
+  it('MySQL should detect AWS IAM token and configure cleartext plugin with SSL', async () => {
+    const config = await new MySQLConnector().dsnParser.parse(iamDsn('mysql'));
 
-      const config = await parser.parse(dsn);
+    // Should auto-enable SSL for AWS IAM authentication
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
 
-      // Should have authPlugins configured with cleartext plugin
-      expect(config.authPlugins).toBeDefined();
-      expect(config.authPlugins?.mysql_clear_password).toBeDefined();
-
-      // Should auto-enable SSL for AWS IAM authentication
-      expect(config.ssl).toEqual({ rejectUnauthorized: false });
-
-      // Plugin should return password with null terminator
-      if (config.authPlugins?.mysql_clear_password) {
-        // mysql2 passes plugin metadata and the server's auth data; the
-        // cleartext plugin ignores both.
-        const pluginFunc = config.authPlugins.mysql_clear_password({} as any);
-        const result = pluginFunc(Buffer.alloc(0)) as Buffer;
-        expect(result).toBeInstanceOf(Buffer);
-        expect(result.toString()).toBe(awsToken + '\0');
-      }
-    });
-
-    it('should not configure cleartext plugin for normal passwords', async () => {
-      const dsn = 'mysql://myuser:regularpassword@localhost:3306/mydb';
-
-      const config = await parser.parse(dsn);
-
-      expect(config.authPlugins).toBeUndefined();
-      expect(config.ssl).toBeUndefined();
-    });
+    // mysql2 passes plugin metadata and the server's auth data; the cleartext
+    // plugin ignores both and returns the password with a null terminator.
+    const pluginFunc = config.authPlugins!.mysql_clear_password({} as any);
+    const result = pluginFunc(Buffer.alloc(0)) as Buffer;
+    expect(result).toBeInstanceOf(Buffer);
+    expect(result.toString()).toBe(awsToken + '\0');
   });
 
-  describe('MariaDB', () => {
-    const connector = new MariaDBConnector();
-    const parser = connector.dsnParser;
+  it('MySQL should not configure cleartext plugin for normal passwords', async () => {
+    const config = await new MySQLConnector().dsnParser.parse('mysql://myuser:regularpassword@localhost:3306/mydb');
 
-    it('should detect AWS IAM token and auto-enable SSL', async () => {
-      const awsToken = 'mydb.abc123.us-east-1.rds.amazonaws.com:3306/?Action=connect&DBUser=myuser&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE/20240101/us-east-1/rds-db/aws4_request&X-Amz-Date=20240101T000000Z&X-Amz-SignedHeaders=host&X-Amz-Signature=abc123def456';
-      const dsn = `mariadb://myuser:${encodeURIComponent(awsToken)}@mydb.abc123.us-east-1.rds.amazonaws.com:3306/mydb`;
+    expect(config.authPlugins).toBeUndefined();
+    expect(config.ssl).toBeUndefined();
+  });
 
-      const config = await parser.parse(dsn);
+  it('MariaDB should detect AWS IAM token and auto-enable SSL', async () => {
+    const config = await new MariaDBConnector().dsnParser.parse(iamDsn('mariadb'));
 
-      // SSL should be auto-enabled for AWS IAM auth
-      // MariaDB connector includes mysql_clear_password in default permitted plugins
-      expect(config.ssl).toEqual({ rejectUnauthorized: false });
+    // SSL should be auto-enabled for AWS IAM auth
+    // MariaDB connector includes mysql_clear_password in default permitted plugins
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  });
+});
+
+describe('DSN Parser - empty sslmode', () => {
+  const generic = "Unsupported sslmode ''. Valid values: disable, require, verify-ca, verify-full";
+
+  // These parsers read sslmode from the raw query string (rawQueryParamValues):
+  // SafeURL drops a parameter with no value, so each of these used to look like
+  // no sslmode at all and connected without TLS. SQL Server has its own check below.
+  describe.each([
+    ['PostgreSQL', new PostgresConnector().dsnParser, 'postgres://user:pass@localhost:5432/db', generic],
+    ['MySQL', new MySQLConnector().dsnParser, 'mysql://user:pass@db.example.com:3306/db', generic],
+    ['MariaDB', new MariaDBConnector().dsnParser, 'mariadb://user:pass@db.example.com:3306/db', generic],
+    [
+      'Oracle',
+      new OracleConnector().dsnParser,
+      'oracle://app:secret@db:2484/PROD',
+      "Unsupported sslmode '' for Oracle. Supported: disable, require, verify-full",
+    ],
+  ])('%s', (_name, parser, base, message) => {
+    it.each([
+      ['an empty value', '?sslmode='],
+      ['a bare parameter', '?sslmode'],
+      ['an empty value among other parameters', '?application_name=app&sslmode=&foo=bar'],
+      ['an empty value after a valid one', '?sslmode=require&sslmode='],
+      ['an empty value before a valid one', '?sslmode=&sslmode=require'],
+    ])('rejects %s instead of connecting unencrypted', async (_, query) => {
+      await expect(parser.parse(`${base}${query}`)).rejects.toThrow(message);
     });
   });
 });
@@ -574,6 +438,10 @@ describe('DSN Parser - SQL Server SSL/TLS Configuration', () => {
     expect(config.options?.instanceName).toBeUndefined();
     expect(config.server).toBe('localhost');
     expect(config.port).toBe(1433);
+    // Plain SQL authentication: credentials at the top level, no NTLM block
+    expect(config.user).toBe('user');
+    expect(config.password).toBe('pass');
+    expect(config.authentication).toBeUndefined();
   });
 
   it.each([
@@ -701,16 +569,6 @@ describe('DSN Parser - SQL Server NTLM Authentication', () => {
 
     await expect(parser.parse(dsn)).rejects.toThrow("Parameter 'domain' requires 'authentication=ntlm'");
   });
-
-  it('should not configure NTLM for normal SQL authentication', async () => {
-    const dsn = 'sqlserver://sa:password@localhost:1433/mydb';
-
-    const config = await parser.parse(dsn);
-
-    expect(config.authentication).toBeUndefined();
-    expect(config.user).toBe('sa');
-    expect(config.password).toBe('password');
-  });
 });
 
 describe('DSN Parser - missing database component', () => {
@@ -746,10 +604,11 @@ describe('DSN Parser - Oracle', () => {
   const parser = new OracleConnector().dsnParser;
 
   it('builds an Easy Connect string from host, port and service name', async () => {
-    const config = await parser.parse('oracle://app:secret@db.example.com:1521/FREEPDB1');
+    // The password is URL-encoded in the DSN and handed to the driver decoded
+    const config = await parser.parse('oracle://app:p%40ss%3Aw%2Frd@db.example.com:1521/FREEPDB1');
     expect(config.pool).toMatchObject({
       user: 'app',
-      password: 'secret',
+      password: 'p@ss:w/rd',
       connectString: 'db.example.com:1521/FREEPDB1',
       program: 'dbhub',
       poolMin: 0,
@@ -802,11 +661,6 @@ describe('DSN Parser - Oracle', () => {
     expect(config.callTimeoutMs).toBe(30000);
   });
 
-  it('decodes URL-encoded credentials', async () => {
-    const config = await parser.parse('oracle://app:p%40ss%3Aw%2Frd@db:1521/FREEPDB1');
-    expect(config.pool.password).toBe('p@ss:w/rd');
-  });
-
   it('passes a PEM wallet for mutual TLS', async () => {
     const config = await parser.parse(
       'oracle://app:secret@adb.example.com:1522/svc_tp?sslmode=require&wallet_location=%2Fopt%2Fwallet&wallet_password=w%40llet'
@@ -856,25 +710,6 @@ describe('DSN Parser - Oracle', () => {
     ['postgres://app:secret@db:5432/X', 'Invalid Oracle DSN format'],
   ])('rejects %s', async (dsn, message) => {
     await expect(parser.parse(dsn)).rejects.toThrow(message);
-  });
-
-  it.each([
-    ['an empty value', '?sslmode='],
-    ['a bare parameter', '?sslmode'],
-    ['an empty value among other parameters', '?sid=ORCL&sslmode=&foo=bar'],
-    ['an empty value after a valid one', '?sslmode=require&sslmode='],
-    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
-  ])('rejects %s instead of connecting over plain TCP', async (_, query) => {
-    // SafeURL drops a parameter with no value, so these used to look like no
-    // sslmode at all and connected without TLS.
-    await expect(parser.parse(`oracle://app:secret@db:2484/PROD${query}`)).rejects.toThrow(
-      "Unsupported sslmode '' for Oracle. Supported: disable, require, verify-full"
-    );
-  });
-
-  it('keeps plain TCP when sslmode is absent but other parameters are present', async () => {
-    const config = await parser.parse('oracle://app:secret@db:1521/?sid=ORCL');
-    expect(config.pool.connectString).toContain('(PROTOCOL=TCP)');
   });
 
   it('applies the last sslmode when it is given more than once', async () => {

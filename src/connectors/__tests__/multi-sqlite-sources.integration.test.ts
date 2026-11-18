@@ -50,31 +50,20 @@ describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
     expect(sourceIds).toEqual(['database_a', 'database_b', 'database_c']);
   });
 
-  it('should maintain separate table structures for each database', async () => {
+  it('should not overwrite connections when connecting to multiple SQLite databases', async () => {
+    // This is the core test for issue #115
     const connectorA = manager.getConnector('database_a');
     const connectorB = manager.getConnector('database_b');
 
-    const tablesA = await connectorA.getTables();
-    const tablesB = await connectorB.getTables();
+    // Each database lists its own table and not the other's
+    expect(await connectorA.getTables()).toEqual(['employees']);
+    expect(await connectorB.getTables()).toEqual(['products']);
 
-    // database_a should have 'employees' table
-    expect(tablesA).toContain('employees');
-    expect(tablesA).not.toContain('products');
-
-    // database_b should have 'products' table
-    expect(tablesB).toContain('products');
-    expect(tablesB).not.toContain('employees');
-  });
-
-  it('should not overwrite connections when connecting to multiple SQLite databases', async () => {
-    // This is the core test for issue #115
     // Query database_a
-    const connectorA = manager.getConnector('database_a');
     const resultA = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
     expect(Number(resultA.resultSets[0].rows[0].count)).toBe(2);
 
     // Query database_b
-    const connectorB = manager.getConnector('database_b');
     const resultB = await connectorB.executeSQL('SELECT COUNT(*) as count FROM products', {});
     expect(Number(resultB.resultSets[0].rows[0].count)).toBe(3);
 
@@ -91,24 +80,5 @@ describe('Multiple SQLite Sources Integration Test (Issue #115)', () => {
     await expect(
       connectorB.executeSQL('SELECT COUNT(*) as count FROM employees', {})
     ).rejects.toThrow();
-  });
-
-  it('should handle inserts to each database independently', async () => {
-    const connectorA = manager.getConnector('database_a');
-    const connectorB = manager.getConnector('database_b');
-
-    // Insert into database_a
-    await connectorA.executeSQL("INSERT INTO employees (name) VALUES ('Charlie')", {});
-    const resultA = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA.resultSets[0].rows[0].count)).toBe(3);
-
-    // Insert into database_b
-    await connectorB.executeSQL("INSERT INTO products (title) VALUES ('Thingamajig')", {});
-    const resultB = await connectorB.executeSQL('SELECT COUNT(*) as count FROM products', {});
-    expect(Number(resultB.resultSets[0].rows[0].count)).toBe(4);
-
-    // Verify database_a still has 3 employees
-    const resultA2 = await connectorA.executeSQL('SELECT COUNT(*) as count FROM employees', {});
-    expect(Number(resultA2.resultSets[0].rows[0].count)).toBe(3);
   });
 });

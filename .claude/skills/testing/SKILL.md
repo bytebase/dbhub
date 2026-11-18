@@ -78,14 +78,26 @@ Run without Docker (in-memory SQLite or no database):
 
 Database connector integration tests extend `IntegrationTestBase<TContainer>` from `src/connectors/__tests__/shared/integration-test-base.ts`. This abstract class provides:
 
-- **Lifecycle**: Container start in `beforeAll` (120s timeout) → connect → setup test data → run tests → cleanup in `afterAll`
-- **Shared test suites**: `createConnectionTests()`, `createSchemaTests()`, `createTableTests()`, `createSQLExecutionTests()`, `createStoredProcedureTests()`, `createCommentTests()`, `createErrorHandlingTests()`
+- **Lifecycle**: `registerLifecycle()` registers the `beforeAll` (container start, 120s timeout → connect → setup test data) and `afterAll` (cleanup) hooks
+- **Shared test suites**: `createCommonTests()` runs all of `createConnectionTests()`, `createSchemaTests()`, `createTableTests()`, `createSQLExecutionTests()`, `createStoredProcedureTests()`, `createCommentTests()`, `createErrorHandlingTests()`, `createMaxRowsTests()` and `createReadonlyBackstopTests()`; `createSSLTests()` is opt-in for engines whose container can report session encryption (`expectSessionEncryption` hook)
+- **Dialect hooks**: `DatabaseTestConfig` flags gate the tests an engine cannot run; `userLimitedSQL(n)` is overridden where the row limit is not `LIMIT` (SQL Server `TOP`, Oracle `FETCH FIRST`)
+- **`withConnector(config, fn)`**: connects a second connector with the given `ConnectorConfig`, runs `fn`, and always disconnects — use it instead of a hand-written connect / try / finally
 - **Standard test data**: `users` table (id, name, email, age) + `orders` table (id, user_id, amount) + `test_schema.products`
 
 To add a new database connector test, extend this class and implement:
 - `createContainer()` — Start the Testcontainers instance
 - `createConnector()` — Create the database connector
 - `setupTestData(connector)` — Populate test tables
+
+MySQL and MariaDB share almost everything: both extend `MySQLFamilyIntegrationTest` (`shared/mysql-family-suite.ts`) and call `createFamilyTests(traits)`. A test that applies to both engines goes there; each engine's own file holds only what differs.
+
+Behaviour that belongs to the database engine rather than to a connector branch (window functions, JSON operators, storage engines…) is not tested here — a new integration test should name the connector code it exercises.
+
+### Shared helpers for other tests
+
+- `src/tools/__tests__/helpers.ts` — `createMockConnector()`, `parseToolResponse()`, `describeRequestTracking()` for tool handler tests. Error-envelope shaping lives in `runToolRequest` and is tested once, in `execute-sql.test.ts`.
+- `src/api/__tests__/test-server.ts` — `startApiServer(routes)` serves API handlers on an ephemeral port.
+- `src/__tests__/spawn-http-server.ts` — `spawnHttpServer(bindHost?)` starts the real server as a child process in an isolated working directory.
 
 ### Test Fixtures
 
@@ -175,4 +187,6 @@ The CI workflow (`.github/workflows/run-tests.yml`) runs unit and integration te
 
 **Integration test**: Create `src/{module}/__tests__/{name}.integration.test.ts` — the `integration` in the filename is what routes it to `pnpm test:integration`.
 
-**New connector test**: Extend `IntegrationTestBase`, implement the three abstract methods, and call the shared test suite methods.
+**New connector test**: Extend `IntegrationTestBase`, implement the three abstract methods, then call `registerLifecycle()` and `createCommonTests()` inside the `describe`.
+
+**Prefer a row to a test**: most of the suite is `it.each` tables. When a new case differs from an existing one only in its input and expected value, add a row to that table rather than a new `it`.

@@ -1,24 +1,12 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { describe, it, expect } from 'vitest';
+import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgresConnector } from '../postgres/index.js';
-import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
+import { IntegrationTestBase, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import { settle, waitFor } from './shared/query-timeout-helpers.js';
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from '../../utils/query-timeout.js';
 import type { Connector } from '../interface.js';
 
-class PostgreSQLTestContainer implements TestContainer {
-  constructor(private container: StartedPostgreSqlContainer) {}
-  
-  getConnectionUri(): string {
-    return this.container.getConnectionUri();
-  }
-  
-  async stop(): Promise<void> {
-    await this.container.stop();
-  }
-}
-
-class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContainer> {
+class PostgreSQLIntegrationTest extends IntegrationTestBase<StartedPostgreSqlContainer> {
   constructor() {
     const config: DatabaseTestConfig = {
       expectedSchemas: ['public', 'test_schema'],
@@ -28,70 +16,26 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
       supportsStoredProcedures: true,
       expectedStoredProcedures: ['get_user_count', 'calculate_total_age'],
       supportsComments: true,
+      readonlyWriteError: /read-only transaction/i,
     };
     super(config);
   }
 
-  async createContainer(): Promise<PostgreSQLTestContainer> {
-    const container = await new PostgreSqlContainer('postgres:15-alpine')
+  createContainer(): Promise<StartedPostgreSqlContainer> {
+    return new PostgreSqlContainer('postgres:15-alpine')
       .withDatabase('testdb')
       .withUsername('testuser')
       .withPassword('testpass')
       .start();
-    
-    return new PostgreSQLTestContainer(container);
   }
 
   createConnector(): Connector {
     return new PostgresConnector();
   }
 
-  createSSLTests(): void {
-    describe('SSL Connection Tests', () => {
-      it('should handle SSL mode disable connection', async () => {
-        const baseUri = this.connectionString;
-        const sslDisabledUri = baseUri.includes('?') ? 
-          `${baseUri}&sslmode=disable` : 
-          `${baseUri}?sslmode=disable`;
-        
-        const sslDisabledConnector = new PostgresConnector();
-        
-        // Should connect successfully with sslmode=disable
-        await expect(sslDisabledConnector.connect(sslDisabledUri)).resolves.not.toThrow();
-        
-        // Check SSL status - should be disabled (false)
-        const result = await sslDisabledConnector.executeSQL('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()', {});
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].ssl).toBe(false);
-        
-        await sslDisabledConnector.disconnect();
-      });
-
-      it('should handle SSL mode require connection', async () => {
-        const baseUri = this.connectionString;
-        const sslRequiredUri = baseUri.includes('?') ? 
-          `${baseUri}&sslmode=require` : 
-          `${baseUri}?sslmode=require`;
-        
-        const sslRequiredConnector = new PostgresConnector();
-        
-        // In test containers, SSL may not be supported, so we expect either success or SSL not supported error
-        try {
-          await sslRequiredConnector.connect(sslRequiredUri);
-          
-          // If connection succeeds, check SSL status - should be enabled (true)
-          const result = await sslRequiredConnector.executeSQL('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()', {});
-          expect(result.resultSets[0].rows).toHaveLength(1);
-          expect(result.resultSets[0].rows[0].ssl).toBe(true);
-          
-          await sslRequiredConnector.disconnect();
-        } catch (error) {
-          // If SSL is not supported by the test container, that's expected
-          expect(error instanceof Error).toBe(true);
-          expect((error as Error).message).toMatch(/SSL|does not support SSL/);
-        }
-      });
-    });
+  protected async expectSessionEncryption(connector: Connector, encrypted: boolean): Promise<void> {
+    const result = await connector.executeSQL('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()', {});
+    expect(result.resultSets[0].rows).toEqual([{ ssl: encrypted }]);
   }
 
   async setupTestData(connector: Connector): Promise<void> {
@@ -207,138 +151,97 @@ class PostgreSQLIntegrationTest extends IntegrationTestBase<PostgreSQLTestContai
   }
 }
 
-// Create the test suite
+
 const postgresTest = new PostgreSQLIntegrationTest();
 
 describe('PostgreSQL Connector Integration Tests', () => {
-  beforeAll(async () => {
-    await postgresTest.setup();
-  }, 120000);
+  postgresTest.registerLifecycle();
 
-  afterAll(async () => {
-    await postgresTest.cleanup();
-  });
-
-  // Include all common tests
-  postgresTest.createConnectionTests();
-  postgresTest.createSchemaTests();
-  postgresTest.createTableTests();
-  postgresTest.createSQLExecutionTests();
-  if (postgresTest.config.supportsStoredProcedures) {
-    postgresTest.createStoredProcedureTests();
-  }
-  postgresTest.createCommentTests();
-  postgresTest.createErrorHandlingTests();
+  postgresTest.createCommonTests();
   postgresTest.createSSLTests();
-  describe('PostgreSQL-specific Features', () => {
+
+  describe('query_timeout', () => {
+    /** Statements carrying `probe` that the server is running, as `observer` sees them. */
+    const runningProbeCount = async (observer: Connector, probe: string): Promise<number> => {
+      const result = await observer.executeSQL(
+        `SELECT count(*)::int AS count
+         FROM pg_stat_activity
+         WHERE state = 'active'
+           AND query LIKE '%${probe}%'
+           AND query NOT LIKE '%pg_stat_activity%'`,
+        {}
+      );
+      return result.resultSets[0].rows[0].count;
+    };
+
     it('should cancel a timed-out query on the PostgreSQL server', async () => {
-      const timedConnector = new PostgresConnector();
-      const observer = new PostgresConnector();
       const probe = 'dbhub_query_timeout_probe';
+      await postgresTest.withConnector({ queryTimeoutSeconds: 1 }, (timedConnector) =>
+        postgresTest.withConnector(undefined, async (observer) => {
+          const query = timedConnector.executeSQL(
+            `SELECT pg_sleep(10), '${probe}'`,
+            { readonly: true }
+          );
+          const settled = query.then(
+            () => null,
+            (error) => error as NodeJS.ErrnoException
+          );
 
-      const runningProbeCount = async (): Promise<number> => {
-        const result = await observer.executeSQL(
-          `SELECT count(*)::int AS count
-           FROM pg_stat_activity
-           WHERE state = 'active'
-             AND query LIKE '%${probe}%'
-             AND query NOT LIKE '%pg_stat_activity%'`,
-          {}
-        );
-        return result.resultSets[0].rows[0].count;
-      };
+          expect(await waitFor(async () => (await runningProbeCount(observer, probe)) === 1, 5_000)).toBe(true);
 
-      try {
-        await timedConnector.connect(postgresTest.connectionString, undefined, {
-          queryTimeoutSeconds: 1,
-        });
-        await observer.connect(postgresTest.connectionString);
+          const error = await settled;
+          expect(error).toBeInstanceOf(Error);
+          expect(error?.code).toBe('57014');
+          expect(await waitFor(async () => (await runningProbeCount(observer, probe)) === 0, 2_000)).toBe(true);
 
-        const query = timedConnector.executeSQL(
-          `SELECT pg_sleep(10), '${probe}'`,
-          { readonly: true }
-        );
-        const settled = query.then(
-          () => null,
-          (error) => error as NodeJS.ErrnoException
-        );
-
-        expect(await waitFor(async () => (await runningProbeCount()) === 1, 5_000)).toBe(true);
-
-        const error = await settled;
-        expect(error).toBeInstanceOf(Error);
-        expect(error?.code).toBe('57014');
-        expect(await waitFor(async () => (await runningProbeCount()) === 0, 2_000)).toBe(true);
-
-        const after = await timedConnector.executeSQL('SELECT 1 AS ok', { readonly: true });
-        expect(after.resultSets[0].rows[0].ok).toBe(1);
-      } finally {
-        await timedConnector.disconnect();
-        await observer.disconnect();
-      }
+          const after = await timedConnector.executeSQL('SELECT 1 AS ok', { readonly: true });
+          expect(after.resultSets[0].rows[0].ok).toBe(1);
+        })
+      );
     }, 20_000);
 
     it('should fall back to the client-side timeout and cancel the statement when the server limit is cleared', async () => {
-      const timedConnector = new PostgresConnector();
-      const observer = new PostgresConnector();
       const probe = 'dbhub_client_timeout_probe';
+      // A pool of one: the cancel has to reuse the slot of the client it replaces.
+      await postgresTest.withConnector({ queryTimeoutSeconds: 1, poolMaxConnections: 1 }, (timedConnector) =>
+        postgresTest.withConnector(undefined, async (observer) => {
+          // The batch clears statement_timeout first, so only the client-side
+          // fallback is left to bound the SELECT.
+          const result = await settle(
+            timedConnector.executeSQL(
+              `SET statement_timeout = 0; SELECT pg_sleep(30), '${probe}'`,
+              {}
+            )
+          );
 
-      const runningProbeCount = async (): Promise<number> => {
-        const result = await observer.executeSQL(
-          `SELECT count(*)::int AS count
-           FROM pg_stat_activity
-           WHERE state = 'active'
-             AND query LIKE '%${probe}%'
-             AND query NOT LIKE '%pg_stat_activity%'`,
-          {}
-        );
-        return result.resultSets[0].rows[0].count;
-      };
+          expect(result.error?.message).toBe('Query read timeout');
+          expect(result.elapsedMs).toBeGreaterThanOrEqual(1000 + CLIENT_QUERY_TIMEOUT_GRACE_MS - 100);
+          // Not twice the deadline: the ROLLBACK is skipped rather than queued
+          // behind the abandoned statement.
+          expect(result.elapsedMs).toBeLessThan(10_000);
+          expect(await waitFor(async () => (await runningProbeCount(observer, probe)) === 0, 2_000)).toBe(true);
 
-      try {
-        // A pool of one: the cancel has to reuse the slot of the client it replaces.
-        await timedConnector.connect(postgresTest.connectionString, undefined, {
-          queryTimeoutSeconds: 1,
-          poolMaxConnections: 1,
-        });
-        await observer.connect(postgresTest.connectionString);
-
-        // The batch clears statement_timeout first, so only the client-side
-        // fallback is left to bound the SELECT.
-        const result = await settle(
-          timedConnector.executeSQL(
-            `SET statement_timeout = 0; SELECT pg_sleep(30), '${probe}'`,
-            {}
-          )
-        );
-
-        expect(result.error?.message).toBe('Query read timeout');
-        expect(result.elapsedMs).toBeGreaterThanOrEqual(1000 + CLIENT_QUERY_TIMEOUT_GRACE_MS - 100);
-        // Not twice the deadline: the ROLLBACK is skipped rather than queued
-        // behind the abandoned statement.
-        expect(result.elapsedMs).toBeLessThan(10_000);
-        expect(await waitFor(async () => (await runningProbeCount()) === 0, 2_000)).toBe(true);
-
-        // The abandoned client was discarded; a fresh one carries the limit again.
-        const after = await timedConnector.executeSQL(
-          "SELECT current_setting('statement_timeout') AS statement_timeout",
-          { readonly: true }
-        );
-        expect(after.resultSets[0].rows[0].statement_timeout).toBe('1s');
-      } finally {
-        await timedConnector.disconnect();
-        await observer.disconnect();
-      }
+          // The abandoned client was discarded; a fresh one carries the limit again.
+          const after = await timedConnector.executeSQL(
+            "SELECT current_setting('statement_timeout') AS statement_timeout",
+            { readonly: true }
+          );
+          expect(after.resultSets[0].rows[0].statement_timeout).toBe('1s');
+        })
+      );
     }, 30_000);
+  });
 
+  describe('PostgreSQL-specific Features', () => {
     it('should execute multiple statements with transaction support', async () => {
       const result = await postgresTest.connector.executeSQL(`
         INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30);
         INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35);
         SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%';
-      `, {});
+        SELECT name FROM users WHERE email LIKE 'multi%' ORDER BY name;
+      `, { maxRows: 1 });
 
-      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets).toHaveLength(4);
       expect(result.resultSets[0]).toEqual({
         sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30)",
         rows: [],
@@ -351,33 +254,42 @@ describe('PostgreSQL Connector Integration Tests', () => {
       });
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(result.resultSets[2].rows[0].total).toBe('2');
+      // maxRows leaves the writes alone and caps a SELECT that shares their
+      // batch, which still reports the statement as it was written
+      expect(result.resultSets[3]).toMatchObject({
+        sql: "SELECT name FROM users WHERE email LIKE 'multi%' ORDER BY name",
+        rows: [{ name: 'Multi User 1' }],
+        truncated: true,
+      });
     });
 
-    it('should handle PostgreSQL-specific data types', async () => {
-      await postgresTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS postgres_types_test (
-          id SERIAL PRIMARY KEY,
-          json_data JSONB,
-          uuid_val UUID DEFAULT gen_random_uuid(),
-          array_val INTEGER[],
-          timestamp_val TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `, {});
-
-      await postgresTest.connector.executeSQL(`
-        INSERT INTO postgres_types_test (json_data, array_val) 
-        VALUES ('{"key": "value"}', ARRAY[1,2,3,4,5])
-      `, {});
-
+    it('should roll the whole batch back when one of its statements fails', async () => {
+      await expect(
+        postgresTest.connector.executeSQL(`
+          BEGIN;
+          INSERT INTO users (name, email, age) VALUES ('Transaction Test', 'trans@example.com', 40);
+          INSERT INTO users (name, email, age) VALUES ('Transaction Test', 'trans@example.com', 40); -- This should fail due to unique constraint
+          COMMIT;
+        `, {})
+      ).rejects.toThrow();
+      
+      // Verify rollback worked
       const result = await postgresTest.connector.executeSQL(
-        'SELECT * FROM postgres_types_test ORDER BY id DESC LIMIT 1',
+        "SELECT COUNT(*) as count FROM users WHERE email = 'trans@example.com'",
+        {}
+      );
+      expect(result.resultSets[0].rows[0].count).toBe('0');
+    });
+
+    it('should return the rows of a write with a RETURNING clause', async () => {
+      const result = await postgresTest.connector.executeSQL(
+        "INSERT INTO users (name, email, age) VALUES ('Returning Test', 'returning@example.com', 40) RETURNING id, name",
         {}
       );
       
       expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].json_data).toBeDefined();
-      expect(result.resultSets[0].rows[0].uuid_val).toBeDefined();
-      expect(result.resultSets[0].rows[0].array_val).toBeDefined();
+      expect(result.resultSets[0].rows[0].id).toBeDefined();
+      expect(result.resultSets[0].rows[0].name).toBe('Returning Test');
     });
 
     it('should return date/timestamp values verbatim, not shifted by the host timezone', async () => {
@@ -439,259 +351,35 @@ describe('PostgreSQL Connector Integration Tests', () => {
         expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
       }
     });
-
-    it('should handle PostgreSQL returning clause', async () => {
-      const result = await postgresTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('Returning Test', 'returning@example.com', 40) RETURNING id, name",
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].id).toBeDefined();
-      expect(result.resultSets[0].rows[0].name).toBe('Returning Test');
-    });
-
-    it('should work with PostgreSQL-specific functions', async () => {
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          version() as postgres_version,
-          current_database() as current_db,
-          current_user as current_user,
-          now() as current_time,
-          gen_random_uuid() as random_uuid
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].postgres_version).toContain('PostgreSQL');
-      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
-      expect(result.resultSets[0].rows[0].current_user).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_time).toBeDefined();
-      expect(result.resultSets[0].rows[0].random_uuid).toBeDefined();
-    });
-
-    it('should handle PostgreSQL transactions correctly', async () => {
-      // Test rollback on error
-      await expect(
-        postgresTest.connector.executeSQL(`
-          BEGIN;
-          INSERT INTO users (name, email, age) VALUES ('Transaction Test', 'trans@example.com', 40);
-          INSERT INTO users (name, email, age) VALUES ('Transaction Test', 'trans@example.com', 40); -- This should fail due to unique constraint
-          COMMIT;
-        `, {})
-      ).rejects.toThrow();
-      
-      // Verify rollback worked
-      const result = await postgresTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'trans@example.com'",
-        {}
-      );
-      expect(result.resultSets[0].rows[0].count).toBe('0');
-    });
-
-    it('should handle PostgreSQL window functions', async () => {
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank,
-          AVG(age) OVER () as avg_age
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
-    });
-
-    it('should handle PostgreSQL arrays and JSON operations', async () => {
-      await postgresTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS json_test (
-          id SERIAL PRIMARY KEY,
-          data JSONB
-        )
-      `, {});
-
-      await postgresTest.connector.executeSQL(`
-        INSERT INTO json_test (data) VALUES 
-        ('{"name": "John", "tags": ["admin", "user"], "settings": {"theme": "dark"}}'),
-        ('{"name": "Jane", "tags": ["user"], "settings": {"theme": "light"}}')
-      `, {});
-
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          data->>'name' as name,
-          data->'tags' as tags,
-          data#>>'{settings,theme}' as theme
-        FROM json_test
-        WHERE data @> '{"tags": ["admin"]}'
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].name).toBe('John');
-      expect(result.resultSets[0].rows[0].theme).toBe('dark');
-    });
-
-    it('should respect maxRows limit for SELECT queries', async () => {
-      // Test basic SELECT with maxRows limit
-      const result = await postgresTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        { maxRows: 2 }
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
-      // The cap provably cut off rows (users has more than 2)
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should respect existing LIMIT clause when lower than maxRows', async () => {
-      // Test when existing LIMIT is lower than maxRows
-      const result = await postgresTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id LIMIT 1',
-        { maxRows: 3 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      // The user's own LIMIT fired, not the cap — no truncation flag
-      expect(result.resultSets[0].truncated).toBeUndefined();
-    });
-
-    it('should not affect non-SELECT queries', async () => {
-      // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
-      const insertResult = await postgresTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('MaxRows Test', 'maxrows@example.com', 25)",
-        { maxRows: 1 }
-      );
-      
-      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs don't return rows by default
-      
-      // Verify the insert worked
-      const selectResult = await postgresTest.connector.executeSQL(
-        "SELECT * FROM users WHERE email = 'maxrows@example.com'",
-        {}
-      );
-      expect(selectResult.resultSets[0].rows).toHaveLength(1);
-      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
-    });
-
-    it('should handle maxRows in multi-statement execution with transactions', async () => {
-      // Test maxRows with multiple statements where some are SELECT
-      const result = await postgresTest.connector.executeSQL(`
-        INSERT INTO users (name, email, age) VALUES ('Multi Test 1', 'multi1@test.com', 30);
-        SELECT name FROM users WHERE email LIKE '%@test.com' ORDER BY name;
-        INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35);
-      `, { maxRows: 1 });
-
-      // One resultSet per statement, in source order: INSERT, SELECT, INSERT.
-      expect(result.resultSets).toHaveLength(3);
-      expect(result.resultSets[0]).toEqual({
-        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 1', 'multi1@test.com', 30)",
-        rows: [],
-        rowCount: 1,
-      });
-      // Should return only 1 row from the SELECT statement
-      expect(result.resultSets[1].rows).toHaveLength(1);
-      expect(result.resultSets[1].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[2]).toEqual({
-        sql: "INSERT INTO users (name, email, age) VALUES ('Multi Test 2', 'multi2@test.com', 35)",
-        rows: [],
-        rowCount: 1,
-      });
-    });
-
   });
 
   describe('SDK-Level Readonly Mode Tests', () => {
-    it('should set default_transaction_read_only at connection level', async () => {
-      const readonlyConnector = new PostgresConnector();
+    it('should set default_transaction_read_only on the connection: reads work, writes and DDL are rejected', async () => {
+      // Connection-level readonly; no execution here passes options.readonly.
+      await postgresTest.withConnector({ readonly: true }, async (connector) => {
+        const setting = await connector.executeSQL('SHOW default_transaction_read_only', {});
+        expect(setting.resultSets[0].rows).toEqual([{ default_transaction_read_only: 'on' }]);
 
-      try {
-        // Connect with readonly flag
-        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
+        const read = await connector.executeSQL('SELECT * FROM users ORDER BY id LIMIT 1', {});
+        expect(read.resultSets[0].rows).toHaveLength(1);
+        expect(read.resultSets[0].rows[0].name).toBe('John Doe');
 
-        // Verify the connection has default_transaction_read_only set to 'on'
-        const result = await readonlyConnector.executeSQL(
-          'SHOW default_transaction_read_only',
-          {}
-        );
-
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].default_transaction_read_only).toBe('on');
-      } finally {
-        await readonlyConnector.disconnect();
-      }
-    });
-
-    it('should allow reads in readonly mode', async () => {
-      const readonlyConnector = new PostgresConnector();
-
-      try {
-        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
-
-        // Should be able to read data
-        const result = await readonlyConnector.executeSQL(
-          'SELECT * FROM users ORDER BY id LIMIT 1',
-          {}
-        );
-
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].name).toBe('John Doe');
-      } finally {
-        await readonlyConnector.disconnect();
-      }
-    });
-
-    it('should reject writes in readonly mode', async () => {
-      const readonlyConnector = new PostgresConnector();
-
-      try {
-        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
-
-        // Should NOT be able to write data (SDK-level enforcement)
         await expect(
-          readonlyConnector.executeSQL(
-            "INSERT INTO users (name, email) VALUES ('fail', 'fail@test.com')",
-            {}
-          )
+          connector.executeSQL("INSERT INTO users (name, email) VALUES ('fail', 'fail@test.com')", {})
         ).rejects.toThrow(/read-only/);
-      } finally {
-        await readonlyConnector.disconnect();
-      }
-    });
-
-    it('should reject DDL operations in readonly mode', async () => {
-      const readonlyConnector = new PostgresConnector();
-
-      try {
-        await readonlyConnector.connect(postgresTest.connectionString, undefined, { readonly: true });
-
-        // Should NOT be able to create tables
         await expect(
-          readonlyConnector.executeSQL(
-            'CREATE TABLE should_fail (id INTEGER)',
-            {}
-          )
+          connector.executeSQL('CREATE TABLE should_fail (id INTEGER)', {})
         ).rejects.toThrow(/read-only/);
-      } finally {
-        await readonlyConnector.disconnect();
-      }
+      });
     });
   });
 
-  describe('Per-tool readonly engine backstop (options.readonly)', () => {
-    // These mirror the realistic config: the connection is writable (no
-    // connection-level readonly), and read-only is enforced per execution by
-    // running inside a READ ONLY transaction. This catches function-based writes
-    // that the leading-keyword classifier passes (e.g. SELECT setval()).
+  describe('Per-tool readonly engine backstop: function-based writes', () => {
+    // Read-only is enforced per execution by running inside a READ ONLY
+    // transaction. This catches function-based writes that the
+    // leading-keyword classifier passes (e.g. SELECT setval()).
     it('should block a sequence write via SELECT setval() when options.readonly is set', async () => {
-      const connector = new PostgresConnector();
-      try {
-        await connector.connect(postgresTest.connectionString);
-
+      await postgresTest.withConnector(undefined, async (connector) => {
         // SELECT setval(...) passes the read-only keyword classifier but writes a
         // sequence; the READ ONLY transaction must reject it at the engine.
         await expect(
@@ -700,46 +388,13 @@ describe('PostgreSQL Connector Integration Tests', () => {
             { readonly: true }
           )
         ).rejects.toThrow(/read-only transaction/i);
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should block INSERT when options.readonly is set, and stay writable for later calls', async () => {
-      const connector = new PostgresConnector();
-      try {
-        await connector.connect(postgresTest.connectionString);
-
-        // The engine rejects the write; the read-only call (rolled back) must
-        // not leave the session read-only.
-        await expect(
-          connector.executeSQL("INSERT INTO users (name, email) VALUES ('x', 'x@x.com')", {
-            readonly: true,
-          })
-        ).rejects.toThrow(/read-only transaction/i);
-
-        const insert = await connector.executeSQL(
-          "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com') RETURNING id",
-          {}
-        );
-        expect(insert.resultSets[0].rows).toHaveLength(1);
-
-        await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
-      } finally {
-        await connector.disconnect();
-      }
+      });
     });
   });
 
   describe('Search Path Configuration Tests', () => {
     it('should use first schema in search_path as default for discovery', async () => {
-      const connector = new PostgresConnector();
-
-      try {
-        await connector.connect(postgresTest.connectionString, undefined, {
-          searchPath: 'test_schema,public',
-        });
-
+      await postgresTest.withConnector({ searchPath: 'test_schema,public' }, async (connector) => {
         // Session search_path should be set
         const result = await connector.executeSQL('SHOW search_path', {});
         expect(result.resultSets[0].rows[0].search_path).toContain('test_schema');
@@ -756,19 +411,11 @@ describe('PostgreSQL Connector Integration Tests', () => {
         // SQL resolves unqualified names via search_path
         const sqlResult = await connector.executeSQL('SELECT * FROM products', {});
         expect(sqlResult.resultSets[0].rows.length).toBeGreaterThan(0);
-      } finally {
-        await connector.disconnect();
-      }
+      });
     });
 
     it('should handle schema names with spaces and special characters', async () => {
-      const connector = new PostgresConnector();
-
-      try {
-        await connector.connect(postgresTest.connectionString, undefined, {
-          searchPath: 'My Schema,public',
-        });
-
+      await postgresTest.withConnector({ searchPath: 'My Schema,public' }, async (connector) => {
         // Discovery defaults to "My Schema"
         const tables = await connector.getTables();
         expect(tables).toContain('items');
@@ -778,17 +425,14 @@ describe('PostgreSQL Connector Integration Tests', () => {
         const result = await connector.executeSQL('SELECT * FROM items', {});
         expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
         expect(result.resultSets[0].rows[0]).toHaveProperty('label');
-      } finally {
-        await connector.disconnect();
-      }
+      });
     });
   });
 
   describe('[sources.session] settings', () => {
     it('should apply each setting to every new connection as its default', async () => {
-      const connector = new PostgresConnector();
-      try {
-        await connector.connect(postgresTest.connectionString, undefined, {
+      await postgresTest.withConnector(
+        {
           searchPath: 'test_schema,public',
           sessionSettings: {
             lock_timeout: '5s',
@@ -796,74 +440,63 @@ describe('PostgreSQL Connector Integration Tests', () => {
             application_name: 'dbhub agent',
             'dbhub.note': 'a b\\c',
           },
-        });
-
-        const show =
-          "SELECT current_setting('lock_timeout') AS lock_timeout, " +
-          "current_setting('idle_in_transaction_session_timeout') AS idle, " +
-          "current_setting('application_name') AS app, " +
-          "current_setting('dbhub.note') AS note, " +
-          "current_setting('search_path') AS search_path";
-        // Concurrent calls check out separate pool connections.
-        const results = await Promise.all(
-          [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
-        );
-        for (const result of results) {
-          expect(result.resultSets[0].rows[0]).toMatchObject({
-            lock_timeout: '5s',
-            idle: '1min',
-            app: 'dbhub agent',
-            note: 'a b\\c',
-          });
-          expect(result.resultSets[0].rows[0].search_path).toContain('test_schema');
+        },
+        async (connector) => {
+          const show =
+            "SELECT current_setting('lock_timeout') AS lock_timeout, " +
+            "current_setting('idle_in_transaction_session_timeout') AS idle, " +
+            "current_setting('application_name') AS app, " +
+            "current_setting('dbhub.note') AS note, " +
+            "current_setting('search_path') AS search_path";
+          // Concurrent calls check out separate pool connections.
+          const results = await Promise.all(
+            [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
+          );
+          for (const result of results) {
+            expect(result.resultSets[0].rows[0]).toMatchObject({
+              lock_timeout: '5s',
+              idle: '1min',
+              app: 'dbhub agent',
+              note: 'a b\\c',
+            });
+            expect(result.resultSets[0].rows[0].search_path).toContain('test_schema');
+          }
         }
-      } finally {
-        await connector.disconnect();
-      }
+      );
     });
 
     it('should block writes on a connection whose default is read-only', async () => {
-      const connector = new PostgresConnector();
-      try {
-        await connector.connect(postgresTest.connectionString, undefined, {
-          sessionSettings: { default_transaction_read_only: true },
-        });
-
-        await expect(
-          connector.executeSQL('CREATE TABLE dbhub_session_ro (id int)', {})
-        ).rejects.toThrow(/read-only transaction/);
-      } finally {
-        await connector.disconnect();
-      }
+      await postgresTest.withConnector(
+        { sessionSettings: { default_transaction_read_only: true } },
+        async (connector) => {
+          await expect(
+            connector.executeSQL('CREATE TABLE dbhub_session_ro (id int)', {})
+          ).rejects.toThrow(/read-only transaction/);
+        }
+      );
     });
 
     it('should fail to connect when the server rejects a setting', async () => {
-      const connector = new PostgresConnector();
       await expect(
-        connector.connect(postgresTest.connectionString, undefined, {
+        new PostgresConnector().connect(postgresTest.connectionString, undefined, {
           sessionSettings: { lock_timeout: 'soon' },
         })
       ).rejects.toThrow(/lock_timeout/);
     });
 
     it('should keep connection-level readonly in force over a conflicting session setting', async () => {
-      const connector = new PostgresConnector();
-      try {
-        // The server applies startup options in order, so the enforced option
-        // must come after the session table to win.
-        await connector.connect(postgresTest.connectionString, undefined, {
-          readonly: true,
-          sessionSettings: { default_transaction_read_only: false },
-        });
-
-        const show = await connector.executeSQL('SHOW default_transaction_read_only', {});
-        expect(show.resultSets[0].rows[0].default_transaction_read_only).toBe('on');
-        await expect(
-          connector.executeSQL('CREATE TABLE dbhub_session_ro_conflict (id int)', {})
-        ).rejects.toThrow(/read-only transaction/);
-      } finally {
-        await connector.disconnect();
-      }
+      // The server applies startup options in order, so the enforced option
+      // must come after the session table to win.
+      await postgresTest.withConnector(
+        { readonly: true, sessionSettings: { default_transaction_read_only: false } },
+        async (connector) => {
+          const show = await connector.executeSQL('SHOW default_transaction_read_only', {});
+          expect(show.resultSets[0].rows[0].default_transaction_read_only).toBe('on');
+          await expect(
+            connector.executeSQL('CREATE TABLE dbhub_session_ro_conflict (id int)', {})
+          ).rejects.toThrow(/read-only transaction/);
+        }
+      );
     });
   });
 });

@@ -1,35 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSearchDatabaseObjectsToolHandler } from '../search-objects.js';
 import { ConnectorManager } from '../../connectors/manager.js';
-import { requestStore } from '../../requests/index.js';
-import type { Connector, ConnectorType, TableColumn, TableIndex } from '../../connectors/interface.js';
+import type { Connector, TableColumn, TableIndex } from '../../connectors/interface.js';
+import { createMockConnector, describeRequestTracking, parseToolResponse } from './helpers.js';
 
 // Mock dependencies
 vi.mock('../../connectors/manager.js');
-
-// Mock connector for testing
-const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
-  id,
-  name: 'Mock Connector',
-  getId: () => 'default',
-  dsnParser: {} as any,
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  clone: vi.fn(),
-  getSchemas: vi.fn(),
-  getTables: vi.fn(),
-  getViews: vi.fn(),
-  getTableSchema: vi.fn(),
-  getTableIndexes: vi.fn(),
-  getStoredProcedures: vi.fn(),
-  getStoredProcedureDetail: vi.fn(),
-  executeSQL: vi.fn(),
-});
-
-// Helper function to parse tool response
-const parseToolResponse = (response: any) => {
-  return JSON.parse(response.content[0].text);
-};
 
 // Fixture factories
 const col = (
@@ -78,6 +54,9 @@ describe('search_database_objects tool', () => {
     // bare tool name; multi-source naming is covered separately below.
     vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['default']);
     mockConnector = createMockConnector('sqlite');
+    // One schema holding two tables, unless a test arranges otherwise
+    vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+    vi.mocked(mockConnector.getTables).mockResolvedValue(['users', 'orders']);
     mockGetCurrentConnector.mockReturnValue(mockConnector);
     handler = createSearchDatabaseObjectsToolHandler();
   });
@@ -125,196 +104,128 @@ describe('search_database_objects tool', () => {
     });
   });
 
-  describe('search tables', () => {
+  // searchTables and searchViews are separate implementations of the same
+  // lookup, so each is driven through the same cases.
+  describe.each([
+    ['table', 'getTables'],
+    ['view', 'getViews'],
+  ] as const)('search %ss', (objectType, listMethod) => {
     beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      vi.mocked(mockConnector.getTables).mockResolvedValue([
-        'users',
-        'user_profiles',
-        'user_sessions',
-        'orders',
-        'products',
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public', 'private']);
+      vi.mocked(mockConnector[listMethod]).mockImplementation(async (schema?: string) =>
+        schema === 'public' ? ['users', 'user_profiles', 'active_users'] : ['secrets']
+      );
+    });
+
+    it('should match names against the pattern', async () => {
+      const { parsed } = await search({ object_type: objectType, pattern: 'user%', detail_level: 'names' });
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.results).toEqual([
+        { name: 'users', schema: 'public' },
+        { name: 'user_profiles', schema: 'public' },
       ]);
     });
 
-    it('should search tables with pattern', async () => {
-      const { parsed } = await search({ object_type: 'table', pattern: 'user%', detail_level: 'names' });
-      expect(parsed.data.count).toBe(3);
-      expect(parsed.data.results.map((r: any) => r.name)).toEqual([
-        'users',
-        'user_profiles',
-        'user_sessions',
+    it('should list everything, across schemas, when pattern is omitted', async () => {
+      const { parsed } = await search({ object_type: objectType, detail_level: 'names' });
+      expect(parsed.data.count).toBe(4);
+      expect(parsed.data.results).toEqual([
+        { name: 'users', schema: 'public' },
+        { name: 'user_profiles', schema: 'public' },
+        { name: 'active_users', schema: 'public' },
+        { name: 'secrets', schema: 'private' },
       ]);
     });
 
     it('should filter by schema parameter', async () => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public', 'private']);
-      vi.mocked(mockConnector.getTables).mockImplementation(async (schema) => {
-        if (schema === 'public') return ['users', 'orders'];
-        if (schema === 'private') return ['secrets'];
-        return [];
-      });
-
-      const { parsed } = await search({ object_type: 'table', pattern: '%', schema: 'public', detail_level: 'names' });
-      expect(parsed.data.count).toBe(2);
-      expect(mockConnector.getTables).toHaveBeenCalledWith('public');
-      expect(mockConnector.getTables).not.toHaveBeenCalledWith('private');
+      const { parsed } = await search({ object_type: objectType, pattern: '%', schema: 'public', detail_level: 'names' });
+      expect(parsed.data.count).toBe(3);
+      expect(mockConnector[listMethod]).toHaveBeenCalledWith('public');
+      expect(mockConnector[listMethod]).not.toHaveBeenCalledWith('private');
     });
+  });
 
+  describe('table details', () => {
     it('should return summary with metadata, falling back to COUNT(*) when connector lacks getTableRowCount', async () => {
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn, col('name', 'TEXT')]);
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(100));
+      mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
 
       const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'summary' });
-      expect(parsed.data.results[0]).toMatchObject({
+      expect(parsed.data.results[0]).toEqual({
         name: 'users',
         schema: 'public',
         column_count: 2,
         row_count: 100,
+        comment: 'Application users',
       });
-      // Default mock connector has no getTableRowCount, so the COUNT(*) path runs
-      expect(mockConnector.executeSQL).toHaveBeenCalled();
+      // Default mock connector has no getTableRowCount, so the COUNT(*) path
+      // runs, read-only like everything else this tool executes
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(expect.stringContaining('COUNT(*)'), {
+        maxRows: 1,
+        readonly: true,
+      });
     });
 
-    it('should return full details with columns and indexes', async () => {
+    it.each(['summary', 'full'])('should omit table comment at %s level when getTableComment returns null', async (detailLevel) => {
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
-      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([usersPkey]);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(50));
+      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([]);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(10));
+      mockConnector.getTableComment = vi.fn().mockResolvedValue(null);
 
-      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'full' });
-      expect(parsed.data.results[0]).toMatchObject({
-        name: 'users',
-        columns: [
-          {
-            name: 'id',
-            type: 'INTEGER',
-            nullable: false,
-            default: null,
-          },
-        ],
-        indexes: [
-          {
-            name: 'users_pkey',
-            columns: ['id'],
-            unique: true,
-            primary: true,
-          },
-        ],
-      });
+      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: detailLevel });
+      expect(parsed.data.results[0]).toMatchObject({ name: 'users', row_count: 10 });
+      expect(parsed.data.results[0]).not.toHaveProperty('comment');
     });
 
     it.each([
-      ['include', 'returns a value', 'Application users'],
-      ['omit', 'returns null', null],
-    ])('should %s table comment in summary when getTableComment %s', async (_, __, comment) => {
+      ['its estimate', 42],
+      ['null, without falling back to COUNT(*)', null],
+    ])('should take row_count from connector.getTableRowCount when implemented: %s', async (_, rowCount) => {
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
-      vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(10));
-      mockConnector.getTableComment = vi.fn().mockResolvedValue(comment);
+      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(rowCount);
 
       const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'summary' });
-      expect(parsed.data.results[0].comment).toBe(comment ?? undefined);
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.results[0]).toMatchObject({ name: 'users', row_count: rowCount });
+      expect(mockConnector.getTableRowCount).toHaveBeenCalledWith('users', 'public');
+      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
-    it('should include column descriptions in full detail when present', async () => {
+    it('should return full details with comment, columns (described where present) and indexes', async () => {
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([
         idColumn,
         col('name', 'TEXT', 'YES', 'Full name of the user'),
-        col('email', 'TEXT', 'YES', 'Unique email address'),
       ]);
-      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([]);
+      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([usersPkey]);
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(50));
       mockConnector.getTableComment = vi.fn().mockResolvedValue('Application users');
 
       const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'full' });
-      const tableResult = parsed.data.results[0];
-
-      // Table comment should be present
-      expect(tableResult.comment).toBe('Application users');
-
-      // Column without description should not have the field
-      expect(tableResult.columns[0].description).toBeUndefined();
-
-      // Columns with descriptions should include them
-      expect(tableResult.columns[1].description).toBe('Full name of the user');
-      expect(tableResult.columns[2].description).toBe('Unique email address');
-    });
-  });
-
-  describe('getTableRowCount dispatch', () => {
-    beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      vi.mocked(mockConnector.getTables).mockResolvedValue(['users']);
-      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
-    });
-
-    it('should use connector.getTableRowCount when implemented instead of executeSQL', async () => {
-      // Add the optional method to the mock connector
-      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(42);
-
-      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'summary' });
-      expect(parsed.success).toBe(true);
-      expect(parsed.data.results[0]).toMatchObject({
+      expect(parsed.data.results[0]).toEqual({
         name: 'users',
-        row_count: 42,
+        schema: 'public',
+        column_count: 2,
+        row_count: 50,
+        comment: 'Application users',
+        columns: [
+          // A column without a description does not carry the field
+          { name: 'id', type: 'INTEGER', nullable: false, default: null },
+          { name: 'name', type: 'TEXT', nullable: true, default: null, description: 'Full name of the user' },
+        ],
+        indexes: [{ name: 'users_pkey', columns: ['id'], unique: true, primary: true }],
       });
-      expect(mockConnector.getTableRowCount).toHaveBeenCalledWith('users', 'public');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
-    });
-
-    it('should return row_count null when connector.getTableRowCount returns null without falling back to executeSQL', async () => {
-      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(null);
-
-      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'summary' });
-      expect(parsed.success).toBe(true);
-      expect(parsed.data.results[0].row_count).toBeNull();
-      expect(mockConnector.getTableRowCount).toHaveBeenCalledWith('users', 'public');
-      expect(mockConnector.executeSQL).not.toHaveBeenCalled();
+      expect(parsed.data.results[0].columns[0]).not.toHaveProperty('description');
     });
   });
 
-  describe('search views', () => {
+  describe('view details', () => {
     beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      vi.mocked(mockConnector.getViews).mockResolvedValue([
-        'active_users',
-        'user_summary',
-        'recent_orders',
-      ]);
-    });
-
-    it('should search views with pattern', async () => {
-      const { parsed } = await search({ object_type: 'view', pattern: 'user%', detail_level: 'names' });
-      expect(parsed.success).toBe(true);
-      expect(parsed.data.count).toBe(1);
-      expect(parsed.data.results).toEqual([{ name: 'user_summary', schema: 'public' }]);
-    });
-
-    it('should list all views when pattern is omitted', async () => {
-      const { parsed } = await search({ object_type: 'view', detail_level: 'names' });
-      expect(parsed.data.count).toBe(3);
-      expect(parsed.data.results.map((r: any) => r.name)).toEqual([
-        'active_users',
-        'user_summary',
-        'recent_orders',
-      ]);
-    });
-
-    it('should filter views by schema parameter', async () => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public', 'private']);
-      vi.mocked(mockConnector.getViews).mockImplementation(async (schema) => {
-        if (schema === 'public') return ['active_users'];
-        if (schema === 'private') return ['secret_view'];
-        return [];
-      });
-
-      const { parsed } = await search({ object_type: 'view', pattern: '%', schema: 'public', detail_level: 'names' });
-      expect(parsed.data.count).toBe(1);
-      expect(mockConnector.getViews).toHaveBeenCalledWith('public');
-      expect(mockConnector.getViews).not.toHaveBeenCalledWith('private');
+      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
     });
 
     it('should return summary with column count and comment', async () => {
-      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn, col('name', 'TEXT')]);
       mockConnector.getTableComment = vi.fn().mockResolvedValue('Users with recent activity');
 
@@ -328,7 +239,6 @@ describe('search_database_objects tool', () => {
     });
 
     it('should return full details with columns and an empty indexes array without querying indexes', async () => {
-      vi.mocked(mockConnector.getViews).mockResolvedValue(['active_users']);
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
 
       const { parsed } = await search({ object_type: 'view', pattern: 'active_users', detail_level: 'full' });
@@ -347,11 +257,6 @@ describe('search_database_objects tool', () => {
   });
 
   describe('search columns', () => {
-    beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      vi.mocked(mockConnector.getTables).mockResolvedValue(['users', 'orders']);
-    });
-
     it('should search columns across tables', async () => {
       vi.mocked(mockConnector.getTableSchema).mockImplementation(
         byTable({ users: usersColumns, orders: ordersColumns })
@@ -407,10 +312,6 @@ describe('search_database_objects tool', () => {
   });
 
   describe('search procedures and functions', () => {
-    beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-    });
-
     it.each([
       // [object_type, routines returned by connector, pattern, expected matches]
       ['procedure', ['get_user', 'get_users_by_email', 'delete_user'], 'get%', ['get_user', 'get_users_by_email']],
@@ -426,27 +327,12 @@ describe('search_database_objects tool', () => {
       expect(mockConnector.getStoredProcedures).toHaveBeenCalledWith('public', objectType);
     });
 
-    it('should return function details in summary level', async () => {
-      vi.mocked(mockConnector.getStoredProcedures).mockResolvedValue(['calc_total']);
-      vi.mocked(mockConnector.getStoredProcedureDetail).mockResolvedValue({
-        procedure_name: 'calc_total',
-        procedure_type: 'function',
-        language: 'plpgsql',
-        parameter_list: 'order_id INTEGER',
-        return_type: 'NUMERIC',
-      });
+    const summary = { name: 'calc_total', schema: 'public', type: 'function', language: 'plpgsql', return_type: 'NUMERIC' };
 
-      const { parsed } = await search({ object_type: 'function', pattern: 'calc_total', detail_level: 'summary' });
-      expect(parsed.data.results[0]).toMatchObject({
-        name: 'calc_total',
-        schema: 'public',
-        type: 'function',
-        language: 'plpgsql',
-        return_type: 'NUMERIC',
-      });
-    });
-
-    it('should return function details in full level with definition', async () => {
+    it.each([
+      ['summary', summary],
+      ['full', { ...summary, parameters: 'order_id INTEGER', definition: 'BEGIN RETURN 42; END;' }],
+    ])('should return function details in %s level', async (detailLevel, expected) => {
       vi.mocked(mockConnector.getStoredProcedures).mockResolvedValue(['calc_total']);
       vi.mocked(mockConnector.getStoredProcedureDetail).mockResolvedValue({
         procedure_name: 'calc_total',
@@ -457,23 +343,13 @@ describe('search_database_objects tool', () => {
         definition: 'BEGIN RETURN 42; END;',
       });
 
-      const { parsed } = await search({ object_type: 'function', pattern: 'calc_total', detail_level: 'full' });
-      expect(parsed.data.results[0]).toMatchObject({
-        name: 'calc_total',
-        schema: 'public',
-        type: 'function',
-        parameters: 'order_id INTEGER',
-        definition: 'BEGIN RETURN 42; END;',
-      });
+      const { parsed } = await search({ object_type: 'function', pattern: 'calc_total', detail_level: detailLevel });
+      // Exact match: parameters and definition are only present at the full level
+      expect(parsed.data.results).toEqual([expected]);
     });
   });
 
   describe('search indexes', () => {
-    beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      vi.mocked(mockConnector.getTables).mockResolvedValue(['users', 'orders']);
-    });
-
     it('should search indexes across tables', async () => {
       vi.mocked(mockConnector.getTableIndexes).mockImplementation(
         byTable({ users: usersIndexes, orders: ordersIndexes })
@@ -503,98 +379,59 @@ describe('search_database_objects tool', () => {
   });
 
   describe('table filter', () => {
-    describe('for columns', () => {
-      beforeEach(() => {
-        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      });
+    const tableFilter = { pattern: '%', schema: 'public', table: 'users', detail_level: 'names' };
 
-      it('should filter columns by table when table parameter is provided', async () => {
-        vi.mocked(mockConnector.getTableSchema).mockImplementation(
-          byTable({ users: [idColumn, col('name', 'TEXT')], orders: ordersColumns })
-        );
-
-        const { parsed } = await search({
-          object_type: 'column',
-          pattern: '%',
-          schema: 'public',
-          table: 'users',
-          detail_level: 'names',
-        });
-        expect(parsed.success).toBe(true);
-        expect(parsed.data.count).toBe(2);
-        expect(parsed.data.results).toEqual([
-          { name: 'id', table: 'users', schema: 'public' },
-          { name: 'name', table: 'users', schema: 'public' },
-        ]);
-        // Verify only users table was queried
-        expect(mockConnector.getTableSchema).toHaveBeenCalledWith('users', 'public');
-        expect(mockConnector.getTableSchema).not.toHaveBeenCalledWith('orders', 'public');
-      });
-
-      it('should require schema when table is specified', async () => {
-        const { result, parsed } = await search({
-          object_type: 'column',
-          pattern: '%',
-          table: 'users',
-          detail_level: 'names',
-        });
-        expect(result.isError).toBe(true);
-        expect(parsed.code).toBe('SCHEMA_REQUIRED');
-        expect(parsed.error).toContain("'table' parameter requires 'schema'");
-      });
-    });
-
-    describe('for indexes', () => {
-      beforeEach(() => {
-        vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-      });
-
-      it('should filter indexes by table when table parameter is provided', async () => {
-        vi.mocked(mockConnector.getTableIndexes).mockImplementation(
-          byTable({ users: usersIndexes, orders: ordersIndexes })
-        );
-
-        const { parsed } = await search({
-          object_type: 'index',
-          pattern: '%',
-          schema: 'public',
-          table: 'users',
-          detail_level: 'names',
-        });
-        expect(parsed.success).toBe(true);
-        expect(parsed.data.count).toBe(2);
-        expect(parsed.data.results.map((r: any) => r.name)).toEqual(['users_pkey', 'users_email_idx']);
-        // Verify only users table was queried
-        expect(mockConnector.getTableIndexes).toHaveBeenCalledWith('users', 'public');
-        expect(mockConnector.getTableIndexes).not.toHaveBeenCalledWith('orders', 'public');
-      });
-    });
-
-    describe('validation', () => {
-      it.each(['schema', 'table', 'procedure', 'function'])(
-        'should reject table parameter for %s object type',
-        async (objectType) => {
-          vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-
-          const { result, parsed } = await search({
-            object_type: objectType,
-            pattern: '%',
-            schema: 'public',
-            table: 'users',
-            detail_level: 'names',
-          });
-          expect(result.isError).toBe(true);
-          expect(parsed.code).toBe('INVALID_TABLE_FILTER');
-          expect(parsed.error).toContain("only applies to object_type 'column' or 'index'");
-        }
+    it('should filter columns by table when table parameter is provided', async () => {
+      vi.mocked(mockConnector.getTableSchema).mockImplementation(
+        byTable({ users: [idColumn, col('name', 'TEXT')], orders: ordersColumns })
       );
+
+      const { parsed } = await search({ object_type: 'column', ...tableFilter });
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.results).toEqual([
+        { name: 'id', table: 'users', schema: 'public' },
+        { name: 'name', table: 'users', schema: 'public' },
+      ]);
+      // Verify only users table was queried
+      expect(mockConnector.getTableSchema).toHaveBeenCalledWith('users', 'public');
+      expect(mockConnector.getTableSchema).not.toHaveBeenCalledWith('orders', 'public');
     });
+
+    it('should filter indexes by table when table parameter is provided', async () => {
+      vi.mocked(mockConnector.getTableIndexes).mockImplementation(
+        byTable({ users: usersIndexes, orders: ordersIndexes })
+      );
+
+      const { parsed } = await search({ object_type: 'index', ...tableFilter });
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.count).toBe(2);
+      expect(parsed.data.results.map((r: any) => r.name)).toEqual(['users_pkey', 'users_email_idx']);
+      // Verify only users table was queried
+      expect(mockConnector.getTableIndexes).toHaveBeenCalledWith('users', 'public');
+      expect(mockConnector.getTableIndexes).not.toHaveBeenCalledWith('orders', 'public');
+    });
+
+    it('should require schema when table is specified', async () => {
+      const { result, parsed } = await search({ object_type: 'column', ...tableFilter, schema: undefined });
+      expect(result.isError).toBe(true);
+      expect(parsed.code).toBe('SCHEMA_REQUIRED');
+      expect(parsed.error).toContain("'table' parameter requires 'schema'");
+    });
+
+    it.each(['schema', 'table', 'procedure', 'function'])(
+      'should reject table parameter for %s object type',
+      async (objectType) => {
+        const { result, parsed } = await search({ object_type: objectType, ...tableFilter });
+        expect(result.isError).toBe(true);
+        expect(parsed.code).toBe('INVALID_TABLE_FILTER');
+        expect(parsed.error).toContain("only applies to object_type 'column' or 'index'");
+      }
+    );
   });
 
   describe('error handling', () => {
     it('should validate schema exists', async () => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-
       const { result, parsed } = await search({
         object_type: 'table',
         pattern: '%',
@@ -613,7 +450,11 @@ describe('search_database_objects tool', () => {
       expect(parsed.code).toBe('SEARCH_ERROR');
     });
 
-    it('returns AUTH_FAILED when the connector throws a login error', async () => {
+    // Classification itself is runToolRequest's (see execute-sql.test.ts).
+    // What is specific to this tool: its searches skip schemas and tables they
+    // cannot read, and a connection failure must not be skipped the same way
+    // and reported as an empty, successful search.
+    it('returns AUTH_FAILED for a table search when the connector throws a login error', async () => {
       const elogin: any = new Error('Login failed for user');
       elogin.code = 'ELOGIN';
       // make every method the handler might call reject with the auth error
@@ -628,8 +469,7 @@ describe('search_database_objects tool', () => {
       vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
       vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ id: 'mssql', type: 'sqlserver' } as any);
 
-      const sourceHandler = createSearchDatabaseObjectsToolHandler('mssql');
-      const result: any = await sourceHandler(
+      const result: any = await createSearchDatabaseObjectsToolHandler('mssql')(
         { object_type: 'table', detail_level: 'names', limit: 100 },
         {}
       );
@@ -674,9 +514,11 @@ describe('search_database_objects tool', () => {
     // Simulates a MySQL/MariaDB connector whose getSchemas() lists every
     // database on the server, but getDefaultSchema() reports the DSN-configured
     // database. Searches without an explicit schema must stay within the default.
+    let getDefaultSchema: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
+
     beforeEach(() => {
-      mockConnector = createMockConnector('mysql');
-      (mockConnector as any).getDefaultSchema = vi.fn();
+      getDefaultSchema = vi.fn();
+      mockConnector = createMockConnector('mysql', 'default', { getDefaultSchema });
       mockGetCurrentConnector.mockReturnValue(mockConnector);
       vi.mocked(mockConnector.getSchemas).mockResolvedValue([
         'configured_db',
@@ -702,7 +544,7 @@ describe('search_database_objects tool', () => {
     ] as const)(
       'scopes %s search to the default schema and never fans out to other databases',
       async (objectType, method, expectedName) => {
-        vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+        getDefaultSchema.mockResolvedValue('configured_db');
 
         const { parsed } = await search({ object_type: objectType, pattern: '%', detail_level: 'names' });
         expect(parsed.data.results.map((r: any) => r.schema)).toEqual(['configured_db']);
@@ -716,7 +558,7 @@ describe('search_database_objects tool', () => {
     it.each(['table', 'view'])(
       'falls back to the full schema list for %ss when no default is configured (null)',
       async (objectType) => {
-        vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue(null);
+        getDefaultSchema.mockResolvedValue(null);
 
         const { parsed } = await search({ object_type: objectType, pattern: '%', detail_level: 'names' });
         expect(parsed.data.results.map((r: any) => r.schema)).toEqual([
@@ -728,46 +570,24 @@ describe('search_database_objects tool', () => {
     );
 
     it('scopes schema listing to the default schema', async () => {
-      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+      getDefaultSchema.mockResolvedValue('configured_db');
 
       const { parsed } = await search({ object_type: 'schema', pattern: '%', detail_level: 'names' });
       expect(parsed.data.results.map((r: any) => r.name)).toEqual(['configured_db']);
     });
 
     it('honors an explicit schema filter targeting a non-default database', async () => {
-      vi.mocked((mockConnector as any).getDefaultSchema).mockResolvedValue('configured_db');
+      getDefaultSchema.mockResolvedValue('configured_db');
 
       const { parsed } = await search({ object_type: 'table', pattern: '%', schema: 'other_db', detail_level: 'names' });
       expect(parsed.data.results.map((r: any) => r.schema)).toEqual(['other_db']);
       expect(parsed.data.results.map((r: any) => r.name)).toEqual(['secrets']);
       // getDefaultSchema must not override an explicit caller-provided schema.
-      expect((mockConnector as any).getDefaultSchema).not.toHaveBeenCalled();
+      expect(getDefaultSchema).not.toHaveBeenCalled();
     });
   });
 
-  describe('request tracking', () => {
-    const args = { object_type: 'schema', pattern: '%', detail_level: 'names' };
-
-    beforeEach(() => {
-      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
-    });
-
-    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
-      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
-      const addSpy = vi.spyOn(requestStore, 'add');
-
-      await createSearchDatabaseObjectsToolHandler('prod')(args, null);
-
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'search_objects' }));
-    });
-
-    it('tracks the normalized, suffixed tool name for a multi-source id with special characters', async () => {
-      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
-      const addSpy = vi.spyOn(requestStore, 'add');
-
-      await createSearchDatabaseObjectsToolHandler('prod-pg')(args, null);
-
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'search_objects_prod_pg' }));
-    });
-  });
+  describeRequestTracking('search_objects', (sourceId) =>
+    createSearchDatabaseObjectsToolHandler(sourceId)({ object_type: 'schema', pattern: '%', detail_level: 'names' }, null)
+  );
 });

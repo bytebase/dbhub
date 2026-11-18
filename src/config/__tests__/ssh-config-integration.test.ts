@@ -1,152 +1,92 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resolveSSHConfig } from '../env.js';
-import { homedir } from 'os';
 import { join } from 'path';
-import * as sshConfigParser from '../../utils/ssh-config-parser.js';
+import { parseSSHConfig } from '../../utils/ssh-config-parser.js';
 
-// Mock the ssh-config-parser module
-vi.mock('../../utils/ssh-config-parser.js', () => ({
+// Only the ~/.ssh/config lookup is replaced; the alias heuristic
+// (looksLikeSSHAlias) and the default config path are the real ones.
+vi.mock('../../utils/ssh-config-parser.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../utils/ssh-config-parser.js')>()),
   parseSSHConfig: vi.fn(),
-  looksLikeSSHAlias: vi.fn(),
-  getDefaultSSHConfigPath: vi.fn(() => join(homedir(), '.ssh', 'config'))
 }));
 
 describe('SSH Config Integration', () => {
-  let originalArgs: string[];
-  
+  const originalArgs = process.argv;
+
+  // What ~/.ssh/config holds for the alias `mybastion`
+  const bastion = {
+    host: 'bastion.example.com',
+    username: 'ubuntu',
+    port: 2222,
+    privateKey: '/home/user/.ssh/id_rsa',
+  };
+
+  // Values exported in the developer's shell must not leak into a test, nor
+  // one test's values into the next.
+  const clearSSHEnv = (): void => {
+    for (const name of ['SSH_HOST', 'SSH_USER', 'SSH_PORT', 'SSH_KEY', 'SSH_PASSWORD', 'SSH_AUTH_SOCK']) {
+      delete process.env[name];
+    }
+  };
+
   beforeEach(() => {
-    // Save original values
-    originalArgs = process.argv;
-
-    // Clear mocks
-    vi.clearAllMocks();
-
-    // Clear any SSH environment variables so values exported in the
-    // developer's shell can't leak into the first test
-    delete process.env.SSH_HOST;
-    delete process.env.SSH_USER;
-    delete process.env.SSH_PORT;
-    delete process.env.SSH_KEY;
-    delete process.env.SSH_PASSWORD;
-    delete process.env.SSH_AUTH_SOCK;
+    clearSSHEnv();
+    // Unless a test says otherwise, `mybastion` is the only alias in the config
+    vi.mocked(parseSSHConfig).mockReset();
+    vi.mocked(parseSSHConfig).mockImplementation((hostAlias: string) =>
+      hostAlias === 'mybastion' ? { ...bastion } : null
+    );
   });
 
   afterEach(() => {
-    // Restore original values
     process.argv = originalArgs;
-    
-    // Clear any environment variables
-    delete process.env.SSH_HOST;
-    delete process.env.SSH_USER;
-    delete process.env.SSH_PORT;
-    delete process.env.SSH_KEY;
-    delete process.env.SSH_PASSWORD;
-    delete process.env.SSH_AUTH_SOCK;
+    clearSSHEnv();
   });
-  
-  it('should resolve SSH config from host alias', () => {
-    // Mock the SSH config parser
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
-    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation((hostAlias: string, configPath: string) => ({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    }));
-    
-    // Simulate command line args
-    process.argv = ['node', 'index.js', '--ssh-host=mybastion'];
-    
+
+  it.each([
+    ['--ssh-host', ['--ssh-host=mybastion'], {}],
+    ['SSH_HOST', [], { SSH_HOST: 'mybastion' }],
+  ])('should resolve SSH config from a host alias given via %s', (_label, argv, env) => {
+    process.argv = ['node', 'index.js', ...argv];
+    Object.assign(process.env, env);
+
     const result = resolveSSHConfig();
-    
-    expect(result).not.toBeNull();
-    expect(result?.config).toMatchObject({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    });
+
+    expect(result?.config).toMatchObject(bastion);
     expect(result?.source).toContain('SSH config for host \'mybastion\'');
   });
-  
+
   it('should allow command line to override SSH config values', () => {
-    // Mock the SSH config parser
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
-    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation((hostAlias: string, configPath: string) => ({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    }));
-    
-    // Simulate command line args with override
     process.argv = ['node', 'index.js', '--ssh-host=mybastion', '--ssh-user=override-user'];
-    
+
     const result = resolveSSHConfig();
-    
-    expect(result).not.toBeNull();
-    expect(result?.config).toMatchObject({
-      host: 'bastion.example.com',
-      username: 'override-user', // Command line overrides config
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    });
+
+    // Command line overrides config
+    expect(result?.config).toMatchObject({ ...bastion, username: 'override-user' });
   });
-  
-  it('should work with environment variables', () => {
-    // Mock the SSH config parser
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
-    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation((hostAlias: string, configPath: string) => ({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    }));
-    
-    process.env.SSH_HOST = 'mybastion';
-    
-    const result = resolveSSHConfig();
-    
-    expect(result).not.toBeNull();
-    expect(result?.config).toMatchObject({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      port: 2222,
-      privateKey: '/home/user/.ssh/id_rsa'
-    });
-  });
-  
+
   it('should not use SSH config for direct hostnames', () => {
-    // Mock the SSH config parser
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
-    
     process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser', '--ssh-password=mypass'];
-    
+
     const result = resolveSSHConfig();
-    
-    expect(result).not.toBeNull();
+
     expect(result?.config).toMatchObject({
       host: 'direct.example.com',
       username: 'myuser',
       password: 'mypass'
     });
     expect(result?.source).not.toContain('SSH config');
-    expect(sshConfigParser.parseSSHConfig).not.toHaveBeenCalled();
+    expect(parseSSHConfig).not.toHaveBeenCalled();
   });
-  
+
   it('should require SSH user when only host is provided', () => {
-    // Mock the SSH config parser to return null (no config found)
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
-    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation((hostAlias: string, configPath: string) => null);
-    
+    // An alias that ~/.ssh/config does not define
     process.argv = ['node', 'index.js', '--ssh-host=unknown-host'];
-    
+
     expect(() => resolveSSHConfig()).toThrow('SSH tunnel configuration requires at least --ssh-host and --ssh-user');
   });
 
   it('should require an auth method when no password, key, or agent is available', () => {
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
-
     process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser'];
 
     expect(() => resolveSSHConfig()).toThrow(
@@ -156,8 +96,6 @@ describe('SSH Config Integration', () => {
 
   it('should accept an SSH agent as the only auth method', () => {
     process.env.SSH_AUTH_SOCK = '/tmp/agent.sock';
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
-
     process.argv = ['node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser'];
 
     const result = resolveSSHConfig();
@@ -168,8 +106,6 @@ describe('SSH Config Integration', () => {
   });
 
   it('should accept --ssh-agent as the only auth method', () => {
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
-
     process.argv = [
       'node', 'index.js', '--ssh-host=direct.example.com', '--ssh-user=myuser', '--ssh-agent=~/agent.sock'
     ];
@@ -181,7 +117,6 @@ describe('SSH Config Integration', () => {
   });
 
   it('should exit when --ssh-agent is given without a value', () => {
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(false);
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit: ${code}`);
     }) as never);
@@ -199,13 +134,7 @@ describe('SSH Config Integration', () => {
   });
 
   it('should treat --ssh-key as explicit even when the host resolves from SSH config', () => {
-    vi.mocked(sshConfigParser.looksLikeSSHAlias).mockReturnValue(true);
-    vi.mocked(sshConfigParser.parseSSHConfig).mockImplementation(() => ({
-      host: 'bastion.example.com',
-      username: 'ubuntu',
-      privateKey: '/home/user/.ssh/id_rsa',
-      privateKeyDiscovered: true
-    }));
+    vi.mocked(parseSSHConfig).mockReturnValue({ ...bastion, privateKeyDiscovered: true });
 
     process.argv = ['node', 'index.js', '--ssh-host=mybastion'];
     expect(resolveSSHConfig()?.config.privateKeyDiscovered).toBe(true);

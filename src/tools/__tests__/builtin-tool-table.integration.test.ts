@@ -59,4 +59,15 @@ describe("built-in tool tables", () => {
       expect.objectContaining({ name: metadata.name, description: metadata.description })
     );
   });
+
+  it("describes an opt-in health_check as the registered built-in, not as a custom tool", () => {
+    const metadata = getBuiltinToolMetadata("health_check", sourceId);
+
+    expect(getToolsForSource(sourceId).find((t) => t.name.startsWith("health_check"))).toEqual({
+      name: metadata.name,
+      description: metadata.description,
+      parameters: [],
+      readonly: true,
+    });
+  });
 });
