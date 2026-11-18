@@ -1,7 +1,7 @@
 {
   "name": "dbhub",
   "version": "1.7.1",
-  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite, with skills for connection setup and schema exploration",
+  "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite, with skills for connection setup and schema exploration",
   "author": {
     "name": "Bytebase",
     "url": "https://www.bytebase.com"
@@ -17,6 +17,7 @@
     "mariadb",
     "sqlserver",
     "oracle",
+    "clickhouse",
     "sqlite"
   ],
   "skills": "./skills/",
@@ -24,7 +25,7 @@
   "interface": {
     "displayName": "DBHub",
     "shortDescription": "Query and explore your databases",
-    "longDescription": "DBHub connects Codex to PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite through a minimal, token-efficient MCP server. Explore schemas with progressive disclosure and run read-only SQL, capped at 1000 rows.",
+    "longDescription": "DBHub connects Codex to PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite through a minimal, token-efficient MCP server. Explore schemas with progressive disclosure and run read-only SQL, capped at 1000 rows.",
     "developerName": "Bytebase",
     "category": "Coding",
     "capabilities": [

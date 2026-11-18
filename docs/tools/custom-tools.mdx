@@ -159,6 +159,21 @@ The same tool pattern works across different databases, just adjust the paramete
     description = "Product ID"
     ```
   </Tab>
+
+  <Tab title="ClickHouse">
+    ```toml
+    [[tools]]
+    name = "get_product"
+    description = "Get product by ID"
+    source = "clickhouse_db"
+    statement = "SELECT * FROM products WHERE id = {p1:UInt64}"
+
+    [[tools.parameters]]
+    name = "product_id"
+    type = "integer"
+    description = "Product ID"
+    ```
+  </Tab>
 </Tabs>
 
 See [Parameter Placeholders](/config/toml#parameters) for syntax reference.

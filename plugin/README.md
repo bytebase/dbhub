@@ -1,6 +1,6 @@
 # DBHub Plugin for Claude Code and Codex
 
-Plugin for [DBHub](https://dbhub.ai) — a minimal, token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite. One directory serves both hosts: Claude Code reads `.claude-plugin/plugin.json` + `.mcp.json`, Codex reads `.codex-plugin/plugin.json` + `mcp.codex.json`. Full guides: https://dbhub.ai/claude-code-plugin and https://dbhub.ai/codex-plugin
+Plugin for [DBHub](https://dbhub.ai) — a minimal, token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite. One directory serves both hosts: Claude Code reads `.claude-plugin/plugin.json` + `.mcp.json`, Codex reads `.codex-plugin/plugin.json` + `mcp.codex.json`. Full guides: https://dbhub.ai/claude-code-plugin and https://dbhub.ai/codex-plugin
 
 ## What's included
 

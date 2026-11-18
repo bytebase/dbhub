@@ -169,7 +169,7 @@ The result is a JSON object. Each statement in the call gets its own entry in `s
 
 - `count` is the number of rows returned, or the number of rows affected for a write.
 - `truncated: true` appears on a statement only when `max_rows` cut its rows off (see [Row Limiting](#row-limiting)).
-- `messages` appears next to `statements` when the database sent informational messages (SQL Server `PRINT` output, for example).
+- `messages` appears next to `statements` when the database sent informational messages (SQL Server `PRINT` output, for example, or the rows and bytes a ClickHouse statement read).
 - Columns that share a name within one result are suffixed `_1`, `_2`, … so no value is lost.
 
 Errors use the same envelope with `success: false`:

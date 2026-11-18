@@ -18,6 +18,7 @@ This plugin runs DBHub read-only and caps results at 1000 rows. Where the databa
    - MariaDB: `mariadb://user:password@localhost:3306/dbname`
    - SQL Server: `sqlserver://user:password@localhost:1433/dbname`
    - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name)
+   - ClickHouse: `clickhouse://user:password@localhost:8123/dbname` (the HTTP port; `8443` with `?sslmode=require` for ClickHouse Cloud)
    - SQLite: `sqlite:///absolute/path/to/database.db` (no credentials)
 
    Append `?sslmode=require` for SSL (`sslmode=disable` for local databases). URL-encode special characters in the password. Recommend a least-privilege, read-only database account. Full DSN options (SQL Server named instances/NTLM, PostgreSQL cert verification): https://dbhub.ai/installation

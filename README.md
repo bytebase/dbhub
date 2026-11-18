@@ -36,6 +36,8 @@
             |                  |    |              |    |                  |
             |  Copilot CLI     +--->+              +--->+    MariaDB       |
             |                  |    |              |    |                  |
+            |                  |    |              +--->+    ClickHouse    |
+            |                  |    |              |    |                  |
             +------------------+    +--------------+    +------------------+
                  MCP Clients           MCP Server             Databases
 ```
@@ -43,7 +45,7 @@
 DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two tools by default with opt-in extras. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases:
 
 - **Minimal**: Zero dependency, token efficient with a minimal set of MCP tools to maximize context window
-- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite through a single interface
+- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite through a single interface
 - **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
 - **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
 - **Secure Access**: SSH tunneling and SSL/TLS encryption
@@ -71,7 +73,7 @@ DBHub loads just 2 tools by default at **0.5k tokens** — 16-25x fewer than alt
 
 ## Supported Databases
 
-PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, and SQLite.
+PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, and SQLite.
 
 ## MCP Tools
 

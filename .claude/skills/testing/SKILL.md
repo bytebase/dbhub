@@ -48,7 +48,7 @@ This means the naming convention matters — integration tests MUST have `integr
 - `src/utils/__tests__/` — Utility function tests (SQL parsing and classification, access policy, row limiting, DSN obfuscation, SafeURL, SQLite DSNs, SSH config and tunnel, identifier quoting, parameter mapping, result columns, query timeouts, config watcher, auth token, cross-origin, AWS RDS signer, …)
 - `src/tools/__tests__/` — Tool handler tests (execute-sql, search-objects, explain-sql, health-check, custom-tool-handler, registry, builtin-tools)
 - `src/config/__tests__/` — Configuration tests (env parsing, TOML loading)
-- `src/connectors/__tests__/` — Connector unit tests (dsn-parser, manager, oracle, per-connector timeout / auth / pool behaviour, read-only transaction strategy)
+- `src/connectors/__tests__/` — Connector unit tests (dsn-parser, manager, oracle, clickhouse (against a fake HTTP server), per-connector timeout / auth / pool behaviour, read-only transaction strategy)
 - `src/requests/__tests__/` — Request store tests
 - `src/__tests__/` — Connector loading and `plugin-consistency.test.ts` (plugin / bundle / registry manifests stay in step with `package.json`)
 
@@ -62,6 +62,7 @@ Need Docker (Testcontainers):
 - `src/connectors/__tests__/mariadb.integration.test.ts`
 - `src/connectors/__tests__/sqlserver.integration.test.ts`
 - `src/connectors/__tests__/oracle.integration.test.ts`
+- `src/connectors/__tests__/clickhouse.integration.test.ts`
 
 Run without Docker (in-memory SQLite or no database):
 - `src/connectors/__tests__/sqlite.integration.test.ts`
@@ -145,6 +146,7 @@ Before running integration tests:
 | MariaDB | `@testcontainers/mariadb` (`mariadb:10.11`) | Supports IAM auth testing |
 | SQL Server | `@testcontainers/mssqlserver` (`mssql/server:2019-latest`) | Slow startup (3-5 min), needs 4GB+ RAM |
 | Oracle | `@testcontainers/oraclefree` (`gvenzl/oracle-free:23-slim-faststart`) | ~1.2GB pull, 1-2 min startup, needs 2GB+ RAM |
+| ClickHouse | `@testcontainers/clickhouse` (`clickhouse/clickhouse-server:25.8`) | Fast startup; replaces the shared SQL-execution suite with its own (no auto-increment, no repeated aliases) |
 | SQLite | No container needed | In-memory or file-based |
 
 ## Troubleshooting

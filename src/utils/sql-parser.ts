@@ -308,6 +308,40 @@ function scanTokenOracle(sql: string, i: number): SQLToken {
     ?? plainToken(i);
 }
 
+/**
+ * ClickHouse single-line comments: `--` and `//` anywhere, and `#` when it is
+ * followed by a space or `!` (a `#` followed by anything else is not a
+ * comment). All run to the end of the line.
+ */
+function scanSingleLineCommentClickHouse(sql: string, i: number): SQLToken | null {
+  const isComment =
+    (sql[i] === "-" && sql[i + 1] === "-") ||
+    (sql[i] === "/" && sql[i + 1] === "/") ||
+    (sql[i] === "#" && (sql[i + 1] === " " || sql[i + 1] === "!"));
+  if (!isComment) { return null; }
+  let j = i;
+  while (j < sql.length && sql[j] !== "\n") { j++; }
+  return { type: TokenType.Comment, end: j };
+}
+
+function scanBacktickQuotedIdentifierBackslash(sql: string, i: number): SQLToken | null {
+  return sql[i] === "`" ? scanBackslashQuoted(sql, i, "`") : null;
+}
+
+/**
+ * ClickHouse: nested block comments, backslash escapes in strings and in both
+ * kinds of quoted identifier ("..." and `...`), and `$tag$...$tag$` heredocs.
+ */
+function scanTokenClickHouse(sql: string, i: number): SQLToken {
+  return scanSingleLineCommentClickHouse(sql, i)
+    ?? scanNestedMultiLineComment(sql, i)
+    ?? scanSingleQuotedStringBackslash(sql, i)
+    ?? scanDoubleQuotedStringBackslash(sql, i)
+    ?? scanBacktickQuotedIdentifierBackslash(sql, i)
+    ?? scanDollarQuotedBlock(sql, i)
+    ?? plainToken(i);
+}
+
 type TokenScanner = (sql: string, i: number) => SQLToken;
 
 const dialectScanners: Record<ConnectorType, TokenScanner> = {
@@ -317,6 +351,7 @@ const dialectScanners: Record<ConnectorType, TokenScanner> = {
   sqlite: scanTokenSQLite,
   sqlserver: scanTokenSQLServer,
   oracle: scanTokenOracle,
+  clickhouse: scanTokenClickHouse,
 };
 
 function getScanner(dialect?: ConnectorType): TokenScanner {

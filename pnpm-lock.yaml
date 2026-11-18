@@ -39,6 +39,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: ^2.0.0
         version: 2.0.0
+      '@testcontainers/clickhouse':
+        specifier: ^11.14.0
+        version: 11.14.0
       '@testcontainers/mariadb':
         specifier: ^11.0.3
         version: 11.0.3
@@ -109,6 +112,9 @@ importers:
       '@azure/identity':
         specifier: ^4.8.0
         version: 4.10.1
+      '@clickhouse/client':
+        specifier: ^1.25.0
+        version: 1.25.0
       mariadb:
         specifier: ^3.4.0
         version: 3.4.2
@@ -514,6 +520,10 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  '@clickhouse/client@1.25.0':
+    resolution: {integrity: sha512-sxoCDlA8iOEGpGrJzl9SeNvG7II6e5kSeo0JI4Mru2QhwhjydWuDEE55ryZg3vIJ0CSJ1bhn9+Xtnuvf1BZT/w==}
+    engines: {node: '>=20'}
 
   '@codemirror/autocomplete@6.20.0':
     resolution: {integrity: sha512-bOwvTOIJcG5FVo5gUUupiwYh8MioPLQ4UcqbcRf7UQ98X90tCa9E1kZ3Z7tqwpZxYyOvh1YTYbmZE9RTfTp5hg==}
@@ -1097,6 +1107,9 @@ packages:
   '@smithy/smithy-client@4.12.1':
     resolution: {integrity: sha512-Xf9UFHlAihewfkmLNZ6I/Ek6kcYBKoU3cbRS9Z4q++9GWoW0YFbAHs7wMbuXm+nGuKHZ5OKheZMuDdaWPv8DJw==}
     engines: {node: '>=18.0.0'}
+    deprecated: |-
+      Deprecated due to a bug in custom logger data redaction. Upgrade to the latest version. If you used a custom logger with
+        this version, review your logs and rotate any credentials or other secrets. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/types@4.13.0':
     resolution: {integrity: sha512-COuLsZILbbQsdrwKQpkkpyep7lCsByxwj7m0Mg5v66/ZTyenlfBc40/QFQ5chO0YN/PNEH1Bi3fGtfXPnYNeDw==}
@@ -1278,6 +1291,9 @@ packages:
 
   '@tediousjs/connection-string@0.5.0':
     resolution: {integrity: sha512-7qSgZbincDDDFyRweCIEvZULFAw5iz/DeunhvuxpL31nfntX3P4Yd4HkHBRg9H8CdqY1e5WFN1PZIz/REL9MVQ==}
+
+  '@testcontainers/clickhouse@11.14.0':
+    resolution: {integrity: sha512-kjsXHAHiL5kmF0xMg5SXOioVz7ss8hPaManDjmb3rgkM3HMh2xXTbIuN7lYmZIJYAoLNf7NTT7/16MdOs4xhYw==}
 
   '@testcontainers/mariadb@11.0.3':
     resolution: {integrity: sha512-WIUlOoOjmGQbVUr+UtHQerHSiLVeOV7E+nniOCj45m4BCe5iy3tCFuqCY9Yq60xzWpHccGuUYwkRd7e8EcCGIA==}
@@ -4009,6 +4025,9 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.26
 
+  '@clickhouse/client@1.25.0':
+    optional: true
+
   '@codemirror/autocomplete@6.20.0':
     dependencies:
       '@codemirror/language': 6.12.1
@@ -4869,6 +4888,13 @@ snapshots:
 
   '@tediousjs/connection-string@0.5.0':
     optional: true
+
+  '@testcontainers/clickhouse@11.14.0':
+    dependencies:
+      testcontainers: 11.14.0
+    transitivePeerDependencies:
+      - bare-buffer
+      - supports-color
 
   '@testcontainers/mariadb@11.0.3':
     dependencies:

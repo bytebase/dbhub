@@ -35,7 +35,7 @@ The [MCP Bundle](/mcpb), the [Claude Code Plugin](/claude-code-plugin) and the [
 
 A statement goes through two layers.
 
-**1. Keyword classifier.** Before anything reaches the database, DBHub strips comments and string literals and checks each statement against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) for the dialect: `SELECT`, `WITH` and `EXPLAIN` everywhere, plus `SHOW` (PostgreSQL, MySQL, MariaDB), `DESCRIBE` (MySQL, MariaDB) and `PRAGMA` (SQLite). When several statements are sent together, every one of them must pass.
+**1. Keyword classifier.** Before anything reaches the database, DBHub strips comments and string literals and checks each statement against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) for the dialect: `SELECT`, `WITH` and `EXPLAIN` everywhere, plus `SHOW` (PostgreSQL, MySQL, MariaDB, ClickHouse), `DESCRIBE` (MySQL, MariaDB, ClickHouse), `EXISTS` (ClickHouse) and `PRAGMA` (SQLite). When several statements are sent together, every one of them must pass.
 
 **2. Engine-level backstop.** The statement then runs under the database's own read-only mechanism, so the database rejects or discards a write even if the classifier is evaded:
 
@@ -46,6 +46,7 @@ A statement goes through two layers.
 | SQL Server | Transaction that is always rolled back (SQL Server has no read-only transaction mode) | — |
 | Oracle | `SET TRANSACTION READ ONLY` transaction | DDL |
 | SQLite | `PRAGMA query_only = ON` | — |
+| ClickHouse | `readonly = 1` setting on the request | — |
 | TiDB (`mysql://`) | Transaction that is always rolled back (TiDB rejects `READ ONLY` transactions) | DDL |
 | Apache Doris (`mysql://`) | None. Doris does not run queries inside a transaction; DBHub logs a warning when it connects | Everything |
 

@@ -17,7 +17,15 @@ export const PARAMETER_STYLES = {
   sqlserver: "named", // @p1, @p2, @p3
   sqlite: "positional", // ?, ?, ?
   oracle: "colon", // :1, :2, :3
+  clickhouse: "braced", // {p1:String}, {p2:UInt32}
 } as const;
+
+/**
+ * ClickHouse placeholder: `{p1:Type}`. The type is part of the placeholder
+ * (the server parses the value as that type), so only the `{pN:` head is
+ * matched here.
+ */
+const BRACED_PARAMETER = /\{p\d+\s*:/;
 
 /**
  * Detect the parameter style used in a SQL statement.
@@ -28,10 +36,16 @@ export const PARAMETER_STYLES = {
 export function detectParameterStyle(
   statement: string,
   connectorType?: ConnectorType
-): "numbered" | "positional" | "named" | "colon" | "none" {
+): "numbered" | "positional" | "named" | "colon" | "braced" | "none" {
   // Strip comments and strings (with the dialect's quoting rules, e.g. Oracle
   // q'[...]' literals) to avoid matching parameters inside them
   const cleanedSQL = stripCommentsAndStrings(statement, connectorType);
+
+  // ClickHouse has only its own placeholder form, and `?` and `:` are
+  // operators there (`cond ? a : b`), so the other styles are not looked for.
+  if (connectorType === "clickhouse") {
+    return BRACED_PARAMETER.test(cleanedSQL) ? "braced" : "none";
+  }
 
   // Check for PostgreSQL-style numbered parameters ($1, $2, etc.)
   if (/\$\d+/.test(cleanedSQL)) {
@@ -82,6 +96,7 @@ export function validateParameterStyle(
       positional: "?, ?, ?",
       named: "@p1, @p2, @p3",
       colon: ":1, :2, :3",
+      braced: "{p1:String}, {p2:UInt32}",
     };
 
     throw new Error(
@@ -111,6 +126,13 @@ export function countParameters(statement: string, connectorType?: ConnectorType
       return countIndexedParameters(cleanedSQL, /@p\d+/g, "@p", "named");
     case "colon":
       return countIndexedParameters(cleanedSQL, /(?<!:):\d+/g, ":", "colon-numbered");
+    case "braced":
+      return countIndexedParameters(
+        cleanedSQL,
+        new RegExp(BRACED_PARAMETER, "g"),
+        "{p",
+        "braced"
+      );
     case "positional":
       // Count question marks (positional parameters don't have this issue)
       return (cleanedSQL.match(/\?/g) || []).length;

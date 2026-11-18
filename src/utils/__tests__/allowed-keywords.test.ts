@@ -144,6 +144,49 @@ describe("isReadOnlySQL", () => {
     ])("rejects %s (%s)", rejects);
   });
 
+  describe("ClickHouse keywords", () => {
+    it.each<Case>([
+      ["SELECT", "clickhouse", "SELECT count() FROM events FINAL"],
+      ["WITH", "clickhouse", "WITH 1 AS x SELECT x"],
+      ["SHOW", "clickhouse", "SHOW CREATE TABLE events"],
+      ["DESCRIBE", "clickhouse", "DESCRIBE TABLE events"],
+      ["DESC", "clickhouse", "DESC events"],
+      ["EXISTS", "clickhouse", "EXISTS TABLE analytics.events"],
+      ["EXPLAIN with settings", "clickhouse", "EXPLAIN indexes = 1 SELECT * FROM events WHERE id = 1"],
+      ["EXPLAIN ESTIMATE", "clickhouse", "EXPLAIN ESTIMATE SELECT * FROM events"],
+      ["a trailing SETTINGS clause", "clickhouse", "SELECT * FROM events SETTINGS max_threads = 1"],
+      ["cluster table functions, which read the same tables on other replicas", "clickhouse", "SELECT * FROM clusterAllReplicas('default', system.query_log)"],
+      ["a column or alias named after a table function", "clickhouse", "SELECT url, file, domain(url) AS remote FROM hits"],
+      ["a combinator that ends in Merge inside a WITH", "clickhouse", "WITH t AS (SELECT uniqMerge(u) AS u FROM agg) SELECT u FROM t"],
+    ])("allows %s", allows);
+
+    it.each<Case>([
+      ["INSERT", "clickhouse", "INSERT INTO events VALUES (1)"],
+      ["ALTER ... DELETE (a mutation)", "clickhouse", "ALTER TABLE events DELETE WHERE id = 1"],
+      ["OPTIMIZE", "clickhouse", "OPTIMIZE TABLE events FINAL"],
+      ["SYSTEM", "clickhouse", "SYSTEM FLUSH LOGS"],
+      ["SET", "clickhouse", "SET max_threads = 1"],
+      ["USE", "clickhouse", "USE analytics"],
+      ["KILL", "clickhouse", "KILL QUERY WHERE query_id = 'x'"],
+      ["TRUNCATE", "clickhouse", "TRUNCATE TABLE events"],
+      ["DETACH", "clickhouse", "DETACH TABLE events"],
+      ["SELECT ... INTO OUTFILE", "clickhouse", "SELECT * FROM events INTO OUTFILE 'out.csv'"],
+      ["a write hidden behind a // comment line", "clickhouse", "// note\nDROP TABLE events"],
+    ])("rejects %s", rejects);
+
+    it.each<Case>([
+      ["url()", "clickhouse", "SELECT * FROM url('http://169.254.169.254/latest/meta-data', 'RawBLOB')"],
+      ["s3()", "clickhouse", "SELECT * FROM s3('https://bucket.s3.amazonaws.com/x.csv')"],
+      ["file()", "clickhouse", "SELECT * FROM file('/etc/passwd', 'LineAsString')"],
+      ["remote()", "clickhouse", "SELECT * FROM remote('other:9000', db.t)"],
+      ["remoteSecure()", "clickhouse", "SELECT * FROM remoteSecure('other:9440', db.t)"],
+      ["mysql()", "clickhouse", "SELECT * FROM mysql('h:3306', 'db', 't', 'u', 'p')"],
+      ["postgresql() in a subquery", "clickhouse", "SELECT count() FROM (SELECT * FROM postgresql('h:5432', 'db', 't', 'u', 'p'))"],
+      ["executable()", "clickhouse", "SELECT * FROM executable('script.sh', 'TSV', 'x String')"],
+      ["a table function with a space before the parenthesis, in any case", "clickhouse", "SELECT * FROM URL ('http://x', CSV)"],
+    ])("rejects %s, which reaches outside the server", rejects);
+  });
+
   describe("Oracle keywords", () => {
     it("allows SELECT, WITH and EXPLAIN [PLAN FOR]", () => {
       expect(isReadOnlySQL("SELECT * FROM dual", "oracle")).toBe(true);

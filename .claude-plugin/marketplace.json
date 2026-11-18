@@ -11,7 +11,7 @@
     {
       "name": "dbhub",
       "source": "./plugin",
-      "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite, with skills for connection setup and schema exploration"
+      "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite, with skills for connection setup and schema exploration"
     }
   ]
 }

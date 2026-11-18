@@ -33,6 +33,7 @@ src/
 │   ├── mariadb/         # MariaDB connector
 │   ├── sqlserver/       # SQL Server connector
 │   ├── oracle/          # Oracle connector (node-oracledb Thin mode, no Instant Client)
+│   ├── clickhouse/      # ClickHouse connector (@clickhouse/client over the HTTP interface)
 │   └── sqlite/          # SQLite connector
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
@@ -182,6 +183,7 @@ outside TOML and follow the same order:
   - `src/connectors/introspection-utils.ts`: `groupIndexColumns`, for catalogs that list an index one column per row.
   - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
   - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
+- ClickHouse (`src/connectors/clickhouse/index.ts`) is stateless: one HTTP request per statement, with `readonly = 1`, `query_timeout` (`max_execution_time`) and `[sources.session]` sent as settings on each request. `max_rows` is applied by reading the streamed response, not by `sql-row-limiter.ts`. The connector's comments cover the rest (read-only user levels, errors raised mid-stream, exact numbers, the client-side deadline).
 - DSN Examples:
   - PostgreSQL: `postgres://user:password@localhost:5432/dbname?sslmode=disable`
   - MySQL: `mysql://user:password@localhost:3306/dbname?sslmode=disable`
@@ -190,6 +192,7 @@ outside TOML and follow the same order:
   - SQL Server (named instance): `sqlserver://user:password@localhost:1433/dbname?instanceName=ENV1`
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name; `?sid=ORCL` for a SID; `sslmode=require`/`verify-full` switch to TCPS)
+  - ClickHouse: `clickhouse://user:password@localhost:8123/dbname` (the HTTP interface; `sslmode=require`/`verify-full` switch to HTTPS and default the port to 8443, as on ClickHouse Cloud)
   - SQLite: `sqlite:///path/to/database.db` (absolute), `sqlite:///./database.db` (relative: to the working directory, or to the config file when set in TOML) or `sqlite:///:memory:` — all forms and their resolution live in `src/utils/sqlite-dsn.ts`
 - SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL, MySQL and MariaDB, CA verification), `sslmode=verify-full` (every network database, CA + hostname verification). MySQL/MariaDB validation and the per-driver mapping live in `src/connectors/mysql-family-ssl.ts` and each connector's `*SslOptions`; unknown values are rejected. On PostgreSQL, use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
 

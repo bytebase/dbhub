@@ -8,6 +8,7 @@ import { MySQLConnector } from '../mysql/index.js';
 import { MariaDBConnector } from '../mariadb/index.js';
 import { SQLServerConnector } from '../sqlserver/index.js';
 import { OracleConnector } from '../oracle/index.js';
+import { ClickHouseConnector } from '../clickhouse/index.js';
 
 /** Write a PEM fixture into a temp dir and return its path. */
 function writeTempPem(dir: string, name: string, pem: string): string {
@@ -408,6 +409,12 @@ describe('DSN Parser - empty sslmode', () => {
       'oracle://app:secret@db:2484/PROD',
       "Unsupported sslmode '' for Oracle. Supported: disable, require, verify-full",
     ],
+    [
+      'ClickHouse',
+      new ClickHouseConnector().dsnParser,
+      'clickhouse://reader:secret@ch:8123/analytics',
+      "Unsupported sslmode '' for ClickHouse. Supported: disable, require, verify-full",
+    ],
   ])('%s', (_name, parser, base, message) => {
     it.each([
       ['an empty value', '?sslmode='],
@@ -597,6 +604,72 @@ describe('DSN Parser - missing database component', () => {
         })
       );
     });
+  });
+});
+
+describe('DSN Parser - ClickHouse', () => {
+  const parser = new ClickHouseConnector().dsnParser;
+
+  it('points the client at the HTTP interface, with credentials decoded', async () => {
+    expect(await parser.parse('clickhouse://reader:p%40ss%3Aw%2Frd@ch.example.com:8124/analytics')).toEqual({
+      url: 'http://ch.example.com:8124',
+      username: 'reader',
+      password: 'p@ss:w/rd',
+      database: 'analytics',
+      sslmode: 'disable',
+    });
+  });
+
+  it("falls back to the server's defaults: user default, no password, database default, port 8123", async () => {
+    expect(await parser.parse('clickhouse://localhost')).toEqual({
+      url: 'http://localhost:8123',
+      username: 'default',
+      password: '',
+      database: 'default',
+      sslmode: 'disable',
+    });
+    expect(await parser.parse('clickhouse://default:@localhost/')).toMatchObject({
+      username: 'default',
+      password: '',
+      database: 'default',
+    });
+  });
+
+  it.each([
+    ['require', 'https://x.clickhouse.cloud:8443'],
+    ['verify-full', 'https://x.clickhouse.cloud:8443'],
+    ['disable', 'http://x.clickhouse.cloud:8123'],
+  ])('uses the port that goes with sslmode=%s when none is given', async (sslmode, url) => {
+    expect(await parser.parse(`clickhouse://default:pw@x.clickhouse.cloud/default?sslmode=${sslmode}`)).toMatchObject({
+      url,
+      sslmode,
+    });
+  });
+
+  it('keeps an explicit port whatever the sslmode, and the last sslmode given', async () => {
+    expect(
+      await parser.parse('clickhouse://default:pw@ch:9000/default?sslmode=disable&sslmode=verify-full')
+    ).toMatchObject({ url: 'https://ch:9000', sslmode: 'verify-full' });
+  });
+
+  it('brackets an IPv6 host in the URL', async () => {
+    expect(await parser.parse('clickhouse://default:pw@[::1]:8123/default')).toMatchObject({
+      url: 'http://[::1]:8123',
+    });
+  });
+
+  it.each([
+    ['verify-ca, which the HTTP client cannot do', 'clickhouse://u:p@ch/db?sslmode=verify-ca', "Unsupported sslmode 'verify-ca' for ClickHouse"],
+    ['an unknown sslmode', 'clickhouse://u:p@ch/db?sslmode=on', "Unsupported sslmode 'on' for ClickHouse"],
+    ['another scheme', 'https://u:p@ch:8443/db', 'Invalid ClickHouse DSN format'],
+  ])('rejects %s', async (_label, dsn, message) => {
+    await expect(parser.parse(dsn)).rejects.toThrow(message);
+  });
+
+  it('does not echo the password when the DSN is rejected', async () => {
+    await expect(parser.parse('clickhous://reader:hunter2@ch/db')).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining('hunter2') })
+    );
   });
 });
 

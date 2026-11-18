@@ -3,8 +3,8 @@ import { quoteIdentifier, quoteQualifiedIdentifier } from "../identifier-quoter.
 import type { ConnectorType } from "../../connectors/interface.js";
 
 describe("quoteIdentifier", () => {
-  // quoteIdentifier has three quoting branches (double quotes, backticks, square
-  // brackets). Each dialect gets one plain row and one row exercising its escape
+  // quoteIdentifier has four quoting branches (double quotes, backticks, backticks
+  // with backslash escapes, square brackets). Each dialect gets one plain row and one row exercising its escape
   // rule; spaces, dots and reserved words take the same path as a plain name.
   it.each<[ConnectorType, string, string]>([
     ["postgres", "users", '"users"'],
@@ -17,6 +17,10 @@ describe("quoteIdentifier", () => {
     ["mysql", "table`name", "`table``name`"],
     ["mariadb", "users", "`users`"],
     ["mariadb", "table`name", "`table``name`"],
+    ["clickhouse", "users", "`users`"],
+    // A backslash is an escape character inside a ClickHouse quoted identifier
+    ["clickhouse", "table`name", "`table\\`name`"],
+    ["clickhouse", "back\\slash", "`back\\\\slash`"],
     ["sqlserver", "users", "[users]"],
     ["sqlserver", "table]name", "[table]]name]"],
     // Only the closing bracket is escaped, so "table[1]" becomes "[table[1]]]"

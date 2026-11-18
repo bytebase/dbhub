@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildMySQLSessionStatement,
   buildPostgresSessionOptions,
+  toClickHouseSettings,
   validateSessionSettings,
 } from "../session-settings.js";
 
@@ -66,7 +67,33 @@ describe("buildPostgresSessionOptions", () => {
   });
 });
 
+describe("toClickHouseSettings", () => {
+  it("should render booleans as 1/0 and keep large integers exact", () => {
+    expect(
+      toClickHouseSettings({
+        max_rows_to_read: 1000000000,
+        max_bytes_to_read: 9223372036854775807n,
+        max_memory_usage: "10G",
+        use_uncompressed_cache: true,
+        optimize_read_in_order: false,
+      })
+    ).toEqual({
+      max_rows_to_read: 1000000000,
+      max_bytes_to_read: "9223372036854775807",
+      max_memory_usage: "10G",
+      use_uncompressed_cache: 1,
+      optimize_read_in_order: 0,
+    });
+  });
+});
+
 describe("validateSessionSettings", () => {
+  it("should accept ClickHouse settings, including a backslash in a string value", () => {
+    expect(
+      validateSessionSettings({ max_rows_to_read: 1000, log_comment: "a\\b" }, "clickhouse")
+    ).toBeUndefined();
+  });
+
   it("should match managed setting names case-insensitively", () => {
     expect(validateSessionSettings({ Statement_Timeout: 0 }, "postgres")).toContain(
       "Use 'query_timeout' instead"

@@ -322,3 +322,35 @@ describe("backslash escapes in string literals", () => {
     expect(stripCommentsAndStringsVariants("SELECT 'a'", "sqlite")).toEqual(["SELECT  "]);
   });
 });
+
+describe("ClickHouse syntax", () => {
+  it.each([
+    ["a -- comment", "SELECT 1 -- DROP TABLE t"],
+    ["a // comment", "SELECT 1 // DROP TABLE t"],
+    ["a # comment followed by a space", "SELECT 1 # DROP TABLE t"],
+    ["a #! comment", "SELECT 1 #! DROP TABLE t"],
+    ["a nested block comment", "SELECT 1 /* a /* DROP TABLE t */ b */"],
+    ["a string with a backslash-escaped quote", String.raw`SELECT 'it\'s; DROP TABLE t'`],
+    ["a quoted identifier with a backslash-escaped quote", String.raw`SELECT 1 AS "a\"; DROP TABLE t"`],
+    ["a backtick identifier with a backslash-escaped backtick", "SELECT 1 AS `a\\`; DROP TABLE t`"],
+    ["a heredoc", "SELECT $tag$it's; DROP TABLE t$tag$"],
+  ])("hides the contents of %s", (_label, sql) => {
+    expect(stripCommentsAndStrings(sql, "clickhouse")).not.toContain("DROP");
+    expect(splitSQLStatements(sql, "clickhouse")).toHaveLength(1);
+  });
+
+  it("does not treat a # that is not followed by a space or ! as a comment", () => {
+    expect(splitSQLStatements("SELECT 1 #x; SELECT 2", "clickhouse")).toEqual(["SELECT 1 #x", "SELECT 2"]);
+  });
+
+  it("leaves a {name:Type} placeholder and a map literal as plain text", () => {
+    const sql = "SELECT {p1:String}, map('a', 1), {'k': 2}['k']";
+    expect(stripCommentsAndStrings(sql, "clickhouse")).toContain("{p1:String}");
+  });
+
+  it("splits statements around comments and strings that hold semicolons", () => {
+    expect(
+      splitSQLStatements("SELECT 'a;b'; // one; two\nSELECT `c;d` FROM t; /* x; */ SELECT 3", "clickhouse")
+    ).toEqual(["SELECT 'a;b'", "// one; two\nSELECT `c;d` FROM t", "/* x; */ SELECT 3"]);
+  });
+});

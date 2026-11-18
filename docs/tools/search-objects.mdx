@@ -194,6 +194,7 @@ When using `detail_level: "summary"` or `"full"`, the tool includes database com
 | MariaDB    | `ALTER TABLE ... COMMENT` | `ALTER TABLE ... MODIFY COLUMN ... COMMENT` |
 | SQL Server | `sp_addextendedproperty` (MS_Description) | `sp_addextendedproperty` (MS_Description) |
 | Oracle     | `COMMENT ON TABLE` | `COMMENT ON COLUMN` |
+| ClickHouse | `COMMENT` clause of `CREATE TABLE` / `ALTER TABLE ... MODIFY COMMENT` | `COMMENT` on the column definition |
 | SQLite     | Not supported | Not supported |
 
 ## Usage Patterns

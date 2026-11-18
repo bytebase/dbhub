@@ -27,6 +27,16 @@ describe("classifyConnectionError", () => {
     expect(classifyConnectionError({ code: "ELOGIN" }, "sqlserver", "s")?.code).toBe("AUTH_FAILED");
   });
 
+  it("classifies clickhouse authentication errors by server error code", () => {
+    // The client reports the code as a string; 516 is AUTHENTICATION_FAILED.
+    for (const code of ["516", "192", "193", "194"]) {
+      expect(classifyConnectionError({ code }, "clickhouse", "ch")?.code).toBe("AUTH_FAILED");
+    }
+    expect(classifyConnectionError({ code: "ECONNREFUSED" }, "clickhouse", "ch")?.code).toBe("SOURCE_UNREACHABLE");
+    // 60 = UNKNOWN_TABLE: a query error, not a connection failure
+    expect(classifyConnectionError({ code: "60" }, "clickhouse", "ch")).toBeNull();
+  });
+
   it("classifies oracle errors: NJS-503 unreachable, ORA-01017/ORA-28000 auth", () => {
     expect(classifyConnectionError({ code: "NJS-503" }, "oracle", "o")?.code).toBe("SOURCE_UNREACHABLE");
     expect(classifyConnectionError({ code: "ORA-01017" }, "oracle", "o")?.code).toBe("AUTH_FAILED");
