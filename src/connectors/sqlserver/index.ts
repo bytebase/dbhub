@@ -14,6 +14,7 @@ import {
   HealthCheckResult,
 } from "../interface.js";
 import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
+import { groupIndexColumns } from "../introspection-utils.js";
 import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -354,46 +355,15 @@ export class SQLServerConnector implements Connector {
 
       const result = await request.query(query);
 
-      // Group by index name to collect all columns for each index
-      const indexMap = new Map<
-        string,
-        {
-          columns: string[];
-          is_unique: boolean;
-          is_primary: boolean;
-        }
-      >();
-
-      for (const row of result.recordset) {
-        const indexName = row.index_name;
-        const columnName = row.column_name;
-        const isUnique = !!row.is_unique;
-        const isPrimary = !!row.is_primary_key;
-
-        if (!indexMap.has(indexName)) {
-          indexMap.set(indexName, {
-            columns: [],
-            is_unique: isUnique,
-            is_primary: isPrimary,
-          });
-        }
-
-        const indexInfo = indexMap.get(indexName)!;
-        indexInfo.columns.push(columnName);
-      }
-
-      // Convert Map to array of TableIndex objects
-      const indexes: TableIndex[] = [];
-      indexMap.forEach((info, name) => {
-        indexes.push({
-          index_name: name,
-          column_names: info.columns,
-          is_unique: info.is_unique,
-          is_primary: info.is_primary,
-        });
-      });
-
-      return indexes;
+      return groupIndexColumns(
+        result.recordset,
+        (row: { index_name: string; column_name: string; is_unique: unknown; is_primary_key: unknown }) => ({
+          indexName: row.index_name,
+          columnName: row.column_name,
+          isUnique: !!row.is_unique,
+          isPrimary: !!row.is_primary_key,
+        })
+      );
     } catch (error) {
       throw new Error(`Failed to get indexes for table ${tableName}: ${(error as Error).message}`);
     }

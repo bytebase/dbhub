@@ -9,6 +9,7 @@ import type { SourceConfig } from "../types/config.js";
 import { loadTomlConfig } from "./toml-loader.js";
 import { obfuscateDSNPassword, parseConnectionInfoFromDSN } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { expandHomeDir } from "../utils/home-dir.js";
 import { buildSqliteDSN, normalizeSqliteDsn, resolveSqliteFilePath } from "../utils/sqlite-dsn.js";
 
 // Create __dirname equivalent for ES modules
@@ -611,20 +612,12 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
 
   // SSH Private Key (optional)
   if (args["ssh-key"]) {
-    config.privateKey = args["ssh-key"];
+    config.privateKey = expandHomeDir(args["ssh-key"]);
     config.privateKeyDiscovered = false;
-    // Expand ~ to home directory
-    if (config.privateKey.startsWith("~/")) {
-      config.privateKey = path.join(process.env.HOME || "", config.privateKey.substring(2));
-    }
     sources.push("ssh-key from command line");
   } else if (process.env.SSH_KEY) {
-    config.privateKey = process.env.SSH_KEY;
+    config.privateKey = expandHomeDir(process.env.SSH_KEY);
     config.privateKeyDiscovered = false;
-    // Expand ~ to home directory
-    if (config.privateKey.startsWith("~/")) {
-      config.privateKey = path.join(process.env.HOME || "", config.privateKey.substring(2));
-    }
     sources.push("SSH_KEY from environment");
   }
 
@@ -641,11 +634,7 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
   // variable and is read by the tunnel itself when no socket is configured
   const cliAgent = requireFlagValue("ssh-agent", args, "~/.ssh/agent.sock");
   if (cliAgent) {
-    config.agent = cliAgent;
-    // Expand ~ to home directory
-    if (config.agent.startsWith("~/")) {
-      config.agent = path.join(process.env.HOME || "", config.agent.substring(2));
-    }
+    config.agent = expandHomeDir(cliAgent);
     sources.push("ssh-agent from command line");
   }
 

@@ -314,17 +314,13 @@ export class SQLiteConnector implements Connector {
     // SQLite has a single namespace for tables within a database file
     // You could use 'schema.table' syntax if you have attached databases, but we're
     // accessing the 'main' database by default
-    try {
-      const rows = this.queryAll<SQLiteTableNameRow>(`
-        SELECT name FROM sqlite_master
-        WHERE type='table' AND name NOT LIKE 'sqlite_%'
-        ORDER BY name
-      `);
+    const rows = this.queryAll<SQLiteTableNameRow>(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name
+    `);
 
-      return rows.map((row) => row.name);
-    } catch (error) {
-      throw error;
-    }
+    return rows.map((row) => row.name);
   }
 
   async getViews(schema?: string): Promise<string[]> {
@@ -333,17 +329,13 @@ export class SQLiteConnector implements Connector {
     }
 
     // In SQLite, schema parameter is ignored since SQLite doesn't have schemas like PostgreSQL
-    try {
-      const rows = this.queryAll<SQLiteTableNameRow>(`
-        SELECT name FROM sqlite_master
-        WHERE type='view' AND name NOT LIKE 'sqlite_%'
-        ORDER BY name
-      `);
+    const rows = this.queryAll<SQLiteTableNameRow>(`
+      SELECT name FROM sqlite_master
+      WHERE type='view' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name
+    `);
 
-      return rows.map((row) => row.name);
-    } catch (error) {
-      throw error;
-    }
+    return rows.map((row) => row.name);
   }
 
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
@@ -352,72 +344,68 @@ export class SQLiteConnector implements Connector {
     }
 
     // In SQLite, schema parameter is ignored (no schema concept)
-    try {
-      // Get all indexes for the specified table
-      const indexInfoRows = this.queryAll<{ index_name: string; is_unique: number }>(
-        `
-        SELECT
-          name as index_name,
-          0 as is_unique
-        FROM sqlite_master
-        WHERE type = 'index'
-        AND tbl_name = ?
-      `,
-        tableName
-      );
+    // Get all indexes for the specified table
+    const indexInfoRows = this.queryAll<{ index_name: string; is_unique: number }>(
+      `
+      SELECT
+        name as index_name,
+        0 as is_unique
+      FROM sqlite_master
+      WHERE type = 'index'
+      AND tbl_name = ?
+    `,
+      tableName
+    );
 
-      // Get unique info from PRAGMA index_list which provides the unique flag
-      // Note: PRAGMA commands require proper identifier quoting for special characters
-      const quotedTableName = quoteIdentifier(tableName, "sqlite");
-      const indexListRows = this.queryAll<{ name: string; unique: number }>(
-        `PRAGMA index_list(${quotedTableName})`
-      );
+    // Get unique info from PRAGMA index_list which provides the unique flag
+    // Note: PRAGMA commands require proper identifier quoting for special characters
+    const quotedTableName = quoteIdentifier(tableName, "sqlite");
+    const indexListRows = this.queryAll<{ name: string; unique: number }>(
+      `PRAGMA index_list(${quotedTableName})`
+    );
 
-      // Create a map of index names to unique status
-      const indexUniqueMap = new Map<string, boolean>();
-      for (const indexListRow of indexListRows) {
-        indexUniqueMap.set(indexListRow.name, indexListRow.unique === 1);
-      }
-
-      // Get the primary key info
-      const tableInfo = this.queryAll<SQLiteTableInfo>(`PRAGMA table_info(${quotedTableName})`);
-
-      // Find primary key columns
-      const pkColumns = tableInfo.filter((col) => col.pk > 0).map((col) => col.name);
-
-      const results: TableIndex[] = [];
-
-      // Add regular indexes
-      for (const indexInfo of indexInfoRows) {
-        // Get the columns for this index
-        const quotedIndexName = quoteIdentifier(indexInfo.index_name, "sqlite");
-        const indexDetailRows = this.queryAll<{ name: string }>(
-          `PRAGMA index_info(${quotedIndexName})`
-        );
-        const columnNames = indexDetailRows.map((row) => row.name);
-
-        results.push({
-          index_name: indexInfo.index_name,
-          column_names: columnNames,
-          is_unique: indexUniqueMap.get(indexInfo.index_name) || false,
-          is_primary: false,
-        });
-      }
-
-      // Add primary key if it exists
-      if (pkColumns.length > 0) {
-        results.push({
-          index_name: "PRIMARY",
-          column_names: pkColumns,
-          is_unique: true,
-          is_primary: true,
-        });
-      }
-
-      return results;
-    } catch (error) {
-      throw error;
+    // Create a map of index names to unique status
+    const indexUniqueMap = new Map<string, boolean>();
+    for (const indexListRow of indexListRows) {
+      indexUniqueMap.set(indexListRow.name, indexListRow.unique === 1);
     }
+
+    // Get the primary key info
+    const tableInfo = this.queryAll<SQLiteTableInfo>(`PRAGMA table_info(${quotedTableName})`);
+
+    // Find primary key columns
+    const pkColumns = tableInfo.filter((col) => col.pk > 0).map((col) => col.name);
+
+    const results: TableIndex[] = [];
+
+    // Add regular indexes
+    for (const indexInfo of indexInfoRows) {
+      // Get the columns for this index
+      const quotedIndexName = quoteIdentifier(indexInfo.index_name, "sqlite");
+      const indexDetailRows = this.queryAll<{ name: string }>(
+        `PRAGMA index_info(${quotedIndexName})`
+      );
+      const columnNames = indexDetailRows.map((row) => row.name);
+
+      results.push({
+        index_name: indexInfo.index_name,
+        column_names: columnNames,
+        is_unique: indexUniqueMap.get(indexInfo.index_name) || false,
+        is_primary: false,
+      });
+    }
+
+    // Add primary key if it exists
+    if (pkColumns.length > 0) {
+      results.push({
+        index_name: "PRIMARY",
+        column_names: pkColumns,
+        is_unique: true,
+        is_primary: true,
+      });
+    }
+
+    return results;
   }
 
   async getTableSchema(tableName: string, schema?: string): Promise<TableColumn[]> {
@@ -429,29 +417,25 @@ export class SQLiteConnector implements Connector {
     // 1. SQLite doesn't have schemas in the same way as PostgreSQL or MySQL
     // 2. Each SQLite database file is its own separate namespace
     // 3. The PRAGMA commands operate on the current database connection
-    try {
-      const quotedTableName = quoteIdentifier(tableName, "sqlite");
-      // table_info omits generated columns. Keep them, but exclude virtual-table
-      // implementation columns (hidden=1) exposed by table_xinfo.
-      const rows = this.queryAll<SQLiteTableInfo & { hidden: number }>(
-        `PRAGMA table_xinfo(${quotedTableName})`
-      ).filter((row) => row.hidden !== 1);
+    const quotedTableName = quoteIdentifier(tableName, "sqlite");
+    // table_info omits generated columns. Keep them, but exclude virtual-table
+    // implementation columns (hidden=1) exposed by table_xinfo.
+    const rows = this.queryAll<SQLiteTableInfo & { hidden: number }>(
+      `PRAGMA table_xinfo(${quotedTableName})`
+    ).filter((row) => row.hidden !== 1);
 
-      // Convert SQLite schema format to our standard TableColumn format
-      // SQLite does not support column comments, so description is always null
-      const columns = rows.map((row) => ({
-        column_name: row.name,
-        data_type: row.type,
-        // In SQLite, primary key columns are automatically NOT NULL even if notnull=0
-        is_nullable: (row.notnull === 1 || row.pk > 0) ? "NO" : "YES",
-        column_default: row.dflt_value,
-        description: null,
-      }));
+    // Convert SQLite schema format to our standard TableColumn format
+    // SQLite does not support column comments, so description is always null
+    const columns = rows.map((row) => ({
+      column_name: row.name,
+      data_type: row.type,
+      // In SQLite, primary key columns are automatically NOT NULL even if notnull=0
+      is_nullable: (row.notnull === 1 || row.pk > 0) ? "NO" : "YES",
+      column_default: row.dflt_value,
+      description: null,
+    }));
 
-      return columns;
-    } catch (error) {
-      throw error;
-    }
+    return columns;
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {

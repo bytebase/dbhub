@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { expandHomeDir } from './home-dir.js';
 import SSHConfig from 'ssh-config';
 import type { SSHTunnelConfig, JumpHost } from '../types/ssh.js';
 
@@ -35,16 +36,6 @@ function firstValue(value: string | string[]): string {
 }
 
 /**
- * Expand tilde (~) in file paths to home directory
- */
-function expandTilde(filePath: string): string {
-  if (filePath.startsWith('~/')) {
-    return join(homedir(), filePath.substring(2));
-  }
-  return filePath;
-}
-
-/**
  * Resolve a path, following symlinks if necessary.
  * This is particularly important on Windows where .ssh directory
  * may be a directory junction or symbolic link.
@@ -52,7 +43,7 @@ function expandTilde(filePath: string): string {
  * @returns The resolved real path, or the expanded path if resolution fails
  */
 export function resolveSymlink(filePath: string): string {
-  const expandedPath = expandTilde(filePath);
+  const expandedPath = expandHomeDir(filePath);
   try {
     return realpathSync(expandedPath);
   } catch {

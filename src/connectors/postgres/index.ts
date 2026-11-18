@@ -334,10 +334,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getSchemas(): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       const result = await client.query(`
@@ -354,10 +350,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getTables(schema?: string): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -384,10 +376,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getViews(schema?: string): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       const schemaToUse = schema || this.defaultSchema;
@@ -410,10 +398,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -466,10 +450,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getTableSchema(tableName: string, schema?: string): Promise<TableColumn[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -508,10 +488,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getTableRowCount(tableName: string, schema?: string): Promise<number | null> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -540,10 +516,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getTableComment(tableName: string, schema?: string): Promise<string | null> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       const schemaToUse = schema || this.defaultSchema;
@@ -570,10 +542,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getHealthCheck(): Promise<HealthCheckResult> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       const [connectionsResult, maxConnectionsResult, bufferCacheResult] = await Promise.all([
@@ -632,10 +600,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getStoredProcedures(schema?: string, routineType?: "procedure" | "function"): Promise<string[]> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -669,10 +633,6 @@ export class PostgresConnector implements Connector {
   }
 
   async getStoredProcedureDetail(procedureName: string, schema?: string): Promise<StoredProcedure> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     try {
       // Use the configured default schema (from search_path config, defaults to 'public')
@@ -792,10 +752,6 @@ export class PostgresConnector implements Connector {
   }
 
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
     const client = await this.acquireClient();
     // Captured up front, before a timeout can lead to the client being discarded.
     const backendPid = (client as unknown as { processID: number | null }).processID;

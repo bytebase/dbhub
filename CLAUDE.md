@@ -176,6 +176,12 @@ outside TOML and follow the same order:
 - Add new connectors in `src/connectors/{db-type}/index.ts`
 - Implement the `Connector` and `DSNParser` interfaces from `src/connectors/interface.ts`
 - Register connector with `ConnectorRegistry.register(connector)`
+- Shared connector code — reuse it rather than re-implementing per connector:
+  - `src/connectors/mysql-family-connector.ts`: base class for MySQL and MariaDB (introspection, health check, and `executeStatements`, the split → row-cap → run → per-statement result-set flow). Only what differs by driver stays in the subclasses: pool setup, how a query is issued and timed out, and how a timed-out connection is discarded. The sibling `mysql-family-*.ts` files hold the shared catalog queries, health check and `sslmode` handling.
+  - `src/connectors/sqlserver/request-helpers.ts`: parameter binding, read-only escape checks, `collectInfoMessages`, and `runRolledBack` — the always-rolled-back transaction every SQL Server read-only path (execute and `EXPLAIN ANALYZE`) goes through.
+  - `src/connectors/introspection-utils.ts`: `groupIndexColumns`, for catalogs that list an index one column per row.
+  - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
+  - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
 - DSN Examples:
   - PostgreSQL: `postgres://user:password@localhost:5432/dbname?sslmode=disable`
   - MySQL: `mysql://user:password@localhost:3306/dbname?sslmode=disable`
