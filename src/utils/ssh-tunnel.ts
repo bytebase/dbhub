@@ -24,7 +24,6 @@ interface SSHHostAuth {
 export class SSHTunnel {
   private sshClients: Client[] = []; // All SSH clients in the chain
   private localServer: Server | null = null;
-  private tunnelInfo: SSHTunnelInfo | null = null;
   private isConnected: boolean = false;
 
   /**
@@ -399,15 +398,13 @@ export class SSHTunnel {
           return;
         }
 
-        this.tunnelInfo = {
+        console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
+        settled = true;
+        resolve({
           localPort: address.port,
           targetHost: options.targetHost,
           targetPort: options.targetPort,
-        };
-
-        console.error(`SSH tunnel established: localhost:${address.port} → ${options.targetHost}:${options.targetPort}`);
-        settled = true;
-        resolve(this.tunnelInfo);
+        });
       });
     });
   }
@@ -446,21 +443,6 @@ export class SSHTunnel {
     }
     this.sshClients = [];
 
-    this.tunnelInfo = null;
     this.isConnected = false;
-  }
-
-  /**
-   * Get current tunnel information
-   */
-  getTunnelInfo(): SSHTunnelInfo | null {
-    return this.tunnelInfo;
-  }
-
-  /**
-   * Check if tunnel is connected
-   */
-  getIsConnected(): boolean {
-    return this.isConnected;
   }
 }

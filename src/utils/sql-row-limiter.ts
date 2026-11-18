@@ -56,7 +56,7 @@ export class SQLRowLimiter {
    * blanked the same way the read-only classifier blanks it; without it only
    * ANSI syntax is recognized.
    */
-  static isSelectQuery(sql: string, dialect?: ConnectorType): boolean {
+  private static isSelectQuery(sql: string, dialect?: ConnectorType): boolean {
     const blankedSQL = blankCommentsAndStrings(sql, dialect).trim().toLowerCase();
     // Leading parentheses are skipped: `(SELECT ...) UNION (SELECT ...)` is a
     // row-returning statement whose first token is `(`. So is a leading
@@ -73,14 +73,14 @@ export class SQLRowLimiter {
    * own, or when that LIMIT is a parameter placeholder rather than a literal
    * (see hasParameterizedLimit).
    */
-  static extractLimitValue(sql: string, dialect?: ConnectorType): number | null {
+  private static extractLimitValue(sql: string, dialect?: ConnectorType): number | null {
     return this.findTopLevelLimit(sql, dialect)?.value ?? null;
   }
 
   /**
    * Extract the statement's own TOP value (SQL Server), or null when it has none.
    */
-  static extractTopValue(sql: string): number | null {
+  private static extractTopValue(sql: string): number | null {
     return this.findTopLevelTop(sql)?.value ?? null;
   }
 
@@ -88,7 +88,7 @@ export class SQLRowLimiter {
    * Check if the statement's own LIMIT clause uses a parameter placeholder
    * ($1, ?, @p1) instead of a literal number.
    */
-  static hasParameterizedLimit(sql: string, dialect?: ConnectorType): boolean {
+  private static hasParameterizedLimit(sql: string, dialect?: ConnectorType): boolean {
     const limit = this.findTopLevelLimit(sql, dialect);
     return limit !== null && limit.value === null;
   }
@@ -96,7 +96,7 @@ export class SQLRowLimiter {
   /**
    * Add or tighten the LIMIT clause of a SQL statement
    */
-  static applyLimitToQuery(sql: string, maxRows: number, dialect?: ConnectorType): string {
+  private static applyLimitToQuery(sql: string, maxRows: number, dialect?: ConnectorType): string {
     const limit = this.findTopLevelLimit(sql, dialect);
 
     if (limit !== null && limit.value !== null) {
@@ -321,7 +321,7 @@ export class SQLRowLimiter {
    * (UNION [ALL], INTERSECT, EXCEPT) at the top level — i.e. not nested
    * inside a subquery already wrapped in parentheses.
    */
-  static hasSetOperator(sql: string): boolean {
+  private static hasSetOperator(sql: string): boolean {
     return (
       this.findTopLevelMatch(sql, /\(|\)|\bunion\b|\bintersect\b|\bexcept\b/gi, "first", "sqlserver") !==
       null
@@ -340,7 +340,7 @@ export class SQLRowLimiter {
   /**
    * Add or modify TOP clause in a SQL statement (SQL Server)
    */
-  static applyTopToQuery(sql: string, maxRows: number): string {
+  private static applyTopToQuery(sql: string, maxRows: number): string {
     // T-SQL rejects TOP in a query that has OFFSET, so cap through the
     // FETCH count instead: tighten a literal one, append one when missing,
     // and wrap when the count is a parameter or the clause has an unusual

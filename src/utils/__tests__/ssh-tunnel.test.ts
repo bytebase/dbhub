@@ -102,22 +102,16 @@ describe('SSHTunnel', () => {
       await promise1;
     });
 
-    it('should start disconnected and reset connection state after failed establish', async () => {
+    it('should reset connection state after a failed establish', async () => {
       const tunnel = new SSHTunnel();
-      expect(tunnel.getIsConnected()).toBe(false);
-      expect(tunnel.getTunnelInfo()).toBeNull();
 
       // Missing both password and privateKey - will fail validation
       const noAuth: SSHTunnelConfig = { host: 'ssh.example.com', username: 'testuser' };
       const noAuthError = 'must be provided for SSH authentication';
       await expect(tunnel.establish(noAuth, options)).rejects.toThrow(noAuthError);
 
-      // After failure, isConnected should be false
-      expect(tunnel.getIsConnected()).toBe(false);
-      expect(tunnel.getTunnelInfo()).toBeNull();
-
-      // Should be able to try establishing again: it fails validation again
-      // rather than with "SSH tunnel is already established"
+      // The tunnel can be established again: a second attempt fails validation
+      // again rather than with "SSH tunnel is already established"
       await expect(tunnel.establish(noAuth, options)).rejects.toThrow(noAuthError);
     });
 
