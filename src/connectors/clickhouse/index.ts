@@ -20,7 +20,9 @@ import {
   StoredProcedure,
   ExecuteOptions,
   ConnectorConfig,
+  HealthCheckResult,
 } from "../interface.js";
+import { computeHitRatioPct } from "../health-check-utils.js";
 import { SafeURL, rawQueryParamValues } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword, getDefaultPortForType } from "../../utils/dsn-obfuscate.js";
 import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
@@ -152,6 +154,14 @@ const VIEW_ENGINES = "('View', 'MaterializedView', 'LiveView', 'WindowView')";
 
 /** Longest piece of an unreadable response quoted back in an error. */
 const MAX_ERROR_TEXT = 2000;
+
+/**
+ * The `system.metrics` gauges that count client connections, one per protocol.
+ * `InterserverConnection` (replicas fetching parts) is left out: it is not a
+ * client.
+ */
+const CLIENT_CONNECTION_METRICS =
+  "('TCPConnection', 'HTTPConnection', 'MySQLConnection', 'PostgreSQLConnection')";
 
 /**
  * Counters ClickHouse reports for a statement in the X-ClickHouse-Summary
@@ -818,6 +828,125 @@ export class ClickHouseConnector implements Connector {
       parameter_list: (parameters?.[1] ?? parameters?.[2] ?? "").trim(),
       definition: rows[0].create_query,
     };
+  }
+
+  /**
+   * Health metrics, from the server's own counters.
+   *
+   * Connections: `system.metrics` counts client connections per protocol and
+   * `system.processes` lists the queries running. The server counts an HTTP
+   * connection only while it is handling a request, so `idle` is in practice
+   * the native-protocol clients with no query running: a kept-alive HTTP
+   * connection between two requests is counted nowhere. ClickHouse has no
+   * transaction a session could sit idle in.
+   *
+   * Cache: ClickHouse has no buffer pool. Table data is read through the
+   * operating system's page cache, which the server keeps no hit counters
+   * for. What it does cache and count for every MergeTree read is marks (the
+   * offsets that turn a primary key range into file positions), so the mark
+   * cache is what `bufferCache` reports, with a note saying so.
+   *
+   * Every table read here needs its own SELECT grant on servers where system
+   * tables are not open to all users (`select_from_system_db_requires_grant`,
+   * on in the configuration ClickHouse ships). What a missing grant hides is
+   * left out and named in a note.
+   *
+   * The queries run one after the other, not together, so that this check is
+   * one connection and one query at any moment: the one that is subtracted.
+   */
+  async getHealthCheck(): Promise<HealthCheckResult> {
+    const denied: string[] = [];
+    /** Rows of a system table, or undefined when the user may not read it. */
+    const read = async <T>(table: string, query: string): Promise<T[] | undefined> => {
+      try {
+        return await this.catalog<T>(query);
+      } catch (error) {
+        if (error instanceof ClickHouseError && error.type === "ACCESS_DENIED") {
+          denied.push(table);
+          return undefined;
+        }
+        throw error;
+      }
+    };
+
+    const metrics = await read<{ connections: number | string }>(
+      "system.metrics",
+      `SELECT sum(value) AS connections FROM system.metrics WHERE metric IN ${CLIENT_CONNECTION_METRICS}`
+    );
+    const processes = await read<{ active: number | string; longest_seconds: number }>(
+      "system.processes",
+      `SELECT count() AS active, max(elapsed) AS longest_seconds FROM system.processes
+       WHERE query_id != queryID()`
+    );
+    let serverSettings: Array<{ value: string }> | undefined;
+    try {
+      serverSettings = await read<{ value: string }>(
+        "system.server_settings",
+        `SELECT value FROM system.server_settings WHERE name = 'max_connections'`
+      );
+    } catch (error) {
+      // A server from before the table existed: the ceiling is not known.
+      if (!(error instanceof ClickHouseError && error.type === "UNKNOWN_TABLE")) {
+        throw error;
+      }
+      serverSettings = [];
+    }
+    // An event that has not happened yet has no row.
+    const events = await read<{ event: string; value: number | string }>(
+      "system.events",
+      `SELECT event, value FROM system.events WHERE event IN ('MarkCacheHits', 'MarkCacheMisses')`
+    );
+
+    const result: HealthCheckResult = {};
+    const notes: string[] = [];
+    const notReported: string[] = [];
+
+    if (metrics && processes) {
+      // Less the connection this check itself is made over.
+      const total = Math.max(0, Number(metrics[0]?.connections ?? 0) - 1);
+      const active = Number(processes[0]?.active ?? 0);
+      const maxConnections = Number(serverSettings?.[0]?.value);
+      result.connections = {
+        total,
+        active,
+        // The two counts are read by separate requests, and a query need not
+        // belong to a counted connection (see above), hence the floor.
+        idle: Math.max(0, total - active),
+        idleInTransaction: 0,
+        maxConnections: Number.isFinite(maxConnections) && maxConnections > 0 ? maxConnections : null,
+        longestIdleInTransactionSeconds: null,
+        // max() over no rows is 0, not NULL.
+        longestActiveQuerySeconds: active > 0 ? Number(processes[0].longest_seconds) : null,
+      };
+      if (serverSettings === undefined) {
+        notReported.push("max_connections");
+      }
+    } else {
+      notReported.push("connections");
+    }
+
+    if (events) {
+      const counts = Object.fromEntries(events.map((row) => [row.event, Number(row.value)]));
+      const hits = counts.MarkCacheHits ?? 0;
+      const misses = counts.MarkCacheMisses ?? 0;
+      result.bufferCache = {
+        hitRatioPct: computeHitRatioPct(hits + misses, misses),
+        blocksHit: hits,
+        blocksRead: misses,
+      };
+      notes.push(
+        "buffer_cache is the mark cache: lookups of MergeTree marks served from memory (blocks_hit) or loaded from disk (blocks_read) since the server started. ClickHouse has no buffer pool; table data is cached by the operating system."
+      );
+    } else {
+      notReported.push("buffer_cache");
+    }
+
+    if (denied.length > 0) {
+      notes.unshift(
+        `Connected user lacks the SELECT grant on ${denied.join(", ")}: ${notReported.join(" and ")} ${notReported.length > 1 ? "are" : "is"} not reported.`
+      );
+    }
+    return { ...result, ...(notes.length > 0 && { notes }) };
   }
 
   /**

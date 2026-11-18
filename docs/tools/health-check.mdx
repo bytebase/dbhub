@@ -8,8 +8,8 @@ Report operational health metrics for a database source: connection pool state a
 
 - **Connection pool state**: Total/active/idle session counts, idle-in-transaction sessions, the configured connection ceiling, and how long the longest-running query or idle-in-transaction session has been open
 - **Buffer cache hit ratio**: Percentage of reads served from cache vs disk, useful for spotting an undersized cache before it becomes a production incident
-- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle. SQLite has no connection pool or cache-hit concept to report, so `health_check` returns an `UNSUPPORTED` error there, as it does on ClickHouse, which is not covered yet
-- **Graceful degradation**: On MySQL/MariaDB/SQL Server/Oracle, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
+- **Per-engine support**: Implemented for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and ClickHouse (where the numbers mean something slightly different, see [ClickHouse](#clickhouse)). SQLite has no connection pool or cache-hit concept to report, so `health_check` returns an `UNSUPPORTED` error there
+- **Graceful degradation**: On MySQL/MariaDB/SQL Server/Oracle/ClickHouse, some metrics require an elevated privilege the connected user may not have. Rather than failing outright, `health_check` returns whatever it can and adds a `notes` entry explaining what's missing
 - **Opt-in only**: Not part of the default tool pair — must be explicitly enabled per source
 
 <Note>
@@ -48,7 +48,7 @@ Call the tool with no arguments — metrics are always for the source the tool i
 
 ### Reduced-privilege output
 
-On MySQL, MariaDB, SQL Server, and Oracle, some metrics need a privilege the connected user might not have — the tool still returns what it can and explains the gap instead of erroring:
+On MySQL, MariaDB, SQL Server, Oracle, and ClickHouse, some metrics need a privilege the connected user might not have — the tool still returns what it can and explains the gap instead of erroring:
 
 ```json Example output (MySQL, without PROCESS privilege)
 {
@@ -69,7 +69,23 @@ On MySQL, MariaDB, SQL Server, and Oracle, some metrics need a privilege the con
 | MySQL / MariaDB | `PROCESS` | Idle-in-transaction detection only; connection/buffer-cache counts are still returned, but without it, connection visibility is restricted to the caller's own sessions (and the diagnostic session itself is excluded), so counts may under-report down to 0 |
 | SQL Server | `VIEW SERVER STATE` (`VIEW DATABASE STATE` on Azure SQL Database) | Both connection pool and buffer cache sections |
 | Oracle | `SELECT_CATALOG_ROLE` (or `SELECT ANY DICTIONARY`) | Both sections: connection pool from `V$SESSION` / `V$PARAMETER`, buffer cache from `V$SYSSTAT` |
+| ClickHouse | `SELECT` on `system.metrics`, `system.processes`, `system.server_settings`, `system.events` | Connection pool needs the first two, `max_connections` the third, buffer cache the fourth. Only on servers that close system tables to users without a grant, which is the configuration ClickHouse ships |
 | PostgreSQL | None | All metrics are available to any connected user |
+
+### ClickHouse
+
+ClickHouse has neither sessions that hold transactions nor a buffer pool, so the same fields carry its nearest equivalents:
+
+- **`connections`**: client connections over every protocol (native, HTTP, MySQL and PostgreSQL wire), from `system.metrics`. `active` is the number of queries running, from `system.processes`. The server counts an HTTP connection only while it is handling a request, so `idle` is in practice the native-protocol clients with no query running; a kept-alive HTTP connection between two requests is not counted. `idle_in_transaction` is always 0.
+- **`buffer_cache`**: the mark cache. `blocks_hit` and `blocks_read` are mark lookups served from memory and loaded from disk since the server started (`MarkCacheHits` and `MarkCacheMisses` in `system.events`). Table data itself is cached by the operating system, which ClickHouse keeps no hit counters for. A `notes` entry says so on every call.
+- **One server**: the numbers are those of the replica that answered, not of the cluster.
+
+To let a restricted user run it:
+
+```sql
+GRANT SELECT ON system.metrics, SELECT ON system.processes,
+  SELECT ON system.server_settings, SELECT ON system.events TO dbhub_user;
+```
 
 ## Enabling health_check
 

@@ -38,6 +38,8 @@ interface FakeResponse {
   format?: string;
   /** Sends `body` forever, one copy every few milliseconds, instead of once. */
   endless?: boolean;
+  /** Milliseconds to wait before answering. */
+  delayMs?: number;
 }
 
 /** Body of a ROW_FORMAT result. */
@@ -84,6 +86,10 @@ class FakeClickHouse {
       if (response.endless) {
         const drip = setInterval(() => res.write(response.body ?? ''), 20);
         res.on('close', () => clearInterval(drip));
+        return;
+      }
+      if (response.delayMs) {
+        setTimeout(() => res.end(response.body ?? ''), response.delayMs);
         return;
       }
       res.end(response.body ?? '');
@@ -890,9 +896,190 @@ describe('ClickHouseConnector', () => {
     });
   });
 
+  describe('getHealthCheck', () => {
+    const MARK_CACHE_NOTE = expect.stringMatching(/^buffer_cache is the mark cache/);
+    const denied = (table: string) => ({
+      status: 500,
+      body: `Code: 497. DB::Exception: reader: Not enough privileges. To execute this query, it's necessary to have the grant SELECT ON ${table}. (ACCESS_DENIED) (version 25.8.1.1)`,
+    });
+
+    /** Answer each health query by the system table it reads: rows, or a whole response. */
+    const system = (tables: Record<string, unknown[] | FakeResponse>) => {
+      fake.respond = ({ body }) => {
+        const answer = tables[Object.keys(tables).find((name) => body.includes(`FROM ${name}`)) ?? ''] ?? [];
+        return Array.isArray(answer)
+          ? { body: answer.map((row) => JSON.stringify(row) + '\n').join('') }
+          : answer;
+      };
+    };
+
+    const healthy = {
+      'system.metrics': [{ connections: 7 }],
+      'system.processes': [{ active: 2, longest_seconds: 12.5 }],
+      'system.server_settings': [{ value: '4096' }],
+      'system.events': [
+        { event: 'MarkCacheHits', value: 990 },
+        { event: 'MarkCacheMisses', value: 10 },
+      ],
+    };
+
+    it('reports connections less its own, running queries, the ceiling and the mark cache', async () => {
+      await connect();
+      system(healthy);
+
+      expect(await connector.getHealthCheck()).toEqual({
+        connections: {
+          total: 6,
+          active: 2,
+          idle: 4,
+          idleInTransaction: 0,
+          maxConnections: 4096,
+          longestIdleInTransactionSeconds: null,
+          longestActiveQuerySeconds: 12.5,
+        },
+        bufferCache: { hitRatioPct: 99, blocksHit: 990, blocksRead: 10 },
+        notes: [MARK_CACHE_NOTE],
+      });
+    });
+
+    it('reads each system table read-only, counting client connections and leaving its own query out', async () => {
+      await connect();
+      system(healthy);
+
+      await connector.getHealthCheck();
+
+      expect(fake.statements.map(({ body }) => /FROM (system\.\w+)/.exec(body)?.[1])).toEqual([
+        'system.metrics',
+        'system.processes',
+        'system.server_settings',
+        'system.events',
+      ]);
+      expect(fake.statements.every(({ params }) => params.get('readonly') === '1')).toBe(true);
+      expect(fake.statements[0].body).toContain(
+        "IN ('TCPConnection', 'HTTPConnection', 'MySQLConnection', 'PostgreSQLConnection')"
+      );
+      expect(fake.statements[1].body).toContain('query_id != queryID()');
+    });
+
+    it('reads the tables one at a time, so the check is never more than one connection', async () => {
+      await connect();
+      let inFlight = 0;
+      let mostInFlight = 0;
+      fake.respond = () => {
+        mostInFlight = Math.max(mostInFlight, ++inFlight);
+        // Set before the fake's own timer of the same delay, so it fires first.
+        setTimeout(() => inFlight--, 20);
+        return { delayMs: 20 };
+      };
+
+      await connector.getHealthCheck();
+
+      expect(fake.statements).toHaveLength(4);
+      expect(mostInFlight).toBe(1);
+    });
+
+    it('reports an idle server: no query to time, no cache lookups to rate', async () => {
+      await connect();
+      // Only this check is connected; max() over no queries is 0, and an
+      // event that has not happened yet has no row. Counters arrive as text
+      // from a server that quotes 64-bit integers.
+      system({
+        'system.metrics': [{ connections: '1' }],
+        'system.processes': [{ active: '0', longest_seconds: 0 }],
+        'system.server_settings': [{ value: '4096' }],
+        'system.events': [],
+      });
+
+      const health = await connector.getHealthCheck();
+
+      expect(health.connections).toMatchObject({ total: 0, active: 0, idle: 0, longestActiveQuerySeconds: null });
+      expect(health.bufferCache).toEqual({ hitRatioPct: null, blocksHit: 0, blocksRead: 0 });
+    });
+
+    it('does not report fewer than zero idle connections when queries outnumber connections', async () => {
+      await connect();
+      system({ ...healthy, 'system.metrics': [{ connections: 2 }] });
+
+      expect((await connector.getHealthCheck()).connections).toMatchObject({ total: 1, active: 2, idle: 0 });
+    });
+
+    it('names every system table the user may not read, and reports nothing it could not see', async () => {
+      await connect();
+      system({
+        'system.metrics': denied('system.metrics'),
+        'system.processes': denied('system.processes'),
+        'system.server_settings': denied('system.server_settings'),
+        'system.events': denied('system.events'),
+      });
+
+      expect(await connector.getHealthCheck()).toEqual({
+        notes: [
+          'Connected user lacks the SELECT grant on system.metrics, system.processes, system.server_settings, system.events: connections and buffer_cache are not reported.',
+        ],
+      });
+    });
+
+    it('leaves connections out when only one of their two tables can be read', async () => {
+      await connect();
+      system({ ...healthy, 'system.processes': denied('system.processes') });
+
+      const health = await connector.getHealthCheck();
+
+      expect(health.connections).toBeUndefined();
+      expect(health.bufferCache).toBeDefined();
+      expect(health.notes).toEqual([
+        'Connected user lacks the SELECT grant on system.processes: connections is not reported.',
+        MARK_CACHE_NOTE,
+      ]);
+    });
+
+    it('reports connections without a ceiling when server settings cannot be read', async () => {
+      await connect();
+      system({ ...healthy, 'system.server_settings': denied('system.server_settings') });
+
+      const health = await connector.getHealthCheck();
+
+      expect(health.connections).toMatchObject({ total: 6, maxConnections: null });
+      expect(health.notes).toEqual([
+        'Connected user lacks the SELECT grant on system.server_settings: max_connections is not reported.',
+        MARK_CACHE_NOTE,
+      ]);
+    });
+
+    it('goes without a ceiling, and without a complaint, on a server that predates system.server_settings', async () => {
+      await connect();
+      system({
+        ...healthy,
+        'system.server_settings': {
+          status: 404,
+          body: "Code: 60. DB::Exception: Table system.server_settings doesn't exist. (UNKNOWN_TABLE) (version 22.8.1.1)",
+        },
+      });
+
+      const health = await connector.getHealthCheck();
+
+      expect(health.connections).toMatchObject({ total: 6, maxConnections: null });
+      expect(health.notes).toEqual([MARK_CACHE_NOTE]);
+    });
+
+    it('fails on an error that is not a missing grant, rather than report a partial result', async () => {
+      await connect();
+      system({
+        ...healthy,
+        'system.events': {
+          status: 500,
+          body: 'Code: 241. DB::Exception: Memory limit (total) exceeded. (MEMORY_LIMIT_EXCEEDED) (version 25.8.1.1)',
+        },
+      });
+
+      await expect(connector.getHealthCheck()).rejects.toMatchObject({ type: 'MEMORY_LIMIT_EXCEEDED' });
+    });
+  });
+
   it('refuses to run before connect', async () => {
     await expect(connector.executeSQL('SELECT 1', {})).rejects.toThrow('Not connected to ClickHouse database');
     await expect(connector.getTables()).rejects.toThrow('Not connected to ClickHouse database');
+    await expect(connector.getHealthCheck()).rejects.toThrow('Not connected to ClickHouse database');
   });
 });
 
