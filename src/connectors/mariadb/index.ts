@@ -15,6 +15,7 @@ import {
 import { getMySQLFamilyHealthCheck } from "../mysql-family-health-check.js";
 import * as introspection from "../mysql-family-introspection.js";
 import type { MySQLFamilyQuery } from "../mysql-family-introspection.js";
+import { parseMySQLFamilySslMode, type MySQLFamilySslMode } from "../mysql-family-ssl.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
@@ -33,12 +34,37 @@ import {
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
+ * mariadb driver `ssl` option for an sslmode. With certificate verification
+ * on, the driver also checks the host name unless `checkServerIdentity` is
+ * set — so verify-ca supplies a no-op one, and verify-full leaves it unset.
+ * The driver's typings only declare the secure-context half of the TLS
+ * options, hence the cast; it reads `checkServerIdentity` off this object.
+ * A fresh object per call: the driver writes defaults back onto it.
+ */
+function mariadbSslOptions(mode: MySQLFamilySslMode): mariadb.ConnectionConfig["ssl"] {
+  switch (mode) {
+    case "disable":
+      return undefined;
+    case "require":
+      return { rejectUnauthorized: false };
+    case "verify-ca":
+      return {
+        rejectUnauthorized: true,
+        checkServerIdentity: () => undefined,
+      } as mariadb.ConnectionConfig["ssl"];
+    case "verify-full":
+      return { rejectUnauthorized: true };
+  }
+}
+
+/**
  * MariaDB DSN Parser
  * Handles DSN strings like: mariadb://user:password@localhost:3306/dbname?sslmode=require
- * Supported SSL modes:
+ * Supported SSL modes (anything else is rejected):
  * - sslmode=disable: No SSL connection
  * - sslmode=require: SSL connection without certificate verification
- * - Any other value: Standard SSL connection with certificate verification
+ * - sslmode=verify-ca: SSL connection, certificate chain verified
+ * - sslmode=verify-full: verify-ca plus the certificate must match the host name
  */
 class MariadbDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<mariadb.ConnectionConfig> {
@@ -96,13 +122,7 @@ class MariadbDSNParser implements DSNParser {
       // Handle query parameters
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
-          if (value === "disable") {
-            connectionConfig.ssl = undefined;
-          } else if (value === "require") {
-            connectionConfig.ssl = { rejectUnauthorized: false };
-          } else {
-            connectionConfig.ssl = {};
-          }
+          connectionConfig.ssl = mariadbSslOptions(parseMySQLFamilySslMode(value));
         }
         // Add other parameters as needed
       });

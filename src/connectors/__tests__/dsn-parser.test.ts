@@ -397,6 +397,62 @@ describe('DSN Parser - MySQL pool size', () => {
   });
 });
 
+describe('DSN Parser - MySQL / MariaDB SSL Modes', () => {
+  const mysqlParser = new MySQLConnector().dsnParser;
+  const mariadbParser = new MariaDBConnector().dsnParser;
+  const mysqlDsn = (query: string) => `mysql://user:pass@db.example.com:3306/db${query}`;
+  const mariadbDsn = (query: string) => `mariadb://user:pass@db.example.com:3306/db${query}`;
+
+  it('should leave ssl unset when sslmode is not set or is disable', async () => {
+    for (const query of ['', '?sslmode=disable']) {
+      expect((await mysqlParser.parse(mysqlDsn(query))).ssl).toBeUndefined();
+      expect((await mariadbParser.parse(mariadbDsn(query))).ssl).toBeUndefined();
+    }
+  });
+
+  it('should skip certificate verification for sslmode=require', async () => {
+    expect((await mysqlParser.parse(mysqlDsn('?sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
+    expect((await mariadbParser.parse(mariadbDsn('?sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
+  });
+
+  it('should verify the chain but not the host name for sslmode=verify-ca', async () => {
+    // mysql2 checks the host name only with verifyIdentity
+    expect((await mysqlParser.parse(mysqlDsn('?sslmode=verify-ca'))).ssl).toEqual({ rejectUnauthorized: true });
+
+    // The mariadb driver checks it unless a checkServerIdentity is supplied
+    const ssl = (await mariadbParser.parse(mariadbDsn('?sslmode=verify-ca'))).ssl as any;
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.checkServerIdentity('other.example.com', {})).toBeUndefined();
+  });
+
+  it('should verify the chain and the host name for sslmode=verify-full', async () => {
+    expect((await mysqlParser.parse(mysqlDsn('?sslmode=verify-full'))).ssl).toEqual({
+      rejectUnauthorized: true,
+      verifyIdentity: true,
+    });
+
+    const ssl = (await mariadbParser.parse(mariadbDsn('?sslmode=verify-full'))).ssl as any;
+    expect(ssl).toEqual({ rejectUnauthorized: true });
+    expect(ssl.checkServerIdentity).toBeUndefined();
+  });
+
+  it.each(['prefer', 'allow', 'requier', 'VERIFY_IDENTITY', 'true'])(
+    'should reject unsupported sslmode=%s',
+    async (sslmode) => {
+      const message = `Unsupported sslmode '${sslmode}'. Valid values: disable, require, verify-ca, verify-full`;
+      await expect(mysqlParser.parse(mysqlDsn(`?sslmode=${sslmode}`))).rejects.toThrow(message);
+      await expect(mariadbParser.parse(mariadbDsn(`?sslmode=${sslmode}`))).rejects.toThrow(message);
+    }
+  );
+
+  it('should hand each parse its own ssl object', async () => {
+    // Both drivers write defaults back onto the object they are given
+    const first = await mysqlParser.parse(mysqlDsn('?sslmode=verify-full'));
+    const second = await mysqlParser.parse(mysqlDsn('?sslmode=verify-full'));
+    expect(first.ssl).not.toBe(second.ssl);
+  });
+});
+
 describe('DSN Parser - AWS IAM Authentication', () => {
   describe('MySQL', () => {
     const connector = new MySQLConnector();

@@ -888,6 +888,10 @@ sslmode = "verify-full"
         ['verify-full', 'postgres', 'postgres://user:pass@localhost:5432/testdb?sslmode=verify-full'],
         ['verify-full', 'sqlserver', 'sqlserver://user:pass@localhost:1433/testdb?sslmode=verify-full'],
         ['verify-full', 'oracle', 'oracle://user:pass@localhost:1521/testdb?sslmode=verify-full'],
+        ['verify-ca', 'mysql', 'mysql://user:pass@localhost:3306/testdb?sslmode=verify-ca'],
+        ['verify-full', 'mysql', 'mysql://user:pass@localhost:3306/testdb?sslmode=verify-full'],
+        ['verify-ca', 'mariadb', 'mariadb://user:pass@localhost:3306/testdb?sslmode=verify-ca'],
+        ['verify-full', 'mariadb', 'mariadb://user:pass@localhost:3306/testdb?sslmode=verify-full'],
       ])('should accept sslmode = %j for %s and carry it into the DSN', (sslmode, type, expectedDSN) => {
         writeSource(`sslmode = "${sslmode}"`, type);
 
@@ -941,8 +945,6 @@ dsn = "postgres://user:pass@localhost:5432/db?sslmode=require"
       });
 
       it.each([
-        ['verify-ca', 'mysql'],
-        ['verify-full', 'mariadb'],
         ['verify-ca', 'sqlserver'],
         ['verify-ca', 'oracle'],
       ])('should reject sslmode = %j for %s', (sslmode, type) => {

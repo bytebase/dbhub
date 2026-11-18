@@ -15,6 +15,7 @@ import {
 import { getMySQLFamilyHealthCheck } from "../mysql-family-health-check.js";
 import * as introspection from "../mysql-family-introspection.js";
 import type { MySQLFamilyQuery } from "../mysql-family-introspection.js";
+import { parseMySQLFamilySslMode, type MySQLFamilySslMode } from "../mysql-family-ssl.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
@@ -37,12 +38,31 @@ import {
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 
 /**
+ * mysql2 `ssl` option for an sslmode. mysql2 verifies the certificate chain by
+ * default but checks the host name only with `verifyIdentity`. A fresh object
+ * per call: the driver writes defaults back onto the one it is given.
+ */
+function mysqlSslOptions(mode: MySQLFamilySslMode): mysql.PoolOptions["ssl"] {
+  switch (mode) {
+    case "disable":
+      return undefined;
+    case "require":
+      return { rejectUnauthorized: false };
+    case "verify-ca":
+      return { rejectUnauthorized: true };
+    case "verify-full":
+      return { rejectUnauthorized: true, verifyIdentity: true };
+  }
+}
+
+/**
  * MySQL DSN Parser
  * Handles DSN strings like: mysql://user:password@localhost:3306/dbname?sslmode=require
- * Supported SSL modes:
+ * Supported SSL modes (anything else is rejected):
  * - sslmode=disable: No SSL connection
  * - sslmode=require: SSL connection without certificate verification
- * - Any other value: Standard SSL connection with certificate verification
+ * - sslmode=verify-ca: SSL connection, certificate chain verified
+ * - sslmode=verify-full: verify-ca plus the certificate must match the host name
  */
 class MySQLDSNParser implements DSNParser {
   async parse(dsn: string, config?: ConnectorConfig): Promise<mysql.PoolOptions> {
@@ -82,13 +102,7 @@ class MySQLDSNParser implements DSNParser {
       // Handle query parameters
       url.forEachSearchParam((value, key) => {
         if (key === "sslmode") {
-          if (value === "disable") {
-            config.ssl = undefined;
-          } else if (value === "require") {
-            config.ssl = { rejectUnauthorized: false };
-          } else {
-            config.ssl = {};
-          }
+          config.ssl = mysqlSslOptions(parseMySQLFamilySslMode(value));
         }
         // Add other parameters as needed
       });

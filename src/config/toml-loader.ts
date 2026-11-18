@@ -716,10 +716,12 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    // verify-ca is PostgreSQL-only; SQL Server and Oracle also support
-    // verify-full for server certificate and hostname verification.
+    // verify-ca (chain only) is PostgreSQL, MySQL and MariaDB; SQL Server and
+    // Oracle only offer verify-full (server certificate and hostname).
     const verifyModesByType: Record<string, string[]> = {
       postgres: ["verify-ca", "verify-full"],
+      mysql: ["verify-ca", "verify-full"],
+      mariadb: ["verify-ca", "verify-full"],
       sqlserver: ["verify-full"],
       oracle: ["verify-full"],
     };
