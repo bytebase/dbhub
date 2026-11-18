@@ -529,7 +529,13 @@ export class SQLiteConnector implements Connector {
       if (!isSingleStatement && parameters && parameters.length > 0) {
         throw new Error("Parameters are not supported for multi-statement queries in SQLite");
       }
-      const statementParameters = isSingleStatement ? (parameters ?? []) : [];
+      const statementParameters = (parameters ?? []).map((value) => {
+        // SQLite stores booleans as integers and JSON arrays as text. Preserve
+        // native scalar/blob bindings while accepting the custom tool schema.
+        if (typeof value === "boolean") return value ? 1 : 0;
+        if (Array.isArray(value)) return JSON.stringify(value);
+        return value;
+      });
 
       // Execute each statement individually, in source order, so a later
       // statement sees the effects of earlier ones and result sets line up

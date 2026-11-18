@@ -29,6 +29,8 @@ Custom tools are defined in your `dbhub.toml` configuration file. See the [TOML 
 
 See [TOML Configuration - Tool Options](/config/toml#tool-options) for detailed field descriptions, parameter types, and validation rules.
 
+For SQLite sources, boolean parameters bind as integers (`true` as `1`, `false` as `0`). Array parameters bind as JSON text. Use `json_each(?)` to query their elements, for example `WHERE id IN (SELECT value FROM json_each(?))`.
+
 ## Examples
 
 ### Basic Query
