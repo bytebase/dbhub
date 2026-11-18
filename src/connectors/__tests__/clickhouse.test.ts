@@ -1,4 +1,9 @@
 import http from 'node:http';
+import https from 'node:https';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import type { AddressInfo } from 'node:net';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -688,6 +693,72 @@ describe('ClickHouseConnector', () => {
   it('refuses to run before connect', async () => {
     await expect(connector.executeSQL('SELECT 1', {})).rejects.toThrow('Not connected to ClickHouse database');
     await expect(connector.getTables()).rejects.toThrow('Not connected to ClickHouse database');
+  });
+});
+
+/** A self-signed certificate for `localhost`, or null when the `openssl` CLI is not available. */
+function selfSignedCertificate(): { key: Buffer; cert: Buffer } | null {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbhub-clickhouse-tls-'));
+  try {
+    execFileSync(
+      'openssl',
+      [
+        'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+        '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost',
+        '-keyout', 'key.pem', '-out', 'cert.pem',
+      ],
+      { cwd: dir, stdio: 'pipe' }
+    );
+    return {
+      key: fs.readFileSync(path.join(dir, 'key.pem')),
+      cert: fs.readFileSync(path.join(dir, 'cert.pem')),
+    };
+  } catch {
+    return null;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const certificate = selfSignedCertificate();
+
+describe.skipIf(certificate === null)('ClickHouseConnector over HTTPS', () => {
+  let server: https.Server;
+  let port: number;
+  let connector: ClickHouseConnector;
+
+  beforeEach(async () => {
+    server = https.createServer(certificate!, (req, res) => {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(200, { 'X-ClickHouse-Format': 'JSONEachRow' });
+        res.end('{"database":"default","readonly":"0"}\n');
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    port = (server.address() as AddressInfo).port;
+    connector = new ClickHouseConnector();
+  });
+
+  afterEach(async () => {
+    await connector.disconnect();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  it('connects with sslmode=require without verifying the certificate', async () => {
+    await connector.connect(`clickhouse://default:pw@localhost:${port}/default?sslmode=require`);
+    expect(await connector.getDefaultSchema()).toBe('default');
+  });
+
+  it('refuses a certificate it cannot verify with sslmode=verify-full', async () => {
+    await expect(
+      connector.connect(`clickhouse://default:pw@localhost:${port}/default?sslmode=verify-full`)
+    ).rejects.toMatchObject({ code: expect.stringMatching(/SELF_SIGNED|UNABLE_TO_VERIFY/) });
+  });
+
+  it('speaks plain HTTP when no sslmode is given, which a TLS-only server does not answer', async () => {
+    await expect(connector.connect(`clickhouse://default:pw@localhost:${port}/default`)).rejects.toThrow();
   });
 });
 

@@ -342,9 +342,6 @@ export class ClickHouseConnector implements Connector {
         // Failures are thrown to the caller; the client's own logging of them
         // would only repeat each one on stderr.
         log: { level: ClickHouseLogLevel.OFF },
-        ...(config?.poolMaxConnections !== undefined && {
-          max_open_connections: config.poolMaxConnections,
-        }),
         // `require` encrypts without verifying the certificate, which the
         // client only allows through an agent of our own. `verify-full` is the
         // client's default HTTPS behaviour: chain and host name are checked.
