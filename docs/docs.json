@@ -24,7 +24,7 @@
                 "group": "Installation",
                 "root": "installation",
                 "expanded": true,
-                "pages": ["mcpb", "claude-code-plugin"]
+                "pages": ["mcpb", "claude-code-plugin", "codex-plugin"]
               },
               "quickstart"
             ]

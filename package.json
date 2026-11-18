@@ -36,7 +36,7 @@
     "test:build": "node scripts/smoke-test-build.mjs",
     "sync-version": "node scripts/sync-version.mjs",
     "sync:branding": "node scripts/sync-branding.mjs",
-    "version": "pnpm run sync-version && git add plugin/.claude-plugin/plugin.json plugin/.mcp.json server.json"
+    "version": "pnpm run sync-version && git add plugin/.claude-plugin/plugin.json plugin/.codex-plugin/plugin.json plugin/.mcp.json plugin/mcp.codex.json server.json"
   },
   "engines": {
     "node": ">=22.5.0"

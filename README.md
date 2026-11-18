@@ -102,6 +102,13 @@ For Claude Code, install the [plugin](https://dbhub.ai/claude-code-plugin):
 /plugin install dbhub@dbhub
 ```
 
+For Codex, install the [plugin](https://dbhub.ai/codex-plugin) (reads the connection string from `DBHUB_DSN`):
+
+```bash
+codex plugin marketplace add bytebase/dbhub
+codex plugin add dbhub@dbhub
+```
+
 Also available as:
 
 - [Docker image](https://dbhub.ai/installation#docker)

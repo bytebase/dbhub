@@ -89,6 +89,10 @@ The [MCP Bundle](/mcpb) is a one-click install for MCPB-compatible clients — C
 
 The [Claude Code Plugin](/claude-code-plugin) registers the DBHub MCP server in Claude Code with one install command and adds `/dbhub:setup` and `/dbhub:explore` skills. Claude Code prompts for the connection string and keeps it in secure storage. Read-only by design, like the MCP Bundle.
 
+## Codex Plugin
+
+The [Codex Plugin](/codex-plugin) registers the DBHub MCP server in Codex with two commands and adds `dbhub:setup` and `dbhub:explore` skills. The connection string is read from the `DBHUB_DSN` environment variable. Read-only by design, like the MCP Bundle.
+
 ## Docker
 
 <Tabs>
@@ -682,6 +686,10 @@ VS Code has native MCP support through GitHub Copilot. Create `.vscode/mcp.json`
 
 ### Codex
 
+<Note>
+Prefer a read-only install that also adds setup and schema-exploration skills? Use the [Codex Plugin](/codex-plugin). The manual registration below gives full control over flags and TOML configs.
+</Note>
+
 The Codex CLI, desktop app, and IDE extension share the same MCP configuration.
 
 <Tabs>
@@ -705,8 +713,9 @@ The Codex CLI, desktop app, and IDE extension share the same MCP configuration.
     # Forward DSN from the environment Codex is launched in,
     # so the connection string never lands in this file
     env_vars = ["DSN"]
-    # The first npx run downloads the package; allow more than the 10s default
-    startup_timeout_sec = 30
+    # The first npx run downloads the package and can take up to a minute;
+    # the 10s default is too short for it
+    startup_timeout_sec = 120
     ```
 
     Then export the DSN before starting Codex:
@@ -729,7 +738,7 @@ The Codex CLI, desktop app, and IDE extension share the same MCP configuration.
     [mcp_servers.dbhub]
     command = "npx"
     args = ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "--config", "/path/to/dbhub.toml"]
-    startup_timeout_sec = 30
+    startup_timeout_sec = 120
     ```
 
     To scope the server to one repository, put the same table in `.codex/config.toml` at the root of a trusted project.
