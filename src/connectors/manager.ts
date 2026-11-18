@@ -9,6 +9,7 @@ import { SafeURL } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
+import { getMissingDriverHint } from "../utils/module-loader.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -257,8 +258,10 @@ export class ConnectorManager {
       // Find connector prototype for this DSN
       const connectorPrototype = ConnectorRegistry.getConnectorForDSN(actualDSN);
       if (!connectorPrototype) {
+        const hint = getMissingDriverHint(actualDSN);
         throw new Error(
-          `Source '${sourceId}': No connector found for DSN: ${actualDSN}`
+          `Source '${sourceId}': No connector found for DSN: ${redactDSN(actualDSN)}` +
+            (hint ? `. ${hint}` : "")
         );
       }
 

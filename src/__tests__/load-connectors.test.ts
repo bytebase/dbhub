@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { isDriverNotInstalled, isModuleNotFound, loadConnectors } from "../utils/module-loader.js";
+import {
+  getMissingDriverHint,
+  getNpxCacheDir,
+  isDriverNotInstalled,
+  isModuleNotFound,
+  loadConnectors,
+} from "../utils/module-loader.js";
 
 describe("isDriverNotInstalled", () => {
   it("should return true when the driver package is missing", () => {
@@ -143,5 +149,96 @@ describe("loadConnectors", () => {
       { load: async () => { loaded++; }, name: "TestDB", driver: "test-driver" },
     ]);
     expect(loaded).toBe(1);
+  });
+});
+
+describe("getNpxCacheDir", () => {
+  it("should find the npx cache directory in POSIX and Windows paths", () => {
+    expect(
+      getNpxCacheDir("/home/me/.npm/_npx/abc123/node_modules/.bin/dbhub")
+    ).toBe("/home/me/.npm/_npx");
+    expect(
+      getNpxCacheDir(
+        "C:\\Users\\me\\AppData\\Local\\npm-cache\\_npx\\abc123\\node_modules\\@bytebase\\dbhub\\dist\\index.js"
+      )
+    ).toBe("C:\\Users\\me\\AppData\\Local\\npm-cache\\_npx");
+  });
+
+  it("should return null outside an npx cache", () => {
+    expect(getNpxCacheDir("/usr/local/lib/node_modules/@bytebase/dbhub/dist/index.js")).toBeNull();
+    expect(getNpxCacheDir(undefined)).toBeNull();
+  });
+});
+
+describe("getMissingDriverHint", () => {
+  const missingPg = (): Error => {
+    const err = new Error("Cannot find package 'pg' imported from /fake/path");
+    (err as NodeJS.ErrnoException).code = "ERR_MODULE_NOT_FOUND";
+    return err;
+  };
+
+  const loadWithMissingPg = async (): Promise<void> => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await loadConnectors([
+      {
+        load: () => Promise.reject(missingPg()),
+        name: "PostgreSQL",
+        driver: "pg",
+        schemes: ["postgres", "postgresql"],
+      },
+      { load: () => Promise.resolve(), name: "MySQL", driver: "mysql2", schemes: ["mysql"] },
+    ]);
+    errorSpy.mockRestore();
+  };
+
+  it("should point npx users at the npx cache", async () => {
+    await loadWithMissingPg();
+
+    const hint = getMissingDriverHint(
+      "postgres://user:pass@localhost:5432/db",
+      "/home/me/.npm/_npx/abc123/node_modules/.bin/dbhub"
+    );
+
+    expect(hint).toContain('the package "pg" is not installed');
+    expect(hint).toContain("Delete the npx cache directory (/home/me/.npm/_npx)");
+    expect(hint).not.toContain("pass");
+  });
+
+  it("should suggest installing the driver outside npx", async () => {
+    await loadWithMissingPg();
+
+    const hint = getMissingDriverHint(
+      "postgresql://localhost/db",
+      "/usr/local/lib/node_modules/@bytebase/dbhub/dist/index.js"
+    );
+
+    expect(hint).toContain("npm install -g pg");
+    expect(hint).not.toContain("npx");
+  });
+
+  it("should return null for a DSN whose connector loaded", async () => {
+    await loadWithMissingPg();
+
+    expect(getMissingDriverHint("mysql://localhost/db")).toBeNull();
+    expect(getMissingDriverHint("not-a-dsn")).toBeNull();
+  });
+
+  it("should name the missing transitive dependency", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const transitiveErr = new Error("Cannot find module '@azure/core-client'");
+    (transitiveErr as NodeJS.ErrnoException).code = "MODULE_NOT_FOUND";
+    await loadConnectors([
+      {
+        load: () => Promise.reject(transitiveErr),
+        name: "SQL Server",
+        driver: "mssql",
+        schemes: ["sqlserver"],
+      },
+    ]);
+    errorSpy.mockRestore();
+
+    expect(getMissingDriverHint("sqlserver://localhost/db", "/opt/dbhub/dist/index.js")).toContain(
+      'the package "@azure/core-client" is not installed'
+    );
   });
 });
