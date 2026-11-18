@@ -68,17 +68,24 @@ describe("applySourceDiff", () => {
   it("leaves unchanged sources alone, adds new ones and removes dropped ones", async () => {
     const manager = createMockManager();
     const dbC = { id: "c", type: "mysql" as const, dsn: "mysql://localhost/c" };
+    // A bigint session setting cannot go through JSON.stringify, so an
+    // unchanged source carrying one must still compare equal, not throw.
+    const big = { id: "big", type: "mysql" as const, dsn: "mysql://h/d", session: { max_heap_table_size: 9223372036854775807n } };
 
     // A reload parses the file afresh, so an unchanged source arrives as an
     // equal but distinct object.
-    const { sources: applied, rolledBack } = await applySourceDiff(manager, [dbA, dbB], [{ ...dbA }, dbC]);
+    const { sources: applied, rolledBack } = await applySourceDiff(
+      manager,
+      [dbA, dbB, big],
+      [{ ...dbA }, dbC, { ...big, session: { ...big.session } }]
+    );
 
     expect(manager.removeSource).toHaveBeenCalledTimes(1);
     expect(manager.removeSource).toHaveBeenCalledWith("b");
     expect(manager.addSource).toHaveBeenCalledTimes(1);
     expect(manager.addSource).toHaveBeenCalledWith(dbC);
-    expect(manager.reorderSources).toHaveBeenCalledWith(["a", "c"]);
-    expect(applied).toEqual([dbA, dbC]);
+    expect(manager.reorderSources).toHaveBeenCalledWith(["a", "c", "big"]);
+    expect(applied).toEqual([dbA, dbC, big]);
     expect(rolledBack.size).toBe(0);
   });
 

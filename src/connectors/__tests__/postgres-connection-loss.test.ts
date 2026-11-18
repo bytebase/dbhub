@@ -64,7 +64,9 @@ let port: number;
 async function connect(database: string, config?: ConnectorConfig): Promise<PostgresConnector> {
   const connector = new PostgresConnector();
   connectors.push(connector);
-  await connector.connect(`postgres://user:pw@127.0.0.1:${port}/${database}?sslmode=disable`, undefined, config);
+  // A source with a password callback (IAM) has no password in its DSN
+  const auth = config?.password ? "user" : "user:pw";
+  await connector.connect(`postgres://${auth}@127.0.0.1:${port}/${database}?sslmode=disable`, undefined, config);
   return connector;
 }
 
