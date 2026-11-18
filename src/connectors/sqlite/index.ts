@@ -499,12 +499,15 @@ export class SQLiteConnector implements Connector {
    * `PRAGMA table_xinfo(t)`, ...) and `INSERT ... RETURNING`, none of which a
    * keyword list can enumerate.
    *
-   * The keyword check stays as the fallback for older runtimes and for
-   * statements that have always been read through `all()` despite having no
-   * columns (ANALYZE). It is classified on the comment/string-stripped text so
-   * a leading attribution comment cannot hide a SELECT, matching the row
-   * limiter and the read-only classifier. Every PRAGMA counts: `all()` runs a
-   * pragma that reports nothing just as well, returning no rows.
+   * The keyword check stays as the fallback for older supported runtimes
+   * (Node 22.5 - 22.16 have no `columns()`) and for statements that have always
+   * been read through `all()` despite having no columns (ANALYZE). It is
+   * classified on the comment/string-stripped text so a leading attribution
+   * comment cannot hide a SELECT, matching the row limiter and the read-only
+   * classifier. Every PRAGMA counts: `all()` runs a pragma that reports nothing
+   * just as well, returning no rows. A DML statement counts when it carries a
+   * RETURNING clause; the stripped text has no strings, comments or quoted
+   * identifiers left, so the word can only be the keyword.
    */
   private returnsRows(prepared: StatementSync, statement: string): boolean {
     const withColumns = prepared as unknown as { columns?: () => unknown[] };
@@ -516,7 +519,8 @@ export class SQLiteConnector implements Connector {
            stripped.startsWith('with') ||
            stripped.startsWith('explain') ||
            stripped.startsWith('analyze') ||
-           stripped.startsWith('pragma');
+           stripped.startsWith('pragma') ||
+           (/^(?:insert|update|delete|replace)\b/.test(stripped) && /\breturning\b/.test(stripped));
   }
 
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
