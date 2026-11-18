@@ -15,7 +15,7 @@ import {
   HealthCheckResult,
 } from "../interface.js";
 import { toNullableNumber } from "../health-check-utils.js";
-import { SafeURL } from "../../utils/safe-url.js";
+import { SafeURL, rawQueryParamValues } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { quoteIdentifier } from "../../utils/identifier-quoter.js";
@@ -88,16 +88,13 @@ class PostgresDSNParser implements DSNParser {
         password: config?.password ?? url.password,
       };
 
-      let sslmode: string | undefined;
       let sslrootcert: string | undefined;
       let sslcert: string | undefined;
       let sslkey: string | undefined;
 
-      // Handle query parameters (like sslmode, sslrootcert, etc.)
+      // Handle query parameters (sslrootcert, sslcert, sslkey)
       url.forEachSearchParam((value, key) => {
-        if (key === "sslmode") {
-          sslmode = value;
-        } else if (key === "sslrootcert") {
+        if (key === "sslrootcert") {
           sslrootcert = value;
         } else if (key === "sslcert") {
           sslcert = value;
@@ -111,11 +108,20 @@ class PostgresDSNParser implements DSNParser {
       // through to `ssl: true`, which verifies against the system CA store and
       // never falls back to plaintext — the opposite of what allow/prefer ask
       // for. Reject it instead of guessing.
-      if (sslmode !== undefined && !SUPPORTED_SSL_MODES.includes(sslmode)) {
-        throw new Error(
-          `Unsupported sslmode '${sslmode}'. Valid values: ${SUPPORTED_SSL_MODES.join(", ")}`
-        );
+      //
+      // sslmode is read from the raw query rather than SafeURL's parameters:
+      // SafeURL drops a parameter with no value, so `?sslmode=` and a bare
+      // `?sslmode` would otherwise look like no sslmode at all and connect
+      // unencrypted. Every occurrence must be valid; the last one applies.
+      const sslmodes = rawQueryParamValues(dsn, "sslmode");
+      for (const mode of sslmodes) {
+        if (!SUPPORTED_SSL_MODES.includes(mode)) {
+          throw new Error(
+            `Unsupported sslmode '${mode}'. Valid values: ${SUPPORTED_SSL_MODES.join(", ")}`
+          );
+        }
       }
+      const sslmode = sslmodes.at(-1);
 
       // sslrootcert is only read for verify-ca/verify-full. libpq treats
       // require + a root CA as verify-ca, so a DSN copied from psql would

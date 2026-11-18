@@ -16,7 +16,7 @@ import {
   HealthCheckResult,
 } from "../interface.js";
 import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
-import { SafeURL } from "../../utils/safe-url.js";
+import { SafeURL, rawQueryParamValues } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import {
@@ -75,15 +75,12 @@ export class OracleDSNParser implements DSNParser {
     try {
       const url = new SafeURL(dsn);
 
-      let sslmode: string | undefined;
       let sid: string | undefined;
       let walletLocation: string | undefined;
       let walletPassword: string | undefined;
       let sslServerCertDN: string | undefined;
       url.forEachSearchParam((value, key) => {
-        if (key === "sslmode") {
-          sslmode = value;
-        } else if (key === "sid") {
+        if (key === "sid") {
           sid = value;
         } else if (key === "wallet_location") {
           walletLocation = value;
@@ -94,11 +91,19 @@ export class OracleDSNParser implements DSNParser {
         }
       });
 
-      if (sslmode !== undefined && !["disable", "require", "verify-full"].includes(sslmode)) {
-        throw new Error(
-          `Unsupported sslmode '${sslmode}' for Oracle. Supported: disable, require, verify-full`
-        );
+      // sslmode is read from the raw query rather than SafeURL's parameters:
+      // SafeURL drops a parameter with no value, so `?sslmode=` and a bare
+      // `?sslmode` would otherwise look like no sslmode at all and connect over
+      // plain TCP. Every occurrence must be valid; the last one applies.
+      const sslmodes = rawQueryParamValues(dsn, "sslmode");
+      for (const mode of sslmodes) {
+        if (!["disable", "require", "verify-full"].includes(mode)) {
+          throw new Error(
+            `Unsupported sslmode '${mode}' for Oracle. Supported: disable, require, verify-full`
+          );
+        }
       }
+      const sslmode = sslmodes.at(-1);
 
       const host = url.hostname;
       const port = url.port ? parseInt(url.port, 10) : 1521;
