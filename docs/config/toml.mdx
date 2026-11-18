@@ -116,12 +116,10 @@ source = "production"
 Start DBHub:
 
 ```bash
-# Automatically loads ./dbhub.toml
-npx @bytebase/dbhub@latest --transport http --port 8080
-
-# Or specify custom location
-npx @bytebase/dbhub@latest --config=/path/to/config.toml
+npx @bytebase/dbhub@latest --config ./dbhub.toml --transport http --port 8080
 ```
+
+The file is only loaded when `--config` is given; DBHub does not pick up a `dbhub.toml` from the working directory on its own.
 
 ## Source Options
 
@@ -130,7 +128,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### id
 
 <ParamField path="id" type="string" required>
-  **Required.** Unique identifier for this data source. Used for routing tool calls and in tool names.
+  **Required.** Unique identifier for this data source. It appears as `source_id` in tool output, and when the file defines two or more sources it is appended to each tool name (`execute_sql_production`). A single source keeps the bare tool names — see [Tool Naming](/tools/overview#tool-naming).
 
   ```toml
   [[sources]]
@@ -153,8 +151,8 @@ Sources define database connections. Each source represents a database that DBHu
 
 ### dsn
 
-<ParamField path="dsn" type="string" required>
-  **Required.** Database connection string. Same format as command-line [`--dsn`](/config/command-line#--dsn).
+<ParamField path="dsn" type="string">
+  Database connection string. Same format as command-line [`--dsn`](/config/command-line#param-dsn). Every source needs either a `dsn` or the individual parameters (`type` plus `host`, or `type = "sqlite"` plus `database`) shown in the second tab.
 
   <Tabs>
     <Tab title="Using DSN">
@@ -172,7 +170,7 @@ Sources define database connections. Each source represents a database that DBHu
       dsn = "sqlite:///./dev.db"  # relative to this config file
       ```
 
-      A relative SQLite path (`sqlite:///./dev.db`) is resolved against the directory holding the config file, so the config names the same database wherever DBHub is started from. Without the `./`, the path is absolute: `sqlite:///dev.db` is `/dev.db`. See the [SQLite DSN formats](/config/command-line#--dsn).
+      A relative SQLite path (`sqlite:///./dev.db`) is resolved against the directory holding the config file, so the config names the same database wherever DBHub is started from. Without the `./`, the path is absolute: `sqlite:///dev.db` is `/dev.db`. See the [SQLite DSN formats](/config/command-line#param-dsn).
     </Tab>
 
     <Tab title="Individual Parameters">
@@ -235,7 +233,7 @@ Sources define database connections. Each source represents a database that DBHu
   </Tabs>
 
   <Note>
-  **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `instanceName`, `authentication`, `domain`, `applicationIntent` — may be set alongside a `dsn` and are applied when the DSN omits them.
+  **Mixing `dsn` with individual fields.** A `dsn` already encodes the connection identity (type, host, port, database, user, password). Fields that can also live in the DSN query string — `sslmode`, `sslrootcert`, `sslcert`, `sslkey`, `instanceName`, `authentication`, `domain`, `applicationIntent`, and the Oracle `wallet_location`, `wallet_password`, `ssl_server_cert_dn` — may be set alongside a `dsn` and are applied when the DSN omits them.
 
   If such a field is set to a value that **contradicts** the DSN (e.g. `dsn = "...?sslmode=disable"` together with `sslmode = "require"`, or a `host`/`user`/`database` that differs from the DSN), DBHub rejects the configuration at startup rather than silently ignoring the field. Set each value in only one place, or make the two values match.
 
@@ -723,7 +721,7 @@ Sources define database connections. Each source represents a database that DBHu
 ### SSH Tunnel Options
 
 <ParamField path="ssh_*" type="group">
-  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_agent`, `ssh_proxy_jump`.
+  SSH tunnel configuration for connecting to databases through bastion/jump hosts. Available fields: `ssh_host`, `ssh_port`, `ssh_user`, `ssh_password`, `ssh_key`, `ssh_passphrase`, `ssh_agent`, `ssh_proxy_jump`, `ssh_keepalive_interval`, `ssh_keepalive_count_max`.
 
   ```toml
   [[sources]]
@@ -738,6 +736,8 @@ Sources define database connections. Each source represents a database that DBHu
   ssh_passphrase = "my_key_passphrase"  # Optional
   # ssh_agent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"  # SSH agent socket (instead of ssh_key)
   ssh_proxy_jump = "jump1.example.com,admin@jump2.internal:2222"
+  # ssh_keepalive_interval = 30   # Seconds between keepalive packets (default: 0 = disabled)
+  # ssh_keepalive_count_max = 3   # Missed responses before the tunnel is dropped (default: 3)
   ```
 
   `ssh_key` accepts either a file path or a base64-encoded private key. DBHub automatically detects the format.
@@ -786,7 +786,7 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
 ### readonly
 
 <ParamField path="readonly" type="boolean" default="false">
-  Restrict SQL execution to read-only operations (SELECT, SHOW, DESCRIBE, EXPLAIN, PRAGMA). Write operations like INSERT, UPDATE, DELETE are blocked.
+  Restrict SQL execution to read-only statements. Write operations like INSERT, UPDATE, DELETE are blocked. The exact allow-list depends on the database — see [Read-Only Mode](/config/read-only-mode#how-it-is-enforced).
 
   ```toml
   [[tools]]
@@ -1013,7 +1013,13 @@ default = 10
 |-------|------|----------|-------------|
 | `id` | string | ✅ | Unique source identifier |
 | `description` | string | ❌ | Human-readable description of the data source |
-| `dsn` | string | ✅ | Database connection string |
+| `dsn` | string | ✅* | Database connection string (*or the individual parameters below) |
+| `type` | string | ❌ | Database type when not using `dsn`: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite` |
+| `host` | string | ❌ | Database host (with `type`) |
+| `port` | number | ❌ | Database port (default: the standard port for `type`) |
+| `database` | string | ❌ | Database name, Oracle service name, or SQLite file path |
+| `user` | string | ❌ | Database username |
+| `password` | string | ❌ | Database password (no URL encoding needed) |
 | `aws_iam_auth` | boolean | ❌ | Generate AWS RDS IAM authentication tokens (default: `false`) |
 | `aws_region` | string | ❌ | AWS region (required when `aws_iam_auth` is enabled) |
 | `aws_profile` | string | ❌ | Named AWS shared-config profile (requires `aws_iam_auth`) |
@@ -1025,6 +1031,9 @@ default = 10
 | `sslrootcert` | string | ❌ | CA certificate path (PostgreSQL only, requires `verify-ca` or `verify-full`) |
 | `sslcert` | string | ❌ | PEM client certificate path for client certificate authentication (PostgreSQL only, requires `sslkey` and TLS enabled) |
 | `sslkey` | string | ❌ | Unencrypted PEM private key path for `sslcert` (PostgreSQL only) |
+| `wallet_location` | string | ❌ | Oracle: directory holding `ewallet.pem` for mutual TLS |
+| `wallet_password` | string | ❌ | Oracle: password of an encrypted `ewallet.pem` |
+| `ssl_server_cert_dn` | string | ❌ | Oracle: expected server certificate DN |
 | `instanceName` | string | ❌ | SQL Server named instance |
 | `authentication` | string | ❌ | SQL Server auth method |
 | `domain` | string | ❌ | Windows domain (NTLM) |
@@ -1042,6 +1051,8 @@ default = 10
 | `ssh_passphrase` | string | ❌ | SSH key passphrase |
 | `ssh_agent` | string | ❌ | SSH agent socket path (default: `SSH_AUTH_SOCK`) |
 | `ssh_proxy_jump` | string | ❌ | ProxyJump hosts |
+| `ssh_keepalive_interval` | number | ❌ | Seconds between SSH keepalive packets (default: `0`, disabled) |
+| `ssh_keepalive_count_max` | number | ❌ | Missed keepalive responses before the tunnel is dropped (default: `3`) |
 
 ### Tool Options
 

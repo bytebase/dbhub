@@ -43,7 +43,7 @@ Use the issue details to identify which part of the codebase is affected. DBHub 
 | Bug Category | Where to Look | Key Files |
 |-------------|--------------|-----------|
 | Connection failures | Connector implementations | `src/connectors/{db-type}/index.ts`, `src/connectors/manager.ts` |
-| SQL execution errors | Tool handlers | `src/tools/execute-sql.ts`, `src/utils/allowed-keywords.ts` |
+| SQL execution errors | Tool handlers | `src/tools/execute-sql.ts`, `src/utils/tool-handler-helpers.ts` |
 | Schema/table listing | Search tool | `src/tools/search-objects.ts` |
 | DSN parsing issues | Parser logic | `src/connectors/{db-type}/index.ts` (DSNParser), `src/utils/dsn-obfuscate.ts`, `src/utils/safe-url.ts` |
 | SSH tunnel problems | Tunnel utilities | `src/utils/ssh-tunnel.ts`, `src/utils/ssh-config-parser.ts` |
@@ -51,8 +51,10 @@ Use the issue details to identify which part of the codebase is affected. DBHub 
 | Multi-database routing | Manager & tools | `src/connectors/manager.ts`, `src/utils/tool-handler-helpers.ts` |
 | Custom tool issues | Custom handler | `src/tools/custom-tool-handler.ts`, `src/tools/registry.ts` |
 | HTTP transport | Server setup | `src/server.ts` |
-| Read-only violations | SQL validation | `src/utils/allowed-keywords.ts`, `src/utils/sql-parser.ts` |
+| Read-only violations | SQL validation | `src/utils/sql-access-policy.ts` (verdict pipeline), `src/utils/allowed-keywords.ts`, `src/utils/sql-parser.ts`, `src/utils/readonly-transaction.ts` |
 | Row limiting | SQL rewriting | `src/utils/sql-row-limiter.ts` |
+| Execution plans / health metrics | Opt-in tools | `src/tools/explain-sql.ts`, `src/tools/health-check.ts`, `src/connectors/{db-type}/index.ts` |
+| Tool names, descriptions, API tool list | Tool metadata | `src/utils/tool-metadata.ts`, `src/tools/index.ts`, `src/tools/builtin-tools.ts` |
 | API endpoint issues | API handlers | `src/api/sources.ts`, `src/api/requests.ts` |
 | AWS IAM auth | Token signing | `src/utils/aws-rds-signer.ts` |
 
@@ -107,11 +109,11 @@ Check that:
    git checkout -b fix/issue-123
    ```
 
-2. **Commit changes** referencing the issue:
+2. **Commit changes** referencing the issue. This repo uses Conventional Commits (`fix: …`, optionally scoped: `fix(mysql): …`):
    ```bash
    git add <changed-files>
    git commit -m "$(cat <<'EOF'
-   Fix: <short description>
+   fix: <short description>
 
    Closes #123
    EOF
@@ -121,7 +123,7 @@ Check that:
 3. **Push and create the PR**:
    ```bash
    git push -u origin fix/issue-123
-   gh pr create --title "Fix: <short description>" --body "$(cat <<'EOF'
+   gh pr create --title "fix: <short description>" --body "$(cat <<'EOF'
    ## Summary
    <What was broken and how this fixes it>
 

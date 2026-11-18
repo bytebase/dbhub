@@ -13,7 +13,7 @@ Before starting, ensure you have:
 
 ## Choose Your Transport
 
-DBHub supports two [transport protocols](/config/command-line#transport):
+DBHub supports two [transport protocols](/config/command-line#param-transport):
 
 | Transport | How It Works | Best For |
 |-----------|--------------|----------|
@@ -102,15 +102,15 @@ Try these example prompts in your AI tool:
     What schemas are available in the database?
     ```
 
-    The AI will use the `db://schemas` resource to list all schemas.
+    The AI will call `search_objects` with `object_type: "schema"`. The demo database is SQLite, which has a single schema, `main`.
   </Accordion>
 
   <Accordion icon="table" title="Show tables in a schema">
     ```
-    What tables are in the public schema?
+    What tables are in the database?
     ```
 
-    The AI will use the `db://schemas/public/tables` resource.
+    The AI will call `search_objects` with `object_type: "table"` and list `employee`, `department`, `salary`, `title` and the rest.
   </Accordion>
 
   <Accordion icon="magnifying-glass" title="Query employee data">
@@ -120,18 +120,23 @@ Try these example prompts in your AI tool:
 
     The AI will generate and execute SQL like:
     ```sql
-    SELECT * FROM employees ORDER BY salary DESC LIMIT 5;
+    SELECT e.first_name, e.last_name, MAX(s.amount) AS salary
+    FROM employee e JOIN salary s ON s.emp_no = e.emp_no
+    GROUP BY e.emp_no
+    ORDER BY salary DESC
+    LIMIT 5;
     ```
   </Accordion>
 
   <Accordion icon="pen" title="Change data">
     ```
-    Update the salary of employee 10001 to 100000
+    Update the current salary of employee 10001 to 100000
     ```
 
     The AI will generate and execute SQL like:
     ```sql
-    UPDATE salaries SET salary = 100000 WHERE emp_no = 10001;
+    UPDATE salary SET amount = 100000
+    WHERE emp_no = 10001 AND to_date = '9999-01-01';
     ```
 
     <Note>
@@ -154,6 +159,6 @@ The skill guides the AI to follow the **explore-then-query** pattern: discover s
 
 Once you've verified DBHub works in demo mode, connect it to your actual database.
 
-<Card title="DSN Configuration" icon="link" href="/config/command-line#dsn">
+<Card title="DSN Configuration" icon="link" href="/config/command-line#param-dsn">
   Complete connection string formats and options for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite.
 </Card>

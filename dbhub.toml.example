@@ -7,9 +7,9 @@
 #   2. Uncomment and edit the sources you need
 #   3. Delete or comment out sources you don't need
 #
-# Usage:
-#   pnpm run dev                         # Uses ./dbhub.toml
-#   pnpm run dev -- --config=/path/to/config.toml
+# Usage (the file is only loaded when --config is given):
+#   npx @bytebase/dbhub@latest --config ./dbhub.toml
+#   pnpm run dev:backend --config=./dbhub.toml    # from a checkout of this repo
 
 # ============================================================================
 # POSTGRESQL EXAMPLES (Local → Dev → Prod progression)
@@ -31,7 +31,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # database = "myapp"
 # user = "postgres"
 # password = "p@ss:word/123"
-# sslmode = "disable"  # Optional: "disable" or "require"
+# sslmode = "disable"  # Optional: "disable", "require", "verify-ca" or "verify-full"
 
 # Local PostgreSQL with custom schema (non-public schema)
 # [[sources]]
@@ -454,7 +454,8 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   domain = "MYDOMAIN"                                  # Required for NTLM
 #
 # Tool Options:
-#   readonly = true    # Restrict to SELECT, SHOW, DESCRIBE, EXPLAIN (works for execute_sql and custom tools)
+#   readonly = true    # Restrict to read-only statements (works for execute_sql and custom tools;
+#                      # allow-list per database: https://dbhub.ai/config/read-only-mode)
 #   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
 #   explain_sql        # Opt-in tool (name = "explain_sql"); no readonly/max_rows options - always safe
 #   health_check       # Opt-in tool (name = "health_check"); PostgreSQL/MySQL/MariaDB/SQL Server/Oracle for now, always safe
@@ -463,4 +464,5 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   PostgreSQL:     $1, $2, $3
 #   MySQL/MariaDB:  ?, ?, ?
 #   SQL Server:     @p1, @p2, @p3
+#   Oracle:         :1, :2, :3
 #   SQLite:         ?, ?, ?

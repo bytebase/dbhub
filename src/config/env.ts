@@ -802,7 +802,8 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     }
 
     // Get --id flag value (if specified) to use as source ID
-    // If not specified, use "default" (which will result in no tool name suffix)
+    // If not specified, use "default". Either way a single source keeps the
+    // bare tool names; suffixing depends on the number of sources.
     const idData = resolveId();
     const sourceId = idData?.id || "default";
 

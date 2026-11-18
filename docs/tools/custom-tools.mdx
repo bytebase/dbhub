@@ -22,7 +22,10 @@ Custom tools are defined in your `dbhub.toml` configuration file. See the [TOML 
 - `description` - What the tool does (helps AI models)
 - `source` - Database source ID to use
 - `statement` - SQL query with parameter placeholders
-- `parameters` - Parameter definitions (optional)
+
+**Optional fields:**
+- `parameters` - Parameter definitions, one per placeholder
+- `readonly`, `max_rows` - See [Readonly Mode](#readonly-mode) and [Max Rows Enforcement](#max-rows-enforcement)
 
 See [TOML Configuration - Tool Options](/config/toml#tool-options) for detailed field descriptions, parameter types, and validation rules.
 
@@ -287,22 +290,29 @@ If validation fails, the server will not start and will display detailed error m
 
 ## Tool Response Format
 
-Custom tools return the same response format as `execute_sql`:
+Custom tools return the same [response format as `execute_sql`](/tools/execute-sql#response-format): one entry in `statements` per SQL statement in the tool's `statement`.
 
 **Success:**
 ```json
 {
   "success": true,
-  "rows": [
-    {
-      "id": 12345,
-      "name": "Alice Johnson",
-      "email": "alice@example.com",
-      "created_at": "2024-01-15T10:30:00Z"
-    }
-  ],
-  "count": 1,
-  "source_id": "prod_pg"
+  "data": {
+    "statements": [
+      {
+        "sql": "SELECT * FROM users WHERE id = $1",
+        "rows": [
+          {
+            "id": 12345,
+            "name": "Alice Johnson",
+            "email": "alice@example.com",
+            "created_at": "2024-01-15T10:30:00Z"
+          }
+        ],
+        "count": 1
+      }
+    ],
+    "source_id": "prod_pg"
+  }
 }
 ```
 

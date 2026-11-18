@@ -4,10 +4,10 @@ title: "Overview"
 
 ## Available Tools
 
-| Tool        | Command Name  | Default | Description                                                         |
+| Tool        | Tool Name     | Default | Description                                                         |
 | ----------- | ------------- | ------- | -------------------------------------------------------------------- |
 | Execute SQL | `execute_sql` or `execute_sql_{id}` | On | Execute single or multiple SQL statements (separated by semicolons) |
-| Search Objects | `search_objects` or `search_objects_{id}` | On | Search and list database objects (schemas, tables, columns, procedures, indexes) with pattern matching and token-efficient progressive disclosure |
+| Search Objects | `search_objects` or `search_objects_{id}` | On | Search and list database objects (schemas, tables, views, columns, procedures, functions, indexes) with pattern matching and token-efficient progressive disclosure |
 | Explain SQL | `explain_sql` or `explain_sql_{id}` | Opt-in | Show the execution plan for a SQL statement without running it |
 | Health Check | `health_check` or `health_check_{id}` | Opt-in | Report connection pool state and buffer cache hit ratio (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle) |
 | Custom Tools | User-defined names | Opt-in | Define reusable, parameterized SQL operations in your `dbhub.toml` configuration file |
@@ -58,7 +58,7 @@ dsn = "postgres://..."
 [[tools]]
 name = "execute_sql"
 source = "production"
-readonly = true    # Only allow SELECT, SHOW, DESCRIBE, EXPLAIN
+readonly = true    # Only allow read-only statements (see Read-Only Mode)
 max_rows = 100     # Limit query results
 
 [[tools]]
@@ -66,7 +66,7 @@ name = "search_objects"
 source = "production"
 ```
 
-See [execute_sql documentation](/tools/execute-sql) for details on `readonly` and `max_rows` settings.
+See [Read-Only Mode](/config/read-only-mode) for what `readonly` allows on each database, and the [execute_sql documentation](/tools/execute-sql#row-limiting) for `max_rows`.
 
 ### Mixed Configuration
 
@@ -128,21 +128,15 @@ This approach gives you fine-grained control: disable general SQL execution whil
 
 ## Tool Naming
 
-The tool name varies based on your configuration:
+Tool names depend on how many sources DBHub is serving, not on the source ID:
 
-**Single database without `--id`:**
+**One source** — a DSN (with or without `--id`), or a TOML file with a single `[[sources]]` entry:
 ```bash
 npx @bytebase/dbhub@latest --dsn "postgres://..."
 ```
-Tool name: `execute_sql`
+Tool names: `execute_sql`, `search_objects` (no suffix)
 
-**Single database with `--id`:**
-```bash
-npx @bytebase/dbhub@latest --id prod --dsn "postgres://..."
-```
-Tool name: `execute_sql_prod`
-
-**Multiple databases via TOML config:**
+**Two or more sources** via TOML config — each source gets its own tools, suffixed with its ID:
 ```toml
 [[sources]]
 id = "prod-pg"
@@ -157,6 +151,8 @@ Tool names: `execute_sql_prod_pg` and `execute_sql_staging_mysql`
 <Note>
 Special characters in source IDs (hyphens, dots, etc.) are converted to underscores in tool names. For example, `prod-pg` becomes `execute_sql_prod_pg`.
 </Note>
+
+Whatever the tool is called, `execute_sql`, `explain_sql`, `health_check` and custom tools report the source ID as `source_id` in their output.
 
 ## Next Steps
 
