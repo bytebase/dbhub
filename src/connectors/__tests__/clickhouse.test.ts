@@ -650,6 +650,32 @@ describe('ClickHouseConnector', () => {
       });
     });
 
+    it('raises an error the server appended between marker lines', async () => {
+      await connect();
+      fake.respond = () => ({
+        body:
+          result(['n'], ['UInt8'], [[0], [0]]) +
+          '__exception__\r\n' +
+          "Code: 395. DB::Exception: review exception: while executing 'FUNCTION throwIf()'. (FUNCTION_THROW_IF_VALUE_IS_NON_ZERO) (version 25.8.1.1 (official build))\r\n" +
+          '160 tagtagtag\r\n__exception__\r\n',
+      });
+
+      await expect(connector.executeSQL('SELECT throwIf(...) AS n FROM t', {})).rejects.toMatchObject({
+        code: '395',
+        type: 'FUNCTION_THROW_IF_VALUE_IS_NON_ZERO',
+        message: expect.stringContaining('review exception'),
+      });
+    });
+
+    it('raises unreadable trailing text as it is when it holds no server error', async () => {
+      await connect();
+      fake.respond = () => ({ body: result(['n'], ['UInt8'], [[0]]) + '<html>502 Bad Gateway</html>\nupstream\n' });
+
+      await expect(connector.executeSQL('SELECT n FROM t', {})).rejects.toThrow(
+        '<html>502 Bad Gateway</html>\nupstream'
+      );
+    });
+
     it('raises an error the server appended in the output format', async () => {
       await connect();
       fake.respond = () => ({

@@ -307,17 +307,19 @@ function responseError(text: string): Error {
 }
 
 /**
- * Parse one line of a ROW_FORMAT response into its array of values. Anything
- * else on a line is an error the server appended after it had started sending
- * rows: plain `Code: N. DB::Exception: ...` text, or `{"exception": "..."}`
- * when the server writes exceptions in the output format.
+ * Parse one line of a ROW_FORMAT response into its array of values, or
+ * undefined when the line is not JSON. Such a line starts an error the server
+ * appended after it had started sending rows, as text that runs to the end of
+ * the response: `Code: N. DB::Exception: ...` on its own, or between
+ * `__exception__` marker lines, depending on the server's version. An object
+ * is `{"exception": "..."}`, the same error written in the output format.
  */
-function parseRowLine(text: string): unknown[] {
+function parseRowLine(text: string): unknown[] | undefined {
   let value: unknown;
   try {
     value = JSON.parse(text, keepExactNumbers as (key: string, value: unknown) => unknown);
   } catch {
-    throw responseError(text);
+    return undefined;
   }
   if (!Array.isArray(value)) {
     const exception = (value as { exception?: unknown } | null)?.exception;
@@ -885,6 +887,9 @@ export class ClickHouseConnector implements Connector {
     // A row that reads as an error message, held back until the next line
     // shows it was data or the end of the response shows it was the last.
     let heldBack: [string] | undefined;
+    // Text of an error the server appended in place of further rows: every
+    // line from the first that is not a row to the end of the response.
+    let appendedError: string | undefined;
 
     /** Take a row into the result; false once the cap says to stop reading. */
     const accept = (values: unknown[]): boolean => {
@@ -911,7 +916,15 @@ export class ClickHouseConnector implements Connector {
         reading: for await (const lines of response.stream()) {
           for (const line of lines as Array<{ text: string }>) {
             bytes += Buffer.byteLength(line.text) + 1;
-            const values = parseRowLine(line.text);
+            const values = appendedError === undefined ? parseRowLine(line.text) : undefined;
+            if (values === undefined) {
+              // The message may be several lines in; it is read out of the
+              // whole once the response ends. Capped, as only its head is shown.
+              if ((appendedError?.length ?? 0) < MAX_ERROR_TEXT) {
+                appendedError = `${appendedError ?? ""}${line.text}\n`;
+              }
+              continue;
+            }
             if (columnNames === undefined) {
               columnNames = values.map(String);
               continue;
@@ -939,9 +952,18 @@ export class ClickHouseConnector implements Connector {
             }
           }
         }
+      } catch (error) {
+        // A server may drop the connection once it has written its error:
+        // the error it wrote is the one to report, not the dropped connection.
+        if (appendedError === undefined || deadline.expired) {
+          throw error;
+        }
       } finally {
         // Releases the socket when reading stopped early; a no-op otherwise.
         response.close();
+      }
+      if (appendedError !== undefined) {
+        throw responseError(appendedError.trim());
       }
       if (heldBack !== undefined && !truncated) {
         // The response ended on a one-string row that reads as an error, from
