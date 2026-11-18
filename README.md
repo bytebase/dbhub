@@ -28,13 +28,13 @@
             |                  |    |              |    |                  |
             |  Claude Code     +--->+              +--->+    SQL Server    |
             |                  |    |              |    |                  |
-            |  Cursor          +--->+    DBHub     +--->+    Oracle        |
+            |  Codex           +--->+    DBHub     +--->+    Oracle        |
             |                  |    |              |    |                  |
-            |  VS Code         +--->+              +--->+    SQLite        |
+            |  Cursor          +--->+              +--->+    SQLite        |
             |                  |    |              |    |                  |
-            |  Copilot CLI     +--->+              +--->+    MySQL         |
+            |  VS Code         +--->+              +--->+    MySQL         |
             |                  |    |              |    |                  |
-            |                  |    |              +--->+    MariaDB       |
+            |  Copilot CLI     +--->+              +--->+    MariaDB       |
             |                  |    |              |    |                  |
             +------------------+    +--------------+    +------------------+
                  MCP Clients           MCP Server             Databases

@@ -23,13 +23,13 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
  |                  |    |              |    |                  |
  |  Claude Code     +--->+              +--->+    SQL Server    |
  |                  |    |              |    |                  |
- |  Cursor          +--->+    DBHub     +--->+    Oracle        |
+ |  Codex           +--->+    DBHub     +--->+    Oracle        |
  |                  |    |              |    |                  |
- |  VS Code         +--->+              +--->+    SQLite        |
+ |  Cursor          +--->+              +--->+    SQLite        |
  |                  |    |              |    |                  |
- |  Other Clients   +--->+              +--->+    MySQL         |
+ |  VS Code         +--->+              +--->+    MySQL         |
  |                  |    |              |    |                  |
- |                  |    |              +--->+    MariaDB       |
+ |  Other Clients   +--->+              +--->+    MariaDB       |
  |                  |    |              |    |                  |
  +------------------+    +--------------+    +------------------+
      MCP Clients           MCP Server             Databases
@@ -138,7 +138,7 @@ DBHub acts as a gateway between databases and AI agents. AI agents access databa
 
 <CardGroup cols={2}>
   <Card title="Installation" icon="download" href="/installation">
-    Install DBHub using Docker, NPM, the MCP Bundle, or the Claude Code plugin
+    Install DBHub using Docker, NPM, the MCP Bundle, or the Claude Code and Codex plugins
   </Card>
 
   <Card title="Quickstart" icon="rocket" href="/quickstart">
