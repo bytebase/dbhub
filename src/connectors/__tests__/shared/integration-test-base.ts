@@ -240,7 +240,7 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
       if (this.config.expectedStoredProcedures?.length) {
         it('should get stored procedure details', async () => {
-          const procedureName = this.config.expectedStoredProcedures[0];
+          const procedureName = this.config.expectedStoredProcedures![0];
           const procedure = await this.connector.getStoredProcedureDetail(procedureName);
           expect(procedure.procedure_name).toBe(procedureName);
           expect(procedure.procedure_type).toMatch(/function|procedure/);

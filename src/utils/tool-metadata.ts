@@ -14,10 +14,10 @@ import {
   BUILTIN_TOOL_HEALTH_CHECK,
   BUILTIN_TOOL_SEARCH_OBJECTS,
   isAlwaysReadOnlyTool,
-  isBuiltinToolName,
+  isCustomToolConfig,
   type BuiltinToolName,
 } from "../tools/builtin-tools.js";
-import type { ParameterConfig, ToolConfig } from "../types/config.js";
+import type { CustomToolConfig, ParameterConfig, ToolConfig } from "../types/config.js";
 
 /**
  * Tool parameter definition for API responses
@@ -399,10 +399,10 @@ function buildBuiltinTool(name: BuiltinToolName, sourceId: string, toolConfig: T
 /**
  * Build custom tool metadata for API response
  */
-function buildCustomTool(toolConfig: ToolConfig): Tool {
+function buildCustomTool(toolConfig: CustomToolConfig): Tool {
   return {
     name: toolConfig.name,
-    description: toolConfig.description!,
+    description: toolConfig.description,
     parameters: customParamsToToolParams(toolConfig.parameters),
     statement: toolConfig.statement,
     readonly: toolConfig.readonly,
@@ -420,8 +420,8 @@ export function getToolsForSource(sourceId: string): Tool[] {
   return getToolRegistry()
     .getEnabledToolConfigs(sourceId)
     .map((toolConfig) =>
-      isBuiltinToolName(toolConfig.name)
-        ? buildBuiltinTool(toolConfig.name, sourceId, toolConfig)
-        : buildCustomTool(toolConfig)
+      isCustomToolConfig(toolConfig)
+        ? buildCustomTool(toolConfig)
+        : buildBuiltinTool(toolConfig.name, sourceId, toolConfig)
     );
 }

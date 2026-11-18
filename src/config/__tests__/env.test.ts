@@ -23,7 +23,8 @@ vi.mock('../toml-loader.js', () => ({
 // loading flips `dotenvState.passthrough` to use the real implementation.
 const dotenvState = vi.hoisted(() => ({ passthrough: false }));
 vi.mock('dotenv', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('dotenv')>();
+  // dotenv is CommonJS: under esModuleInterop its exports are the default import
+  const actual = await importOriginal<{ default: typeof import('dotenv') }>();
   return {
     default: {
       ...actual.default,
@@ -421,8 +422,8 @@ describe('Environment Configuration Tests', () => {
     });
 
     describe('--host requires a value', () => {
-      let exitSpy: ReturnType<typeof vi.spyOn>;
-      let errorSpy: ReturnType<typeof vi.spyOn>;
+      let exitSpy: MockInstance;
+      let errorSpy: MockInstance;
 
       beforeEach(() => {
         exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {

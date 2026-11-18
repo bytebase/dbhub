@@ -14,6 +14,7 @@ import * as sshConfigParser from '../../utils/ssh-config-parser.js';
 function createSourceConfigFromDSN(dsn: string, sourceId: string = 'test'): SourceConfig {
   return {
     id: sourceId,
+    type: 'postgres',
     dsn: dsn,
   };
 }

@@ -11,6 +11,7 @@ DBHub is a zero-dependency, token efficient database MCP server implementing the
 - Build: `pnpm run build` - Compiles TypeScript to JavaScript using tsup
 - Start: `pnpm run start` - Runs the compiled server
 - Dev: `pnpm run dev` - Runs the backend (tsx, HTTP transport, no compilation) and the workbench frontend together; `pnpm run dev:backend` runs the server alone and accepts flags (`pnpm run dev:backend --config=./dbhub.toml`)
+- Typecheck: `pnpm run typecheck` - `tsc --noEmit` over `src/`, tests included (CI runs it; Vitest and tsx do not check types)
 - Test: `pnpm test` - Run all tests
 - Test Watch: `pnpm test:watch` - Run tests in watch mode
 - Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)

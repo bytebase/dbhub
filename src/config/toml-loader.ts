@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { homedir } from "os";
 import toml from "@iarna/toml";
-import type { SourceConfig, TomlConfig, ToolConfig } from "../types/config.js";
+import type { SourceConfig, TomlConfig, UnvalidatedToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
@@ -16,7 +16,7 @@ import {
 } from "../utils/sqlite-dsn.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
 import { validateSessionSettings } from "../utils/session-settings.js";
-import { BUILTIN_TOOL_EXECUTE_SQL, BUILTIN_TOOL_SEARCH_OBJECTS, ALL_BUILTIN_TOOL_NAMES, toolsAreReadOnly } from "../tools/builtin-tools.js";
+import { BUILTIN_TOOL_EXECUTE_SQL, isBuiltinToolName, toolsAreReadOnly } from "../tools/builtin-tools.js";
 
 /**
  * Load and parse TOML configuration file
@@ -181,7 +181,7 @@ function validateTomlConfig(config: TomlConfig, configPath: string): void {
  * Validate tools configuration
  */
 function validateToolsConfig(
-  tools: ToolConfig[],
+  tools: UnvalidatedToolConfig[],
   sources: SourceConfig[],
   configPath: string
 ): void {
@@ -218,7 +218,7 @@ function validateToolsConfig(
     }
 
     // Validate based on tool type (built-in vs custom)
-    const isBuiltin = (ALL_BUILTIN_TOOL_NAMES as readonly string[]).includes(tool.name);
+    const isBuiltin = isBuiltinToolName(tool.name);
     const isExecuteSql = tool.name === BUILTIN_TOOL_EXECUTE_SQL;
 
     if (isBuiltin) {

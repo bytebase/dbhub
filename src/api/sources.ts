@@ -26,7 +26,8 @@ function transformSourceConfig(source: SourceConfig): DataSource {
     throw new Error(`Source ${source.id} is missing required type field`);
   }
 
-  const dataSource: DataSource = {
+  // `tools` is added last so it stays the final key of the response
+  const dataSource: Omit<DataSource, "tools"> = {
     id: source.id,
     type: source.type,
   };
@@ -68,9 +69,7 @@ function transformSourceConfig(source: SourceConfig): DataSource {
   }
 
   // Add tools for this source
-  dataSource.tools = getToolsForSource(source.id);
-
-  return dataSource;
+  return { ...dataSource, tools: getToolsForSource(source.id) };
 }
 
 /**

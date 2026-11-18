@@ -9,14 +9,14 @@ import { getBuiltinToolMetadata } from "../utils/tool-metadata.js";
 import type { ToolResponse } from "../utils/tool-handler-helpers.js";
 import { classifySQL } from "../utils/sql-access-policy.js";
 import { createCustomToolHandler, getCustomToolInputSchema } from "./custom-tool-handler.js";
-import type { ToolConfig } from "../types/config.js";
+import type { CustomToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
 import {
   BUILTIN_TOOL_EXECUTE_SQL,
   BUILTIN_TOOL_SEARCH_OBJECTS,
   BUILTIN_TOOL_EXPLAIN_SQL,
   BUILTIN_TOOL_HEALTH_CHECK,
-  isBuiltinToolName,
+  isCustomToolConfig,
   type BuiltinToolName,
 } from "./builtin-tools.js";
 
@@ -69,10 +69,10 @@ export function registerTools(server: McpServer): void {
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
     for (const toolConfig of registry.getEnabledToolConfigs(sourceId)) {
-      if (isBuiltinToolName(toolConfig.name)) {
-        registerBuiltinTool(server, toolConfig.name, sourceId);
-      } else {
+      if (isCustomToolConfig(toolConfig)) {
         registerCustomTool(server, sourceId, toolConfig);
+      } else {
+        registerBuiltinTool(server, toolConfig.name, sourceId);
       }
     }
   }
@@ -102,14 +102,14 @@ function registerBuiltinTool(server: McpServer, name: BuiltinToolName, sourceId:
 function registerCustomTool(
   server: McpServer,
   sourceId: string,
-  toolConfig: ToolConfig
+  toolConfig: CustomToolConfig
 ): void {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
 
   // Annotations reflect what the statement actually does, not the tool's
   // readonly config: a SELECT-backed custom tool is read-only regardless.
-  const isReadOnly = classifySQL(toolConfig.statement!, dbType) === "read";
+  const isReadOnly = classifySQL(toolConfig.statement, dbType) === "read";
 
   server.registerTool(
     toolConfig.name,

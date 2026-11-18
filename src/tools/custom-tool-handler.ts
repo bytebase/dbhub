@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { ToolConfig, ParameterConfig } from "../types/config.js";
+import type { CustomToolConfig, ParameterConfig } from "../types/config.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import {
   createReadonlyViolationMessage,
@@ -86,9 +86,9 @@ export function buildZodSchemaFromParameters(
  * once (hot reload produces new config objects, so stale entries just get
  * garbage collected).
  */
-const customToolInputSchemas = new WeakMap<ToolConfig, z.ZodObject<Record<string, z.ZodTypeAny>>>();
+const customToolInputSchemas = new WeakMap<CustomToolConfig, z.ZodObject<Record<string, z.ZodTypeAny>>>();
 
-export function getCustomToolInputSchema(toolConfig: ToolConfig): z.ZodObject<Record<string, z.ZodTypeAny>> {
+export function getCustomToolInputSchema(toolConfig: CustomToolConfig): z.ZodObject<Record<string, z.ZodTypeAny>> {
   let schema = customToolInputSchemas.get(toolConfig);
   if (!schema) {
     schema = z.object(buildZodSchemaFromParameters(toolConfig.parameters));
@@ -102,7 +102,7 @@ export function getCustomToolInputSchema(toolConfig: ToolConfig): z.ZodObject<Re
  * @param toolConfig Tool configuration from TOML
  * @returns Handler function compatible with MCP server.registerTool
  */
-export function createCustomToolHandler(toolConfig: ToolConfig) {
+export function createCustomToolHandler(toolConfig: CustomToolConfig) {
   // Same schema object the tool was registered with (cached per config)
   const zodSchema = getCustomToolInputSchema(toolConfig);
 

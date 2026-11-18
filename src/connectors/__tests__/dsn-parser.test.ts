@@ -473,8 +473,10 @@ describe('DSN Parser - AWS IAM Authentication', () => {
 
       // Plugin should return password with null terminator
       if (config.authPlugins?.mysql_clear_password) {
-        const pluginFunc = config.authPlugins.mysql_clear_password();
-        const result = pluginFunc();
+        // mysql2 passes plugin metadata and the server's auth data; the
+        // cleartext plugin ignores both.
+        const pluginFunc = config.authPlugins.mysql_clear_password({} as any);
+        const result = pluginFunc(Buffer.alloc(0)) as Buffer;
         expect(result).toBeInstanceOf(Buffer);
         expect(result.toString()).toBe(awsToken + '\0');
       }

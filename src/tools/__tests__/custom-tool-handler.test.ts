@@ -5,7 +5,7 @@ import {
   createCustomToolHandler,
 } from "../custom-tool-handler.js";
 import { ConnectorManager } from "../../connectors/manager.js";
-import type { ToolConfig, ParameterConfig } from "../../types/config.js";
+import type { CustomToolConfig, ParameterConfig } from "../../types/config.js";
 
 // Auto-mock the connector manager so we control connection/execution behavior
 vi.mock("../../connectors/manager.js");
@@ -105,11 +105,12 @@ describe("Custom Tool Handler", () => {
         type: "postgres",
       } as any);
 
-      const toolConfig: ToolConfig = {
+      const toolConfig: CustomToolConfig = {
         name: "get_user",
         source: "prod",
+        description: "Get users",
         statement: "SELECT * FROM users",
-      } as any;
+      };
 
       const handler = createCustomToolHandler(toolConfig);
       const res: any = await handler({}, {});
