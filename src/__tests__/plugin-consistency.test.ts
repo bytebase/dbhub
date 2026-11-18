@@ -105,6 +105,18 @@ describe("Codex plugin consistency", () => {
     expect(logo.equals(fs.readFileSync(path.join(repoRoot, "mcpb/icon.png")))).toBe(true);
   });
 
+  it("version hook stages every file sync-version rewrites", () => {
+    // `pnpm version` only commits what the hook `git add`s; a synced file
+    // missing here would be left out of the release commit and tag.
+    const staged = pkg.scripts.version.split("git add ")[1].split(" ");
+    const synced = fs
+      .readFileSync(path.join(repoRoot, "scripts/sync-version.mjs"), "utf-8")
+      .match(/"(?:plugin\/[^"]+|server)\.json"/g)!
+      .map((quoted) => quoted.slice(1, -1));
+    expect(synced).toContain("plugin/mcp.codex.json");
+    expect([...staged].sort()).toEqual([...new Set(synced)].sort());
+  });
+
   it("Codex and Claude Code marketplaces list the same plugin", () => {
     const codex = readJson(".agents/plugins/marketplace.json");
     const claude = readJson(".claude-plugin/marketplace.json");
