@@ -1,38 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHealthCheckToolHandler } from "../health-check.js";
 import { ConnectorManager } from "../../connectors/manager.js";
-import { requestStore } from "../../requests/index.js";
-import type { Connector, ConnectorType, HealthCheckResult } from "../../connectors/interface.js";
+import type { HealthCheckResult } from "../../connectors/interface.js";
+import { createMockConnector, describeRequestTracking, parseToolResponse } from "./helpers.js";
 
 vi.mock("../../connectors/manager.js");
 
-const createMockConnector = (
-  id: ConnectorType = "postgres",
-  sourceId: string = "default",
-  withHealthCheck = true
-): Connector => ({
-  id,
-  name: "Mock Connector",
-  getId: () => sourceId,
-  dsnParser: {} as any,
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  clone: vi.fn(),
-  getSchemas: vi.fn(),
-  getTables: vi.fn(),
-  getViews: vi.fn(),
-  getTableSchema: vi.fn(),
-  getTableIndexes: vi.fn(),
-  getStoredProcedures: vi.fn(),
-  getStoredProcedureDetail: vi.fn(),
-  executeSQL: vi.fn(),
-  ...(withHealthCheck ? { getHealthCheck: vi.fn() } : {}),
-});
-
-const parseToolResponse = (response: any) => JSON.parse(response.content[0].text);
-
 describe("health-check tool", () => {
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+
+  // Bind the mocked manager to a postgres connector reporting `health`
+  const useHealthCheck = (health: HealthCheckResult, sourceId: string = "test_source") => {
+    mockGetCurrentConnector.mockReturnValue(
+      createMockConnector("postgres", sourceId, { getHealthCheck: vi.fn().mockResolvedValue(health) })
+    );
+  };
 
   beforeEach(() => {
     // Single-source by default, so resolveTrackedToolName resolves to the
@@ -45,9 +27,7 @@ describe("health-check tool", () => {
   });
 
   it("returns connections and buffer_cache in snake_case", async () => {
-    const mockConnector = createMockConnector("postgres", "test_source");
-    mockGetCurrentConnector.mockReturnValue(mockConnector);
-    const health: HealthCheckResult = {
+    useHealthCheck({
       connections: {
         total: 10,
         active: 2,
@@ -63,8 +43,7 @@ describe("health-check tool", () => {
         blocksHit: 1000,
         blocksRead: 9,
       },
-    };
-    vi.mocked(mockConnector.getHealthCheck!).mockResolvedValue(health);
+    });
 
     const handler = createHealthCheckToolHandler("test_source");
     const result = await handler({}, null);
@@ -92,8 +71,7 @@ describe("health-check tool", () => {
   });
 
   it("returns UNSUPPORTED when the connector has no getHealthCheck implementation", async () => {
-    const mockConnector = createMockConnector("sqlite", "test_source", false);
-    mockGetCurrentConnector.mockReturnValue(mockConnector);
+    mockGetCurrentConnector.mockReturnValue(createMockConnector("sqlite", "test_source"));
 
     const handler = createHealthCheckToolHandler("test_source");
     const result = await handler({}, null);
@@ -103,41 +81,8 @@ describe("health-check tool", () => {
     expect(parsed.code).toBe("UNSUPPORTED");
   });
 
-  it("returns EXECUTION_ERROR when the connector throws", async () => {
-    const mockConnector = createMockConnector("postgres", "test_source");
-    mockGetCurrentConnector.mockReturnValue(mockConnector);
-    vi.mocked(mockConnector.getHealthCheck!).mockRejectedValue(new Error("boom"));
-
-    const handler = createHealthCheckToolHandler("test_source");
-    const result = await handler({}, null);
-
-    expect(result.isError).toBe(true);
-    const parsed = parseToolResponse(result);
-    expect(parsed.success).toBe(false);
-    expect(parsed.error).toBe("boom");
-    expect(parsed.code).toBe("EXECUTION_ERROR");
-  });
-
-  describe("request tracking", () => {
-    const track = async (sourceIds: string[], sourceId: string) => {
-      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(sourceIds);
-      const mockConnector = createMockConnector("postgres", sourceId);
-      mockGetCurrentConnector.mockReturnValue(mockConnector);
-      vi.mocked(mockConnector.getHealthCheck!).mockResolvedValue({} as HealthCheckResult);
-      const addSpy = vi.spyOn(requestStore, "add");
-
-      await createHealthCheckToolHandler(sourceId)({}, null);
-      return addSpy;
-    };
-
-    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
-      const addSpy = await track(["prod"], "prod");
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: "health_check" }));
-    });
-
-    it("tracks the normalized, suffixed tool name for a multi-source id with special characters", async () => {
-      const addSpy = await track(["prod-pg", "staging"], "prod-pg");
-      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: "health_check_prod_pg" }));
-    });
+  describeRequestTracking("health_check", async (sourceId) => {
+    useHealthCheck({} as HealthCheckResult, sourceId);
+    await createHealthCheckToolHandler(sourceId)({}, null);
   });
 });

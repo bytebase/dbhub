@@ -31,28 +31,21 @@ describe("RequestStore", () => {
       expect(requests[0]).toEqual(request);
     });
 
-    it("should evict oldest when exceeding max per source", () => {
+    it("should evict oldest when exceeding max per source, leaving other sources alone", () => {
+      store.add(createRequest({ sourceId: "other_db", id: "other" }));
       // Add 101 requests to same source
       for (let i = 0; i < 101; i++) {
         store.add(createRequest({ id: `id-${i}`, sql: `SELECT ${i}` }));
       }
-      const requests = store.getAll();
+      const requests = store.getAll("test_db");
       expect(requests).toHaveLength(100);
       // First request (id-0) should be evicted
       expect(requests.find((r) => r.id === "id-0")).toBeUndefined();
       // Last request (id-100) should exist
       expect(requests.find((r) => r.id === "id-100")).toBeDefined();
-    });
-
-    it("should track separate limits per source", () => {
-      // Add 50 to source A, 50 to source B
-      for (let i = 0; i < 50; i++) {
-        store.add(createRequest({ sourceId: "source_a", id: `a-${i}` }));
-        store.add(createRequest({ sourceId: "source_b", id: `b-${i}` }));
-      }
-      expect(store.getAll()).toHaveLength(100);
-      expect(store.getAll("source_a")).toHaveLength(50);
-      expect(store.getAll("source_b")).toHaveLength(50);
+      // The limit is per source: the other source's older request survives
+      expect(store.getAll("other_db").map((r) => r.id)).toEqual(["other"]);
+      expect(store.getAll()).toHaveLength(101);
     });
   });
 
@@ -61,31 +54,21 @@ describe("RequestStore", () => {
       expect(store.getAll()).toEqual([]);
     });
 
-    it("should filter by sourceId", () => {
-      store.add(createRequest({ sourceId: "db1", id: "1" }));
-      store.add(createRequest({ sourceId: "db2", id: "2" }));
-      store.add(createRequest({ sourceId: "db1", id: "3" }));
-
-      const db1Requests = store.getAll("db1");
-      expect(db1Requests).toHaveLength(2);
-      expect(db1Requests.every((r) => r.sourceId === "db1")).toBe(true);
-    });
-
     it("should return empty array for unknown sourceId", () => {
       store.add(createRequest({ sourceId: "db1" }));
       expect(store.getAll("unknown")).toEqual([]);
     });
 
-    it("should return requests in reverse chronological order", () => {
+    it("should return requests newest first, for every source or only the one asked for", () => {
       const now = Date.now();
-      store.add(createRequest({ id: "old", timestamp: new Date(now - 1000).toISOString() }));
-      store.add(createRequest({ id: "new", timestamp: new Date(now).toISOString() }));
-      store.add(createRequest({ id: "older", timestamp: new Date(now - 2000).toISOString() }));
+      const at = (ageMs: number) => new Date(now - ageMs).toISOString();
+      store.add(createRequest({ sourceId: "db1", id: "old", timestamp: at(1000) }));
+      store.add(createRequest({ sourceId: "db2", id: "new", timestamp: at(0) }));
+      store.add(createRequest({ sourceId: "db1", id: "older", timestamp: at(2000) }));
+      store.add(createRequest({ sourceId: "db1", id: "newish", timestamp: at(500) }));
 
-      const requests = store.getAll();
-      expect(requests[0].id).toBe("new");
-      expect(requests[1].id).toBe("old");
-      expect(requests[2].id).toBe("older");
+      expect(store.getAll().map((r) => r.id)).toEqual(["new", "newish", "old", "older"]);
+      expect(store.getAll("db1").map((r) => r.id)).toEqual(["newish", "old", "older"]);
     });
   });
 

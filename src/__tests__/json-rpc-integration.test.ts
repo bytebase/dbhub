@@ -1,275 +1,108 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawn, ChildProcess } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import { spawnHttpServer, type SpawnedHttpServer } from './spawn-http-server.js';
 
 describe('JSON RPC Integration Tests', () => {
-  let serverProcess: ChildProcess | null = null;
-  let testDbPath: string;
-  let baseUrl: string;
-  let isolatedCwd: string;
-  // Randomize the port to avoid conflicts with other test files and stray servers
-  const testPort = 20000 + Math.floor(Math.random() * 20000);
-  const startupLogs: string[] = [];
+  let server: SpawnedHttpServer;
 
   beforeAll(async () => {
-    // Create a temporary SQLite database file
-    const tempDir = os.tmpdir();
-    testDbPath = path.join(tempDir, `json_rpc_test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.db`);
+    server = await spawnHttpServer();
 
-    // The server discovers ./dbhub.toml relative to its own cwd, and TOML config
-    // outranks the DSN env var below. Running from the repo root would therefore
-    // silently ignore DSN and connect to whatever a developer's local (gitignored)
-    // dbhub.toml names, so the server would fail to start on any machine that has
-    // one. Spawn from an empty directory to isolate config discovery.
-    isolatedCwd = fs.mkdtempSync(path.join(tempDir, 'json_rpc_cwd_'));
-
-    baseUrl = `http://localhost:${testPort}`;
-
-    // Invoke tsx directly via node rather than `pnpm dev`: `pnpm dev` runs the
-    // backend and the Vite frontend under `concurrently`, and the frontend is both
-    // unnecessary here and leaked a stray dev server on every run.
-    const tsxCli = path.resolve(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs');
-    const entry = path.resolve(process.cwd(), 'src', 'index.ts');
-
-    // Start the server as a child process
-    serverProcess = spawn(process.execPath, [tsxCli, entry, '--transport=http'], {
-      cwd: isolatedCwd,
-      env: {
-        ...process.env,
-        DSN: `sqlite://${testDbPath}`,
-        TRANSPORT: 'http',
-        PORT: testPort.toString(),
-        NODE_ENV: 'test'
-      },
-      stdio: 'pipe'
-    });
-
-    // Handle server output. Retained for the failure message below: without the
-    // server's own logs, a startup failure surfaces only as a timeout with no
-    // indication of the cause.
-    serverProcess.stdout?.on('data', (data) => {
-      startupLogs.push(data.toString());
-    });
-
-    serverProcess.stderr?.on('data', (data) => {
-      startupLogs.push(data.toString());
-    });
-
-    // Wait for server to start up (poll every 250ms, ~20s total)
-    let serverReady = false;
-    for (let i = 0; i < 80; i++) {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 250));
-        const response = await fetch(`${baseUrl}/mcp`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream'
-          },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            id: 'health-check',
-            method: 'notifications/initialized'
-          })
-        });
-        if (response.status < 500) {
-          serverReady = true;
-          break;
-        }
-      } catch (e) {
-        // Server not ready yet, continue waiting
-      }
-    }
-    
-    if (!serverReady) {
-      throw new Error(`Server did not start within expected time. Logs:\n${startupLogs.join('')}`);
-    }
-    
     // Create test tables and data via HTTP request
-    await makeJsonRpcCall('execute_sql', {
-      sql: `
-        CREATE TABLE IF NOT EXISTS users (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name VARCHAR(100) NOT NULL,
-          email VARCHAR(100) UNIQUE NOT NULL,
-          age INTEGER
-        );
-        
-        CREATE TABLE IF NOT EXISTS orders (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          user_id INTEGER REFERENCES users(id),
-          total DECIMAL(10,2),
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );
-        
-        INSERT INTO users (name, email, age) VALUES 
-        ('John Doe', 'john@example.com', 30),
-        ('Jane Smith', 'jane@example.com', 25),
-        ('Bob Johnson', 'bob@example.com', 35);
-        
-        INSERT INTO orders (user_id, total) VALUES 
-        (1, 99.99),
-        (1, 149.50),
-        (2, 75.25);
-      `
-    });
-  }, 30000);
+    await executeSql(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        age INTEGER
+      );
+
+      INSERT INTO users (name, email, age) VALUES
+      ('John Doe', 'john@example.com', 30),
+      ('Jane Smith', 'jane@example.com', 25),
+      ('Bob Johnson', 'bob@example.com', 35);
+    `);
+  }, 45000);
 
   afterAll(async () => {
-    // Kill the server process if it's still running
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM');
-      
-      // Wait for process to exit
-      await new Promise<void>((resolve) => {
-        if (serverProcess) {
-          // Without clearing this on normal exit, the pending timer keeps
-          // the Vitest process alive until the 5s tail elapses.
-          const killTimeout = setTimeout(() => {
-            if (serverProcess && !serverProcess.killed) {
-              serverProcess.kill('SIGKILL');
-            }
-            resolve();
-          }, 5000);
-          serverProcess.on('exit', () => {
-            clearTimeout(killTimeout);
-            resolve();
-          });
-        } else {
-          resolve();
-        }
-      });
-    }
-    
-    // Clean up the test database file
-    if (testDbPath && fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
-
-    // Clean up the isolated working directory
-    if (isolatedCwd && fs.existsSync(isolatedCwd)) {
-      fs.rmSync(isolatedCwd, { recursive: true, force: true });
-    }
+    await server?.stop();
   });
 
-  async function makeJsonRpcCall(method: string, params: any): Promise<any> {
-    const response = await fetch(`${baseUrl}/mcp`, {
+  function postMcp(body: unknown, init: { headers?: Record<string, string>; signal?: AbortSignal } = {}): Promise<Response> {
+    return fetch(`${server.baseUrl}/mcp`, {
       method: 'POST',
+      signal: init.signal,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json, text/event-stream',
+        ...init.headers,
       },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: Math.random().toString(36).substr(2, 9),
-        method: 'tools/call',
-        params: {
-          name: method,
-          arguments: params
-        }
-      })
+      body: JSON.stringify(body),
+    });
+  }
+
+  // Call execute_sql over JSON-RPC; returns the raw JSON-RPC response and the
+  // tool's own JSON envelope parsed out of it.
+  async function executeSql(sql: string, id: string = Math.random().toString(36).slice(2, 11)): Promise<any> {
+    const httpResponse = await postMcp({
+      jsonrpc: '2.0',
+      id,
+      method: 'tools/call',
+      params: { name: 'execute_sql', arguments: { sql } },
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    if (!httpResponse.ok) {
+      throw new Error(`HTTP ${httpResponse.status}: ${httpResponse.statusText}`);
     }
 
     // The stateless legacy path answers spec-standard SSE framing (a single
     // result event per exchange); modern-era responses are plain JSON.
-    const text = await response.text();
-    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    let text = await httpResponse.text();
+    if (httpResponse.headers.get('content-type')?.includes('text/event-stream')) {
       const dataLine = text.split('\n').find((line) => line.startsWith('data: '));
       if (!dataLine) {
         throw new Error(`No data event in SSE response: ${text}`);
       }
-      return JSON.parse(dataLine.slice('data: '.length));
+      text = dataLine.slice('data: '.length);
     }
-    return JSON.parse(text);
+    const response = JSON.parse(text);
+    expect(response).toHaveProperty('result');
+    return { response, content: JSON.parse(response.result.content[0].text) };
   }
 
   it('uses the DSN env var, not an ambient dbhub.toml', () => {
-    // Guards the isolated cwd above: if the server is ever spawned from the repo
-    // root again, a developer's local dbhub.toml wins over DSN and this reports
-    // the cause directly instead of an opaque startup timeout.
-    expect(startupLogs.join('')).toContain('Configuration source: environment variable');
+    // Guards the isolated cwd in spawnHttpServer: if the server is ever spawned
+    // from the repo root again, a developer's local dbhub.toml wins over DSN and
+    // this reports the cause directly instead of an opaque startup timeout.
+    expect(server.logs.join('')).toContain('Configuration source: environment variable');
   });
 
+  // What SQLite itself does with a statement (joins, aggregates, functions,
+  // transactions, PRAGMAs) is covered against the connector in
+  // src/connectors/__tests__/sqlite.integration.test.ts. These tests cover the
+  // path around it: HTTP -> JSON-RPC -> tool handler -> response envelope.
   describe('execute_sql JSON RPC calls', () => {
-    it('should execute a simple SELECT query successfully', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT * FROM users WHERE age > 25 ORDER BY age'
-      });
-      
-      expect(response).toHaveProperty('result');
-      expect(response.result).toHaveProperty('content');
+    it('should answer a SELECT with a JSON-RPC result carrying the rows', async () => {
+      const { response, content } = await executeSql('SELECT * FROM users WHERE age > 25 ORDER BY age', 'select-1');
+
+      expect(response).toMatchObject({ jsonrpc: '2.0', id: 'select-1' });
       expect(Array.isArray(response.result.content)).toBe(true);
-      
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data).toHaveProperty('statements');
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0]).toHaveProperty('rows');
-      expect(content.data.statements[0]).toHaveProperty('count');
-      expect(content.data.statements[0].rows).toHaveLength(2);
-      expect(content.data.statements[0].rows[0].name).toBe('John Doe');
-      expect(content.data.statements[0].rows[1].name).toBe('Bob Johnson');
-    });
 
-    it('should execute a JOIN query successfully', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT u.name, u.email, o.total 
-          FROM users u 
-          JOIN orders o ON u.id = o.user_id 
-          WHERE u.age >= 30
-          ORDER BY o.total DESC
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
       expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(2);
-      expect(content.data.statements[0].rows[0].total).toBe(149.50);
-      expect(content.data.statements[0].rows[1].total).toBe(99.99);
-    });
-
-    it('should execute aggregate queries successfully', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT 
-            COUNT(*) as user_count,
-            AVG(age) as avg_age,
-            MIN(age) as min_age,
-            MAX(age) as max_age
-          FROM users
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(1);
-      expect(content.data.statements[0].rows[0].user_count).toBe(3);
-      expect(content.data.statements[0].rows[0].avg_age).toBe(30);
-      expect(content.data.statements[0].rows[0].min_age).toBe(25);
-      expect(content.data.statements[0].rows[0].max_age).toBe(35);
+      expect(content.data.statements[0].count).toBe(2);
+      // Integer columns (SQLite hands them over as BigInt) arrive as JSON numbers
+      expect(content.data.statements[0].rows).toMatchObject([
+        { name: 'John Doe', age: 30 },
+        { name: 'Bob Johnson', age: 35 },
+      ]);
     });
 
     it('should handle multiple statements in a single call', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          INSERT INTO users (name, email, age) VALUES ('Test User', 'test@example.com', 28);
-          SELECT COUNT(*) as total_users FROM users;
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
+      const { content } = await executeSql(`
+        INSERT INTO users (name, email, age) VALUES ('Test User', 'test@example.com', 28);
+        SELECT COUNT(*) as total_users FROM users;
+      `);
+
       expect(content.success).toBe(true);
       // SQLite runs all write statements before read statements, so the
       // INSERT's entry comes first even though it's first in source order
@@ -284,118 +117,34 @@ describe('JSON RPC Integration Tests', () => {
       expect(content.data.statements[1].rows[0].total_users).toBe(4);
     });
 
-    it('should handle SQLite-specific functions', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT 
-            sqlite_version() as version,
-            datetime('now') as current_time,
-            upper('hello world') as uppercase,
-            length('test string') as str_length
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(1);
-      expect(content.data.statements[0].rows[0].version).toBeDefined();
-      expect(content.data.statements[0].rows[0].uppercase).toBe('HELLO WORLD');
-      expect(content.data.statements[0].rows[0].str_length).toBe(11);
-    });
-
     it('should return error for invalid SQL', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT * FROM non_existent_table'
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
+      const { content } = await executeSql('SELECT * FROM non_existent_table');
+
       expect(content.success).toBe(false);
       expect(content.error).toContain('no such table');
       expect(content.code).toBe('EXECUTION_ERROR');
     });
 
     it('should handle empty result sets', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT * FROM users WHERE age > 100'
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
+      const { content } = await executeSql('SELECT * FROM users WHERE age > 100');
+
       expect(content.success).toBe(true);
       expect(content.data.statements).toHaveLength(1);
       expect(content.data.statements[0].rows).toHaveLength(0);
       expect(content.data.statements[0].count).toBe(0);
     });
-
-    it('should work with SQLite transactions', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          BEGIN TRANSACTION;
-          INSERT INTO users (name, email, age) VALUES ('Transaction User', 'transaction@example.com', 40);
-          COMMIT;
-          SELECT * FROM users WHERE email = 'transaction@example.com';
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      // SQLite runs all write statements (BEGIN TRANSACTION, INSERT, COMMIT)
-      // before the read statement (SELECT), so the SELECT's resultSet is last.
-      expect(content.data.statements).toHaveLength(4);
-      const selectSet = content.data.statements[content.data.statements.length - 1];
-      expect(selectSet.rows).toHaveLength(1);
-      expect(selectSet.rows[0].name).toBe('Transaction User');
-      expect(selectSet.rows[0].age).toBe(40);
-    });
-
-    it('should handle PRAGMA statements', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'PRAGMA table_info(users)'
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows.length).toBeGreaterThan(0);
-      expect(content.data.statements[0].rows.some((row: any) => row.name === 'id')).toBe(true);
-      expect(content.data.statements[0].rows.some((row: any) => row.name === 'name')).toBe(true);
-    });
   });
 
   describe('JSON RPC protocol compliance', () => {
-    it('should return proper JSON RPC response structure', async () => {
-      const requestId = Math.random().toString(36).substr(2, 9);
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT 1 as test'
-      });
-      
-      expect(response).toHaveProperty('jsonrpc', '2.0');
-      expect(response).toHaveProperty('id');
-      expect(response).toHaveProperty('result');
-      expect(response.result).toHaveProperty('content');
-    });
-
     it('should handle malformed requests gracefully', async () => {
-      const response = await fetch(`${baseUrl}/mcp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          // Missing required jsonrpc field
-          id: 'test',
-          method: 'tools/call',
-          params: {
-            name: 'execute_sql',
-            arguments: { sql: 'SELECT 1' }
-          }
-        })
+      const response = await postMcp({
+        // Missing required jsonrpc field
+        id: 'test',
+        method: 'tools/call',
+        params: {
+          name: 'execute_sql',
+          arguments: { sql: 'SELECT 1' }
+        }
       });
 
       // The server should still respond, but with an error
@@ -413,21 +162,13 @@ describe('JSON RPC Integration Tests', () => {
     // held-open listen delays tool discovery by the proxy timeout. See
     // https://github.com/bytebase/dbhub/issues/474.
     it('refuses subscriptions/listen in-band instead of holding the request open', async () => {
-      const logLengthBefore = startupLogs.length;
+      const logLengthBefore = server.logs.length;
       const controller = new AbortController();
       const abortTimer = setTimeout(() => controller.abort(), 5000);
       let response: Response;
       try {
-        response = await fetch(`${baseUrl}/mcp`, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream',
-            'Mcp-Protocol-Version': '2026-07-28',
-            'Mcp-Method': 'subscriptions/listen',
-          },
-          body: JSON.stringify({
+        response = await postMcp(
+          {
             jsonrpc: '2.0',
             id: 'listen-1',
             method: 'subscriptions/listen',
@@ -438,8 +179,12 @@ describe('JSON RPC Integration Tests', () => {
                 'io.modelcontextprotocol/clientCapabilities': {},
               },
             },
-          }),
-        });
+          },
+          {
+            signal: controller.signal,
+            headers: { 'Mcp-Protocol-Version': '2026-07-28', 'Mcp-Method': 'subscriptions/listen' },
+          }
+        );
       } finally {
         clearTimeout(abortTimer);
       }
@@ -459,7 +204,7 @@ describe('JSON RPC Integration Tests', () => {
       // The SDK reports each refusal through onerror; with the limit at 0
       // that is the configured answer, so it must not land in the log.
       await new Promise((resolve) => setTimeout(resolve, 100));
-      const newLogs = startupLogs.slice(logLengthBefore).join('');
+      const newLogs = server.logs.slice(logLengthBefore).join('');
       expect(newLogs).not.toContain('subscriptions/listen refused');
     });
   });
