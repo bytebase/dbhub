@@ -23,7 +23,7 @@ const copies = {
     "docs/favicon.svg",
     "frontend/public/favicon.svg",
   ],
-  "png/512w/dbhub-icon-transparent-512w.png": ["mcpb/icon.png"],
+  "png/512w/dbhub-icon-transparent-512w.png": ["mcpb/icon.png", "plugin/assets/icon.png"],
 };
 
 for (const [asset, destinations] of Object.entries(copies)) {

@@ -305,7 +305,7 @@ workbench; the custom logo lettering is artwork, not a UI typeface.
 
 The sync script maintains the existing `docs/images/logo/` URLs used by the
 README and documentation, the workbench's public assets, the two favicons, and
-`mcpb/icon.png` (the 512-pixel transparent icon). `docs/images/logo/icon.svg`
+`mcpb/icon.png` and `plugin/assets/icon.png` (the 512-pixel transparent icon). `docs/images/logo/icon.svg`
 and `icon-dark.svg` are kept as separate URLs but now hold the same transparent
 icon. Do not edit these generated copies by hand; rerunning the command will
 overwrite them.
