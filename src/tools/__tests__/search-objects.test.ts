@@ -430,8 +430,6 @@ describe('search_database_objects tool', () => {
     );
   });
 
-  // Connection-failure classification happens in runToolRequest, shared by
-  // every tool; it is covered once, in execute-sql.test.ts.
   describe('error handling', () => {
     it('should validate schema exists', async () => {
       const { result, parsed } = await search({
@@ -450,6 +448,36 @@ describe('search_database_objects tool', () => {
       const { result, parsed } = await search({ object_type: 'schema', pattern: '%', detail_level: 'names' });
       expect(result.isError).toBe(true);
       expect(parsed.code).toBe('SEARCH_ERROR');
+    });
+
+    // Classification itself is runToolRequest's (see execute-sql.test.ts).
+    // What is specific to this tool: its searches skip schemas and tables they
+    // cannot read, and a connection failure must not be skipped the same way
+    // and reported as an empty, successful search.
+    it('returns AUTH_FAILED for a table search when the connector throws a login error', async () => {
+      const elogin: any = new Error('Login failed for user');
+      elogin.code = 'ELOGIN';
+      // make every method the handler might call reject with the auth error
+      const failing = {
+        id: 'sqlserver',
+        getId: () => 'mssql',
+        getDefaultSchema: vi.fn().mockRejectedValue(elogin),
+        getSchemas: vi.fn().mockRejectedValue(elogin),
+        getTables: vi.fn().mockRejectedValue(elogin),
+      };
+      mockGetCurrentConnector.mockReturnValue(failing as any);
+      vi.mocked(ConnectorManager.ensureConnected).mockResolvedValue(undefined as any);
+      vi.mocked(ConnectorManager.getSourceConfig).mockReturnValue({ id: 'mssql', type: 'sqlserver' } as any);
+
+      const result: any = await createSearchDatabaseObjectsToolHandler('mssql')(
+        { object_type: 'table', detail_level: 'names', limit: 100 },
+        {}
+      );
+      const payload = parseToolResponse(result);
+
+      expect(result.isError).toBe(true);
+      expect(payload.code).toBe('AUTH_FAILED');
+      expect(payload.details.source_id).toBe('mssql');
     });
   });
 

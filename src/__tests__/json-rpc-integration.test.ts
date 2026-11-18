@@ -76,10 +76,11 @@ describe('JSON RPC Integration Tests', () => {
     expect(server.logs.join('')).toContain('Configuration source: environment variable');
   });
 
-  // What SQLite itself does with a statement (joins, aggregates, functions,
-  // transactions, PRAGMAs) is covered against the connector in
-  // src/connectors/__tests__/sqlite.integration.test.ts. These tests cover the
-  // path around it: HTTP -> JSON-RPC -> tool handler -> response envelope.
+  // These tests cover the path around the database: HTTP -> JSON-RPC -> tool
+  // handler -> response envelope. What SQLite computes for a statement (joins,
+  // aggregates, functions) is the engine's business and is not tested; what
+  // the connector does with one (batches, transactions, PRAGMAs, value types)
+  // is covered in src/connectors/__tests__/sqlite.integration.test.ts.
   describe('execute_sql JSON RPC calls', () => {
     it('should answer a SELECT with a JSON-RPC result carrying the rows', async () => {
       const { response, content } = await executeSql('SELECT * FROM users WHERE age > 25 ORDER BY age', 'select-1');
