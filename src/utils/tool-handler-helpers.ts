@@ -139,35 +139,3 @@ export function tryClassifyConnectionError(
     source_id: displaySourceId,
   });
 }
-
-/**
- * Higher-order function to wrap tool handlers with automatic request tracking
- * @param handler Core handler logic that performs the actual work
- * @param getMetadata Function to extract request metadata from args and result
- * @returns Wrapped handler with automatic request tracking
- */
-export function withRequestTracking<TArgs = any, TResult = any>(
-  handler: (args: TArgs, extra: any) => Promise<TResult>,
-  getMetadata: (args: TArgs, result?: TResult, error?: Error) => RequestMetadata
-) {
-  return async (args: TArgs, extra: any): Promise<TResult> => {
-    const startTime = Date.now();
-    let success = true;
-    let errorMessage: string | undefined;
-    let result: TResult | undefined;
-    let error: Error | undefined;
-
-    try {
-      result = await handler(args, extra);
-      return result;
-    } catch (err) {
-      success = false;
-      error = err as Error;
-      errorMessage = error.message;
-      throw err;
-    } finally {
-      const metadata = getMetadata(args, result, error);
-      trackToolRequest(metadata, startTime, extra, success, errorMessage);
-    }
-  };
-}

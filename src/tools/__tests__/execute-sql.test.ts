@@ -20,7 +20,7 @@ const createMockConnector = (id: ConnectorType = 'sqlite', sourceId: string = 'd
   clone: vi.fn(),
   getSchemas: vi.fn(),
   getTables: vi.fn(),
-  tableExists: vi.fn(),
+  getViews: vi.fn(),
   getTableSchema: vi.fn(),
   getTableIndexes: vi.fn(),
   getStoredProcedures: vi.fn(),

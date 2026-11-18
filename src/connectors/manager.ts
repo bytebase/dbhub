@@ -1,10 +1,13 @@
-import { Connector, ConnectorType, ConnectorRegistry, ExecuteOptions, ConnectorConfig } from "./interface.js";
+import { Connector, ConnectorRegistry, ConnectorConfig } from "./interface.js";
 import { SSHTunnel } from "../utils/ssh-tunnel.js";
 import type { SSHTunnelConfig, SSHTunnelInfo } from "../types/ssh.js";
 import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
-import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
-import { redactDSN } from "../config/env.js";
+import {
+  getDatabaseTypeFromDSN,
+  getDefaultPortForType,
+  obfuscateDSNPassword,
+} from "../utils/dsn-obfuscate.js";
 import { SafeURL, replaceDSNHostPort } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
@@ -79,7 +82,7 @@ export class ConnectorManager {
     const sourceId = source.id;
     const dsn = buildDSNFromSource(source);
 
-    console.error(`  - ${sourceId}: ${redactDSN(dsn)} (lazy, will connect on first use)`);
+    console.error(`  - ${sourceId}: ${obfuscateDSNPassword(dsn)} (lazy, will connect on first use)`);
 
     // Store config for later connection
     this.lazySources.set(sourceId, source);
@@ -152,7 +155,7 @@ export class ConnectorManager {
     const config: ConnectorConfig = {};
     // Build DSN from source config
     const dsn = await this.buildConnectionDSN(source, config);
-    console.error(`  - ${sourceId}: ${redactDSN(dsn)}`);
+    console.error(`  - ${sourceId}: ${obfuscateDSNPassword(dsn)}`);
 
     // Setup SSH tunnel if needed
     let actualDSN = dsn;
@@ -261,7 +264,7 @@ export class ConnectorManager {
       if (!connectorPrototype) {
         const hint = getMissingDriverHint(actualDSN);
         throw new Error(
-          `Source '${sourceId}': No connector found for DSN: ${redactDSN(actualDSN)}` +
+          `Source '${sourceId}': No connector found for DSN: ${obfuscateDSNPassword(actualDSN)}` +
             (hint ? `. ${hint}` : "")
         );
       }
@@ -485,20 +488,6 @@ export class ConnectorManager {
     }
 
     return connector;
-  }
-
-  /**
-   * Get all available connector types
-   */
-  static getAvailableConnectors(): ConnectorType[] {
-    return ConnectorRegistry.getAvailableConnectors();
-  }
-
-  /**
-   * Get sample DSNs for all available connectors
-   */
-  static getAllSampleDSNs(): { [key in ConnectorType]?: string } {
-    return ConnectorRegistry.getAllSampleDSNs();
   }
 
   /**

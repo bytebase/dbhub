@@ -403,33 +403,6 @@ export class PostgresConnector implements Connector {
     }
   }
 
-  async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    if (!this.pool) {
-      throw new Error("Not connected to database");
-    }
-
-    const client = await this.acquireClient();
-    try {
-      // Use the configured default schema (from search_path config, defaults to 'public')
-      const schemaToUse = schema || this.defaultSchema;
-
-      const result = await client.query(
-        `
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables
-          WHERE table_schema = $1
-          AND table_name = $2
-        )
-      `,
-        [schemaToUse, tableName]
-      );
-
-      return result.rows[0].exists;
-    } finally {
-      client.release();
-    }
-  }
-
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
     if (!this.pool) {
       throw new Error("Not connected to database");

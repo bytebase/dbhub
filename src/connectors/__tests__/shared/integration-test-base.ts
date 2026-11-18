@@ -141,16 +141,6 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         }
       });
 
-      it('should check if table exists', async () => {
-        const firstTable = this.config.expectedTables[0];
-        expect(await this.connector.tableExists(firstTable)).toBe(true);
-        expect(await this.connector.tableExists('nonexistent_table')).toBe(false);
-        
-        if (this.config.testSchema && this.config.expectedTestSchemaTable) {
-          expect(await this.connector.tableExists(this.config.expectedTestSchemaTable, this.config.testSchema)).toBe(true);
-          expect(await this.connector.tableExists(this.config.expectedTestSchemaTable, 'public')).toBe(false);
-        }
-      });
     });
   }
 

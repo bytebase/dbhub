@@ -2,7 +2,6 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
 import {
   buildZodSchemaFromParameters,
-  buildInputSchema,
   createCustomToolHandler,
 } from "../custom-tool-handler.js";
 import { ConnectorManager } from "../../connectors/manager.js";
@@ -83,63 +82,6 @@ describe("Custom Tool Handler", () => {
     ])("should build empty schema for %s", (_, params) => {
       const schema = zodSchemaFor(params);
       expect(schema.safeParse({}).success).toBe(true);
-    });
-  });
-
-  describe("buildInputSchema", () => {
-    it("should build JSON Schema for string parameter", () => {
-      const schema = buildInputSchema([param("email", "string", { description: "User email" })]);
-
-      expect(schema.type).toBe("object");
-      expect(schema.properties.email).toEqual({
-        type: "string",
-        description: "User email",
-      });
-      expect(schema.required).toEqual(["email"]);
-    });
-
-    it.each([
-      // [parameter type, expected JSON Schema type]
-      ["integer", "integer"],
-      ["float", "number"],
-      ["boolean", "boolean"],
-      ["array", "array"],
-    ] as const)("should build JSON Schema for %s parameter", (paramType, jsonType) => {
-      const schema = buildInputSchema([param("value", paramType)]);
-
-      expect(schema.properties.value.type).toBe(jsonType);
-    });
-
-    it("should include enum for allowed_values", () => {
-      const schema = buildInputSchema([
-        param("status", "string", { allowed_values: ["pending", "active"] }),
-      ]);
-
-      expect(schema.properties.status.enum).toEqual(["pending", "active"]);
-    });
-
-    it("should not include optional params in required array", () => {
-      const schema = buildInputSchema([
-        param("id", "integer"),
-        param("status", "string", { required: false }),
-        param("priority", "integer", { default: 1 }),
-      ]);
-
-      expect(schema.required).toEqual(["id"]);
-    });
-
-    it("should omit required field when all params are optional", () => {
-      const schema = buildInputSchema([param("status", "string", { default: "pending" })]);
-
-      expect(schema.required).toBeUndefined();
-    });
-
-    it("should build empty schema for undefined parameters", () => {
-      const schema = buildInputSchema(undefined);
-
-      expect(schema.type).toBe("object");
-      expect(schema.properties).toEqual({});
-      expect(schema.required).toBeUndefined();
     });
   });
 

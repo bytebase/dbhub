@@ -291,15 +291,6 @@ export interface Connector {
   getTableSchema(tableName: string, schema?: string): Promise<TableColumn[]>;
 
   /**
-   * Check if a table exists
-   * @param tableName The name of the table to check
-   * @param schema Optional schema name. If not provided, implementation should use the default schema
-   *   as described in getTables method.
-   * @returns Promise with boolean indicating if table exists
-   */
-  tableExists(tableName: string, schema?: string): Promise<boolean>;
-
-  /**
    * Get indexes for a specific table
    * @param tableName The name of the table to get indexes for
    * @param schema Optional schema name. If not provided, implementation should use the default schema
@@ -365,13 +356,6 @@ export class ConnectorRegistry {
   }
 
   /**
-   * Get a connector by ID
-   */
-  static getConnector(id: ConnectorType): Connector | null {
-    return ConnectorRegistry.connectors.get(id) || null;
-  }
-
-  /**
    * Get connector for a DSN string
    * Tries to find a connector that can handle the given DSN format
    */
@@ -382,22 +366,6 @@ export class ConnectorRegistry {
       }
     }
     return null;
-  }
-
-  /**
-   * Get all available connector IDs
-   */
-  static getAvailableConnectors(): ConnectorType[] {
-    return Array.from(ConnectorRegistry.connectors.keys());
-  }
-
-  /**
-   * Get sample DSN for a specific connector
-   */
-  static getSampleDSN(connectorType: ConnectorType): string | null {
-    const connector = ConnectorRegistry.getConnector(connectorType);
-    if (!connector) return null;
-    return connector.dsnParser.getSampleDSN();
   }
 
   /**

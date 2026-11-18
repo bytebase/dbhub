@@ -346,28 +346,6 @@ export class SQLiteConnector implements Connector {
     }
   }
 
-  async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    if (!this.db) {
-      throw new Error("Not connected to SQLite database");
-    }
-
-    // In SQLite, schema parameter is ignored since there's only one schema per database file
-    // All tables exist in a single namespace within the SQLite database
-    try {
-      const row = this.queryOne<SQLiteTableNameRow>(
-        `
-        SELECT name FROM sqlite_master
-        WHERE type='table' AND name = ?
-      `,
-        tableName
-      );
-
-      return !!row;
-    } catch (error) {
-      throw error;
-    }
-  }
-
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
     if (!this.db) {
       throw new Error("Not connected to SQLite database");

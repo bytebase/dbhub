@@ -1,4 +1,3 @@
-import type { SSHTunnelConfig } from '../types/ssh.js';
 import type { ConnectorType } from '../connectors/interface.js';
 import { SafeURL } from './safe-url.js';
 import { parseSqliteDsnPath } from './sqlite-dsn.js';
@@ -189,33 +188,6 @@ export function obfuscateDSNPassword(dsn: string): string {
     // Fail closed: an unparseable DSN may still contain a password
     return REDACTED_DSN;
   }
-}
-
-/**
- * Obfuscates sensitive information in SSH configuration for logging
- * @param config The SSH tunnel configuration
- * @returns SSH config with sensitive data replaced by asterisks
- */
-export function obfuscateSSHConfig(config: SSHTunnelConfig): Partial<SSHTunnelConfig> {
-  const obfuscated: Partial<SSHTunnelConfig> = {
-    host: config.host,
-    port: config.port,
-    username: config.username,
-  };
-  
-  if (config.password) {
-    obfuscated.password = '*'.repeat(8);
-  }
-  
-  if (config.privateKey) {
-    obfuscated.privateKey = config.privateKey; // Keep path as-is
-  }
-  
-  if (config.passphrase) {
-    obfuscated.passphrase = '*'.repeat(8);
-  }
-  
-  return obfuscated;
 }
 
 /**

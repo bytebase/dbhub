@@ -1,6 +1,5 @@
 /**
- * Response formatter utility for consistent API responses
- * Provides formatting for resources, tools, and prompts
+ * Response formatter utility for consistent tool responses
  */
 
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
@@ -88,110 +87,5 @@ export function createToolSuccessResponse<T>(data: T, meta: Record<string, any> 
         mimeType: "application/json",
       },
     ],
-  };
-}
-
-/**
- * Create a resource error response object
- */
-export function createResourceErrorResponse(
-  uri: string,
-  error: string,
-  code: string = "ERROR",
-  details?: any
-) {
-  return {
-    contents: [
-      {
-        uri,
-        text: JSON.stringify(formatErrorResponse(error, code, details), bigIntReplacer, 2),
-        mimeType: "application/json",
-      },
-    ],
-  };
-}
-
-/**
- * Create a resource success response object
- */
-export function createResourceSuccessResponse<T>(
-  uri: string,
-  data: T,
-  meta: Record<string, any> = {}
-) {
-  return {
-    contents: [
-      {
-        uri,
-        text: JSON.stringify(formatSuccessResponse(data, meta), bigIntReplacer, 2),
-        mimeType: "application/json",
-      },
-    ],
-  };
-}
-
-/**
- * Format a successful prompt response in the MCP format
- */
-export function formatPromptSuccessResponse(
-  text: string,
-  references: string[] = []
-): {
-  messages: Array<{
-    role: "assistant";
-    content: {
-      type: "text";
-      text: string;
-    };
-  }>;
-  references?: string[];
-  _meta?: Record<string, unknown>;
-  [key: string]: unknown;
-} {
-  return {
-    messages: [
-      {
-        role: "assistant",
-        content: {
-          type: "text",
-          text,
-        },
-      },
-    ],
-    ...(references.length > 0 ? { references } : {}),
-  };
-}
-
-/**
- * Format an error prompt response in the MCP format
- */
-export function formatPromptErrorResponse(
-  error: string,
-  code: string = "ERROR"
-): {
-  messages: Array<{
-    role: "assistant";
-    content: {
-      type: "text";
-      text: string;
-    };
-  }>;
-  error: string;
-  code: string;
-  _meta?: Record<string, unknown>;
-  [key: string]: unknown;
-} {
-  return {
-    messages: [
-      {
-        role: "assistant",
-        content: {
-          type: "text",
-          text: `Error: ${error}`,
-        },
-      },
-    ],
-    error,
-    code,
   };
 }

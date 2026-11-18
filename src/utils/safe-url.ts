@@ -6,27 +6,10 @@
  */
 
 /**
- * Interface defining the structure of a URL parser
- * that can handle special characters in connection strings
- */
-export interface ISafeURL {
-  protocol: string;
-  hostname: string;
-  port: string;
-  pathname: string;
-  username: string;
-  password: string;
-  searchParams: Map<string, string>;
-  
-  getSearchParam(name: string): string | null;
-  forEachSearchParam(callback: (value: string, key: string) => void): void;
-}
-
-/**
  * SafeURL class implements a parser for handling DSN strings
  * with special characters that might break the standard URL constructor
  */
-export class SafeURL implements ISafeURL {
+export class SafeURL {
   protocol: string;
   hostname: string;
   port: string;

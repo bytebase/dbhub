@@ -312,35 +312,6 @@ export class SQLServerConnector implements Connector {
     }
   }
 
-  async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    if (!this.connection) {
-      throw new Error("Not connected to SQL Server database");
-    }
-
-    try {
-      // In SQL Server, use 'dbo' as the default schema if none specified
-      const schemaToUse = schema || "dbo";
-
-      const request = this.connection
-        .request()
-        .input("tableName", sql.VarChar, tableName)
-        .input("schema", sql.VarChar, schemaToUse);
-
-      const query = `
-          SELECT COUNT(*) as count
-          FROM INFORMATION_SCHEMA.TABLES
-          WHERE TABLE_NAME = @tableName
-            AND TABLE_SCHEMA = @schema
-      `;
-
-      const result = await request.query(query);
-
-      return result.recordset[0].count > 0;
-    } catch (error) {
-      throw new Error(`Failed to check if table exists: ${(error as Error).message}`);
-    }
-  }
-
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
     if (!this.connection) {
       throw new Error("Not connected to SQL Server database");

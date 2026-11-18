@@ -517,17 +517,6 @@ function splitTokenList(value: string): string[] {
 }
 
 /**
- * Redact sensitive information from a DSN string
- * Replaces the password with asterisks; returns a constant placeholder if the
- * DSN cannot be parsed, so a malformed DSN never leaks its password.
- * @param dsn - The DSN string to redact
- * @returns The sanitized DSN string
- */
-export function redactDSN(dsn: string): string {
-  return obfuscateDSNPassword(dsn);
-}
-
-/**
  * Resolve ID from command line args or environment variables
  * Returns ID or null if not provided
  */
@@ -777,7 +766,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       dsnUrl = new SafeURL(dsnResult.dsn);
     } catch (error) {
       throw new Error(
-        `Invalid DSN format: ${redactDSN(dsnResult.dsn)}. Expected format: protocol://[user[:password]@]host[:port]/database`
+        `Invalid DSN format: ${obfuscateDSNPassword(dsnResult.dsn)}. Expected format: protocol://[user[:password]@]host[:port]/database`
       );
     }
 

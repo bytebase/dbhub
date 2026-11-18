@@ -220,49 +220,6 @@ export class ToolRegistry {
     return tools.find((t) => t.name === toolName);
   }
 
-  /**
-   * Get all unique tools across all sources (for tools/list response)
-   * Returns the union of all enabled tools
-   */
-  getAllTools(): ToolConfig[] {
-    const seen = new Set<string>();
-    const result: ToolConfig[] = [];
-
-    for (const tools of this.toolsBySource.values()) {
-      for (const tool of tools) {
-        if (!seen.has(tool.name)) {
-          seen.add(tool.name);
-          result.push(tool);
-        }
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Get all custom tools (non-builtin) across all sources
-   */
-  getCustomTools(): ToolConfig[] {
-    return this.getAllTools().filter((tool) => !this.isBuiltinTool(tool.name));
-  }
-
-  /**
-   * Get all built-in tool names that are enabled across any source
-   */
-  getEnabledBuiltinToolNames(): string[] {
-    const enabledBuiltins = new Set<string>();
-
-    for (const tools of this.toolsBySource.values()) {
-      for (const tool of tools) {
-        if (this.isBuiltinTool(tool.name)) {
-          enabledBuiltins.add(tool.name);
-        }
-      }
-    }
-
-    return Array.from(enabledBuiltins);
-  }
 }
 
 // Global singleton instance

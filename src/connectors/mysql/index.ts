@@ -389,10 +389,6 @@ export class MySQLConnector implements Connector {
     return introspection.getViews(this.requireQuery(), schema);
   }
 
-  async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    return introspection.tableExists(this.requireQuery(), tableName, schema);
-  }
-
   async getTableIndexes(tableName: string, schema?: string): Promise<TableIndex[]> {
     return introspection.getTableIndexes(this.requireQuery(), tableName, schema);
   }

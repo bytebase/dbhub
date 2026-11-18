@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 import {
   buildDSNFromEnvParams,
-  redactDSN,
   resolveDSN,
   resolveHost,
   resolveId,
@@ -359,16 +358,6 @@ describe('Environment Configuration Tests', () => {
       process.argv = ['node', 'script.js', '--dsn=sqlite://'];
 
       await expect(resolveSourceConfigs()).rejects.toThrow(/Invalid SQLite DSN.*does not name a database file/);
-    });
-  });
-
-  describe('redactDSN', () => {
-    // redactDSN delegates to obfuscateDSNPassword; its edge cases are covered
-    // in src/utils/__tests__/dsn-obfuscate.test.ts.
-    it('should replace the password with asterisks', () => {
-      const result = redactDSN('postgres://user:hunter2@localhost:5432/db');
-      expect(result).not.toContain('hunter2');
-      expect(result).toMatch(/^postgres:\/\/user:\*+@localhost:5432\/db$/);
     });
   });
 
