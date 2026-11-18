@@ -1,11 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { homedir } from "os";
 import toml from "@iarna/toml";
 import type { SourceConfig, TomlConfig, UnvalidatedToolConfig } from "../types/config.js";
 import { parseCommandLineArgs, requireFlagValue } from "./env.js";
 import { parseConnectionInfoFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { SafeURL } from "../utils/safe-url.js";
+import { expandHomeDir } from "../utils/home-dir.js";
 import {
   SQLITE_DSN_PREFIX,
   SQLITE_MEMORY_PATH,
@@ -1184,16 +1184,6 @@ export function interpolateEnvVars(value: unknown): unknown {
     return result;
   }
   return value;
-}
-
-/**
- * Expand ~ to home directory in paths
- */
-function expandHomeDir(filePath: string): string {
-  if (filePath.startsWith("~/")) {
-    return path.join(homedir(), filePath.substring(2));
-  }
-  return filePath;
 }
 
 /**

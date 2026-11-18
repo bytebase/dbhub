@@ -1,4 +1,5 @@
 import { TableColumn, TableIndex, StoredProcedure } from "./interface.js";
+import { groupIndexColumns } from "./introspection-utils.js";
 import { quoteIdentifier } from "../utils/identifier-quoter.js";
 
 /**
@@ -114,46 +115,12 @@ export async function getTableIndexes(query: MySQLFamilyQuery, tableName: string
       queryParams
     );
 
-    // Process the results to group columns by index
-    const indexMap = new Map<
-      string,
-      {
-        columns: string[];
-        is_unique: boolean;
-        is_primary: boolean;
-      }
-    >();
-
-    for (const row of indexRows) {
-      const indexName = row.INDEX_NAME;
-      const columnName = row.COLUMN_NAME;
-      const isUnique = row.NON_UNIQUE === 0; // In MySQL and MariaDB, NON_UNIQUE=0 means the index is unique
-      const isPrimary = indexName === "PRIMARY";
-
-      if (!indexMap.has(indexName)) {
-        indexMap.set(indexName, {
-          columns: [],
-          is_unique: isUnique,
-          is_primary: isPrimary,
-        });
-      }
-
-      const indexInfo = indexMap.get(indexName)!;
-      indexInfo.columns.push(columnName);
-    }
-
-    // Convert the map to the expected TableIndex format
-    const results: TableIndex[] = [];
-    indexMap.forEach((indexInfo, indexName) => {
-      results.push({
-        index_name: indexName,
-        column_names: indexInfo.columns,
-        is_unique: indexInfo.is_unique,
-        is_primary: indexInfo.is_primary,
-      });
-    });
-
-    return results;
+    return groupIndexColumns(indexRows, (row) => ({
+      indexName: row.INDEX_NAME,
+      columnName: row.COLUMN_NAME,
+      isUnique: row.NON_UNIQUE === 0, // In MySQL and MariaDB, NON_UNIQUE=0 means the index is unique
+      isPrimary: row.INDEX_NAME === "PRIMARY",
+    }));
   } catch (error) {
     console.error("Error getting table indexes:", error);
     throw error;

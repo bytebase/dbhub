@@ -1,7 +1,7 @@
 import sql from "mssql";
 import { ExecuteOptions, SQLResult } from "../interface.js";
 import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
-import { assertNoReadOnlyEscapes, bindParameters } from "./request-helpers.js";
+import { assertNoReadOnlyEscapes, bindParameters, runRolledBack } from "./request-helpers.js";
 
 /**
  * EXPLAIN emulation for SQL Server, which has no native EXPLAIN statement.
@@ -73,6 +73,40 @@ export async function explainQuery(
     throw new Error("EXPLAIN does not support SET SHOWPLAN statements");
   }
 
+  try {
+    return await withPlanSession(config, "SET SHOWPLAN_XML ON", async (explainPool) => {
+      // The parameters belong on the statement being explained, not on the
+      // toggle. node-mssql turns them into DECLARE/SET, which SHOWPLAN compiles
+      // without executing — so the plan is the one for a parameterized query,
+      // estimated from density rather than from the literal values.
+      const planRequest = explainPool.request();
+      bindParameters(planRequest, parameters);
+      const planResult = await planRequest.batch(innerQuery);
+
+      // The plan is returned as the single column of the first row.
+      const planRow = planResult.recordset?.[0];
+      return planRow ? Object.values(planRow)[0] : null;
+    });
+  } catch (error) {
+    throw new Error(`Failed to explain query: ${(error as Error).message}`);
+  }
+}
+
+/**
+ * Run `readPlan` on a short-lived, single-connection pool with a plan-yielding
+ * session toggle switched on, and shape the plan document it returns as the
+ * tool's result.
+ *
+ * The dedicated pool is what keeps the toggle off the shared one: `max: 1`
+ * plus sequential awaits guarantee the toggle and every batch `readPlan` sends
+ * land on the same session, and closing the pool discards that session
+ * instead of handing it to a concurrent query.
+ */
+async function withPlanSession(
+  config: sql.config,
+  toggle: string,
+  readPlan: (explainPool: sql.ConnectionPool) => Promise<unknown>
+): Promise<SQLResult> {
   const explainPool = new sql.ConnectionPool({
     ...config,
     pool: { ...config.pool, max: 1, min: 1 },
@@ -80,20 +114,9 @@ export async function explainQuery(
 
   try {
     await explainPool.connect();
-    // max:1 + sequential awaits guarantee both batches hit the same session.
-    await explainPool.request().batch("SET SHOWPLAN_XML ON");
+    await explainPool.request().batch(toggle);
 
-    // The parameters belong on the statement being explained, not on the
-    // toggle. node-mssql turns them into DECLARE/SET, which SHOWPLAN compiles
-    // without executing — so the plan is the one for a parameterized query,
-    // estimated from density rather than from the literal values.
-    const planRequest = explainPool.request();
-    bindParameters(planRequest, parameters);
-    const planResult = await planRequest.batch(innerQuery);
-
-    // The plan is returned as the single column of the first row.
-    const planRow = planResult.recordset?.[0];
-    const planXml = planRow ? Object.values(planRow)[0] : null;
+    const planXml = await readPlan(explainPool);
     return {
       resultSets: [
         {
@@ -102,8 +125,6 @@ export async function explainQuery(
         },
       ],
     };
-  } catch (error) {
-    throw new Error(`Failed to explain query: ${(error as Error).message}`);
   } finally {
     await explainPool.close();
   }
@@ -234,80 +255,24 @@ export async function explainAnalyzeQuery(
     assertNoReadOnlyEscapes(innerQuery, { transactionControl: true });
   }
 
-  const explainPool = new sql.ConnectionPool({
-    ...config,
-    pool: { ...config.pool, max: 1, min: 1 },
-  });
-
   try {
-    await explainPool.connect();
-    // max:1 + sequential awaits guarantee every batch hits the same session.
-    await explainPool.request().batch("SET STATISTICS XML ON");
+    return await withPlanSession(config, "SET STATISTICS XML ON", async (explainPool) => {
+      const runBatch = (planRequest: sql.Request) => {
+        bindParameters(planRequest, parameters);
+        return planRequest.batch(innerQuery);
+      };
+      // Read-only: the statement really runs, so it runs inside a transaction
+      // that is always rolled back and its writes cannot stick.
+      const planResult = options.readonly
+        ? await runRolledBack(explainPool, runBatch)
+        : await runBatch(explainPool.request());
 
-    let planResult: sql.IResult<any>;
-    if (options.readonly) {
-      planResult = await batchRolledBack(
-        explainPool,
-        innerQuery,
-        parameters
-      );
-    } else {
-      const planRequest = explainPool.request();
-      bindParameters(planRequest, parameters);
-      planResult = await planRequest.batch(innerQuery);
-    }
-
-    const planXml = extractPlanXml(planResult);
-    return {
-      resultSets: [
-        {
-          rows: planXml != null ? [{ plan: planXml }] : [],
-          rowCount: planXml != null ? 1 : 0,
-        },
-      ],
-    };
+      return extractPlanXml(planResult);
+    });
   } catch (error) {
     // Named apart from the plain EXPLAIN path: this one ran the statement, so
     // a failure here can mean the statement itself failed mid-execution.
     throw new Error(`Failed to explain analyze query: ${(error as Error).message}`);
-  } finally {
-    await explainPool.close();
-  }
-}
-
-/**
- * Run a batch inside a transaction that is always rolled back, so EXPLAIN
- * ANALYZE can report a real plan without letting the statement's writes stick.
- */
-async function batchRolledBack(
-  pool: sql.ConnectionPool,
-  innerQuery: string,
-  parameters?: any[]
-): Promise<sql.IResult<any>> {
-  const transaction = new sql.Transaction(pool);
-  await transaction.begin();
-
-  let queryFailed = false;
-  try {
-    const request = new sql.Request(transaction);
-    bindParameters(request, parameters);
-    return await request.batch(innerQuery);
-  } catch (error) {
-    queryFailed = true;
-    throw error;
-  } finally {
-    try {
-      await transaction.rollback();
-    } catch (rollbackError) {
-      // A failed query already aborted the transaction, so a rollback error
-      // there is expected noise. After a *successful* query it means the
-      // writes may still be live — that must surface.
-      if (!queryFailed) {
-        throw new Error(
-          `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`
-        );
-      }
-    }
   }
 }
 

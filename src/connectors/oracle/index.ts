@@ -1,5 +1,3 @@
-import os from "os";
-import path from "path";
 import oracledb from "oracledb";
 import {
   Connector,
@@ -16,6 +14,7 @@ import {
   HealthCheckResult,
 } from "../interface.js";
 import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
+import { groupIndexColumns } from "../introspection-utils.js";
 import { SafeURL, rawQueryParamValues } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
@@ -26,11 +25,7 @@ import {
 } from "../../utils/sql-parser.js";
 import { isReadOnlySQL } from "../../utils/allowed-keywords.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
-
-/** Expand a leading `~/` in a wallet directory given as a DSN parameter. */
-function expandHomeDir(dir: string): string {
-  return dir.startsWith("~/") ? path.join(os.homedir(), dir.slice(2)) : dir;
-}
+import { expandHomeDir } from "../../utils/home-dir.js";
 
 /**
  * End-to-end tracing attributes for V$SESSION / ASH: `module` is the DBHub
@@ -535,21 +530,12 @@ export class OracleConnector implements Connector {
         { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
       );
 
-      const indexMap = new Map<string, TableIndex>();
-      for (const row of rows) {
-        let index = indexMap.get(row.INDEX_NAME);
-        if (!index) {
-          index = {
-            index_name: row.INDEX_NAME,
-            column_names: [],
-            is_unique: row.UNIQUENESS === "UNIQUE",
-            is_primary: Number(row.IS_PRIMARY) === 1,
-          };
-          indexMap.set(row.INDEX_NAME, index);
-        }
-        index.column_names.push(row.COLUMN_NAME);
-      }
-      return Array.from(indexMap.values());
+      return groupIndexColumns(rows, (row) => ({
+        indexName: row.INDEX_NAME,
+        columnName: row.COLUMN_NAME,
+        isUnique: row.UNIQUENESS === "UNIQUE",
+        isPrimary: Number(row.IS_PRIMARY) === 1,
+      }));
     } catch (error) {
       throw new Error(`Failed to get indexes for table ${tableName}: ${(error as Error).message}`);
     }

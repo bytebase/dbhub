@@ -6,7 +6,6 @@ import {
   DSNParser,
   SQLResult,
   SQLResultSet,
-  DatabaseMessage,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -15,6 +14,7 @@ import {
   HealthCheckResult,
 } from "../interface.js";
 import { computeHitRatioPct, toNullableNumber } from "../health-check-utils.js";
+import { groupIndexColumns } from "../introspection-utils.js";
 import { isDriverNotInstalled } from "../../utils/module-loader.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
@@ -22,7 +22,12 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { objectRows } from "../../utils/result-columns.js";
 import { LEADING_SQL_NOISE, splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
-import { assertNoReadOnlyEscapes, bindParameters } from "./request-helpers.js";
+import {
+  assertNoReadOnlyEscapes,
+  bindParameters,
+  collectInfoMessages,
+  runRolledBack,
+} from "./request-helpers.js";
 import { explainAnalyzeQuery, explainQuery, parseExplainPrefix } from "./explain.js";
 
 /**
@@ -350,46 +355,15 @@ export class SQLServerConnector implements Connector {
 
       const result = await request.query(query);
 
-      // Group by index name to collect all columns for each index
-      const indexMap = new Map<
-        string,
-        {
-          columns: string[];
-          is_unique: boolean;
-          is_primary: boolean;
-        }
-      >();
-
-      for (const row of result.recordset) {
-        const indexName = row.index_name;
-        const columnName = row.column_name;
-        const isUnique = !!row.is_unique;
-        const isPrimary = !!row.is_primary_key;
-
-        if (!indexMap.has(indexName)) {
-          indexMap.set(indexName, {
-            columns: [],
-            is_unique: isUnique,
-            is_primary: isPrimary,
-          });
-        }
-
-        const indexInfo = indexMap.get(indexName)!;
-        indexInfo.columns.push(columnName);
-      }
-
-      // Convert Map to array of TableIndex objects
-      const indexes: TableIndex[] = [];
-      indexMap.forEach((info, name) => {
-        indexes.push({
-          index_name: name,
-          column_names: info.columns,
-          is_unique: info.is_unique,
-          is_primary: info.is_primary,
-        });
-      });
-
-      return indexes;
+      return groupIndexColumns(
+        result.recordset,
+        (row: { index_name: string; column_name: string; is_unique: unknown; is_primary_key: unknown }) => ({
+          indexName: row.index_name,
+          columnName: row.column_name,
+          isUnique: !!row.is_unique,
+          isPrimary: !!row.is_primary_key,
+        })
+      );
     } catch (error) {
       throw new Error(`Failed to get indexes for table ${tableName}: ${(error as Error).message}`);
     }
@@ -769,40 +743,25 @@ export class SQLServerConnector implements Connector {
       // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
       // unconditionally ROLLBACK to prevent any modifications from persisting.
       // This is defense-in-depth behind the keyword classifier.
-      if (options.readonly) {
-        return await this.executeReadOnly(
-          processedSQL,
-          parameters,
-          isSingleStatement ? sqlQuery : undefined,
-          options.maxRows,
-        );
-      }
+      // Both modes run the same request; read-only only changes what it runs in.
+      const run = async (request: sql.Request) => {
+        // Informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
+        const messages = collectInfoMessages(request);
+        bindParameters(request, parameters);
+        // Positional rows; buildResultSets rebuilds the objects (see objectRows).
+        request.arrayRowMode = true;
+        return { result: await request.query(processedSQL), messages };
+      };
 
-      // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
-      const request = this.connection.request();
-      const messages: DatabaseMessage[] = [];
-      request.on(
-        'info',
-        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-          messages.push({
-            text: info.message,
-            // SQL Server reports severity as a numeric class; info messages are < 10.
-            severity: info.class !== undefined ? String(info.class) : undefined,
-            code: info.number,
-            line: info.lineNumber,
-          });
-        }
-      );
-
-      bindParameters(request, parameters);
-      // Positional rows; buildResultSets rebuilds the objects (see objectRows).
-      request.arrayRowMode = true;
-
-      const result = await request.query(processedSQL);
+      const { result, messages } = options.readonly
+        ? await this.executeReadOnly(processedSQL, run)
+        : await run(this.connection.request());
 
       const resultSets = SQLServerConnector.buildResultSets(
         result.recordsets,
         result.rowsAffected,
+        // Original (pre-rewrite) statement text for attribution; undefined for
+        // multi-statement batches, where attribution would be a guess.
         isSingleStatement ? sqlQuery : undefined,
         options.maxRows,
       );
@@ -918,75 +877,21 @@ export class SQLServerConnector implements Connector {
   }
 
   /**
-   * Execute a query inside a transaction that always rolls back, preventing
+   * Run a request inside a transaction that always rolls back, preventing
    * any modifications from persisting. SQL Server has no native READ ONLY
    * transaction mode, so this is the defense-in-depth backstop behind the
-   * keyword classifier.
+   * keyword classifier (see runRolledBack).
    *
    * Dangerous constructs are rejected before the transaction opens; see
    * assertNoReadOnlyEscapes.
    */
-  private async executeReadOnly(
+  private async executeReadOnly<T>(
     processedSQL: string,
-    parameters: any[] | undefined,
-    // Original (pre-rewrite) statement text for attribution; undefined for
-    // multi-statement batches, where attribution would be a guess.
-    sourceSql: string | undefined,
-    maxRows: number | undefined,
-  ): Promise<SQLResult> {
+    run: (request: sql.Request) => Promise<T>
+  ): Promise<T> {
     assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
-
-    const transaction = new sql.Transaction(this.connection!);
-    await transaction.begin();
-
-    const request = new sql.Request(transaction);
-    const messages: DatabaseMessage[] = [];
-    request.on(
-      'info',
-      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-        messages.push({
-          text: info.message,
-          severity: info.class !== undefined ? String(info.class) : undefined,
-          code: info.number,
-          line: info.lineNumber,
-        });
-      },
-    );
-
-    bindParameters(request, parameters);
-    // Positional rows; buildResultSets rebuilds the objects (see objectRows).
-    request.arrayRowMode = true;
-
-    let result;
-    let queryFailed = false;
-    try {
-      result = await request.query(processedSQL);
-    } catch (error) {
-      queryFailed = true;
-      throw error;
-    } finally {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        if (!queryFailed) {
-          throw new Error(
-            `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`,
-          );
-        }
-      }
-    }
-    const resultSets = SQLServerConnector.buildResultSets(
-      result.recordsets,
-      result.rowsAffected,
-      sourceSql,
-      maxRows,
-    );
-    return {
-      resultSets,
-      ...(messages.length > 0 ? { messages } : {}),
-    };
+    return runRolledBack(this.connection!, run);
   }
-
 }
 
 // Create and register the connector

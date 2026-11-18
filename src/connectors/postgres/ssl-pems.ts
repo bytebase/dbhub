@@ -1,8 +1,7 @@
 import fs from "fs";
-import os from "os";
-import path from "path";
 import pg from "pg";
 import { FailedToReadCertificate } from "./failed-to-read-certificate.js";
+import { expandHomeDir } from "../../utils/home-dir.js";
 
 /**
  * PEM handling behind the PostgreSQL `sslrootcert` / `sslcert` / `sslkey` DSN
@@ -36,11 +35,6 @@ export interface PemContents {
   key?: string;
 }
 
-/** Expand a leading `~/` in a PEM path referenced by an SSL DSN parameter. */
-function resolvePemPath(filePath: string): string {
-  return filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath;
-}
-
 function failedToRead(label: string, resolved: string, err: unknown): FailedToReadCertificate {
   return new FailedToReadCertificate(
     `Failed to read ${label} at '${resolved}': ${err instanceof Error ? err.message : String(err)}`
@@ -53,7 +47,7 @@ function failedToRead(label: string, resolved: string, err: unknown): FailedToRe
  * misconfigured cert path apart from a malformed DSN.
  */
 export async function readPemFile(filePath: string, label: string): Promise<string> {
-  const resolved = resolvePemPath(filePath);
+  const resolved = expandHomeDir(filePath);
   try {
     return await fs.promises.readFile(resolved, "utf-8");
   } catch (err) {
@@ -63,7 +57,7 @@ export async function readPemFile(filePath: string, label: string): Promise<stri
 
 /** Synchronous variant of readPemFile for the per-connection reload. */
 function readPemFileSync(filePath: string, label: string): string {
-  const resolved = resolvePemPath(filePath);
+  const resolved = expandHomeDir(filePath);
   try {
     return fs.readFileSync(resolved, "utf-8");
   } catch (err) {
