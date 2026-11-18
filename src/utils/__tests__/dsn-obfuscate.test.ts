@@ -3,6 +3,7 @@ import {
   obfuscateDSNPassword,
   REDACTED_DSN,
   getDatabaseTypeFromDSN,
+  getDefaultPortForType,
   parseConnectionInfoFromDSN,
 } from '../dsn-obfuscate.js';
 
@@ -143,6 +144,19 @@ describe('DSN Obfuscation Utilities', () => {
       ['not-a-valid-dsn', 'invalid'],
     ])('should return null for %s DSN', (dsn) => {
       expect(parseConnectionInfoFromDSN(dsn)).toBeNull();
+    });
+  });
+
+  describe('getDefaultPortForType', () => {
+    it.each([
+      ['postgres', 5432],
+      ['mysql', 3306],
+      ['mariadb', 3306],
+      ['sqlserver', 1433],
+      ['oracle', 1521],
+      ['sqlite', undefined],
+    ] as const)('%s -> %s', (type, port) => {
+      expect(getDefaultPortForType(type)).toBe(port);
     });
   });
 });

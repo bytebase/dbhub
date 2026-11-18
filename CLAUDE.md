@@ -202,7 +202,7 @@ Key points:
 - Integration tests using Testcontainers for real database testing
 - All connectors have comprehensive integration test coverage
 - Test specific databases: `pnpm test src/connectors/__tests__/{db-type}.integration.test.ts`
-- SSH tunnel tests: `pnpm test postgres-ssh.integration.test.ts`
+- SSH tunnel tests: `pnpm test src/utils/__tests__/ssh-tunnel.test.ts src/connectors/__tests__/manager.test.ts` (tunnel behaviour and how sources are wired to it; no Docker)
 
 ## SSH Tunnel Support
 

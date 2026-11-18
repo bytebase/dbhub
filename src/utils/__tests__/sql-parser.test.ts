@@ -318,6 +318,11 @@ describe("stripCommentsAndStrings", () => {
 });
 
 describe("splitSQLStatements", () => {
+  it("does not take PostgreSQL's JSON path operators for a comment or a string", () => {
+    const first = `SELECT data#>>'{settings,theme}' AS theme FROM t WHERE data @> '{"tags": ["admin"]}'`;
+    expect(splitSQLStatements(`${first}; SELECT 2`, "postgres")).toEqual([first, "SELECT 2"]);
+  });
+
   describe("basic splitting", () => {
     it.each([
       ["single statement without semicolon", "SELECT 1", ["SELECT 1"]],

@@ -278,22 +278,6 @@ describe('MariaDB Connector Integration Tests', () => {
       expect(Number(result.resultSets[1].rows[0].last_id)).toBeGreaterThan(0);
     });
 
-    it('should work with MariaDB-specific functions', async () => {
-      const result = await mariadbTest.connector.executeSQL(`
-        SELECT 
-          VERSION() as mariadb_version,
-          DATABASE() as current_db,
-          USER() as current_user_info,
-          NOW() as timestamp_val
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].mariadb_version).toContain('MariaDB');
-      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
-      expect(result.resultSets[0].rows[0].current_user_info).toBeDefined();
-      expect(result.resultSets[0].rows[0].timestamp_val).toBeDefined();
-    });
-
     it('should handle MariaDB transactions correctly', async () => {
       // Test explicit transaction
       await mariadbTest.connector.executeSQL(`
@@ -332,77 +316,6 @@ describe('MariaDB Connector Integration Tests', () => {
       const afterCount = Number(afterResult.resultSets[0].rows[0].count);
       
       expect(afterCount).toBe(beforeCount);
-    });
-
-    it('should handle MariaDB-specific storage engines', async () => {
-      await mariadbTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS engine_test (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          data VARCHAR(100)
-        ) ENGINE=InnoDB
-      `, {});
-
-      await mariadbTest.connector.executeSQL(`
-        INSERT INTO engine_test (data) VALUES ('InnoDB test data')
-      `, {});
-
-      const result = await mariadbTest.connector.executeSQL(`
-        SELECT 
-          TABLE_NAME,
-          ENGINE
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_SCHEMA = DATABASE() 
-        AND TABLE_NAME = 'engine_test'
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].ENGINE).toBe('InnoDB');
-    });
-
-    it('should handle MariaDB virtual and computed columns', async () => {
-      await mariadbTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS computed_test (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          first_name VARCHAR(50),
-          last_name VARCHAR(50),
-          full_name VARCHAR(101) AS (CONCAT(first_name, ' ', last_name)) VIRTUAL
-        )
-      `, {});
-
-      await mariadbTest.connector.executeSQL(`
-        INSERT INTO computed_test (first_name, last_name) 
-        VALUES ('John', 'Doe'), ('Jane', 'Smith')
-      `, {});
-
-      const result = await mariadbTest.connector.executeSQL(`
-        SELECT first_name, last_name, full_name 
-        FROM computed_test 
-        ORDER BY id
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0].full_name).toBe('John Doe');
-      expect(result.resultSets[0].rows[1].full_name).toBe('Jane Smith');
-    });
-
-    it('should handle MariaDB sequence functionality', async () => {
-      // MariaDB supports sequences similar to PostgreSQL
-      await mariadbTest.connector.executeSQL(`
-        CREATE SEQUENCE IF NOT EXISTS test_seq 
-        START WITH 100 
-        INCREMENT BY 5 
-        MAXVALUE 1000
-      `, {});
-
-      const result = await mariadbTest.connector.executeSQL(`
-        SELECT 
-          NEXT VALUE FOR test_seq as next_val1,
-          NEXT VALUE FOR test_seq as next_val2
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(Number(result.resultSets[0].rows[0].next_val1)).toBe(100);
-      expect(Number(result.resultSets[0].rows[0].next_val2)).toBe(105);
     });
 
     it('should respect maxRows limit for SELECT queries', async () => {

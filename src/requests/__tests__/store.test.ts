@@ -61,13 +61,14 @@ describe("RequestStore", () => {
       expect(store.getAll()).toEqual([]);
     });
 
-    it("should filter by sourceId", () => {
-      store.add(createRequest({ sourceId: "db1", id: "1" }));
-      store.add(createRequest({ sourceId: "db2", id: "2" }));
-      store.add(createRequest({ sourceId: "db1", id: "3" }));
+    it("should filter by sourceId, keeping reverse chronological order", () => {
+      const now = Date.now();
+      store.add(createRequest({ sourceId: "db1", id: "old", timestamp: new Date(now - 2000).toISOString() }));
+      store.add(createRequest({ sourceId: "db2", id: "other", timestamp: new Date(now - 1000).toISOString() }));
+      store.add(createRequest({ sourceId: "db1", id: "new", timestamp: new Date(now).toISOString() }));
 
       const db1Requests = store.getAll("db1");
-      expect(db1Requests).toHaveLength(2);
+      expect(db1Requests.map((r) => r.id)).toEqual(["new", "old"]);
       expect(db1Requests.every((r) => r.sourceId === "db1")).toBe(true);
     });
 

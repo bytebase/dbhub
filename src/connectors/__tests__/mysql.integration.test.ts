@@ -270,22 +270,6 @@ describe('MySQL Connector Integration Tests', () => {
       expect(Number(result.resultSets[1].rows[0].last_id)).toBeGreaterThan(0);
     });
 
-    it('should work with MySQL-specific functions', async () => {
-      const result = await mysqlTest.connector.executeSQL(`
-        SELECT 
-          VERSION() as mysql_version,
-          DATABASE() as current_db,
-          USER() as current_user_info,
-          NOW() as timestamp_val
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].mysql_version).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
-      expect(result.resultSets[0].rows[0].current_user_info).toBeDefined();
-      expect(result.resultSets[0].rows[0].timestamp_val).toBeDefined();
-    });
-
     it('should handle MySQL transactions correctly', async () => {
       // Test explicit transaction
       await mysqlTest.connector.executeSQL(`

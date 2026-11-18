@@ -90,6 +90,15 @@ describe('resolveSqliteDsnPath', () => {
     expect(resolveSqliteDsnPath(dsn, baseDir)).toBe(path.join(baseDir, relative));
   });
 
+  // Issue #137: a drive letter is an absolute path on every platform, so it
+  // must come through untouched rather than be resolved against the base.
+  it.each(['c:/temp/test.db', 'C:/temp/test.db', 'D:/path/to/db.db'])(
+    'keeps the Windows drive-letter path %s as written',
+    (drivePath) => {
+      expect(resolveSqliteDsnPath(`sqlite:///${drivePath}`, baseDir)).toBe(drivePath);
+    }
+  );
+
   it('keeps a four-slash path absolute rather than relative', () => {
     expect(resolveSqliteDsnPath('sqlite:////var/lib/app.db', baseDir)).toBe('/var/lib/app.db');
   });

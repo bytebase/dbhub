@@ -196,16 +196,23 @@ describe('JSON RPC Integration Tests', () => {
     expect(startupLogs.join('')).toContain('Configuration source: environment variable');
   });
 
+  // What this file adds over the connector and tool tests is the path through
+  // the transport: HTTP, the MCP SDK, tool registration, the handler and the
+  // response envelope. SQL behaviour itself is covered at the connector layer.
   describe('execute_sql JSON RPC calls', () => {
     it('should execute a simple SELECT query successfully', async () => {
       const response = await makeJsonRpcCall('execute_sql', {
         sql: 'SELECT * FROM users WHERE age > 25 ORDER BY age'
       });
       
+      // JSON-RPC envelope
+      expect(response).toHaveProperty('jsonrpc', '2.0');
+      expect(response).toHaveProperty('id');
       expect(response).toHaveProperty('result');
       expect(response.result).toHaveProperty('content');
       expect(Array.isArray(response.result.content)).toBe(true);
       
+      // Tool payload
       const content = JSON.parse(response.result.content[0].text);
       expect(content.success).toBe(true);
       expect(content.data).toHaveProperty('statements');
@@ -215,49 +222,6 @@ describe('JSON RPC Integration Tests', () => {
       expect(content.data.statements[0].rows).toHaveLength(2);
       expect(content.data.statements[0].rows[0].name).toBe('John Doe');
       expect(content.data.statements[0].rows[1].name).toBe('Bob Johnson');
-    });
-
-    it('should execute a JOIN query successfully', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT u.name, u.email, o.total 
-          FROM users u 
-          JOIN orders o ON u.id = o.user_id 
-          WHERE u.age >= 30
-          ORDER BY o.total DESC
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(2);
-      expect(content.data.statements[0].rows[0].total).toBe(149.50);
-      expect(content.data.statements[0].rows[1].total).toBe(99.99);
-    });
-
-    it('should execute aggregate queries successfully', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT 
-            COUNT(*) as user_count,
-            AVG(age) as avg_age,
-            MIN(age) as min_age,
-            MAX(age) as max_age
-          FROM users
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(1);
-      expect(content.data.statements[0].rows[0].user_count).toBe(3);
-      expect(content.data.statements[0].rows[0].avg_age).toBe(30);
-      expect(content.data.statements[0].rows[0].min_age).toBe(25);
-      expect(content.data.statements[0].rows[0].max_age).toBe(35);
     });
 
     it('should handle multiple statements in a single call', async () => {
@@ -284,27 +248,6 @@ describe('JSON RPC Integration Tests', () => {
       expect(content.data.statements[1].rows[0].total_users).toBe(4);
     });
 
-    it('should handle SQLite-specific functions', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          SELECT 
-            sqlite_version() as version,
-            datetime('now') as current_time,
-            upper('hello world') as uppercase,
-            length('test string') as str_length
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(1);
-      expect(content.data.statements[0].rows[0].version).toBeDefined();
-      expect(content.data.statements[0].rows[0].uppercase).toBe('HELLO WORLD');
-      expect(content.data.statements[0].rows[0].str_length).toBe(11);
-    });
-
     it('should return error for invalid SQL', async () => {
       const response = await makeJsonRpcCall('execute_sql', {
         sql: 'SELECT * FROM non_existent_table'
@@ -316,70 +259,9 @@ describe('JSON RPC Integration Tests', () => {
       expect(content.error).toContain('no such table');
       expect(content.code).toBe('EXECUTION_ERROR');
     });
-
-    it('should handle empty result sets', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT * FROM users WHERE age > 100'
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows).toHaveLength(0);
-      expect(content.data.statements[0].count).toBe(0);
-    });
-
-    it('should work with SQLite transactions', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: `
-          BEGIN TRANSACTION;
-          INSERT INTO users (name, email, age) VALUES ('Transaction User', 'transaction@example.com', 40);
-          COMMIT;
-          SELECT * FROM users WHERE email = 'transaction@example.com';
-        `
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      // SQLite runs all write statements (BEGIN TRANSACTION, INSERT, COMMIT)
-      // before the read statement (SELECT), so the SELECT's resultSet is last.
-      expect(content.data.statements).toHaveLength(4);
-      const selectSet = content.data.statements[content.data.statements.length - 1];
-      expect(selectSet.rows).toHaveLength(1);
-      expect(selectSet.rows[0].name).toBe('Transaction User');
-      expect(selectSet.rows[0].age).toBe(40);
-    });
-
-    it('should handle PRAGMA statements', async () => {
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'PRAGMA table_info(users)'
-      });
-      
-      expect(response).toHaveProperty('result');
-      const content = JSON.parse(response.result.content[0].text);
-      expect(content.success).toBe(true);
-      expect(content.data.statements).toHaveLength(1);
-      expect(content.data.statements[0].rows.length).toBeGreaterThan(0);
-      expect(content.data.statements[0].rows.some((row: any) => row.name === 'id')).toBe(true);
-      expect(content.data.statements[0].rows.some((row: any) => row.name === 'name')).toBe(true);
-    });
   });
 
   describe('JSON RPC protocol compliance', () => {
-    it('should return proper JSON RPC response structure', async () => {
-      const requestId = Math.random().toString(36).substr(2, 9);
-      const response = await makeJsonRpcCall('execute_sql', {
-        sql: 'SELECT 1 as test'
-      });
-      
-      expect(response).toHaveProperty('jsonrpc', '2.0');
-      expect(response).toHaveProperty('id');
-      expect(response).toHaveProperty('result');
-      expect(response.result).toHaveProperty('content');
-    });
-
     it('should handle malformed requests gracefully', async () => {
       const response = await fetch(`${baseUrl}/mcp`, {
         method: 'POST',

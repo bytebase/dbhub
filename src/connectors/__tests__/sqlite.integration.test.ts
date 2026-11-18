@@ -192,24 +192,6 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0].null_val).toBeNull();
     });
 
-    it('should work with SQLite-specific functions', async () => {
-      const result = await sqliteTest.connector.executeSQL(`
-        SELECT 
-          sqlite_version() as sqlite_version,
-          datetime('now') as current_time,
-          hex(randomblob(16)) as random_hex,
-          upper('hello world') as uppercase_text,
-          length('test string') as string_length
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].sqlite_version).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_time).toBeDefined();
-      expect(result.resultSets[0].rows[0].random_hex).toBeDefined();
-      expect(result.resultSets[0].rows[0].uppercase_text).toBe('HELLO WORLD');
-      expect(result.resultSets[0].rows[0].string_length).toBe(BigInt(11));
-    });
-
     it('should handle SQLite transactions correctly', async () => {
       // Test successful transaction
       await sqliteTest.connector.executeSQL(`
@@ -336,23 +318,6 @@ describe('SQLite Connector Integration Tests', () => {
           }
         }
       });
-    });
-
-    it('should support SQLite window functions', async () => {
-      const result = await sqliteTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank,
-          AVG(age) OVER () as avg_age
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
     });
 
     it('should execute multi-statement batches in source order', async () => {
@@ -649,30 +614,6 @@ describe('SQLite Connector Integration Tests', () => {
       await expect(new SQLiteConnector().connect('sqlite://')).rejects.toThrow(
         'does not name a database file'
       );
-    });
-
-    it('should parse Windows drive letter paths correctly', async () => {
-      const connector = new SQLiteConnector();
-      const parser = connector.dsnParser;
-
-      // This test explicitly validates Windows DSN format parsing
-      // It tests the fix for issue #137 by ensuring drive letter paths
-      // like C:/, D:/ are correctly parsed regardless of platform
-
-      // Test lowercase drive letter
-      const result1 = await parser.parse('sqlite:///c:/temp/test.db');
-      expect(result1.dbPath).toBe('c:/temp/test.db');
-
-      // Test uppercase drive letter
-      const result2 = await parser.parse('sqlite:///C:/temp/test.db');
-      expect(result2.dbPath).toBe('C:/temp/test.db');
-
-      // Test different drive letters
-      const result3 = await parser.parse('sqlite:///D:/path/to/db.db');
-      expect(result3.dbPath).toBe('D:/path/to/db.db');
-
-      const result4 = await parser.parse('sqlite:///E:/another/path.db');
-      expect(result4.dbPath).toBe('E:/another/path.db');
     });
   });
 

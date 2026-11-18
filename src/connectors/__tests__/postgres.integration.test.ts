@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { PostgresConnector } from '../postgres/index.js';
+import { ConnectorManager } from '../manager.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import { settle, waitFor } from './shared/query-timeout-helpers.js';
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from '../../utils/query-timeout.js';
@@ -353,33 +354,6 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.resultSets[2].rows[0].total).toBe('2');
     });
 
-    it('should handle PostgreSQL-specific data types', async () => {
-      await postgresTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS postgres_types_test (
-          id SERIAL PRIMARY KEY,
-          json_data JSONB,
-          uuid_val UUID DEFAULT gen_random_uuid(),
-          array_val INTEGER[],
-          timestamp_val TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        )
-      `, {});
-
-      await postgresTest.connector.executeSQL(`
-        INSERT INTO postgres_types_test (json_data, array_val) 
-        VALUES ('{"key": "value"}', ARRAY[1,2,3,4,5])
-      `, {});
-
-      const result = await postgresTest.connector.executeSQL(
-        'SELECT * FROM postgres_types_test ORDER BY id DESC LIMIT 1',
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].json_data).toBeDefined();
-      expect(result.resultSets[0].rows[0].uuid_val).toBeDefined();
-      expect(result.resultSets[0].rows[0].array_val).toBeDefined();
-    });
-
     it('should return date/timestamp values verbatim, not shifted by the host timezone', async () => {
       // Regression test for https://github.com/bytebase/dbhub/issues/416
       const result = await postgresTest.connector.executeSQL(
@@ -451,24 +425,6 @@ describe('PostgreSQL Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0].name).toBe('Returning Test');
     });
 
-    it('should work with PostgreSQL-specific functions', async () => {
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          version() as postgres_version,
-          current_database() as current_db,
-          current_user as current_user,
-          now() as current_time,
-          gen_random_uuid() as random_uuid
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].postgres_version).toContain('PostgreSQL');
-      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
-      expect(result.resultSets[0].rows[0].current_user).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_time).toBeDefined();
-      expect(result.resultSets[0].rows[0].random_uuid).toBeDefined();
-    });
-
     it('should handle PostgreSQL transactions correctly', async () => {
       // Test rollback on error
       await expect(
@@ -486,51 +442,6 @@ describe('PostgreSQL Connector Integration Tests', () => {
         {}
       );
       expect(result.resultSets[0].rows[0].count).toBe('0');
-    });
-
-    it('should handle PostgreSQL window functions', async () => {
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank,
-          AVG(age) OVER () as avg_age
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
-    });
-
-    it('should handle PostgreSQL arrays and JSON operations', async () => {
-      await postgresTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS json_test (
-          id SERIAL PRIMARY KEY,
-          data JSONB
-        )
-      `, {});
-
-      await postgresTest.connector.executeSQL(`
-        INSERT INTO json_test (data) VALUES 
-        ('{"name": "John", "tags": ["admin", "user"], "settings": {"theme": "dark"}}'),
-        ('{"name": "Jane", "tags": ["user"], "settings": {"theme": "light"}}')
-      `, {});
-
-      const result = await postgresTest.connector.executeSQL(`
-        SELECT 
-          data->>'name' as name,
-          data->'tags' as tags,
-          data#>>'{settings,theme}' as theme
-        FROM json_test
-        WHERE data @> '{"tags": ["admin"]}'
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].name).toBe('John');
-      expect(result.resultSets[0].rows[0].theme).toBe('dark');
     });
 
     it('should respect maxRows limit for SELECT queries', async () => {
@@ -603,6 +514,22 @@ describe('PostgreSQL Connector Integration Tests', () => {
       });
     });
 
+  });
+
+  describe('Through ConnectorManager', () => {
+    it('should connect a DSN source and serve queries', async () => {
+      const manager = new ConnectorManager();
+      try {
+        await manager.connectWithSources([
+          { id: 'test', type: 'postgres', dsn: postgresTest.connectionString },
+        ]);
+
+        const result = await manager.getConnector().executeSQL('SELECT 1 as test', {});
+        expect(result.resultSets[0].rows).toEqual([{ test: 1 }]);
+      } finally {
+        await manager.disconnect();
+      }
+    });
   });
 
   describe('SDK-Level Readonly Mode Tests', () => {

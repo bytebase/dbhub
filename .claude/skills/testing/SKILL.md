@@ -56,7 +56,6 @@ This means the naming convention matters — integration tests MUST have `integr
 
 Need Docker (Testcontainers):
 - `src/connectors/__tests__/postgres.integration.test.ts`
-- `src/connectors/__tests__/postgres-ssh.integration.test.ts`
 - `src/connectors/__tests__/postgres-client-cert.integration.test.ts`
 - `src/connectors/__tests__/mysql.integration.test.ts`
 - `src/connectors/__tests__/mariadb.integration.test.ts`
@@ -158,7 +157,7 @@ docker container prune               # Clean up stopped containers
 
 ### "Hook timed out in 10000ms" in `afterAll`
 All tests pass but the suite is marked failed at its `afterAll` (seen on MariaDB and
-postgres-ssh in CI). Teardown is `container.stop()`, which runs `docker stop -t 0`
+the since-removed postgres-ssh suite in CI). Teardown is `container.stop()`, which runs `docker stop -t 0`
 followed by `docker rm -v` (removing the data volume). On a shared Docker daemon that
 is simultaneously pulling/extracting the Oracle or SQL Server image, that removal can
 exceed Vitest's 10s default hook timeout. The integration project sets

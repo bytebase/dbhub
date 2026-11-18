@@ -563,6 +563,13 @@ describe("ConnectorManager IAM refresh recovery", () => {
       ssh_password: "secret",
     }]);
 
+    // The SSH fields reach the tunnel, password included
+    expect(establishSpy.mock.calls[0][0]).toMatchObject({
+      host: "bastion.example.com",
+      username: "ubuntu",
+      password: "secret",
+    });
+    // No port in the DSN: the tunnel targets the database type's default
     expect(establishSpy.mock.calls[0][1]).toEqual({ targetHost: "db.internal", targetPort: 5432 });
     expect(instances[0].connect.mock.calls[0][0]).toBe(
       "postgres://user:pa#ss@127.0.0.1:55555/mydb?sslmode=require"

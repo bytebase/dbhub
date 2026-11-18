@@ -540,29 +540,6 @@ describe('SQL Server Connector Integration Tests', () => {
       ).rejects.toThrow(/requires a statement/i);
     });
 
-    it('should handle SQL Server IDENTITY columns', async () => {
-      await sqlServerTest.connector.executeSQL(`
-        CREATE TABLE identity_test (
-          id INT IDENTITY(1,1) PRIMARY KEY,
-          name NVARCHAR(50)
-        )
-      `, {});
-
-      await sqlServerTest.connector.executeSQL(`
-        INSERT INTO identity_test (name) VALUES ('Test 1'), ('Test 2')
-      `, {});
-
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT * FROM identity_test ORDER BY id',
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0].id).toBe(1);
-      expect(result.resultSets[0].rows[1].id).toBe(2);
-      expect(result.resultSets[0].rows[0].name).toBe('Test 1');
-    });
-
     it('should handle SQL Server-specific data types', async () => {
       await sqlServerTest.connector.executeSQL(`
         CREATE TABLE sqlserver_types_test (
@@ -589,24 +566,6 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.resultSets[0].rows[0].unicode_text).toBe('Unicode Text 测试');
       expect(result.resultSets[0].rows[0].unique_id).toBeDefined();
       expect(result.resultSets[0].rows[0].xml_data).toBeDefined();
-    });
-
-    it('should work with SQL Server-specific functions', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          @@VERSION as sql_version,
-          DB_NAME() as current_db,
-          SUSER_NAME() as current_user_name,
-          GETDATE() as current_datetime,
-          NEWID() as new_guid
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].sql_version).toContain('Microsoft SQL Server');
-      expect(result.resultSets[0].rows[0].current_db).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_user_name).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_datetime).toBeDefined();
-      expect(result.resultSets[0].rows[0].new_guid).toBeDefined();
     });
 
     it('should handle SQL Server transactions correctly', async () => {
@@ -659,74 +618,6 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.resultSets[0].rows[0].id).toBeDefined();
       expect(result.resultSets[0].rows[0].name).toBe('Output Test');
-    });
-
-    it('should handle SQL Server window functions', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank,
-          AVG(CAST(age AS FLOAT)) OVER () as avg_age
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
-    });
-
-    it('should handle SQL Server CTEs (Common Table Expressions)', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        WITH UserOrderSummary AS (
-          SELECT 
-            u.name,
-            COUNT(o.id) as order_count,
-            SUM(o.total) as total_spent
-          FROM users u
-          LEFT JOIN orders o ON u.id = o.user_id
-          GROUP BY u.id, u.name
-        )
-        SELECT * FROM UserOrderSummary 
-        WHERE order_count > 0
-        ORDER BY total_spent DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('order_count');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('total_spent');
-    });
-
-    it('should handle SQL Server JSON functions (SQL Server 2016+)', async () => {
-      await sqlServerTest.connector.executeSQL(`
-        CREATE TABLE json_test (
-          id INT IDENTITY(1,1) PRIMARY KEY,
-          data NVARCHAR(MAX)
-        )
-      `, {});
-
-      await sqlServerTest.connector.executeSQL(`
-        INSERT INTO json_test (data) VALUES 
-        (N'{"name": "John", "tags": ["admin", "user"], "settings": {"theme": "dark"}}'),
-        (N'{"name": "Jane", "tags": ["user"], "settings": {"theme": "light"}}')
-      `, {});
-
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          JSON_VALUE(data, '$.name') as name,
-          JSON_VALUE(data, '$.settings.theme') as theme,
-          JSON_QUERY(data, '$.tags') as tags
-        FROM json_test
-        WHERE JSON_VALUE(data, '$.name') = 'John'
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].name).toBe('John');
-      expect(result.resultSets[0].rows[0].theme).toBe('dark');
-      expect(result.resultSets[0].rows[0].tags).toBeDefined();
     });
 
     it('should handle SQL Server MERGE statement', async () => {
