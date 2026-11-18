@@ -16,7 +16,7 @@ DBHub provides two MCP tools by default, plus opt-in ones:
 | `search_objects` | Explore database structure — schemas, tables, columns, indexes, procedures, functions |
 | `execute_sql` | Run SQL statements against the database |
 | `explain_sql` (opt-in) | Show a query's execution plan without running it — only present if the source's config enables it |
-| `health_check` (opt-in) | Report connection pool state and buffer cache hit ratio — only present if the source's config enables it; PostgreSQL, MySQL, MariaDB, SQL Server, and Oracle only (not ClickHouse or SQLite) |
+| `health_check` (opt-in) | Report connection pool state and buffer cache hit ratio — only present if the source's config enables it; every database but SQLite. On ClickHouse, `buffer_cache` is the mark cache and idle HTTP connections are not counted |
 
 If multiple databases are configured, DBHub registers separate tools for each source (for example, `search_objects_prod_pg`, `execute_sql_staging_mysql`). Select the desired database by calling the correspondingly named tool.
 

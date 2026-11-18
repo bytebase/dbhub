@@ -481,7 +481,7 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #                      # allow-list per database: https://dbhub.ai/config/read-only-mode)
 #   max_rows = 1000    # Limit result set size (works for execute_sql and custom tools)
 #   explain_sql        # Opt-in tool (name = "explain_sql"); no readonly/max_rows options - always safe
-#   health_check       # Opt-in tool (name = "health_check"); PostgreSQL/MySQL/MariaDB/SQL Server/Oracle for now, always safe
+#   health_check       # Opt-in tool (name = "health_check"); every database but SQLite, always safe
 #
 # Parameter Placeholders by Database:
 #   PostgreSQL:     $1, $2, $3

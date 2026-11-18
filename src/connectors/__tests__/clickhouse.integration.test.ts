@@ -160,6 +160,15 @@ class ClickHouseIntegrationTest extends IntegrationTestBase<ClickHouseTestContai
       CREATE USER ro1_row_at_a_time IDENTIFIED BY 'ro1pass' SETTINGS max_block_size = 1, readonly = 1;
       GRANT SELECT ON ${APP_DATABASE}.* TO ro1_errors_as_rows, ro1_row_at_a_time;
     `, {});
+
+    // A read-only user granted the system tables health_check reads, which
+    // the image's configuration closes to users without a grant (ro1 has none).
+    await connector.executeSQL(`
+      CREATE USER ro1_monitor IDENTIFIED BY 'ro1pass' SETTINGS readonly = 1;
+      GRANT SELECT ON ${APP_DATABASE}.* TO ro1_monitor;
+      GRANT SELECT ON system.metrics, SELECT ON system.processes,
+        SELECT ON system.server_settings, SELECT ON system.events TO ro1_monitor;
+    `, {});
   }
 }
 
@@ -702,8 +711,91 @@ describe('ClickHouse Connector Integration Tests', () => {
       ).rejects.toThrow("Function 'no_such_function' not found");
     });
 
-    it('should not offer health_check metrics', () => {
-      expect(clickhouseTest.connector.getHealthCheck).toBeUndefined();
+  });
+
+  describe('Health check', () => {
+    const MARK_CACHE_NOTE = expect.stringMatching(/^buffer_cache is the mark cache/);
+
+    it('should report client connections, the connection ceiling and mark cache lookups', async () => {
+      // A read through the primary key, so the mark cache has been consulted.
+      await clickhouseTest.connector.executeSQL('SELECT count() FROM events WHERE tenant_id = 1', {});
+
+      const health = await clickhouseTest.connector.getHealthCheck!();
+
+      expect(health.connections).toBeDefined();
+      expect(health.connections!.total).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.active).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idle).toBeGreaterThanOrEqual(0);
+      expect(health.connections!.idleInTransaction).toBe(0);
+      expect(health.connections!.idleInTransactionAborted).toBeUndefined();
+      expect(health.connections!.longestIdleInTransactionSeconds).toBeNull();
+      // The server's default.
+      expect(health.connections!.maxConnections).toBe(4096);
+
+      expect(health.bufferCache).toBeDefined();
+      expect(health.bufferCache!.blocksHit + health.bufferCache!.blocksRead).toBeGreaterThan(0);
+      expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
+      expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
+      expect(health.notes).toEqual([MARK_CACHE_NOTE]);
+    });
+
+    it('should count a query another connection is running, and not its own', async () => {
+      const other = clickhouseTest.createConnector();
+      try {
+        await other.connect(clickhouseTest.dsnFor(APP_USER, APP_PASSWORD));
+        // Wait out what earlier tests left behind: a query abandoned by a
+        // client-side timeout runs on for a few seconds on the server.
+        await expect
+          .poll(async () => (await clickhouseTest.connector.getHealthCheck!()).connections!.active, {
+            timeout: 20_000,
+            interval: 250,
+          })
+          .toBe(0);
+        const idle = await clickhouseTest.connector.getHealthCheck!();
+
+        const running = other.executeSQL('SELECT sleep(3)', {});
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const busy = await clickhouseTest.connector.getHealthCheck!();
+        await running;
+
+        expect(idle.connections).toMatchObject({ total: 0, active: 0, idle: 0, longestActiveQuerySeconds: null });
+        // The other connection counts for as long as its request runs: the
+        // server does not count an HTTP connection between requests.
+        expect(busy.connections).toMatchObject({ total: 1, active: 1, idle: 0 });
+        expect(busy.connections!.longestActiveQuerySeconds).toBeGreaterThan(0.5);
+        expect(busy.connections!.longestActiveQuerySeconds).toBeLessThan(3);
+      } finally {
+        await other.disconnect();
+      }
+    }, 40_000);
+
+    it('should report the same to a readonly = 1 user granted the system tables it reads', async () => {
+      const connector = clickhouseTest.createConnector();
+      try {
+        await connector.connect(clickhouseTest.dsnFor('ro1_monitor', 'ro1pass'));
+        const health = await connector.getHealthCheck!();
+
+        expect(health.connections).toMatchObject({ idleInTransaction: 0, maxConnections: 4096 });
+        expect(health.bufferCache).toBeDefined();
+        expect(health.notes).toEqual([MARK_CACHE_NOTE]);
+      } finally {
+        await connector.disconnect();
+      }
+    });
+
+    it('should name the grants a user lacks instead of failing or reporting zeros', async () => {
+      const connector = clickhouseTest.createConnector();
+      try {
+        await connector.connect(clickhouseTest.dsnFor('ro1', 'ro1pass'));
+
+        expect(await connector.getHealthCheck!()).toEqual({
+          notes: [
+            'Connected user lacks the SELECT grant on system.metrics, system.processes, system.server_settings, system.events: connections and buffer_cache are not reported.',
+          ],
+        });
+      } finally {
+        await connector.disconnect();
+      }
     });
   });
 
