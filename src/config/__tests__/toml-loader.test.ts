@@ -71,6 +71,7 @@ ${extra}
     postgres: 'postgres://user:pass@localhost:5432/testdb',
     mysql: 'mysql://user:pass@localhost:3306/testdb',
     mariadb: 'mariadb://user:pass@localhost:3306/testdb',
+    clickhouse: 'clickhouse://user:pass@localhost:8123/testdb',
   };
 
   // A single DSN-only source of the given type followed by `extra`.
@@ -488,6 +489,7 @@ wallet_password = "fieldSecret"
         ['mysql', 'transaction_read_only = 1\nlock_wait_timeout = 5\ntime_zone = "+09:00"', { transaction_read_only: 1, lock_wait_timeout: 5, time_zone: '+09:00' }],
         ['mysql', 'max_heap_table_size = 9223372036854775807', { max_heap_table_size: 9223372036854775807n }],
         ['postgres', 'lock_timeout = "5s"\n"pg_stat_statements.track" = "all"\njit = false', { lock_timeout: '5s', 'pg_stat_statements.track': 'all', jit: false }],
+        ['clickhouse', 'max_rows_to_read = 1000000000\nmax_memory_usage = "10G"\nuse_uncompressed_cache = false', { max_rows_to_read: 1000000000, max_memory_usage: '10G', use_uncompressed_cache: false }],
       ])('should accept a %s session table and echo it back', (type, body, expected) => {
         const result = loadDsnSource(type, sessionToml(body));
 
@@ -495,7 +497,7 @@ wallet_password = "fieldSecret"
       });
 
       it.each([
-        ['for a MariaDB source', 'mariadb', 'lock_wait_timeout = 5', 'only supported for MySQL and PostgreSQL'],
+        ['for a MariaDB source', 'mariadb', 'lock_wait_timeout = 5', 'only supported for MySQL, PostgreSQL and ClickHouse'],
         ['a non-table value', 'mysql', { inline: 'session = 5' }, 'must be a table'],
         ['a datetime in place of the table', 'postgres', { inline: 'session = 2024-01-01T00:00:00Z' }, 'must be a table'],
         ['a local date in place of the table', 'mysql', { inline: 'session = 1979-05-27' }, 'must be a table'],
@@ -505,6 +507,10 @@ wallet_password = "fieldSecret"
         ['max_execution_time on MySQL', 'mysql', 'MAX_EXECUTION_TIME = 1000', "Use 'query_timeout' instead"],
         ['statement_timeout on PostgreSQL', 'postgres', 'statement_timeout = "5s"', "Use 'query_timeout' instead"],
         ['search_path on PostgreSQL', 'postgres', 'search_path = "app"', "Use 'search_path' instead"],
+        ['max_execution_time on ClickHouse', 'clickhouse', 'max_execution_time = 30', "Use 'query_timeout' instead"],
+        ['readonly on ClickHouse', 'clickhouse', 'readonly = 2', "Use a tool's 'readonly' option"],
+        ['an HTTP interface parameter on ClickHouse', 'clickhouse', 'session_id = "abc"', "a parameter of ClickHouse's HTTP interface"],
+        ['a query parameter binding on ClickHouse', 'clickhouse', 'param_tenant = "acme"', "a parameter of ClickHouse's HTTP interface"],
         ['an array value', 'mysql', 'sql_mode = ["ANSI"]', "invalid value for 'sql_mode'"],
         ['a nested table', 'postgres', '[sources.session.lock_timeout]\nx = 1', "invalid value for 'lock_timeout'"],
         ['a date value', 'postgres', 'datestyle = 1979-05-27', "invalid value for 'datestyle'"],
@@ -1076,12 +1082,49 @@ aws_profile = "development"
         'password is required',
       ],
       [
+        'required connection params (database) are missing for ClickHouse',
+        { type: 'clickhouse', host: 'localhost', user: 'default' },
+        'missing required connection parameters',
+      ],
+      [
         'password is missing and aws_iam_auth is set on an unsupported type',
         { type: 'sqlserver', host: 'localhost', database: 'master', user: 'sa', aws_iam_auth: true, aws_region: 'eu-west-1' },
         'password is required',
       ],
     ])('should throw error when %s', (_label, source, message) => {
       expect(() => buildDSNFromSource({ id: 'test', ...source })).toThrow(message);
+    });
+
+    // ClickHouse serves HTTP and HTTPS on different ports, and its out-of-the-box
+    // `default` user has no password.
+    it.each<[string, Omit<SourceConfig, 'id'>, string]>([
+      [
+        'the HTTP port without sslmode',
+        { type: 'clickhouse', host: 'ch.local', database: 'analytics', user: 'reader', password: 'p@ss' },
+        'clickhouse://reader:p%40ss@ch.local:8123/analytics',
+      ],
+      [
+        'the HTTPS port with sslmode=require',
+        { type: 'clickhouse', host: 'x.clickhouse.cloud', database: 'default', user: 'default', password: 'pw', sslmode: 'require' },
+        'clickhouse://default:pw@x.clickhouse.cloud:8443/default?sslmode=require',
+      ],
+      [
+        'the HTTPS port with sslmode=verify-full',
+        { type: 'clickhouse', host: 'x.clickhouse.cloud', database: 'default', user: 'default', password: 'pw', sslmode: 'verify-full' },
+        'clickhouse://default:pw@x.clickhouse.cloud:8443/default?sslmode=verify-full',
+      ],
+      [
+        'an explicit port over either default',
+        { type: 'clickhouse', host: 'ch.local', port: 9443, database: 'default', user: 'default', password: 'pw', sslmode: 'require' },
+        'clickhouse://default:pw@ch.local:9443/default?sslmode=require',
+      ],
+      [
+        'no password',
+        { type: 'clickhouse', host: 'localhost', database: 'default', user: 'default' },
+        'clickhouse://default:@localhost:8123/default',
+      ],
+    ])('should build a ClickHouse DSN with %s', (_label, source, expectedDSN) => {
+      expect(buildDSNFromSource({ id: 'test', ...source })).toBe(expectedDSN);
     });
 
     // The DSN is only an intermediate encoding; what matters is the path the

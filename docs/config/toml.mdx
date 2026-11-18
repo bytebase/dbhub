@@ -228,6 +228,16 @@ Sources define database connections. Each source represents a database that DBHu
       database = "FREEPDB1"
       user = "app"
       password = "secret"
+
+      # ClickHouse (HTTP interface; port defaults to 8123, or 8443 with sslmode)
+      [[sources]]
+      id = "clickhouse_cloud"
+      type = "clickhouse"
+      host = "abc123.us-east-1.aws.clickhouse.cloud"
+      database = "default"
+      user = "default"
+      password = "secret"
+      sslmode = "verify-full"
       ```
     </Tab>
   </Tabs>
@@ -287,7 +297,7 @@ Sources define database connections. Each source represents a database that DBHu
 
   On PostgreSQL and MySQL it also limits how long a query waits for a free connection when every connection in the pool is in use (see [`pool_max_connections`](#pool_max_connections)); the query then fails instead of waiting. Without it, the query waits until a connection is free.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse (not applicable to SQLite).
 
   ```toml
   [[sources]]
@@ -306,17 +316,20 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="query_timeout" type="number">
   Query timeout in seconds. The maximum time to wait for a query to complete before timing out.
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse (not applicable to SQLite).
 
-  On PostgreSQL, MySQL and MariaDB the limit is applied on the database server, so a timed-out statement stops running there and the connection stays usable:
+  On PostgreSQL, MySQL, MariaDB and ClickHouse the limit is applied on the database server, so a timed-out statement stops running there and the connection stays usable:
 
   | Database | Server-side setting | Covers |
   |----------|---------------------|--------|
   | PostgreSQL | `statement_timeout` | All statements |
   | MySQL | `max_execution_time` | Read-only `SELECT` statements |
   | MariaDB | `max_statement_time` | All statements |
+  | ClickHouse | `max_execution_time` | All statements |
 
   A client-side fallback fires 5 seconds after `query_timeout` for statements the server did not stop, such as a MySQL write or a statement on a connection whose session setting was changed. DBHub then discards that connection and attempts to cancel the statement on the server over a separate connection. The cancellation is best-effort: if it fails or the server does not honor it, the statement may keep running until the server finishes it.
+
+  On ClickHouse the limit is rounded up to whole seconds, and the client-side fallback is an inactivity timeout on the HTTP request. A ClickHouse source with no `query_timeout` has no client-side timeout at all, so set one for any source an agent queries. See also [`[sources.session]`](#session) for limits on rows, bytes and memory.
 
   The largest accepted value is 2147478 seconds (about 24 days), the longest fallback deadline a Node.js timer can represent.
 
@@ -387,9 +400,9 @@ Sources define database connections. Each source represents a database that DBHu
   - `verify-ca` - SSL with CA certificate verification (no hostname check). **PostgreSQL, MySQL, and MariaDB.**
   - `verify-full` - SSL with CA certificate and hostname verification. **All network databases.**
 
-  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle (not applicable to SQLite). `verify-ca` is supported on PostgreSQL, MySQL and MariaDB; `verify-full` on every network database (Oracle validates the server certificate against the system trust store, and `sslrootcert` is PostgreSQL only).
+  Supported databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse (not applicable to SQLite). `verify-ca` is supported on PostgreSQL, MySQL and MariaDB; `verify-full` on every network database (Oracle validates the server certificate against the system trust store, and `sslrootcert` is PostgreSQL only). On ClickHouse, `require` and `verify-full` switch the connection to HTTPS, and to port `8443` when no port is given.
 
-  MySQL, MariaDB and SQL Server verify against Node's trust roots. Set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed (e.g. the Amazon RDS CA bundle).
+  MySQL, MariaDB, SQL Server and ClickHouse verify against Node's trust roots. Set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed (e.g. the Amazon RDS CA bundle).
 
   ```toml
   # Basic SSL (all network databases)
@@ -691,7 +704,7 @@ Sources define database connections. Each source represents a database that DBHu
 <ParamField path="[sources.session]" type="table">
   Server settings applied to every new connection, as `name = value` pairs. Keys are the server's own setting names; values are strings, numbers or booleans.
 
-  **MySQL / PostgreSQL only.**
+  **MySQL, PostgreSQL and ClickHouse only.**
 
   ```toml
   [[sources]]
@@ -707,11 +720,24 @@ Sources define database connections. Each source represents a database that DBHu
 
   [sources.session]
   lock_timeout = "5s"
+
+  [[sources]]
+  id = "analytics"
+  dsn = "clickhouse://reader:secret@ch.example.com:8443/analytics?sslmode=verify-full"
+  query_timeout = 30
+
+  # Scan budgets: stop a query that would read or use more than this
+  [sources.session]
+  max_rows_to_read = 1000000000
+  max_bytes_to_read = 50000000000
+  max_memory_usage = 10000000000
   ```
 
   Place the table directly after the `[[sources]]` entry it belongs to. DBHub checks only the shape; the server decides whether a setting exists and accepts the value, and a rejected setting fails startup rather than being skipped. Settings with a dedicated option are refused here: use `query_timeout` instead of `max_execution_time` or `statement_timeout`, and the `search_path` option instead of a `search_path` entry.
 
   The settings apply to every tool on the source, read-only and writable alike.
+
+  **ClickHouse.** There is no connection to hold settings, so they are sent with every request, including the catalog queries behind `search_objects`. This is where to put limits on what a query may cost: on a columnar database a query that returns ten rows can still scan billions, which `max_rows` does not prevent. A read-only tool cannot override them, because `readonly = 1` forbids a statement from changing settings (see [Read-Only Mode](/config/read-only-mode)). Two things are refused: `readonly` itself, which each tool's `readonly` option manages, and parameters of the HTTP interface that are not settings (`session_id`, `database`, `query`, ...). A database user whose own profile is `readonly = 1` cannot change settings at all, so a `[sources.session]` table fails startup for such a user; set the limits in that user's settings profile on the server instead.
 
   <Note>
   This option is **only available via TOML**. It is not supported as a DSN query parameter. On PostgreSQL the settings are sent as connection startup options, which some poolers such as PgBouncer drop.
@@ -882,6 +908,9 @@ Tools define MCP tools (like `execute_sql`) with specific execution settings. To
   | SQLite | `?`, `?`, `?` | `WHERE id = ? AND status = ?` |
   | SQL Server | `@p1`, `@p2`, `@p3` | `WHERE id = @p1 AND status = @p2` |
   | Oracle | `:1`, `:2`, `:3` | `WHERE id = :1 AND status = :2` |
+  | ClickHouse | `{p1:Type}`, `{p2:Type}` | `WHERE id = {p1:UInt64} AND status = {p2:String}` |
+
+  On ClickHouse the placeholder carries the ClickHouse type the value is parsed as (`String`, `UInt64`, `Date`, `Array(String)`, ...), and parameters bind by position: the first parameter to `p1`, the second to `p2`.
 
   <Warning>
   The number of parameters must match the number of placeholders in your SQL statement. Validation occurs at server startup.
@@ -1014,12 +1043,12 @@ default = 10
 | `id` | string | ✅ | Unique source identifier |
 | `description` | string | ❌ | Human-readable description of the data source |
 | `dsn` | string | ✅* | Database connection string (*or the individual parameters below) |
-| `type` | string | ❌ | Database type when not using `dsn`: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite` |
+| `type` | string | ❌ | Database type when not using `dsn`: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `clickhouse`, `sqlite` |
 | `host` | string | ❌ | Database host (with `type`) |
 | `port` | number | ❌ | Database port (default: the standard port for `type`) |
 | `database` | string | ❌ | Database name, Oracle service name, or SQLite file path |
 | `user` | string | ❌ | Database username |
-| `password` | string | ❌ | Database password (no URL encoding needed) |
+| `password` | string | ❌ | Database password (no URL encoding needed). May be omitted for ClickHouse, whose `default` user has none out of the box |
 | `aws_iam_auth` | boolean | ❌ | Generate AWS RDS IAM authentication tokens (default: `false`) |
 | `aws_region` | string | ❌ | AWS region (required when `aws_iam_auth` is enabled) |
 | `aws_profile` | string | ❌ | Named AWS shared-config profile (requires `aws_iam_auth`) |
@@ -1042,7 +1071,7 @@ default = 10
 | `timezone` | string | ❌ | MySQL/MariaDB: `Z`, `local`, or offset like `+09:00` |
 | `charset` | string | ❌ | MySQL/MariaDB: connection character set (`utf8mb4`) |
 | `collation` | string | ❌ | MySQL/MariaDB: connection collation (`utf8mb4_0900_ai_ci`) |
-| `[sources.session]` | table | ❌ | MySQL/PostgreSQL: session settings applied to every new connection |
+| `[sources.session]` | table | ❌ | MySQL/PostgreSQL: session settings applied to every new connection. ClickHouse: settings sent with every request |
 | `ssh_host` | string | ❌ | SSH server hostname |
 | `ssh_port` | number | ❌ | SSH server port (default: 22) |
 | `ssh_user` | string | ❌ | SSH username |

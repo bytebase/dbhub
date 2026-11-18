@@ -8,7 +8,7 @@ import {
   getDefaultPortForType,
   obfuscateDSNPassword,
 } from "../utils/dsn-obfuscate.js";
-import { SafeURL, replaceDSNHostPort } from "../utils/safe-url.js";
+import { SafeURL, rawQueryParamValues, replaceDSNHostPort } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
@@ -280,7 +280,7 @@ export class ConnectorManager {
       if (source.connection_timeout !== undefined) {
         config.connectionTimeoutSeconds = source.connection_timeout;
       }
-      // Query timeout is supported by PostgreSQL, MySQL, MariaDB, SQL Server (not SQLite)
+      // Query timeout is supported by every network database (not SQLite)
       if (source.query_timeout !== undefined && connector.id !== 'sqlite') {
         config.queryTimeoutSeconds = source.query_timeout;
       }
@@ -312,7 +312,7 @@ export class ConnectorManager {
       if (source.collation) {
         config.collation = source.collation;
       }
-      // Pass [sources.session] settings for MySQL/PostgreSQL
+      // Pass [sources.session] settings for MySQL/PostgreSQL/ClickHouse
       if (source.session) {
         config.sessionSettings = source.session;
       }
@@ -574,7 +574,9 @@ export class ConnectorManager {
     if (!type) {
       return 0;
     }
-    return getDefaultPortForType(type) ?? 0;
+    // ClickHouse's default port depends on whether the DSN asks for TLS.
+    const sslmode = type === "clickhouse" ? rawQueryParamValues(dsn, "sslmode").at(-1) : undefined;
+    return getDefaultPortForType(type, sslmode) ?? 0;
   }
 
   private scheduleIamRefresh(source: SourceConfig): void {

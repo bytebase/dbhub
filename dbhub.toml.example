@@ -255,6 +255,37 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # password = "secret"
 
 # ============================================================================
+# CLICKHOUSE
+# ============================================================================
+
+# DBHub uses ClickHouse's HTTP interface: port 8123, or 8443 over HTTPS
+# (sslmode=require or verify-full), which is what ClickHouse Cloud exposes.
+# [[sources]]
+# id = "analytics"
+# dsn = "clickhouse://default:secret@localhost:8123/analytics"
+# # ClickHouse Cloud:
+# # dsn = "clickhouse://default:secret@abc123.us-east-1.aws.clickhouse.cloud:8443/default?sslmode=verify-full"
+# # A query that returns ten rows can still scan billions. Bound what a query
+# # may cost: query_timeout stops it on the server, and [sources.session]
+# # settings are sent with every request. A read-only tool cannot override them.
+# query_timeout = 30
+# [sources.session]
+# max_rows_to_read = 1000000000
+# max_bytes_to_read = 50000000000
+# max_memory_usage = 10000000000
+
+# ClickHouse - Individual parameters (password may be omitted for a
+# passwordless `default` user)
+# [[sources]]
+# id = "analytics"
+# type = "clickhouse"
+# host = "localhost"
+# port = 8123
+# database = "analytics"
+# user = "default"
+# password = "secret"
+
+# ============================================================================
 # SQLITE (Local file or in-memory)
 # ============================================================================
 
@@ -423,10 +454,11 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MariaDB:     mariadb://user:pass@host:3306/database
 #   SQL Server:  sqlserver://user:pass@host:1433/database
 #   Oracle:      oracle://user:pass@host:1521/service_name  (or ?sid=ORCL)
+#   ClickHouse:  clickhouse://user:pass@host:8123/database  (HTTP interface; 8443 with sslmode=require)
 #   SQLite:      sqlite:///path/to/file.db (absolute), sqlite:///./file.db (relative)  or  sqlite:///:memory:
 #
 # Default Ports:
-#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433 | Oracle: 1521
+#   PostgreSQL: 5432 | MySQL/MariaDB: 3306 | SQL Server: 1433 | Oracle: 1521 | ClickHouse: 8123 (8443 with TLS)
 #
 # SSH Tunnel Options:
 #   ssh_host, ssh_port (default: 22), ssh_user
@@ -465,4 +497,5 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MySQL/MariaDB:  ?, ?, ?
 #   SQL Server:     @p1, @p2, @p3
 #   Oracle:         :1, :2, :3
+#   ClickHouse:     {p1:String}, {p2:UInt32}  (the type is part of the placeholder)
 #   SQLite:         ?, ?, ?

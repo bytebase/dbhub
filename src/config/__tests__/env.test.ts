@@ -87,6 +87,7 @@ describe('Environment Configuration Tests', () => {
       ['mariadb', 'mariadb', 3306],
       ['sqlserver', 'sqlserver', 1433],
       ['oracle', 'oracle', 1521],
+      ['clickhouse', 'clickhouse', 8123],
     ])(
       'should build DB_TYPE=%s as a %s:// DSN with default port %i when DB_PORT is not set',
       (type, protocol, port) => {
@@ -169,7 +170,7 @@ describe('Environment Configuration Tests', () => {
       Object.assign(process.env, baseEnv, { DB_TYPE: 'db2' });
 
       expect(() => buildDSNFromEnvParams()).toThrow(
-        'Unsupported DB_TYPE: db2. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite, oracle'
+        'Unsupported DB_TYPE: db2. Supported types: postgres, postgresql, mysql, mariadb, sqlserver, sqlite, oracle, clickhouse'
       );
     });
   });

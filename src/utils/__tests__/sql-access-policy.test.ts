@@ -26,6 +26,22 @@ describe("classifyStatement", () => {
     expect(classifyStatement(sql, "postgres")).toBe(expected);
   });
 
+  it.each([
+    ["SELECT count() FROM events FINAL", "read"],
+    ["SHOW CREATE TABLE events", "read"],
+    ["EXPLAIN indexes = 1 SELECT * FROM events", "read"],
+    ["INSERT INTO events SELECT * FROM staging", "dml"],
+    // A mutation is written as ALTER, so it ranks as schema modification
+    ["ALTER TABLE events DELETE WHERE id = 1", "ddl"],
+    ["CREATE MATERIALIZED VIEW mv TO t AS SELECT * FROM events", "ddl"],
+    ["SELECT * FROM url('http://example.com/x.csv')", "admin"],
+    ["OPTIMIZE TABLE events FINAL", "unknown"],
+    ["SYSTEM STOP MERGES", "unknown"],
+    ["SET max_threads = 1", "unknown"],
+  ] as const)("classifies %j as %s (clickhouse)", (sql, expected) => {
+    expect(classifyStatement(sql, "clickhouse")).toBe(expected);
+  });
+
   it("classifies DML hidden in a CTE as dml", () => {
     expect(
       classifyStatement("WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t", "postgres")

@@ -31,6 +31,8 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
  |                  |    |              |    |                  |
  |  Other Clients   +--->+              +--->+    MariaDB       |
  |                  |    |              |    |                  |
+ |                  |    |              +--->+    ClickHouse    |
+ |                  |    |              |    |                  |
  +------------------+    +--------------+    +------------------+
      MCP Clients           MCP Server             Databases
 ```
@@ -60,14 +62,14 @@ Read-only mode is a guardrail, not a permission boundary. Always connect with a 
 
 ## Supported Databases
 
-PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, and SQLite.
+PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, and SQLite.
 
 ## Why DBHub?
 
 DBHub brings powerful database capabilities to AI coding assistants:
 
 - **Minimal**: Zero dependency, token efficient with a minimal set of MCP tools to maximize context window
-- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite through a single interface
+- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite through a single interface
 - **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
 - **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
 - **Secure Access**: SSH tunneling and SSL/TLS encryption
@@ -118,7 +120,7 @@ flowchart TB
     end
 
     %% Databases
-    Databases["PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, SQLite"]
+    Databases["PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, SQLite"]
 
     %% Connections
     User --> WB

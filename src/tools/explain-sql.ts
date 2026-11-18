@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "../utils/sql-parser.js";
+import {
+  LEADING_SQL_NOISE,
+  splitSQLStatementVariants,
+  stripCommentsAndStringsVariants,
+} from "../utils/sql-parser.js";
 import {
   explainAnalyzeKeyword,
   nonExecutingExplainOptions,
@@ -28,6 +32,17 @@ function buildExplainStatement(connectorType: ConnectorType, sql: string): strin
   // EXPLAIN QUERY PLAN is the human-readable form.
   if (connectorType === "sqlite") {
     return `EXPLAIN QUERY PLAN ${sql}`;
+  }
+  // ClickHouse's bare plan only names the steps. `indexes = 1` adds, for each
+  // table read, the parts and granules its keys and skipping indexes leave to
+  // scan, which is the cost that matters there. It is still analysis only.
+  // Added for a query; input that opens with an EXPLAIN kind or settings of
+  // its own (`PIPELINE ...`, `ESTIMATE ...`, `actions = 1 ...`) is left as is.
+  if (
+    connectorType === "clickhouse" &&
+    /^(?:select|with|\()/i.test(sql.replace(LEADING_SQL_NOISE, ""))
+  ) {
+    return `EXPLAIN indexes = 1 ${sql}`;
   }
   return `EXPLAIN ${sql}`;
 }

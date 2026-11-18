@@ -19,6 +19,9 @@ export const allowedKeywords: Record<ConnectorType, string[]> = {
   // DBMS_XPLAN (see OracleConnector.explainQuery). EXPLAIN PLAN only parses
   // the statement, it never executes it.
   oracle: ["select", "with", "explain"],
+  // EXPLAIN never executes the statement on ClickHouse (there is no ANALYZE
+  // form); EXISTS is its "does this table exist" statement.
+  clickhouse: ["select", "with", "explain", "show", "describe", "desc", "exists"],
 };
 
 /**
@@ -140,6 +143,15 @@ export const sqlServerPassThroughPattern = new RegExp(
  *   DBMS_JAVA, DBMS_LOB.FILEOPEN & co), matched on the package prefix in
  *   member-access position (`utl_http.request(`), see escapeHatchCallSuffix.
  *
+ * - ClickHouse: the table functions (and the `file` function) that read from
+ *   or write to somewhere other than the server's own tables: remote servers,
+ *   object storage, URLs, the server's filesystem, other database systems, an
+ *   executable. The server refuses most of them itself under the
+ *   `readonly = 1` setting the connector sends for read-only tools; this
+ *   covers users whose own profile is `readonly = 2`, where it does not.
+ *   `cluster` / `clusterAllReplicas` are not listed: they read the same
+ *   tables on the cluster's other replicas.
+ *
  * This is a best-effort guardrail: name matching is bypassable (quoted
  * identifiers, executable version comments), so least-privilege database
  * accounts remain the security boundary. See issue #377.
@@ -169,6 +181,32 @@ export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly
     "dbms_lob",
     "dbms_xslprocessor",
     "dbms_advisor",
+  ],
+  clickhouse: [
+    "url",
+    "urlCluster",
+    "file",
+    "fileCluster",
+    "s3",
+    "s3Cluster",
+    "gcs",
+    "azureBlobStorage",
+    "azureBlobStorageCluster",
+    "hdfs",
+    "hdfsCluster",
+    "remote",
+    "remoteSecure",
+    "mysql",
+    "postgresql",
+    "mongodb",
+    "redis",
+    "sqlite",
+    "jdbc",
+    "odbc",
+    "executable",
+    "deltaLake",
+    "iceberg",
+    "hudi",
   ],
 };
 
@@ -223,6 +261,7 @@ const mutatingPatterns: Record<ConnectorType, RegExp> = {
   sqlite: mutatingPatternWithReplace,
   sqlserver: mutatingPatternSqlServer,
   oracle: mutatingPattern,
+  clickhouse: mutatingPattern,
 };
 
 /**

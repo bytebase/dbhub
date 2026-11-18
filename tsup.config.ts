@@ -25,6 +25,7 @@ export default defineConfig({
     'mariadb',
     'mssql',
     'oracledb',
+    '@clickhouse/client',
     '@aws-sdk/credential-providers',
     '@aws-sdk/rds-signer',
     '@azure/identity',

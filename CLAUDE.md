@@ -33,6 +33,7 @@ src/
 │   ├── mariadb/         # MariaDB connector
 │   ├── sqlserver/       # SQL Server connector
 │   ├── oracle/          # Oracle connector (node-oracledb Thin mode, no Instant Client)
+│   ├── clickhouse/      # ClickHouse connector (@clickhouse/client over the HTTP interface)
 │   └── sqlite/          # SQLite connector
 ├── tools/               # MCP tool handlers
 │   ├── execute-sql.ts   # SQL execution handler
@@ -180,6 +181,13 @@ outside TOML and follow the same order:
   - `src/connectors/mysql-family-connector.ts`: base class for MySQL and MariaDB (introspection, health check, and `executeStatements`, the split → row-cap → run → per-statement result-set flow). Only what differs by driver stays in the subclasses: pool setup, how a query is issued and timed out, and how a timed-out connection is discarded. The sibling `mysql-family-*.ts` files hold the shared catalog queries, health check and `sslmode` handling.
   - `src/connectors/sqlserver/request-helpers.ts`: parameter binding, read-only escape checks, `collectInfoMessages`, and `runRolledBack` — the always-rolled-back transaction every SQL Server read-only path (execute and `EXPLAIN ANALYZE`) goes through.
   - `src/connectors/introspection-utils.ts`: `groupIndexColumns`, for catalogs that list an index one column per row.
+- ClickHouse (`src/connectors/clickhouse/index.ts`) differs from the pooled connectors in ways worth knowing before changing it:
+  - It is stateless: one HTTP request per statement, no session, so `SET`/`USE`/temporary tables do not carry between statements. `[sources.session]` settings and `query_timeout` (`max_execution_time`) are sent as settings with every request.
+  - Read-only is the `readonly = 1` setting on the request, enforced by the server. A user whose own profile is `readonly = 1` may not change any setting (nothing is sent; `[sources.session]` fails the connect) and one at `readonly = 2` may not change `readonly` (it is left off); the level is probed at connect time.
+  - `max_rows` is applied by reading rows off the streamed response and closing it, never by rewriting SQL; `sql-row-limiter.ts` is not used.
+  - Rows are read as `JSONCompactEachRowWithNamesAndTypes` (positional, so repeated column names survive); 64-bit integers a double cannot hold stay strings.
+  - `SQLResult.messages` carries rows/bytes read per statement from the `X-ClickHouse-Summary` header, only when the response fit the server-side `buffer_size` and was read to the end (otherwise the header is not final).
+  - Custom-tool placeholders are `{p1:Type}`, `{p2:Type}` (`braced` style in `parameter-mapper.ts`). `getTableIndexes` reports `PRIMARY KEY`, `ORDER BY` and skipping indexes, never as unique. No `getHealthCheck`.
   - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
   - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
 - DSN Examples:
@@ -190,6 +198,7 @@ outside TOML and follow the same order:
   - SQL Server (named instance): `sqlserver://user:password@localhost:1433/dbname?instanceName=ENV1`
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name; `?sid=ORCL` for a SID; `sslmode=require`/`verify-full` switch to TCPS)
+  - ClickHouse: `clickhouse://user:password@localhost:8123/dbname` (the HTTP interface; `sslmode=require`/`verify-full` switch to HTTPS and default the port to 8443, as on ClickHouse Cloud)
   - SQLite: `sqlite:///path/to/database.db` (absolute), `sqlite:///./database.db` (relative: to the working directory, or to the config file when set in TOML) or `sqlite:///:memory:` — all forms and their resolution live in `src/utils/sqlite-dsn.ts`
 - SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL, MySQL and MariaDB, CA verification), `sslmode=verify-full` (every network database, CA + hostname verification). MySQL/MariaDB validation and the per-driver mapping live in `src/connectors/mysql-family-ssl.ts` and each connector's `*SslOptions`; unknown values are rejected. On PostgreSQL, use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
 

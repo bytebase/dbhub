@@ -7,6 +7,7 @@ import type { ConnectorType } from "../connectors/interface.js";
  * - MySQL/MariaDB: Backticks (`identifier`)
  * - SQL Server: Square brackets ([identifier])
  * - Oracle: Double quotes ("identifier"); a quoted identifier is case-sensitive
+ * - ClickHouse: Backticks (`identifier`), with backslash escapes
  *
  * This function handles:
  * 1. Database-specific quoting syntax
@@ -17,7 +18,7 @@ import type { ConnectorType } from "../connectors/interface.js";
  * not for user input. User input should always use parameterized queries.
  *
  * @param identifier - The identifier to quote (e.g., table name, schema name)
- * @param dbType - The database type (postgres, mysql, mariadb, sqlite, sqlserver, oracle)
+ * @param dbType - The database type (postgres, mysql, mariadb, sqlite, sqlserver, oracle, clickhouse)
  * @returns The properly quoted identifier
  * @throws Error if identifier contains null bytes or control characters
  */
@@ -45,6 +46,11 @@ export function quoteIdentifier(identifier: string, dbType: ConnectorType): stri
       // MySQL and MariaDB use backticks
       // Escape existing backticks by doubling them
       return `\`${identifier.replace(/`/g, "``")}\``;
+
+    case "clickhouse":
+      // ClickHouse reads a backslash inside a quoted identifier as an escape,
+      // so backslashes are escaped along with the backtick itself.
+      return `\`${identifier.replace(/\\/g, "\\\\").replace(/`/g, "\\`")}\``;
 
     case "sqlserver":
       // SQL Server uses square brackets

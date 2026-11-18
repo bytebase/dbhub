@@ -1,4 +1,4 @@
-export type DatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'sqlserver' | 'sqlite' | 'oracle';
+export type DatabaseType = 'postgres' | 'mysql' | 'mariadb' | 'sqlserver' | 'sqlite' | 'oracle' | 'clickhouse';
 
 export interface SSHTunnel {
   enabled: boolean;

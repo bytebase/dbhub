@@ -5,6 +5,7 @@ import MariaDBLogo from '../assets/logos/mariadb.svg';
 import SQLServerLogo from '../assets/logos/sqlserver.svg';
 import SQLiteLogo from '../assets/logos/sqlite.svg';
 import OracleLogo from '../assets/logos/oracle.svg';
+import ClickHouseLogo from '../assets/logos/clickhouse.svg';
 
 export const DB_LOGOS: Record<DatabaseType, string> = {
   postgres: PostgresLogo,
@@ -13,4 +14,5 @@ export const DB_LOGOS: Record<DatabaseType, string> = {
   sqlserver: SQLServerLogo,
   sqlite: SQLiteLogo,
   oracle: OracleLogo,
+  clickhouse: ClickHouseLogo,
 };

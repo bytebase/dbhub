@@ -42,6 +42,9 @@ const AUTH_CODES: Record<ConnectorType, ReadonlyArray<string | number>> = {
   sqlserver: ["ELOGIN"],
   // ORA-01017: invalid username/password; ORA-28000: account locked
   oracle: ["ORA-01017", "ORA-28000"],
+  // 516 AUTHENTICATION_FAILED; older servers: 192 UNKNOWN_USER, 193 WRONG_PASSWORD,
+  // 194 REQUIRED_PASSWORD. The client reports the code as a string.
+  clickhouse: ["516", "192", "193", "194"],
   sqlite: [], // no network/auth layer
 };
 

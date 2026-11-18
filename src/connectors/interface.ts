@@ -3,7 +3,14 @@ import type { SessionSettings } from "../utils/session-settings.js";
 /**
  * Type definition for supported database connector types
  */
-export type ConnectorType = "postgres" | "mysql" | "mariadb" | "sqlite" | "sqlserver" | "oracle";
+export type ConnectorType =
+  | "postgres"
+  | "mysql"
+  | "mariadb"
+  | "sqlite"
+  | "sqlserver"
+  | "oracle"
+  | "clickhouse";
 
 /**
  * Database Connector Interface
@@ -57,7 +64,10 @@ export interface SQLResult {
    * only care about that should read `resultSets[0]`.
    */
   resultSets: SQLResultSet[];
-  /** Informational messages from the database (e.g. SQL Server STATISTICS TIME/IO, PRINT output) */
+  /**
+   * Informational messages from the database (e.g. SQL Server STATISTICS
+   * TIME/IO, PRINT output; ClickHouse rows and bytes read per statement)
+   */
   messages?: DatabaseMessage[];
 }
 
@@ -142,9 +152,9 @@ export interface ExecuteOptions {
 export interface ConnectorConfig {
   /** Password resolved for each new physical connection (PostgreSQL). */
   password?: () => Promise<string>;
-  /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  /** Connection timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse) */
   connectionTimeoutSeconds?: number;
-  /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server) */
+  /** Query timeout in seconds (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse) */
   queryTimeoutSeconds?: number;
   /** Maximum connections in a source pool (PostgreSQL, MySQL) */
   poolMaxConnections?: number;
@@ -184,8 +194,10 @@ export interface ConnectorConfig {
    */
   collation?: string;
   /**
-   * Per-source session settings from `[sources.session]` (MySQL, PostgreSQL),
-   * applied once to every new connection. Validated by the TOML loader.
+   * Per-source session settings from `[sources.session]` (MySQL, PostgreSQL,
+   * ClickHouse). MySQL and PostgreSQL apply them once to every new connection;
+   * ClickHouse, whose HTTP interface has no connection state, sends them with
+   * every request. Validated by the TOML loader.
    */
   sessionSettings?: SessionSettings;
 }
@@ -204,6 +216,7 @@ export interface DSNParser {
    * - MariaDB: "mariadb://user:password@localhost:3306/dbname"
    * - MySQL: "mysql://user:password@localhost:3306/dbname"
    * - SQLite: "sqlite:///path/to/database.db" or "sqlite:///:memory:"
+   * - ClickHouse: "clickhouse://user:password@localhost:8123/dbname"
    */
   parse(dsn: string, config?: ConnectorConfig): Promise<any>;
 

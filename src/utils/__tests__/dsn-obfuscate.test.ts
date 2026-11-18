@@ -3,6 +3,7 @@ import {
   obfuscateDSNPassword,
   REDACTED_DSN,
   getDatabaseTypeFromDSN,
+  getDefaultPortForType,
   parseConnectionInfoFromDSN,
 } from '../dsn-obfuscate.js';
 
@@ -86,6 +87,7 @@ describe('DSN Obfuscation Utilities', () => {
       ['mariadb://admin:pass123@maria.server:3306/production', { type: 'mariadb', host: 'maria.server', port: 3306, database: 'production', user: 'admin' }],
       ['sqlserver://sa:StrongPass@sqlserver.local:1433/master', { type: 'sqlserver', host: 'sqlserver.local', port: 1433, database: 'master', user: 'sa' }],
       ['oracle://app:secret@ora.local:1521/FREEPDB1', { type: 'oracle', host: 'ora.local', port: 1521, database: 'FREEPDB1', user: 'app' }],
+      ['clickhouse://reader:secret@ch.local:8123/analytics', { type: 'clickhouse', host: 'ch.local', port: 8123, database: 'analytics', user: 'reader' }],
       // Edge cases: no port, query parameters, no user credentials
       ['postgres://user:pass@localhost/db', { type: 'postgres', host: 'localhost', database: 'db', user: 'user' }],
       ['postgres://user:pass@localhost:5432/db?sslmode=require', { type: 'postgres', host: 'localhost', port: 5432, database: 'db', user: 'user' }],
@@ -103,5 +105,19 @@ describe('DSN Obfuscation Utilities', () => {
     ])('should return null for %s DSN', (dsn) => {
       expect(parseConnectionInfoFromDSN(dsn)).toBeNull();
     });
+  });
+});
+
+describe('getDefaultPortForType', () => {
+  it('gives ClickHouse its HTTP port, or its HTTPS port when the sslmode asks for TLS', () => {
+    expect(getDefaultPortForType('clickhouse')).toBe(8123);
+    expect(getDefaultPortForType('clickhouse', 'disable')).toBe(8123);
+    expect(getDefaultPortForType('clickhouse', 'require')).toBe(8443);
+    expect(getDefaultPortForType('clickhouse', 'verify-full')).toBe(8443);
+  });
+
+  it('ignores sslmode for databases with one port', () => {
+    expect(getDefaultPortForType('postgres', 'require')).toBe(5432);
+    expect(getDefaultPortForType('sqlite', 'require')).toBeUndefined();
   });
 });

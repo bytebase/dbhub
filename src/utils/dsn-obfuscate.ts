@@ -215,7 +215,8 @@ function protocolToConnectorType(protocol: string): ConnectorType | undefined {
     'mariadb': 'mariadb',
     'sqlserver': 'sqlserver',
     'sqlite': 'sqlite',
-    'oracle': 'oracle'
+    'oracle': 'oracle',
+    'clickhouse': 'clickhouse'
   };
   return mapping[protocol];
 }
@@ -223,15 +224,18 @@ function protocolToConnectorType(protocol: string): ConnectorType | undefined {
 /**
  * Get the default port for a database type
  * @param type The database connector type
+ * @param sslmode The source's sslmode, for the one type whose port depends on it:
+ *   ClickHouse serves HTTP on 8123 and HTTPS on 8443
  * @returns The default port or undefined for SQLite
  */
-export function getDefaultPortForType(type: ConnectorType): number | undefined {
+export function getDefaultPortForType(type: ConnectorType, sslmode?: string): number | undefined {
   const ports: Record<ConnectorType, number | undefined> = {
     'postgres': 5432,
     'mysql': 3306,
     'mariadb': 3306,
     'sqlserver': 1433,
     'oracle': 1521,
+    'clickhouse': sslmode === 'require' || sslmode === 'verify-full' ? 8443 : 8123,
     'sqlite': undefined,
   };
   return ports[type];

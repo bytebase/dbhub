@@ -11,6 +11,7 @@ const connectorModules = [
   { load: () => import("./connectors/mysql/index.js"), name: "MySQL", driver: "mysql2", schemes: ["mysql"] },
   { load: () => import("./connectors/mariadb/index.js"), name: "MariaDB", driver: "mariadb", schemes: ["mariadb"] },
   { load: () => import("./connectors/oracle/index.js"), name: "Oracle", driver: "oracledb", schemes: ["oracle"] },
+  { load: () => import("./connectors/clickhouse/index.js"), name: "ClickHouse", driver: "@clickhouse/client", schemes: ["clickhouse"] },
 ];
 
 loadConnectors(connectorModules)

@@ -190,7 +190,7 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
   }
 
   // Validate supported database types
-  const supportedTypes = ['postgres', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'sqlite', 'oracle'];
+  const supportedTypes = ['postgres', 'postgresql', 'mysql', 'mariadb', 'sqlserver', 'sqlite', 'oracle', 'clickhouse'];
   if (!supportedTypes.includes(dbType.toLowerCase())) {
     throw new Error(`Unsupported DB_TYPE: ${dbType}. Supported types: ${supportedTypes.join(', ')}`);
   }
@@ -223,6 +223,10 @@ export function buildDSNFromEnvParams(): { dsn: string; source: string } | null 
         break;
       case 'oracle':
         port = '1521';
+        break;
+      case 'clickhouse':
+        // The HTTP interface; DB_* variables carry no sslmode, so never 8443.
+        port = '8123';
         break;
       default:
         throw new Error(`Unknown database type for port determination: ${dbType}`);
@@ -762,7 +766,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
     const protocol = dsnUrl.protocol.replace(':', '');
 
     // Map protocol to database type
-    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "oracle";
+    let dbType: "postgres" | "mysql" | "mariadb" | "sqlserver" | "sqlite" | "oracle" | "clickhouse";
     if (protocol === 'postgresql' || protocol === 'postgres') {
       dbType = 'postgres';
     } else if (protocol === 'mysql') {
@@ -775,6 +779,8 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       dbType = 'sqlite';
     } else if (protocol === 'oracle') {
       dbType = 'oracle';
+    } else if (protocol === 'clickhouse') {
+      dbType = 'clickhouse';
     } else {
       throw new Error(`Unsupported database type in DSN: ${protocol}`);
     }

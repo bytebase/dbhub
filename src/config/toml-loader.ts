@@ -15,7 +15,7 @@ import {
   resolveSqliteFilePath,
 } from "../utils/sqlite-dsn.js";
 import { MAX_QUERY_TIMEOUT_SECONDS } from "../utils/query-timeout.js";
-import { validateSessionSettings } from "../utils/session-settings.js";
+import { supportsSessionSettings, validateSessionSettings } from "../utils/session-settings.js";
 import { BUILTIN_TOOL_EXECUTE_SQL, isBuiltinToolName, toolsAreReadOnly } from "../tools/builtin-tools.js";
 
 /**
@@ -563,7 +563,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
 
   // Validate type if provided
   if (source.type) {
-    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "oracle"];
+    const validTypes = ["postgres", "mysql", "mariadb", "sqlserver", "sqlite", "oracle", "clickhouse"];
     if (!validTypes.includes(source.type)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid type '${source.type}'. ` +
@@ -716,14 +716,15 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    // verify-ca (chain only) is PostgreSQL, MySQL and MariaDB; SQL Server and
-    // Oracle only offer verify-full (server certificate and hostname).
+    // verify-ca (chain only) is PostgreSQL, MySQL and MariaDB; SQL Server,
+    // Oracle and ClickHouse only offer verify-full (server certificate and hostname).
     const verifyModesByType: Record<string, string[]> = {
       postgres: ["verify-ca", "verify-full"],
       mysql: ["verify-ca", "verify-full"],
       mariadb: ["verify-ca", "verify-full"],
       sqlserver: ["verify-full"],
       oracle: ["verify-full"],
+      clickhouse: ["verify-full"],
     };
     if (
       (source.sslmode === "verify-ca" || source.sslmode === "verify-full") &&
@@ -980,11 +981,11 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
     }
   }
 
-  // Validate [sources.session] (MySQL/PostgreSQL only)
+  // Validate [sources.session] (MySQL/PostgreSQL/ClickHouse only)
   if (source.session !== undefined) {
-    if (source.type !== "mysql" && source.type !== "postgres") {
+    if (!supportsSessionSettings(source.type)) {
       throw new Error(
-        `Configuration file ${configPath}: source '${source.id}' has [sources.session] but it is only supported for MySQL and PostgreSQL sources.`
+        `Configuration file ${configPath}: source '${source.id}' has [sources.session] but it is only supported for MySQL, PostgreSQL and ClickHouse sources.`
       );
     }
     const problem = validateSessionSettings(source.session, source.type);
@@ -1345,9 +1346,11 @@ export function buildDSNFromSource(source: SourceConfig): string {
   const isAwsIamPasswordless =
     source.aws_iam_auth === true &&
     ["postgres", "mysql", "mariadb"].includes(source.type);
+  // ClickHouse's `default` user has no password out of the box.
   const passwordRequired =
     source.authentication !== "azure-active-directory-access-token" &&
-    !isAwsIamPasswordless;
+    !isAwsIamPasswordless &&
+    source.type !== "clickhouse";
   if (!source.host || !source.user || !source.database) {
     throw new Error(
       `Source '${source.id}': missing required connection parameters. ` +
@@ -1357,13 +1360,13 @@ export function buildDSNFromSource(source: SourceConfig): string {
   if (passwordRequired && !source.password) {
     throw new Error(
       `Source '${source.id}': password is required. ` +
-        `(Password is optional for azure-active-directory-access-token authentication ` +
-        `or when aws_iam_auth=true)`
+        `(Password is optional for azure-active-directory-access-token authentication, ` +
+        `when aws_iam_auth=true, or for ClickHouse)`
     );
   }
 
   // Determine default port if not specified
-  const port = source.port || getDefaultPortForType(source.type);
+  const port = source.port || getDefaultPortForType(source.type, source.sslmode);
 
   if (!port) {
     throw new Error(`Source '${source.id}': unable to determine port`);

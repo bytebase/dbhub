@@ -235,6 +235,28 @@ This page covers command-line flags and environment variables. For TOML configur
       </Note>
     </Tab>
 
+    <Tab title="ClickHouse">
+      ```bash
+      # Format: clickhouse://[user]:[password]@[host]:[port]/[database]?[options]
+      clickhouse://default:secret@localhost:8123/analytics
+
+      # The out-of-the-box `default` user has no password
+      clickhouse://default:@localhost:8123/default
+
+      # ClickHouse Cloud: HTTPS on port 8443
+      clickhouse://default:secret@abc123.us-east-1.aws.clickhouse.cloud:8443/default?sslmode=verify-full
+      ```
+
+      <Note>
+        DBHub talks to ClickHouse over its **HTTP interface**, so the port is
+        the HTTP port (`8123`), or the HTTPS port (`8443`) with
+        `sslmode=require` or `verify-full` — not the native protocol port
+        (`9000`/`9440`). When the port is omitted, DBHub picks `8123` or `8443`
+        from the `sslmode`. The user defaults to `default` and the database to
+        `default`.
+      </Note>
+    </Tab>
+
     <Tab title="SQLite">
       ```bash
       # Absolute path (Unix/Linux/macOS)
@@ -280,7 +302,7 @@ This page covers command-line flags and environment variables. For TOML configur
 
   | Parameter | Databases | Description | Example |
   |-----------|-----------|-------------|---------|
-  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
+  | `sslmode` | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse | SSL mode: `disable`, `require`, `verify-ca`, `verify-full` | `?sslmode=require` |
   | `sslrootcert` | PostgreSQL | CA certificate path (requires `verify-ca` or `verify-full`; rejected with `require`, `disable` or no `sslmode`) | `?sslrootcert=~/.ssl/ca.pem` |
   | `sslcert` | PostgreSQL | PEM client certificate for client certificate authentication (set with `sslkey`; requires `require`, `verify-ca` or `verify-full`) | `?sslcert=~/.ssl/client.crt` |
   | `sslkey` | PostgreSQL | Unencrypted PEM private key for `sslcert` | `?sslkey=~/.ssl/client.key` |
@@ -302,13 +324,14 @@ This page covers command-line flags and environment variables. For TOML configur
   | MariaDB    |     ✅    |     ✅    |      ✅     |      ✅      | Unencrypted |
   | SQL Server |     ✅    |     ✅    |      ❌     |      ✅      | Unencrypted |
   | Oracle     |     ✅    |     ✅    |      ❌     |      ✅      | Plain TCP (`tcps://` only with `require`/`verify-full`) |
+  | ClickHouse |     ✅    |     ✅    |      ❌     |      ✅      | Plain HTTP (HTTPS only with `require`/`verify-full`) |
   | SQLite     |     ❌    |     ❌    |      ❌     |      ❌      | N/A (file-based) |
 
   - No `sslmode`: the connection is **not encrypted** — the same as `disable`. Set `require` or a verify mode for any database reached over a network you don't control.
   - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
   - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL, MySQL, and MariaDB.** On PostgreSQL use `sslrootcert` to specify the CA certificate path.
-  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **All network databases.** On PostgreSQL use `sslrootcert` to specify the CA certificate path. MySQL, MariaDB and SQL Server use Node's configured trust roots; set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed (e.g. the Amazon RDS CA bundle). Oracle uses the system trust store.
+  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **All network databases.** On PostgreSQL use `sslrootcert` to specify the CA certificate path. MySQL, MariaDB, SQL Server and ClickHouse use Node's configured trust roots; set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed (e.g. the Amazon RDS CA bundle). Oracle uses the system trust store.
 
   <Note>
   Unlike libpq, DBHub does not upgrade `sslmode=require` to `verify-ca` when `sslrootcert` is present: that combination is rejected at startup, so set `sslmode=verify-ca` explicitly. libpq's `allow` and `prefer` modes are not supported for PostgreSQL either; use `require` (or a verify mode) instead. MySQL and MariaDB likewise reject any value other than the four above, including MySQL's own `PREFERRED` / `VERIFY_IDENTITY` spellings.
@@ -323,6 +346,7 @@ This page covers command-line flags and environment variables. For TOML configur
   mysql://user:password@mysql-host:3306/dbname?sslmode=verify-full
   sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
   oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
+  clickhouse://default:secret@abc123.us-east-1.aws.clickhouse.cloud:8443/default?sslmode=verify-full
   ```
 </ParamField>
 
@@ -333,9 +357,9 @@ This page covers command-line flags and environment variables. For TOML configur
 
   | Variable | Type | Description |
   |----------|------|-------------|
-  | `DB_TYPE` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite` |
+  | `DB_TYPE` | string | Database type: `postgres`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `clickhouse`, `sqlite` |
   | `DB_HOST` | string | Database server hostname (not needed for SQLite) |
-  | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`), Oracle (`1521`) |
+  | `DB_PORT` | number | Database server port. Default: PostgreSQL (`5432`), MySQL/MariaDB (`3306`), SQL Server (`1433`), Oracle (`1521`), ClickHouse (`8123`, its HTTP port) |
   | `DB_USER` | string | Database username (not needed for SQLite) |
   | `DB_PASSWORD` | string | Database password (not needed for SQLite). Supports special characters without URL encoding. |
   | `DB_NAME` | string | Database name, or the SQLite file path (a relative path is resolved against the working directory) |

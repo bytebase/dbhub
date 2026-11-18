@@ -49,6 +49,9 @@ describe("Parameter Mapper", () => {
       ["SELECT * FROM users WHERE id = ?", "mysql"],
       ["SELECT * FROM users WHERE id = @p1", "sqlserver"],
       ["SELECT * FROM users WHERE id = :1", "oracle"],
+      ["SELECT * FROM users WHERE id = {p1:UInt64}", "clickhouse"],
+      // `?` and `:` are the conditional operator in ClickHouse, not placeholders
+      ["SELECT x > 0 ? 1 : 2 FROM t", "clickhouse"],
       // SQL without parameters is valid for any connector: the style check
       // returns before the connector is consulted
       ["SELECT * FROM users", "postgres"],
@@ -62,6 +65,41 @@ describe("Parameter Mapper", () => {
       ["SELECT * FROM users WHERE id = ?", "oracle", /Expected colon style \(:1, :2, :3\)/],
     ])("should reject %j for %s", (sql, connector, message) => {
       expect(() => validateParameterStyle(sql, connector)).toThrow(message);
+    });
+  });
+
+  describe("ClickHouse {pN:Type} placeholders", () => {
+    it("should count placeholders by their highest index, whatever the type", () => {
+      const sql =
+        "SELECT * FROM events WHERE tenant = {p1:String} AND day >= {p2 : Date} " +
+        "AND id IN {p3:Array(UInt32)} AND owner = {p1:String}";
+      expect(detectParameterStyle(sql, "clickhouse")).toBe("braced");
+      expect(countParameters(sql, "clickhouse")).toBe(3);
+    });
+
+    it("should ignore placeholders inside strings and comments, and other dialects' styles", () => {
+      const sql = "SELECT '{p2:String}', a ? b : 1 /* {p3:String} */ FROM t WHERE id = {p1:UInt64} -- $1 @p1";
+      expect(countParameters(sql, "clickhouse")).toBe(1);
+    });
+
+    it("should not read a map literal or a named placeholder as a positional one", () => {
+      expect(detectParameterStyle("SELECT {'p1': 1} AS m, {tenant:String} AS t", "clickhouse")).toBe("none");
+    });
+
+    it("should require placeholders to be sequential from p1", () => {
+      expect(() => countParameters("SELECT {p2:String}", "clickhouse")).toThrow(/missing \{p1/);
+      expect(() => countParameters("SELECT {p0:String}", "clickhouse")).toThrow(/parameter \{p0/);
+    });
+
+    it("should validate the placeholder count against the tool's parameters", () => {
+      const parameters = [{ name: "tenant", type: "string" as const, description: "tenant" }];
+      expect(() =>
+        validateParameters("SELECT * FROM t WHERE tenant = {p1:String}", parameters, "clickhouse")
+      ).not.toThrow();
+      // A `?` is not a placeholder here, so the statement has none to bind.
+      expect(() => validateParameters("SELECT * FROM t WHERE tenant = ?", parameters, "clickhouse")).toThrow(
+        /SQL statement has 0 parameter\(s\), but 1 parameter\(s\) defined/
+      );
     });
   });
 

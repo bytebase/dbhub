@@ -6,6 +6,8 @@
  * - MySQL: one `SET SESSION a = 1, b = 'x'` statement in the pool's
  *   'connection' hook, queued ahead of the first caller's statement.
  * - PostgreSQL: `-c name=value` startup options, the same path search_path uses.
+ * - ClickHouse: its HTTP interface keeps no connection state, so the settings
+ *   are sent as query-string settings with every request.
  *
  * Validation is deliberately minimal. Names must look like identifiers and
  * values must be scalars, so nothing but a value assignment reaches the server;
@@ -18,8 +20,14 @@
 export type SessionSettingValue = string | number | bigint | boolean;
 export type SessionSettings = Record<string, SessionSettingValue>;
 
-export type SessionSettingsEngine = "mysql" | "postgres";
+export type SessionSettingsEngine = "mysql" | "postgres" | "clickhouse";
 
+/** Engines whose sources accept a `[sources.session]` table. */
+export function supportsSessionSettings(type: string | undefined): type is SessionSettingsEngine {
+  return type === "mysql" || type === "postgres" || type === "clickhouse";
+}
+
+// MySQL and ClickHouse setting names are plain identifiers.
 const MYSQL_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // PostgreSQL also accepts extension settings such as `pg_stat_statements.track`.
 const POSTGRES_NAME = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$/;
@@ -33,7 +41,34 @@ const MANAGED_SETTINGS: Record<SessionSettingsEngine, Record<string, string>> = 
     statement_timeout: "query_timeout",
     search_path: "search_path",
   },
+  clickhouse: {
+    max_execution_time: "query_timeout",
+  },
 };
+
+/**
+ * Names ClickHouse's HTTP interface reads from the query string as something
+ * other than a setting. Sent as a "setting" they would change how the request
+ * itself is handled (who it runs as, which session it joins, what it executes).
+ */
+const CLICKHOUSE_HTTP_PARAMETERS = new Set([
+  "query",
+  "query_id",
+  "database",
+  "default_format",
+  "user",
+  "password",
+  "quota_key",
+  "role",
+  "session_id",
+  "session_timeout",
+  "session_check",
+  "close_session",
+  "compress",
+  "decompress",
+  "stacktrace",
+  "client_protocol_version",
+]);
 
 /**
  * Check a `[sources.session]` table. Returns an error message describing the
@@ -55,7 +90,7 @@ export function validateSessionSettings(
     return "must be a table of setting names and values (e.g. [sources.session] followed by lock_timeout = \"5s\")";
   }
 
-  const namePattern = engine === "mysql" ? MYSQL_NAME : POSTGRES_NAME;
+  const namePattern = engine === "postgres" ? POSTGRES_NAME : MYSQL_NAME;
   for (const [name, value] of Object.entries(settings)) {
     if (!namePattern.test(name)) {
       return `has invalid setting name '${name}'. Names must be identifiers (letters, digits and underscores${
@@ -65,6 +100,15 @@ export function validateSessionSettings(
     const managedBy = MANAGED_SETTINGS[engine][name.toLowerCase()];
     if (managedBy !== undefined) {
       return `sets '${name}', which DBHub manages through the '${managedBy}' source option. Use '${managedBy}' instead.`;
+    }
+    if (engine === "clickhouse") {
+      if (name === "readonly") {
+        return "sets 'readonly', which DBHub manages through each tool's 'readonly' option. Use a tool's 'readonly' option, or a read-only database user, instead.";
+      }
+      // `param_<name>` binds a query parameter rather than changing a setting.
+      if (CLICKHOUSE_HTTP_PARAMETERS.has(name) || name.startsWith("param_")) {
+        return `sets '${name}', which is a parameter of ClickHouse's HTTP interface rather than a setting.`;
+      }
     }
     const isScalar =
       typeof value === "string" ||
@@ -120,4 +164,18 @@ export function buildPostgresSessionOptions(settings: SessionSettings): string {
       return ` -c ${name}=${text.replace(/\\/g, "\\\\").replace(/(\s)/g, "\\$1")}`;
     })
     .join("");
+}
+
+/**
+ * The settings as ClickHouse query-string settings: booleans as 1/0 and
+ * integers beyond a double's range as their decimal text. The client
+ * URL-encodes each value, so no quoting is involved.
+ */
+export function toClickHouseSettings(settings: SessionSettings): Record<string, string | number> {
+  return Object.fromEntries(
+    Object.entries(settings).map(([name, value]) => [
+      name,
+      typeof value === "boolean" ? (value ? 1 : 0) : typeof value === "bigint" ? String(value) : value,
+    ])
+  );
 }

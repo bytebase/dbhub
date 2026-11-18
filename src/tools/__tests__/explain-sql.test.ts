@@ -52,10 +52,30 @@ describe('explain-sql tool', () => {
       ['mariadb', 'EXPLAIN SELECT * FROM users'],
       ['sqlserver', 'EXPLAIN SELECT * FROM users'],
       ['sqlite', 'EXPLAIN QUERY PLAN SELECT * FROM users'],
+      ['clickhouse', 'EXPLAIN indexes = 1 SELECT * FROM users'],
     ] satisfies [ConnectorType, string][])('on %s, runs "%s" read-only', async (dialect, expected) => {
       useConnector(dialect);
 
       const { parsed } = await explain('SELECT * FROM users');
+
+      expect(parsed.success).toBe(true);
+      expect(mockConnector.executeSQL).toHaveBeenCalledWith(expected, { readonly: true });
+    });
+  });
+
+  describe('ClickHouse', () => {
+    it.each([
+      ['a WITH query', 'WITH 1 AS x SELECT x', 'EXPLAIN indexes = 1 WITH 1 AS x SELECT x'],
+      ['a parenthesized query', '(SELECT 1) UNION ALL (SELECT 2)', 'EXPLAIN indexes = 1 (SELECT 1) UNION ALL (SELECT 2)'],
+      ['a query behind a comment', '-- why slow?\nSELECT 1', 'EXPLAIN indexes = 1 -- why slow?\nSELECT 1'],
+      // The caller chose the kind of EXPLAIN or its settings: nothing is added
+      ['an EXPLAIN kind', 'PIPELINE SELECT 1', 'EXPLAIN PIPELINE SELECT 1'],
+      ['ESTIMATE', 'ESTIMATE SELECT * FROM events', 'EXPLAIN ESTIMATE SELECT * FROM events'],
+      ['EXPLAIN settings', 'actions = 1 SELECT 1', 'EXPLAIN actions = 1 SELECT 1'],
+    ])('explains %s with index analysis only where it is a plain query', async (_label, sql, expected) => {
+      useConnector('clickhouse');
+
+      const { parsed } = await explain(sql);
 
       expect(parsed.success).toBe(true);
       expect(mockConnector.executeSQL).toHaveBeenCalledWith(expected, { readonly: true });
