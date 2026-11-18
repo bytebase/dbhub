@@ -53,6 +53,7 @@
       {
         "tab": "Blog",
         "pages": [
+          "blog/modelcontextprotocol-server-postgres-alternative",
           "blog/database-mcp-server-token-benchmark-2026",
           "blog/dbhub-1-0-0",
           "blog/how-dbhub-adopts-mcp-spec-2026-07-28",

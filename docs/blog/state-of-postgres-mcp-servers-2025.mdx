@@ -52,7 +52,7 @@ Prompt injection: untrusted input mixed with AI instructions, executed by the LL
 
 **The Anthropic Postgres MCP vulnerability**
 
-Datadog [found the first major exploit](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/) in Anthropic's reference implementation. The server wrapped queries in read-only transactions but accepted semicolon-delimited statements. Inject `COMMIT; DROP SCHEMA public CASCADE;`—the COMMIT ends the read-only transaction, everything after runs with full privileges. Anthropic archived the repo. The npm package still gets 15k weekly downloads.
+Datadog [found the first major exploit](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/) in Anthropic's reference implementation. The server wrapped queries in read-only transactions but accepted semicolon-delimited statements. Inject `COMMIT; DROP SCHEMA public CASCADE;`—the COMMIT ends the read-only transaction, everything after runs with full privileges. Anthropic archived the repo. The npm package still gets 15k weekly downloads. (Update, November 2026: that has grown to about 148k a week. See [how to replace `@modelcontextprotocol/server-postgres`](/blog/modelcontextprotocol-server-postgres-alternative).)
 
 **The Supabase MCP vulnerability**
 

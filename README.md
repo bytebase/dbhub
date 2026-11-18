@@ -116,6 +116,38 @@ Also available as:
 
 See the [Installation Guide](https://dbhub.ai/installation) for all options, [Command-Line Options](https://dbhub.ai/config/command-line) for parameters, and [Multi-Database Configuration](https://dbhub.ai/config/toml) for connecting several databases at once.
 
+## Replacing `@modelcontextprotocol/server-postgres`
+
+The reference PostgreSQL MCP server, `@modelcontextprotocol/server-postgres`, is archived and marked deprecated on npm ("Archived and unmaintained; no security guarantees"). DBHub is a maintained replacement. Swap the package and pass the connection string with `--dsn`; an existing `postgresql://` URL works unchanged.
+
+Before:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+After:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@latest", "--dsn", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+The old server only ran read-only queries. With `--dsn` alone, DBHub's `execute_sql` can also write. To keep it read-only, point `--config` at a TOML file that sets `readonly = true`. The [replacement guide](https://dbhub.ai/blog/modelcontextprotocol-server-postgres-alternative) has that config and the other differences.
+
 ## Development
 
 Requires Node.js >= 22.5.0 (DBHub uses the built-in `node:sqlite` module).

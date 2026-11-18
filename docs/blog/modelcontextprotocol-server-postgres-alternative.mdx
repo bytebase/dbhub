@@ -1,0 +1,155 @@
+---
+title: "@modelcontextprotocol/server-postgres Is Archived: How to Replace It"
+description: "@modelcontextprotocol/server-postgres is archived and deprecated on npm. Replace it with @bytebase/dbhub: the exact config change, a read-only setup, and what differs."
+---
+
+*November 18, 2026*
+
+`@modelcontextprotocol/server-postgres`, the reference PostgreSQL MCP server, is archived and no longer maintained. To keep a PostgreSQL MCP server in your client, replace it with a maintained one. With [DBHub](https://github.com/bytebase/dbhub) (`@bytebase/dbhub`, MIT licensed) the change is one entry in your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@latest", "--dsn", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+An existing `postgresql://` connection string works unchanged. The rest of this page covers the read-only setup, Docker, and what behaves differently.
+
+## Is `@modelcontextprotocol/server-postgres` deprecated?
+
+Yes. npm prints this when the package is installed:
+
+```text
+npm warn deprecated @modelcontextprotocol/server-postgres@0.6.2: Archived and unmaintained; no security guarantees. See https://github.com/modelcontextprotocol/servers-archived
+```
+
+- The last release is `0.6.2`, published December 4, 2024.
+- The source moved to the read-only [`modelcontextprotocol/servers-archived`](https://github.com/modelcontextprotocol/servers-archived) repository.
+- Datadog Security Labs [documented a SQL injection](https://securitylabs.datadoghq.com/articles/mcp-vulnerability-case-study-SQL-injection-in-the-postgresql-mcp-server/) that escapes its read-only transaction: a query such as `COMMIT; DROP SCHEMA public CASCADE;` ends the transaction and runs the rest with the full privileges of the connection.
+
+The MCP project did not name a successor. The package keeps working for anyone who already has it in a config, which is why it was still downloaded about 148,000 times in the week of November 10–16, 2026.
+
+## Replace it with DBHub
+
+Find the server entry in your MCP client config. The old one looks like this:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+Change the package name and put `--dsn` in front of the connection string:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@latest", "--dsn", "postgresql://localhost/mydb"]
+    }
+  }
+}
+```
+
+Restart the client. Two tools appear: `execute_sql` and `search_objects`.
+
+<Warning>
+The old server only ran read-only queries. With `--dsn` alone, DBHub's `execute_sql` also runs statements that write. Use the read-only setup below to keep the old behavior.
+</Warning>
+
+DBHub requires **Node.js 22.5.0 or later**. The [Docker image](#docker) bundles its own runtime.
+
+## Keep it read-only
+
+Read-only mode is set in a TOML config file. Create `dbhub.toml`:
+
+```toml dbhub.toml
+[[sources]]
+id = "postgres"
+dsn = "postgresql://localhost/mydb"
+
+[[tools]]
+name = "execute_sql"
+source = "postgres"
+readonly = true
+
+[[tools]]
+name = "search_objects"
+source = "postgres"
+```
+
+Then point the server at it with `--config` in place of `--dsn`:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@latest", "--config", "/absolute/path/to/dbhub.toml"]
+    }
+  }
+}
+```
+
+In read-only mode DBHub checks every statement in a request against an allow-list (`SELECT`, `WITH`, `EXPLAIN`, `SHOW`) before anything reaches the database, then runs the request inside a PostgreSQL `BEGIN READ ONLY` transaction. A batch such as `COMMIT; DROP SCHEMA public CASCADE;` is rejected by the first check because `COMMIT` and `DROP` are not on the list.
+
+Read-only mode is a guardrail, not a permission boundary. Connect with a least-privilege, read-only database user as well. [Read-Only Mode](/config/read-only-mode) describes exactly what it covers.
+
+Three installs are read-only without a config file: the [MCP Bundle](/mcpb), the [Claude Code Plugin](/claude-code-plugin) and the [Codex Plugin](/codex-plugin).
+
+## Docker
+
+If you ran the `mcp/postgres` image:
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "mcp/postgres", "postgresql://host.docker.internal:5432/mydb"]
+    }
+  }
+}
+```
+
+Use the `bytebase/dbhub` image:
+
+```json
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "bytebase/dbhub", "--transport", "stdio", "--dsn", "postgresql://host.docker.internal:5432/mydb"]
+    }
+  }
+}
+```
+
+## What is different
+
+| | `@modelcontextprotocol/server-postgres` | DBHub (`@bytebase/dbhub`) |
+| --- | --- | --- |
+| Status | Archived, deprecated on npm | Maintained |
+| Connection string | Positional argument | `--dsn` flag, `DSN` environment variable, or TOML file |
+| Query tool | `query` | `execute_sql` |
+| Schema discovery | One MCP resource per table | `search_objects` tool: schemas, tables, columns, indexes, procedures, functions |
+| Read-only | Always | Opt-in with `readonly = true` in TOML |
+| Databases | PostgreSQL | PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, SQLite |
+| Node.js | No version declared | 22.5.0 or later |
+
+MCP clients discover tool names when they connect, so the rename from `query` to `execute_sql` needs no change on your side. Saved prompts or rules that name the `query` tool do need updating.
+
+## Other maintained Postgres MCP servers
+
+DBHub is one option. The [State of Postgres MCP Servers](/blog/state-of-postgres-mcp-servers-2025) compares it with Postgres MCP Pro, Supabase MCP, Neon MCP and Google's MCP Toolbox for Databases.

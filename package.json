@@ -43,7 +43,26 @@
     "node": ">=22.5.0"
   },
   "packageManager": "pnpm@10.17.1",
-  "keywords": [],
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "modelcontextprotocol",
+    "database",
+    "sql",
+    "postgres",
+    "postgresql",
+    "mysql",
+    "mariadb",
+    "sqlserver",
+    "mssql",
+    "oracle",
+    "sqlite",
+    "claude",
+    "cursor",
+    "codex",
+    "ai-agent"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
