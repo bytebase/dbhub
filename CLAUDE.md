@@ -181,6 +181,8 @@ outside TOML and follow the same order:
   - `src/connectors/mysql-family-connector.ts`: base class for MySQL and MariaDB (introspection, health check, and `executeStatements`, the split → row-cap → run → per-statement result-set flow). Only what differs by driver stays in the subclasses: pool setup, how a query is issued and timed out, and how a timed-out connection is discarded. The sibling `mysql-family-*.ts` files hold the shared catalog queries, health check and `sslmode` handling.
   - `src/connectors/sqlserver/request-helpers.ts`: parameter binding, read-only escape checks, `collectInfoMessages`, and `runRolledBack` — the always-rolled-back transaction every SQL Server read-only path (execute and `EXPLAIN ANALYZE`) goes through.
   - `src/connectors/introspection-utils.ts`: `groupIndexColumns`, for catalogs that list an index one column per row.
+  - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
+  - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
 - ClickHouse (`src/connectors/clickhouse/index.ts`) differs from the pooled connectors in ways worth knowing before changing it:
   - It is stateless: one HTTP request per statement, no session, so `SET`/`USE`/temporary tables do not carry between statements. `[sources.session]` settings and `query_timeout` (`max_execution_time`) are sent as settings with every request.
   - Read-only is the `readonly = 1` setting on the request, enforced by the server. A user whose own profile is `readonly = 1` may not change any setting (nothing is sent; `[sources.session]` fails the connect) and one at `readonly = 2` may not change `readonly` (it is left off); the level is probed at connect time.
@@ -188,8 +190,6 @@ outside TOML and follow the same order:
   - Rows are read as `JSONCompactEachRowWithNamesAndTypes` (positional, so repeated column names survive); 64-bit integers a double cannot hold stay strings.
   - `SQLResult.messages` carries rows/bytes read per statement from the `X-ClickHouse-Summary` header, only when the response fit the server-side `buffer_size` and was read to the end (otherwise the header is not final).
   - Custom-tool placeholders are `{p1:Type}`, `{p2:Type}` (`braced` style in `parameter-mapper.ts`). `getTableIndexes` reports `PRIMARY KEY`, `ORDER BY` and skipping indexes, never as unique. No `getHealthCheck`.
-  - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
-  - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
 - DSN Examples:
   - PostgreSQL: `postgres://user:password@localhost:5432/dbname?sslmode=disable`
   - MySQL: `mysql://user:password@localhost:3306/dbname?sslmode=disable`
