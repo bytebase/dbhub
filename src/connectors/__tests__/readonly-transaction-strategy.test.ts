@@ -134,6 +134,12 @@ describe("readonly transaction strategy", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    // The console spies of the Doris tests
+    vi.restoreAllMocks();
+  });
+
   describe("MySQL connector", () => {
     it("sets the session READ ONLY around a READ ONLY transaction on stock MySQL", async () => {
       const { pool, statements } = makeFakePool(MYSQL_VERSION, asMysql);
@@ -228,25 +234,21 @@ describe("readonly transaction strategy", () => {
 
     it("runs unwrapped on Apache Doris, which has no transaction a query can run in", async () => {
       const warn = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
-        const { pool, statements } = makeFakePool(
-          DORIS_VERSION,
-          asMysql,
-          undefined,
-          0,
-          DORIS_VERSION_COMMENT
-        );
-        const connector = await connectMysql(pool);
-        await connector.executeSQL("SELECT 1 AS connection_ok", { readonly: true });
+      const { pool, statements } = makeFakePool(
+        DORIS_VERSION,
+        asMysql,
+        undefined,
+        0,
+        DORIS_VERSION_COMMENT
+      );
+      const connector = await connectMysql(pool);
+      await connector.executeSQL("SELECT 1 AS connection_ok", { readonly: true });
 
-        // No flag read, no SET SESSION, no START TRANSACTION, no COMMIT/ROLLBACK.
-        expect(statements).toEqual(["SELECT 1 AS connection_ok"]);
-        // The weaker guarantee is announced once, at connect time.
-        expect(warn).toHaveBeenCalledTimes(1);
-        expect(warn.mock.calls[0][0]).toContain("Apache Doris detected");
-      } finally {
-        warn.mockRestore();
-      }
+      // No flag read, no SET SESSION, no START TRANSACTION, no COMMIT/ROLLBACK.
+      expect(statements).toEqual(["SELECT 1 AS connection_ok"]);
+      // The weaker guarantee is announced once, at connect time.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain("Apache Doris detected");
     });
 
     it("keeps the READ ONLY backstop when @@version_comment cannot be read", async () => {
@@ -433,27 +435,19 @@ describe("readonly transaction strategy", () => {
       ["Apache Doris", DORIS_VERSION, DORIS_VERSION_COMMENT],
     ])("does not special-case %s", async (_name, version, versionComment) => {
       const warn = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
-        const { pool, statements } = makeFakePool(version, asMariadb, undefined, 0, versionComment);
-        const connector = await connectMariadb(pool);
-        await connector.executeSQL("SELECT 1", { readonly: true });
+      const { pool, statements } = makeFakePool(version, asMariadb, undefined, 0, versionComment);
+      const connector = await connectMariadb(pool);
+      await connector.executeSQL("SELECT 1", { readonly: true });
 
-        // Same form as stock MariaDB, and no probing of the server at connect time.
-        expect(statements).toEqual([MARIADB_READ_FLAG, READ_ONLY_OPEN, "SELECT 1", MARIADB_COMMIT]);
-        expect(pool.query).not.toHaveBeenCalledWith(VERSION_COMMENT_QUERY);
-        expect(pool.query).not.toHaveBeenCalledWith(expect.stringContaining("VERSION()"));
-        expect(warn).not.toHaveBeenCalled();
-      } finally {
-        warn.mockRestore();
-      }
+      // Same form as stock MariaDB, and no probing of the server at connect time.
+      expect(statements).toEqual([MARIADB_READ_FLAG, READ_ONLY_OPEN, "SELECT 1", MARIADB_COMMIT]);
+      expect(pool.query).not.toHaveBeenCalledWith(VERSION_COMMENT_QUERY);
+      expect(pool.query).not.toHaveBeenCalledWith(expect.stringContaining("VERSION()"));
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 
   describe("MariaDB query_timeout", () => {
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     it("passes the server-side limit to the driver", async () => {
       const { pool } = makeFakePool(MARIADB_VERSION, asMariadb);
       await connectMariadb(pool, { queryTimeoutSeconds: 30 });

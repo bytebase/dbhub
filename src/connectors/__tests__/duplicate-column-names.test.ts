@@ -1,5 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { EventEmitter } from "events";
+import { describe, it, expect, vi } from "vitest";
 
 /**
  * Driver-level coverage for repeated column names (bytebase/dbhub#484).
@@ -12,54 +11,36 @@ import { EventEmitter } from "events";
 
 const DUPLICATE_SQL = "SELECT 1 AS a, 2 AS a";
 
-let pool: FakePgPool;
+// A checked-out pg client: transaction control arrives as plain strings,
+// execute_sql statements as a query config answered the way node-postgres does
+// in rowMode 'array' (rows positional, fields complete).
+const client = {
+  on: vi.fn(),
+  removeListener: vi.fn(),
+  release: vi.fn(),
+  query: vi.fn(async (query: unknown) =>
+    typeof query === "string"
+      ? { rows: [], rowCount: null }
+      : { rows: [[1, 2]], rowCount: 1, fields: [{ name: "a" }, { name: "a" }] }
+  ),
+};
 
 vi.mock("pg", () => ({
   default: {
     Pool: function () {
-      return pool;
+      // A copy per checkout: the connector wraps `release` on the client it is handed.
+      return { on: vi.fn(), connect: async () => ({ ...client }), end: vi.fn() };
     },
-    types: { builtins: {}, getTypeParser: () => (value: string) => value },
   },
 }));
 
-class FakePgPool extends EventEmitter {
-  queries: any[] = [];
-  release = vi.fn();
-  client = Object.assign(new EventEmitter(), {
-    processID: 1,
-    query: vi.fn(async (query: any) => {
-      this.queries.push(query);
-      if (typeof query === "string") {
-        return { rows: [], rowCount: null };
-      }
-      // node-postgres in rowMode 'array': rows positional, fields complete.
-      return {
-        rows: [[1, 2]],
-        rowCount: 1,
-        fields: [{ name: "a" }, { name: "a" }],
-      };
-    }),
-    release: this.release as (err?: Error | boolean) => void,
-  });
-  connect = vi.fn(async () => {
-    this.client.release = this.release;
-    return this.client;
-  });
-  query = vi.fn();
-  end = vi.fn().mockResolvedValue(undefined);
-}
+const { PostgresConnector } = await import("../postgres/index.js");
+const { SQLServerConnector } = await import("../sqlserver/index.js");
 
 describe("PostgreSQL", () => {
-  beforeEach(() => {
-    pool = new FakePgPool();
-  });
-
   async function connect() {
-    const { PostgresConnector } = await import("../postgres/index.js");
     const connector = new PostgresConnector();
     await connector.connect("postgres://u:p@localhost:5432/db");
-    pool.queries.length = 0;
     return connector;
   }
 
@@ -81,13 +62,12 @@ describe("PostgreSQL", () => {
   it("asks the driver for positional rows and passes parameters through", async () => {
     const connector = await connect();
     await connector.executeSQL("SELECT $1 AS a, $2 AS a", {}, [1, 2]);
-    expect(pool.queries).toContainEqual({ text: "SELECT $1 AS a, $2 AS a", values: [1, 2], rowMode: "array" });
+    expect(client.query).toHaveBeenCalledWith({ text: "SELECT $1 AS a, $2 AS a", values: [1, 2], rowMode: "array" });
   });
 });
 
 describe("SQL Server", () => {
   it("rebuilds object rows from an array-row-mode recordset", async () => {
-    const { SQLServerConnector } = await import("../sqlserver/index.js");
     // node-mssql in arrayRowMode: positional rows, `columns` as a list.
     const recordset: any = [[1, 2]];
     Object.defineProperty(recordset, "columns", { value: [{ name: "a" }, { name: "a" }], enumerable: false });
@@ -96,7 +76,6 @@ describe("SQL Server", () => {
   });
 
   it("reads a chunked FOR JSON row positionally", async () => {
-    const { SQLServerConnector } = await import("../sqlserver/index.js");
     // node-mssql assembles a FOR JSON/XML result into a single-key object
     // even in arrayRowMode (keyed "0"), with the chunk column in `columns`.
     const recordset: any = [{ "0": '[{"a":1}]' }];
