@@ -69,21 +69,6 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Check if a SQL statement has a LIMIT clause of its own (not one nested in
-   * a CTE body or subquery).
-   */
-  static hasLimitClause(sql: string, dialect?: ConnectorType): boolean {
-    return this.findTopLevelLimit(sql, dialect) !== null;
-  }
-
-  /**
-   * Check if a SQL statement has a TOP clause of its own (SQL Server).
-   */
-  static hasTopClause(sql: string): boolean {
-    return this.findTopLevelTop(sql) !== null;
-  }
-
-  /**
    * Extract the statement's own LIMIT value. Null when it has no LIMIT of its
    * own, or when that LIMIT is a parameter placeholder rather than a literal
    * (see hasParameterizedLimit).

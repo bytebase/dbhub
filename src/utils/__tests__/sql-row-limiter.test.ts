@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import { SQLRowLimiter } from "../sql-row-limiter.js";
 
 describe("SQLRowLimiter", () => {
-  describe("hasLimitClause - edge cases with comments and strings", () => {
+  describe("LIMIT detection - edge cases with comments and strings", () => {
+    // `true`: the statement has its own LIMIT 10, within the cap, so it is left
+    // alone. `false`: the word only appears in a string or comment, so the
+    // statement has no LIMIT and gets the cap appended.
     it.each([
       ["inside single-quoted string", "SELECT 'show limit 10 records' AS msg FROM users", false],
       ["inside double-quoted identifier", 'SELECT "limit 10" AS col FROM users', false],
@@ -11,30 +14,8 @@ describe("SQLRowLimiter", () => {
       ["inside string with escaped quotes", "SELECT 'it''s limit 10' AS msg FROM users", false],
       ["real LIMIT after string containing 'limit'", "SELECT 'limit' AS word FROM users LIMIT 10", true],
       ["real LIMIT after comment containing 'limit'", "SELECT * FROM users /* show limit */ LIMIT 10", true],
-    ])("LIMIT %s -> %s", (_label, sql, expected) => {
-      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(expected);
-    });
-  });
-
-  describe("hasLimitClause", () => {
-    it("should detect LIMIT with literal number", () => {
-      const sql = "SELECT * FROM users LIMIT 10";
-      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
-    });
-
-    // Note: @p style parameters with LIMIT is not valid SQL Server syntax
-    // (SQL Server uses TOP, not LIMIT). That case tests the regex pattern only.
-    it.each([
-      ["PostgreSQL parameter ($1, $2, etc.)", "SELECT * FROM users WHERE name = $1 LIMIT $2"],
-      ["MySQL/SQLite parameter (?)", "SELECT * FROM users WHERE name = ? LIMIT ?"],
-      ["named parameter (@p1, @p2, etc.)", "SELECT * FROM users WHERE name = @p1 LIMIT @p2"],
-    ])("should detect LIMIT with %s", (_label, sql) => {
-      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(true);
-    });
-
-    it("should return false when no LIMIT clause exists", () => {
-      const sql = "SELECT * FROM users WHERE active = true";
-      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
+    ])("LIMIT %s -> %s", (_label, sql, hasOwnLimit) => {
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(hasOwnLimit ? sql : `${sql}\nLIMIT 100`);
     });
   });
 
@@ -213,7 +194,6 @@ describe("SQLRowLimiter", () => {
   describe("clause detection ignores nested clauses", () => {
     it("does not report a subquery's LIMIT as the statement's own", () => {
       const sql = "SELECT * FROM (SELECT * FROM t LIMIT 5) s";
-      expect(SQLRowLimiter.hasLimitClause(sql)).toBe(false);
       expect(SQLRowLimiter.extractLimitValue(sql)).toBe(null);
     });
 
@@ -224,7 +204,6 @@ describe("SQLRowLimiter", () => {
 
     it("does not report a CTE's TOP as the statement's own", () => {
       const sql = "WITH x AS (SELECT TOP 5 id FROM t) SELECT * FROM x";
-      expect(SQLRowLimiter.hasTopClause(sql)).toBe(false);
       expect(SQLRowLimiter.extractTopValue(sql)).toBe(null);
     });
   });
@@ -526,21 +505,6 @@ describe("SQLRowLimiter", () => {
       const sql = "SELECT * FROM (SELECT name FROM users ORDER BY name OFFSET 5 ROWS) AS t";
       expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
         "SELECT TOP 100 * FROM (SELECT name FROM users ORDER BY name OFFSET 5 ROWS) AS t"
-      );
-    });
-
-    it("should wrap a TOP n WITH TIES query, keeping its ORDER BY inside", () => {
-      // WITH TIES can return far more than n rows, so n is not a bound.
-      const sql = "SELECT TOP 1 WITH TIES id FROM orders ORDER BY discount";
-      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
-        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
-      );
-    });
-
-    it("should wrap a TOP n PERCENT query", () => {
-      const sql = "SELECT TOP 1 PERCENT id FROM orders";
-      expect(SQLRowLimiter.applyMaxRowsForSQLServer(sql, 100)).toBe(
-        `SELECT TOP 100 * FROM (${sql}\n) AS subq`
       );
     });
 

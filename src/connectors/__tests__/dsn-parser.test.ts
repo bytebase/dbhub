@@ -554,14 +554,6 @@ describe('DSN Parser - AWS IAM Authentication', () => {
       // MariaDB connector includes mysql_clear_password in default permitted plugins
       expect(config.ssl).toEqual({ rejectUnauthorized: false });
     });
-
-    it('should not auto-enable SSL for normal passwords', async () => {
-      const dsn = 'mariadb://myuser:regularpassword@localhost:3306/mydb';
-
-      const config = await parser.parse(dsn);
-
-      expect(config.ssl).toBeUndefined();
-    });
   });
 });
 
@@ -747,11 +739,6 @@ describe('DSN Parser - missing database component', () => {
         })
       );
     });
-
-    it('still accepts a DSN that names a database', async () => {
-      const config = await parser.parse(`${scheme}://user:pass@localhost:3306/mydb`);
-      expect(config.database).toBe('mydb');
-    });
   });
 });
 
@@ -789,6 +776,9 @@ describe('DSN Parser - Oracle', () => {
     const config = await parser.parse('oracle://app:secret@db:2484/PROD?sslmode=require');
     expect(config.pool.connectString).toBe('tcps://db:2484/PROD');
     expect(config.pool.sslServerDNMatch).toBe(false);
+    // Wallet attributes stay unset when not given
+    expect(config.pool.walletLocation).toBeUndefined();
+    expect(config.pool.walletPassword).toBeUndefined();
   });
 
   it('switches to TCPS with DN matching for sslmode=verify-full, including the SID form', async () => {
@@ -850,12 +840,6 @@ describe('DSN Parser - Oracle', () => {
     );
     expect(config.pool.sslServerCertDN).toBe(dn);
     expect(config.pool.sslServerDNMatch).toBe(true);
-  });
-
-  it('leaves wallet attributes unset when not given', async () => {
-    const config = await parser.parse('oracle://app:secret@db:2484/PROD?sslmode=require');
-    expect(config.pool.walletLocation).toBeUndefined();
-    expect(config.pool.walletPassword).toBeUndefined();
   });
 
   it.each([

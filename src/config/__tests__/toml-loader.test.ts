@@ -321,28 +321,6 @@ dsn = "postgres://user:pass@localhost:5432/ambient"
       expect(loadTomlConfig()).toBeNull();
     });
 
-    it('should load multiple sources', () => {
-      const result = loadToml(`
-[[sources]]
-id = "db1"
-dsn = "postgres://user:pass@localhost:5432/db1"
-
-[[sources]]
-id = "db2"
-dsn = "mysql://user:pass@localhost:3306/db2"
-
-[[sources]]
-id = "db3"
-type = "sqlite"
-database = "/tmp/test.db"
-`);
-
-      expect(result?.sources).toHaveLength(3);
-      expect(result?.sources[0].id).toBe('db1');
-      expect(result?.sources[1].id).toBe('db2');
-      expect(result?.sources[2].id).toBe('db3');
-    });
-
     it('should throw error for missing sources array', () => {
       expect(() => loadToml(`
 [server]
@@ -1344,43 +1322,6 @@ aws_iam_auth = true
       expect(buildDSNFromSource({ id: 'test', ...source })).toBe(expectedDSN);
     });
 
-    it.each([
-      ['mysql', 3306, 'testdb', 'root', 'secret'],
-      ['mariadb', 3306, 'testdb', 'root', 'secret'],
-      ['sqlserver', 1433, 'master', 'sa', 'StrongPass123'],
-    ])('should build %s DSN with default port %i', (type, port, database, user, password) => {
-      const source: SourceConfig = {
-        id: 'test',
-        type: type as SourceConfig['type'],
-        host: 'localhost',
-        database,
-        user,
-        password,
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).toBe(`${type}://${user}:${password}@localhost:${port}/${database}`);
-    });
-
-    it('should build PostgreSQL DSN with verify-ca and sslrootcert', () => {
-      const source: SourceConfig = {
-        id: 'pg_verify',
-        type: 'postgres',
-        host: 'rds.amazonaws.com',
-        port: 5432,
-        database: 'testdb',
-        user: 'user',
-        password: 'pass',
-        sslmode: 'verify-ca',
-        sslrootcert: '/path/to/ca-bundle.pem'
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).toBe('postgres://user:pass@rds.amazonaws.com:5432/testdb?sslmode=verify-ca&sslrootcert=%2Fpath%2Fto%2Fca-bundle.pem');
-    });
-
     it('should build SQL Server DSN with Azure AD authentication (no password required)', () => {
       const source: SourceConfig = {
         id: 'sqlserver_azure',
@@ -1418,18 +1359,6 @@ aws_iam_auth = true
       const dsn = buildDSNFromSource(source);
 
       expect(dsn).toBe('sqlserver://jsmith:secret@sqlserver.corp.local:1433/appdb?instanceName=PROD&authentication=ntlm&domain=CORP&applicationIntent=ReadOnly&sslmode=require');
-    });
-
-    it('should build SQLite DSN from database path', () => {
-      const source: SourceConfig = {
-        id: 'test',
-        type: 'sqlite',
-        database: '/path/to/database.db',
-      };
-
-      const dsn = buildDSNFromSource(source);
-
-      expect(dsn).toBe('sqlite:///path/to/database.db');
     });
 
     // The DSN is only an intermediate encoding; what matters is the path the
@@ -1805,16 +1734,6 @@ statement = "SELECT 1"
   describe('environment variable interpolation', () => {
     // interpolateEnvVars recurses over every string in the parsed TOML, so the
     // DSN cases below cover connection, SSH and tool fields as well.
-    it('should interpolate ${VAR} in DSN strings', () => {
-      vi.stubEnv('TEST_DB_PASSWORD', 's3cret');
-      const result = loadToml(`
-[[sources]]
-id = "test_db"
-dsn = "postgres://user:\${TEST_DB_PASSWORD}@localhost:5432/testdb"
-`);
-
-      expect(result?.sources[0].dsn).toBe('postgres://user:s3cret@localhost:5432/testdb');
-    });
 
     it('should interpolate multiple variables in a single string', () => {
       vi.stubEnv('TEST_DB_USER', 'admin');

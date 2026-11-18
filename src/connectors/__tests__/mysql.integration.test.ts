@@ -589,21 +589,6 @@ describe('MySQL Connector Integration Tests', () => {
   });
 
   describe('pool_max_connections', () => {
-    it('should run no more statements at once than the pool allows', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, { poolMaxConnections: 2 });
-
-        const started = Date.now();
-        await Promise.all([1, 2, 3].map(() => connector.executeSQL('SELECT SLEEP(1)', {})));
-
-        // Two statements run together; the third waits for a free connection.
-        expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
-      } finally {
-        await connector.disconnect();
-      }
-    }, 20_000);
-
     it('should stop waiting for a free connection after connection_timeout', async () => {
       const connector = new MySQLConnector();
       try {

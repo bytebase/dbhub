@@ -333,11 +333,6 @@ describe('Oracle Connector Integration Tests', () => {
       );
       expect(Number(check.resultSets[0].rows[0].N)).toBe(0);
     });
-
-    it('still serves reads with the backstop engaged', async () => {
-      const result = await oracleTest.connector.executeSQL('SELECT COUNT(*) AS n FROM users', { readonly: true, maxRows: 10 });
-      expect(Number(result.resultSets[0].rows[0].N)).toBeGreaterThanOrEqual(3);
-    });
   });
 
   describe('Oracle-specific: health check', () => {

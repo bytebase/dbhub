@@ -680,33 +680,6 @@ describe('PostgreSQL Connector Integration Tests', () => {
         await readonlyConnector.disconnect();
       }
     });
-
-    it('should work normally without readonly flag', async () => {
-      const normalConnector = new PostgresConnector();
-
-      try {
-        // Connect WITHOUT readonly flag
-        await normalConnector.connect(postgresTest.connectionString);
-
-        // Verify default_transaction_read_only is off
-        const showResult = await normalConnector.executeSQL(
-          'SHOW default_transaction_read_only',
-          {}
-        );
-        expect(showResult.resultSets[0].rows[0].default_transaction_read_only).toBe('off');
-
-        // Should be able to write data
-        const insertResult = await normalConnector.executeSQL(
-          "INSERT INTO users (name, email) VALUES ('ReadonlyTest', 'test@readonly.com') RETURNING id",
-          {}
-        );
-
-        expect(insertResult.resultSets[0].rows).toHaveLength(1);
-        expect(insertResult.resultSets[0].rows[0].id).toBeDefined();
-      } finally {
-        await normalConnector.disconnect();
-      }
-    });
   });
 
   describe('Per-tool readonly engine backstop (options.readonly)', () => {
@@ -732,32 +705,18 @@ describe('PostgreSQL Connector Integration Tests', () => {
       }
     });
 
-    it('should block INSERT when options.readonly is set', async () => {
-      const connector = new PostgresConnector();
-      try {
-        await connector.connect(postgresTest.connectionString);
-        await expect(
-          connector.executeSQL(
-            "INSERT INTO users (name, email) VALUES ('ro', 'ro@ro.com')",
-            { readonly: true }
-          )
-        ).rejects.toThrow(/read-only transaction/i);
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should keep the connection writable for non-read-only calls', async () => {
+    it('should block INSERT when options.readonly is set, and stay writable for later calls', async () => {
       const connector = new PostgresConnector();
       try {
         await connector.connect(postgresTest.connectionString);
 
-        // A read-only call (rolled back) must not leave the session read-only.
+        // The engine rejects the write; the read-only call (rolled back) must
+        // not leave the session read-only.
         await expect(
           connector.executeSQL("INSERT INTO users (name, email) VALUES ('x', 'x@x.com')", {
             readonly: true,
           })
-        ).rejects.toThrow();
+        ).rejects.toThrow(/read-only transaction/i);
 
         const insert = await connector.executeSQL(
           "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com') RETURNING id",

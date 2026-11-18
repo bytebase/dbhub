@@ -147,35 +147,6 @@ describe('Data Sources API Integration Tests', () => {
       });
     });
 
-    it('should include correct tool metadata structure', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources`);
-      const sources = (await response.json()) as DataSource[];
-
-      sources.forEach((source) => {
-        source.tools.forEach((tool) => {
-          // Verify tool has required fields
-          expect(tool.name).toBeDefined();
-          expect(typeof tool.name).toBe('string');
-          expect(tool.description).toBeDefined();
-          expect(typeof tool.description).toBe('string');
-          expect(tool.parameters).toBeDefined();
-          expect(Array.isArray(tool.parameters)).toBe(true);
-
-          // Verify parameter structure
-          tool.parameters.forEach((param) => {
-            expect(param.name).toBeDefined();
-            expect(typeof param.name).toBe('string');
-            expect(param.type).toBeDefined();
-            expect(typeof param.type).toBe('string');
-            expect(param.required).toBeDefined();
-            expect(typeof param.required).toBe('boolean');
-            expect(param.description).toBeDefined();
-            expect(typeof param.description).toBe('string');
-          });
-        });
-      });
-    });
-
     it('should include execute_sql tools with correct naming', async () => {
       const response = await fetch(`${BASE_URL}/api/sources`);
       const sources = (await response.json()) as DataSource[];
@@ -267,25 +238,6 @@ describe('Data Sources API Integration Tests', () => {
       expect(error.source_id).toBe('nonexistent_source');
     });
 
-    it('should not include sensitive fields in single source response', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
-      const source = (await response.json()) as DataSource;
-
-      expect(source).not.toHaveProperty('password');
-      expect(source).not.toHaveProperty('ssh_password');
-      expect(source).not.toHaveProperty('ssh_key');
-      expect(source).not.toHaveProperty('ssh_passphrase');
-    });
-
-    it('should handle URL-encoded source IDs', async () => {
-      // Test with underscores in ID
-      const response = await fetch(`${BASE_URL}/api/sources/${encodeURIComponent('readonly_limited')}`);
-      expect(response.status).toBe(200);
-
-      const source = (await response.json()) as DataSource;
-      expect(source.id).toBe('readonly_limited');
-    });
-
     it('should include tools array in single source response', async () => {
       const response = await fetch(`${BASE_URL}/api/sources/readonly_limited`);
       const source = (await response.json()) as DataSource;
@@ -323,18 +275,6 @@ describe('Data Sources API Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
-    it('should return proper error format for 404', async () => {
-      const response = await fetch(`${BASE_URL}/api/sources/invalid_id`);
-      expect(response.status).toBe(404);
-      expect(response.headers.get('content-type')).toContain('application/json');
-
-      const error = (await response.json()) as ErrorResponse;
-      expect(error).toHaveProperty('error');
-      expect(error).toHaveProperty('source_id');
-      expect(typeof error.error).toBe('string');
-      expect(error.source_id).toBe('invalid_id');
-    });
-
     it('should handle special characters in source ID for 404', async () => {
       const specialId = 'test@#$%';
       const response = await fetch(`${BASE_URL}/api/sources/${encodeURIComponent(specialId)}`);

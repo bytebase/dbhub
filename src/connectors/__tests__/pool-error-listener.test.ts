@@ -63,12 +63,9 @@ describe("pool 'error' listener", () => {
     vi.restoreAllMocks();
   });
 
-  it("an unlistened pool would crash the process (sanity check of the fake)", () => {
-    expect(() => pgPool.emit("error", IDLE_DROP)).toThrow(IDLE_DROP);
-  });
-
   it("PostgreSQL survives an idle connection being dropped", async () => {
     const connector = new PostgresConnector();
+    (connector as any).sourceId = "prod_pg";
     await connector.connect("postgres://u:p@localhost:5432/db");
 
     expect(pgPool.listenerCount("error")).toBe(1);
@@ -78,18 +75,11 @@ describe("pool 'error' listener", () => {
 
     expect(consoleError).toHaveBeenCalledTimes(1);
     expect(consoleError.mock.calls[0].join(" ")).toContain("PostgreSQL pool");
+    // The log line names the source
+    expect(consoleError.mock.calls[0][0]).toContain('source "prod_pg"');
     expect(consoleError.mock.calls[0].join(" ")).toContain(IDLE_DROP.message);
 
     await connector.disconnect();
-  });
-
-  it("PostgreSQL log line names the source", async () => {
-    const connector = new PostgresConnector();
-    (connector as any).sourceId = "prod_pg";
-    await connector.connect("postgres://u:p@localhost:5432/db");
-
-    pgPool.emit("error", IDLE_DROP, {});
-    expect(consoleError.mock.calls[0][0]).toContain('source "prod_pg"');
   });
 
   it("MariaDB survives a background reconnect failure", async () => {

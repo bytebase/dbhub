@@ -51,13 +51,6 @@ export class RequestStore {
   }
 
   /**
-   * Get total count of requests across all sources
-   */
-  getTotal(): number {
-    return Array.from(this.store.values()).reduce((sum, arr) => sum + arr.length, 0);
-  }
-
-  /**
    * Clear all requests (useful for testing)
    */
   clear(): void {
