@@ -3,13 +3,13 @@
  * Shared utilities for MCP tool handlers to reduce boilerplate
  */
 
-import { ConnectorType, SQLResultSet } from "../connectors/interface.js";
+import type { Connector, ConnectorType, SQLResultSet } from "../connectors/interface.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { allowedKeywords } from "./allowed-keywords.js";
 import { requestStore } from "../requests/index.js";
 import { getClientIdentifier } from "./client-identifier.js";
 import { classifyConnectionError } from "./error-classifier.js";
-import { createToolErrorResponse } from "./response-formatter.js";
+import { createToolErrorResponse, createToolSuccessResponse } from "./response-formatter.js";
 import { normalizeSourceId } from "./normalize-id.js";
 
 /**
@@ -138,4 +138,102 @@ export function tryClassifyConnectionError(
   return createToolErrorResponse(classified.message, classified.code, {
     source_id: displaySourceId,
   });
+}
+
+/**
+ * A failure a tool reports itself — invalid input, a read-only violation, an
+ * unsupported database. Thrown from a runToolRequest body, it is returned to
+ * the client under `code` as-is, skipping connection-error classification.
+ */
+export class ToolError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "ToolError";
+    this.code = code;
+  }
+}
+
+/**
+ * What every tool handler returns: the JSON envelope as text content, flagged
+ * `isError` when the call failed.
+ */
+export type ToolResponse = ReturnType<typeof createToolSuccessResponse> & { isError?: boolean };
+
+/**
+ * What runToolRequest needs to know about a tool call besides its body.
+ */
+export interface ToolRequest {
+  /** Source the tool is bound to (undefined => the default source) */
+  sourceId: string | undefined;
+  /** Name the request is tracked under — see resolveTrackedToolName */
+  toolName: string;
+  /** SQL, or a description of the request, shown in the request trace */
+  sql: string;
+  /** MCP extra context, for client identification */
+  extra: any;
+  /**
+   * Shape the response for an error that is neither a ToolError nor a
+   * connection failure. Defaults to the raw message under EXECUTION_ERROR.
+   * `tracked` overrides the message recorded in the request trace (the raw
+   * error message otherwise).
+   */
+  describeError?: (error: unknown) => { message: string; code: string; tracked?: string };
+}
+
+/**
+ * The shell every tool handler shares: connect to the source (lazily), run the
+ * tool, shape the response, classify connection failures, and record the
+ * request — whatever the outcome — in the request trace.
+ *
+ * The body gets `connect` rather than a connector so it can validate its input
+ * before a (possibly lazy) connection is opened. It returns the response data
+ * on success and throws on failure: a ToolError for a failure it diagnosed
+ * itself, anything else for the error handling described on ToolRequest.
+ */
+export async function runToolRequest<T>(
+  request: ToolRequest,
+  body: (connect: () => Promise<Connector>, effectiveSourceId: string) => Promise<T>
+): Promise<ToolResponse> {
+  const startTime = Date.now();
+  const effectiveSourceId = getEffectiveSourceId(request.sourceId);
+  let success = true;
+  let errorMessage: string | undefined;
+
+  try {
+    const data = await body(async () => {
+      // Ensure the source is connected (handles lazy connections)
+      await ConnectorManager.ensureConnected(request.sourceId);
+      return ConnectorManager.getCurrentConnector(request.sourceId);
+    }, effectiveSourceId);
+    return createToolSuccessResponse(data);
+  } catch (error) {
+    success = false;
+    errorMessage = (error as Error).message;
+
+    if (error instanceof ToolError) {
+      return createToolErrorResponse(error.message, error.code);
+    }
+
+    // A connection/access failure is not a problem with the request itself —
+    // classify and return it cleanly, ahead of any tool-specific shaping.
+    const classified = tryClassifyConnectionError(error, request.sourceId, effectiveSourceId);
+    if (classified) return classified;
+
+    const described = request.describeError?.(error) ?? {
+      message: errorMessage,
+      code: "EXECUTION_ERROR",
+    };
+    errorMessage = described.tracked ?? errorMessage;
+    return createToolErrorResponse(described.message, described.code);
+  } finally {
+    trackToolRequest(
+      { sourceId: effectiveSourceId, toolName: request.toolName, sql: request.sql },
+      startTime,
+      request.extra,
+      success,
+      errorMessage
+    );
+  }
 }

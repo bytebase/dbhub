@@ -72,6 +72,7 @@ Run without Docker (in-memory SQLite or no database):
 - `src/api/__tests__/requests.integration.test.ts`
 - `src/config/__tests__/ssh-config-integration.test.ts`
 - `src/utils/__tests__/tool-metadata.integration.test.ts`
+- `src/tools/__tests__/builtin-tool-table.integration.test.ts`
 
 ### IntegrationTestBase
 

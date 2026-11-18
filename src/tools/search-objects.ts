@@ -1,15 +1,8 @@
 import { z } from "zod";
-import { ConnectorManager } from "../connectors/manager.js";
-import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import type { Connector } from "../connectors/interface.js";
 import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
 import { BUILTIN_TOOL_SEARCH_OBJECTS } from "./builtin-tools.js";
-import {
-  getEffectiveSourceId,
-  resolveTrackedToolName,
-  trackToolRequest,
-  tryClassifyConnectionError,
-} from "../utils/tool-handler-helpers.js";
+import { resolveTrackedToolName, runToolRequest, ToolError } from "../utils/tool-handler-helpers.js";
 
 /**
  * Object types that can be searched
@@ -645,106 +638,89 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       limit: number;
     };
 
-    const startTime = Date.now();
-    const effectiveSourceId = getEffectiveSourceId(sourceId);
-    let success = true;
-    let errorMessage: string | undefined;
-
-    try {
-      // Ensure source is connected (handles lazy connections)
-      await ConnectorManager.ensureConnected(sourceId);
-
-      const connector = ConnectorManager.getCurrentConnector(sourceId);
-
-      // Tool is already registered, so it's enabled (no need to check)
-
-      // Validate table parameter
-      if (table) {
-        if (!schema) {
-          success = false;
-          errorMessage = "The 'table' parameter requires 'schema' to be specified";
-          return createToolErrorResponse(errorMessage, "SCHEMA_REQUIRED");
-        }
-        if (!["column", "index"].includes(object_type)) {
-          success = false;
-          errorMessage = `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`;
-          return createToolErrorResponse(errorMessage, "INVALID_TABLE_FILTER");
-        }
-      }
-
-      // Validate schema if provided
-      if (schema) {
-        const schemas = await connector.getSchemas();
-        if (!schemas.includes(schema)) {
-          success = false;
-          errorMessage = `Schema '${schema}' does not exist. Available schemas: ${schemas.join(", ")}`;
-          return createToolErrorResponse(errorMessage, "SCHEMA_NOT_FOUND");
-        }
-      }
-
-      let results: any[] = [];
-
-      // Route to appropriate search function
-      switch (object_type) {
-        case "schema":
-          results = await searchSchemas(connector, pattern, detail_level, limit);
-          break;
-        case "table":
-          results = await searchTables(connector, pattern, schema, detail_level, limit);
-          break;
-        case "view":
-          results = await searchViews(connector, pattern, schema, detail_level, limit);
-          break;
-        case "column":
-          results = await searchColumns(connector, pattern, schema, table, detail_level, limit);
-          break;
-        case "procedure":
-          results = await searchProcedures(connector, pattern, schema, detail_level, limit, "procedure");
-          break;
-        case "function":
-          results = await searchProcedures(connector, pattern, schema, detail_level, limit, "function");
-          break;
-        case "index":
-          results = await searchIndexes(connector, pattern, schema, table, detail_level, limit);
-          break;
-        default:
-          success = false;
-          errorMessage = `Unsupported object_type: ${object_type}`;
-          return createToolErrorResponse(errorMessage, "INVALID_OBJECT_TYPE");
-      }
-
-      return createToolSuccessResponse({
-        object_type,
-        pattern,
-        schema,
-        table,
-        detail_level,
-        count: results.length,
-        results,
-        truncated: results.length === limit,
-      });
-    } catch (error) {
-      success = false;
-      errorMessage = (error as Error).message;
-      const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
-      if (classified) return classified;
-      return createToolErrorResponse(
-        `Error searching database objects: ${errorMessage}`,
-        "SEARCH_ERROR"
-      );
-    } finally {
-      // Track the request
-      trackToolRequest(
-        {
-          sourceId: effectiveSourceId,
-          toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_SEARCH_OBJECTS),
-          sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
-        },
-        startTime,
+    return runToolRequest(
+      {
+        sourceId,
+        toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_SEARCH_OBJECTS),
+        sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
         extra,
-        success,
-        errorMessage
-      );
-    }
+        describeError: (error) => ({
+          message: `Error searching database objects: ${(error as Error).message}`,
+          code: "SEARCH_ERROR",
+        }),
+      },
+      async (connect) => {
+        const connector = await connect();
+
+        // Tool is already registered, so it's enabled (no need to check)
+
+        // Validate table parameter
+        if (table) {
+          if (!schema) {
+            throw new ToolError(
+              "The 'table' parameter requires 'schema' to be specified",
+              "SCHEMA_REQUIRED"
+            );
+          }
+          if (!["column", "index"].includes(object_type)) {
+            throw new ToolError(
+              `The 'table' parameter only applies to object_type 'column' or 'index', not '${object_type}'`,
+              "INVALID_TABLE_FILTER"
+            );
+          }
+        }
+
+        // Validate schema if provided
+        if (schema) {
+          const schemas = await connector.getSchemas();
+          if (!schemas.includes(schema)) {
+            throw new ToolError(
+              `Schema '${schema}' does not exist. Available schemas: ${schemas.join(", ")}`,
+              "SCHEMA_NOT_FOUND"
+            );
+          }
+        }
+
+        let results: any[] = [];
+
+        // Route to appropriate search function
+        switch (object_type) {
+          case "schema":
+            results = await searchSchemas(connector, pattern, detail_level, limit);
+            break;
+          case "table":
+            results = await searchTables(connector, pattern, schema, detail_level, limit);
+            break;
+          case "view":
+            results = await searchViews(connector, pattern, schema, detail_level, limit);
+            break;
+          case "column":
+            results = await searchColumns(connector, pattern, schema, table, detail_level, limit);
+            break;
+          case "procedure":
+            results = await searchProcedures(connector, pattern, schema, detail_level, limit, "procedure");
+            break;
+          case "function":
+            results = await searchProcedures(connector, pattern, schema, detail_level, limit, "function");
+            break;
+          case "index":
+            results = await searchIndexes(connector, pattern, schema, table, detail_level, limit);
+            break;
+          default:
+            throw new ToolError(`Unsupported object_type: ${object_type}`, "INVALID_OBJECT_TYPE");
+        }
+
+        return {
+          object_type,
+          pattern,
+          schema,
+          table,
+          detail_level,
+          count: results.length,
+          results,
+          truncated: results.length === limit,
+        };
+      }
+    );
   };
 }

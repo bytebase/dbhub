@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { ConnectorManager } from "../connectors/manager.js";
-import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "../utils/sql-parser.js";
 import {
   explainAnalyzeKeyword,
@@ -8,12 +6,8 @@ import {
   readExplainOptionList,
 } from "../utils/allowed-keywords.js";
 import type { ConnectorType } from "../connectors/interface.js";
-import {
-  getEffectiveSourceId,
-  resolveTrackedToolName,
-  trackToolRequest,
-  tryClassifyConnectionError,
-} from "../utils/tool-handler-helpers.js";
+import { BUILTIN_TOOL_EXPLAIN_SQL } from "./builtin-tools.js";
+import { resolveTrackedToolName, runToolRequest, ToolError } from "../utils/tool-handler-helpers.js";
 
 // Schema for explain_sql tool. See execute-sql.ts for why the raw shape is
 // exported separately from the wrapped z.object().
@@ -106,60 +100,37 @@ function validateCleanedExplainInput(cleaned: string): string | null {
 export function createExplainSqlToolHandler(sourceId?: string) {
   return async (args: any, extra: any) => {
     const { sql } = args as { sql: string };
-    const startTime = Date.now();
-    const effectiveSourceId = getEffectiveSourceId(sourceId);
-    let success = true;
-    let errorMessage: string | undefined;
-    let result: any;
 
-    try {
-      // Ensure source is connected (handles lazy connections)
-      await ConnectorManager.ensureConnected(sourceId);
-
-      // Get connector for the specified source (or default)
-      const connector = ConnectorManager.getCurrentConnector(sourceId);
-
-      const validationError = validateExplainInput(sql, connector.id);
-      if (validationError) {
-        success = false;
-        errorMessage = validationError;
-        return createToolErrorResponse(errorMessage, "INVALID_INPUT");
-      }
-
-      // Always readonly: plain EXPLAIN never executes the target statement
-      // on any supported engine, so this is safe regardless of the source's
-      // own execute_sql readonly/max_rows configuration.
-      const explainStatement = buildExplainStatement(connector.id, sql);
-      result = await connector.executeSQL(explainStatement, { readonly: true });
-
-      // explain_sql only ever accepts a single statement (validateExplainInput
-      // above rejects anything else), so exactly one result set comes back.
-      const responseData = {
-        rows: result.resultSets[0].rows,
-        count: result.resultSets[0].rowCount,
-        source_id: effectiveSourceId,
-        ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
-      };
-
-      return createToolSuccessResponse(responseData);
-    } catch (error) {
-      success = false;
-      errorMessage = (error as Error).message;
-      const classified = tryClassifyConnectionError(error, sourceId, effectiveSourceId);
-      if (classified) return classified;
-      return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
-    } finally {
-      trackToolRequest(
-        {
-          sourceId: effectiveSourceId,
-          toolName: resolveTrackedToolName(sourceId, "explain_sql"),
-          sql,
-        },
-        startTime,
+    return runToolRequest(
+      {
+        sourceId,
+        toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_EXPLAIN_SQL),
+        sql,
         extra,
-        success,
-        errorMessage
-      );
-    }
+      },
+      async (connect, effectiveSourceId) => {
+        const connector = await connect();
+
+        const validationError = validateExplainInput(sql, connector.id);
+        if (validationError) {
+          throw new ToolError(validationError, "INVALID_INPUT");
+        }
+
+        // Always readonly: plain EXPLAIN never executes the target statement
+        // on any supported engine, so this is safe regardless of the source's
+        // own execute_sql readonly/max_rows configuration.
+        const explainStatement = buildExplainStatement(connector.id, sql);
+        const result = await connector.executeSQL(explainStatement, { readonly: true });
+
+        // explain_sql only ever accepts a single statement (validateExplainInput
+        // above rejects anything else), so exactly one result set comes back.
+        return {
+          rows: result.resultSets[0].rows,
+          count: result.resultSets[0].rowCount,
+          source_id: effectiveSourceId,
+          ...(result.messages && result.messages.length > 0 ? { messages: result.messages } : {}),
+        };
+      }
+    );
   };
 }

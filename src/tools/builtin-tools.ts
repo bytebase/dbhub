@@ -49,3 +49,14 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   BUILTIN_TOOL_EXPLAIN_SQL,
   BUILTIN_TOOL_HEALTH_CHECK,
 ] as const;
+
+export type BuiltinToolName = (typeof ALL_BUILTIN_TOOL_NAMES)[number];
+
+export function isBuiltinToolName(name: string): name is BuiltinToolName {
+  return (ALL_BUILTIN_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+/** Whether a built-in tool can never write, whatever its configuration. */
+export function isAlwaysReadOnlyTool(name: string): boolean {
+  return ALWAYS_READ_ONLY_TOOL_NAMES.includes(name);
+}

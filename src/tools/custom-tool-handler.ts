@@ -5,17 +5,12 @@
 
 import { z } from "zod";
 import { ToolConfig, ParameterConfig } from "../types/config.js";
-import { ConnectorManager } from "../connectors/manager.js";
-import {
-  createToolSuccessResponse,
-  createToolErrorResponse,
-} from "../utils/response-formatter.js";
 import { mapArgumentsToArray } from "../utils/parameter-mapper.js";
 import {
   createReadonlyViolationMessage,
+  runToolRequest,
+  ToolError,
   toStatementsPayload,
-  trackToolRequest,
-  tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
 import { policyFromReadonly, isReadOnlyPolicy, sqlVerdict } from "../utils/sql-access-policy.js";
 
@@ -112,91 +107,62 @@ export function createCustomToolHandler(toolConfig: ToolConfig) {
   const zodSchema = getCustomToolInputSchema(toolConfig);
 
   return async (args: any, extra: any) => {
-    const startTime = Date.now();
-    let success = true;
-    let errorMessage: string | undefined;
     let paramValues: any[] = [];
 
-    try {
-      // 1. Validate arguments against Zod schema
-      const validatedArgs = zodSchema.parse(args);
-
-      // 2. Ensure source is connected (handles lazy connections)
-      await ConnectorManager.ensureConnected(toolConfig.source);
-
-      // 3. Get connector for the specified source
-      const connector = ConnectorManager.getCurrentConnector(toolConfig.source);
-
-      // 4. Build execute options from the tool's access policy (compiled
-      // from the per-tool readonly config); the engine-level read-only
-      // backstop derives from the same policy as the gate below.
-      const policy = policyFromReadonly(toolConfig.readonly);
-      const executeOptions = {
-        readonly: isReadOnlyPolicy(policy),
-        maxRows: toolConfig.max_rows,
-      };
-
-      // 5. Gate the statement through the policy
-      if (sqlVerdict(policy, toolConfig.statement, connector.id) === "deny") {
-        errorMessage = createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id);
-        success = false;
-        return createToolErrorResponse(errorMessage, "READONLY_VIOLATION");
-      }
-
-      // 6. Map parameters to array format for SQL execution
-      paramValues = mapArgumentsToArray(
-        toolConfig.parameters,
-        validatedArgs
-      );
-
-      // 7. Execute SQL with parameters
-      const result = await connector.executeSQL(
-        toolConfig.statement,
-        executeOptions,
-        paramValues
-      );
-
-      // 8. Build response data. A custom tool's statement is usually one
-      // SQL statement, but isn't restricted to be - surface every statement's
-      // result rather than assuming exactly one.
-      const responseData = {
-        statements: toStatementsPayload(result.resultSets),
-        source_id: toolConfig.source,
-      };
-
-      return createToolSuccessResponse(responseData);
-    } catch (error) {
-      success = false;
-      errorMessage = (error as Error).message;
-
-      // A connection/access failure is not a SQL problem — classify and return
-      // it cleanly, ahead of the ZodError / SQL-context augmentation below.
-      const classified = tryClassifyConnectionError(error, toolConfig.source, toolConfig.source);
-      if (classified) return classified;
-
-      // Provide helpful error messages for common issues
-      if (error instanceof z.ZodError) {
-        const issues = error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-        errorMessage = `Parameter validation failed: ${issues}`;
-      } else {
-        // Add SQL context to execution errors for debugging
-        errorMessage = `${errorMessage}\n\nSQL: ${toolConfig.statement}\nParameters: ${JSON.stringify(paramValues)}`;
-      }
-
-      return createToolErrorResponse(errorMessage, "EXECUTION_ERROR");
-    } finally {
-      // Track the request
-      trackToolRequest(
-        {
-          sourceId: toolConfig.source,
-          toolName: toolConfig.name,
-          sql: toolConfig.statement,
-        },
-        startTime,
+    return runToolRequest(
+      {
+        sourceId: toolConfig.source,
+        toolName: toolConfig.name,
+        sql: toolConfig.statement,
         extra,
-        success,
-        errorMessage
-      );
-    }
+        describeError: (error) => {
+          // Provide helpful error messages for common issues
+          const message =
+            error instanceof z.ZodError
+              ? `Parameter validation failed: ${error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
+              : // Add SQL context to execution errors for debugging
+                `${(error as Error).message}\n\nSQL: ${toolConfig.statement}\nParameters: ${JSON.stringify(paramValues)}`;
+          return { message, code: "EXECUTION_ERROR", tracked: message };
+        },
+      },
+      async (connect) => {
+        // 1. Validate arguments against Zod schema, before any connection is opened
+        const validatedArgs = zodSchema.parse(args);
+
+        // 2. Connect to the tool's source (handles lazy connections)
+        const connector = await connect();
+
+        // 3. Build execute options from the tool's access policy (compiled
+        // from the per-tool readonly config); the engine-level read-only
+        // backstop derives from the same policy as the gate below.
+        const policy = policyFromReadonly(toolConfig.readonly);
+        const executeOptions = {
+          readonly: isReadOnlyPolicy(policy),
+          maxRows: toolConfig.max_rows,
+        };
+
+        // 4. Gate the statement through the policy
+        if (sqlVerdict(policy, toolConfig.statement, connector.id) === "deny") {
+          throw new ToolError(
+            createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id),
+            "READONLY_VIOLATION"
+          );
+        }
+
+        // 5. Map parameters to array format for SQL execution
+        paramValues = mapArgumentsToArray(toolConfig.parameters, validatedArgs);
+
+        // 6. Execute SQL with parameters
+        const result = await connector.executeSQL(toolConfig.statement, executeOptions, paramValues);
+
+        // 7. A custom tool's statement is usually one SQL statement, but
+        // isn't restricted to be - surface every statement's result rather
+        // than assuming exactly one.
+        return {
+          statements: toStatementsPayload(result.resultSets),
+          source_id: toolConfig.source,
+        };
+      }
+    );
   };
 }

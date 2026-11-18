@@ -63,6 +63,8 @@ Key architectural patterns:
   - 2026-07-28 clients get cache hints on `tools/list` (`cacheHints` in `ServerOptions`: 5-minute TTL, `private` scope) and send `Mcp-Method`/`Mcp-Name` headers usable for gateway routing/rate-limiting
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Tool Handlers**: Clean separation of MCP protocol concerns
+  - Every handler (built-in and custom) runs inside `runToolRequest` (`src/utils/tool-handler-helpers.ts`): it connects lazily, shapes the success/error envelope, classifies connection failures and records the request trace. A handler body returns its data and throws `ToolError(message, code)` for failures it diagnoses itself.
+  - A built-in tool is described in two tables keyed by tool name — metadata in `BUILTIN_TOOL_METADATA` (`src/utils/tool-metadata.ts`, shared by registration and the API tool list) and schema + handler in `BUILTIN_TOOL_HANDLERS` (`src/tools/index.ts`). Adding one means an entry in each plus the name in `src/tools/builtin-tools.ts`; `builtin-tool-table.integration.test.ts` checks they agree.
   - Multi-database routing is by tool name, not by parameter: one tool instance is registered per source, named `execute_sql_{source_id}` / `search_objects_{source_id}` (single-source configs keep the bare `execute_sql` / `search_objects` names). See `src/tools/index.ts` and `src/utils/tool-metadata.ts`. `source_id` appears in tool *output* metadata only.
 - **Token-Efficient Schema Exploration**: Unified search/list tool with progressive disclosure
   - `search_objects`: Single tool for both pattern-based search and listing all objects
