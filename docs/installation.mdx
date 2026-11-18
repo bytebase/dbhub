@@ -63,6 +63,24 @@ SQLite uses the built-in `node:sqlite` module (Node.js 22.5+), so it requires no
 When a driver is not installed or a required dependency is missing (e.g., a transitive dependency like `@azure/core-client` for the SQL Server driver), DBHub will skip that connector at startup and log a message. All other connectors will work normally. SQLite (including `--demo` mode) needs no extra driver — it relies on the built-in `node:sqlite` module.
 </Note>
 
+### Driver missing after an `npx` upgrade
+
+If a source that used to work fails with `No connector found for DSN` and the log shows `Skipping PostgreSQL connector: driver package "pg" not installed`, npm has dropped the driver from the npx cache. Some npm versions (seen on 11.6.2, bundled with Node.js 24.13; not on 11.16.0) remove the optional `pg` package when `npx @bytebase/dbhub@latest` upgrades a cached install to a new release.
+
+To recover, delete the npx cache and restart your MCP client, so the next start installs everything again:
+
+```bash
+# macOS / Linux
+rm -rf "$(npm config get cache)/_npx"
+```
+
+```powershell
+# Windows (PowerShell)
+Remove-Item -Recurse -Force "$(npm config get cache)\_npx"
+```
+
+Upgrading npm (`npm install -g npm@latest`) prevents it from recurring.
+
 ## MCP Bundle (.mcpb)
 
 The [MCP Bundle](/mcpb) is a one-click install for MCPB-compatible clients — Claude Desktop, Claude Code, MCP for Windows: download the `.mcpb` from the [latest release](https://github.com/bytebase/dbhub/releases/latest), install, enter your connection string. Read-only by default, no Node.js or JSON editing required — the recommended path for non-technical users. The guide also covers packaging your own bundle.
