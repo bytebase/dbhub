@@ -6,17 +6,12 @@ import { validateOrigin, buildAllowedHosts, getSelfHosts, ALLOW_ANY_HOST } from 
 const loopback = buildAllowedHosts([], '0.0.0.0');
 
 describe('buildAllowedHosts', () => {
-  it('always includes loopback hostnames', () => {
-    const hosts = buildAllowedHosts([], '0.0.0.0');
-    expect(hosts.has('localhost')).toBe(true);
-    expect(hosts.has('127.0.0.1')).toBe(true);
-    expect(hosts.has('[::1]')).toBe(true);
-  });
-
-  it('does not add wildcard bind addresses as hostnames', () => {
-    expect(buildAllowedHosts([], '0.0.0.0').has('0.0.0.0')).toBe(false);
-    expect(buildAllowedHosts([], '::').has('[::]')).toBe(false);
-  });
+  it.each(['0.0.0.0', '::'])(
+    'allows exactly the loopback hostnames on a wildcard bind (%s), which is not itself a hostname',
+    (bindHost) => {
+      expect(buildAllowedHosts([], bindHost)).toEqual(new Set(['localhost', '127.0.0.1', '[::1]']));
+    }
+  );
 
   it('adds a concrete bind host', () => {
     expect(buildAllowedHosts([], '192.168.1.10').has('192.168.1.10')).toBe(true);
@@ -103,34 +98,18 @@ describe('validateOrigin', () => {
     expect(validateOrigin(origin, host, loopback)).toEqual({ ok: true });
   });
 
-  it('rejects a rebound attacker host even when Origin matches it (the CVE)', () => {
+  it.each([
     // This is the DNS-rebinding shape: Host and Origin agree, but the hostname
     // is not one we serve, so the request must be refused.
-    const result = validateOrigin(
-      'http://evil.attacker.test',
-      'evil.attacker.test:8080',
-      loopback
-    );
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(403);
-      expect(result.message).toContain('not allowed');
-    }
-  });
-
-  it('rejects a rebound attacker host with no Origin header (same-origin POST)', () => {
-    const result = validateOrigin(undefined, 'evil.attacker.test:8080', loopback);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.status).toBe(403);
-  });
-
-  it('rejects an off-list Origin even when Host is allowed', () => {
-    const result = validateOrigin('http://evil.com', 'localhost:8080', loopback);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.status).toBe(403);
-      expect(result.message).toContain("Origin 'evil.com'");
-    }
+    ['a rebound attacker host even when Origin matches it (the CVE)', 'http://evil.attacker.test', 'evil.attacker.test:8080', "Host 'evil.attacker.test' is not allowed"],
+    ['a rebound attacker host with no Origin header (same-origin POST)', undefined, 'evil.attacker.test:8080', "Host 'evil.attacker.test' is not allowed"],
+    ['an off-list Origin even when Host is allowed', 'http://evil.com', 'localhost:8080', "Origin 'evil.com' is not allowed"],
+  ])('rejects %s with 403', (_case, origin, host, message) => {
+    expect(validateOrigin(origin, host, loopback)).toEqual({
+      ok: false,
+      status: 403,
+      message: expect.stringContaining(message),
+    });
   });
 
   it('allows an operator-configured deployment host', () => {

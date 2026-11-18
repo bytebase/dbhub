@@ -42,66 +42,34 @@ describe('DSN Obfuscation Utilities', () => {
       ['oracle://app@db:1522/svc?sslmode=require&wallet_password=secret==', 'oracle://app@db:1522/svc?sslmode=require&wallet_password=********'],
       ['oracle://app@db:1522/svc?ssl_server_cert_dn=CN=db&wallet_password=s%3D=', 'oracle://app@db:1522/svc?ssl_server_cert_dn=CN=db&wallet_password=***'],
       ['oracle://app@db:1522/svc?wallet%5Fpassword=secret', 'oracle://app@db:1522/svc?wallet%5Fpassword=******'],
+      ['oracle://app@db:1522/svc?wallet_password=hunter2==', 'oracle://app@db:1522/svc?wallet_password=********'],
+      ['oracle://app@db:1522/svc?wallet_password=hunter2=&sslmode=require', 'oracle://app@db:1522/svc?wallet_password=********&sslmode=require'],
+      ['oracle://app@db:1522/svc?WALLET_PASSWORD=hunter2', 'oracle://app@db:1522/svc?WALLET_PASSWORD=*******'],
       ['postgres://user:pass@localhost:5432/db?sslrootcert=~/.ssl/ca.pem&flag', 'postgres://user:****@localhost:5432/db?sslrootcert=~/.ssl/ca.pem&flag'],
+      // An unknown scheme is still obfuscated
+      ['db2://user:hunter2@localhost:50000/db', 'db2://user:*******@localhost:50000/db'],
     ])('should obfuscate %s as %s', (dsn, expected) => {
       expect(obfuscateDSNPassword(dsn)).toBe(expected);
     });
 
-    it('should fail closed on a scheme-less DSN instead of echoing it', () => {
+    it.each([
       // SafeURL rejects input without "://", so nothing can be parsed out of
       // it — but it may still carry a password, so the original must not
       // be returned.
-      const dsn = 'user:hunter2@localhost/db';
-      const result = obfuscateDSNPassword(dsn);
-
-      expect(result).toBe(REDACTED_DSN);
-      expect(result).not.toContain('hunter2');
-    });
-
-    it('should fail closed when the authority has no @ and a credential lands in the port', () => {
+      ['a scheme-less DSN', 'user:hunter2@localhost/db'],
       // "user:secret" without a host parses as host "user", port "secret",
       // so there is no password field to mask — the whole string must be
       // withheld instead.
-      for (const dsn of ['postgres://user:secret/db', 'postgres://user:secret?sslmode=require']) {
-        const result = obfuscateDSNPassword(dsn);
-
-        expect(result).toBe(REDACTED_DSN);
-        expect(result).not.toContain('secret');
-      }
-    });
-
-    it('should never echo a secret query value, however it is written', () => {
-      for (const dsn of [
-        'oracle://app@db:1522/svc?wallet_password=hunter2==',
-        'oracle://app@db:1522/svc?wallet_password=hunter2=&sslmode=require',
-        'oracle://app@db:1522/svc?WALLET_PASSWORD=hunter2',
-        'oracle://app@db:1522/svc?wallet%5Fpassword=hunter2',
-      ]) {
-        expect(obfuscateDSNPassword(dsn)).not.toContain('hunter2');
-      }
-    });
-
-    it('should still obfuscate a DSN with an unknown scheme', () => {
-      const dsn = 'db2://user:hunter2@localhost:50000/db';
-      const result = obfuscateDSNPassword(dsn);
-
-      expect(result).toBe('db2://user:*******@localhost:50000/db');
+      ['an authority with no @, where a credential lands in the port', 'postgres://user:secret/db'],
+      ['an authority with no @ and no path, where a credential lands in the port', 'postgres://user:secret?sslmode=require'],
+    ])('should fail closed on %s instead of echoing it', (_label, dsn) => {
+      expect(obfuscateDSNPassword(dsn)).toBe(REDACTED_DSN);
     });
   });
 
   describe('getDatabaseTypeFromDSN', () => {
-    it.each([
-      ['postgres://user:pass@localhost:5432/db', 'postgres'],
-      ['postgresql://user:pass@localhost:5432/db', 'postgres'],
-      ['mysql://user:pass@localhost:3306/db', 'mysql'],
-      ['mariadb://user:pass@localhost:3306/db', 'mariadb'],
-      ['sqlserver://user:pass@localhost:1433/db', 'sqlserver'],
-      ['oracle://user:pass@localhost:1521/FREEPDB1', 'oracle'],
-      ['sqlite:///path/to/db.db', 'sqlite'],
-    ])('should return correct type for %s', (dsn, expected) => {
-      expect(getDatabaseTypeFromDSN(dsn)).toBe(expected);
-    });
-
+    // The scheme-to-type mapping of every supported scheme is asserted through
+    // parseConnectionInfoFromDSN below, which returns it as `type`.
     it.each([
       ['db2://user:pass@localhost:50000/db', 'unknown protocol'],
       ['', 'empty DSN'],
@@ -111,7 +79,6 @@ describe('DSN Obfuscation Utilities', () => {
   });
 
   describe('parseConnectionInfoFromDSN', () => {
-    // Test standard database DSNs
     it.each([
       ['postgres://pguser:secret@db.example.com:5433/mydb', { type: 'postgres', host: 'db.example.com', port: 5433, database: 'mydb', user: 'pguser' }],
       ['postgresql://user:pass@localhost:5432/testdb', { type: 'postgres', host: 'localhost', port: 5432, database: 'testdb', user: 'user' }],
@@ -123,19 +90,11 @@ describe('DSN Obfuscation Utilities', () => {
       ['postgres://user:pass@localhost/db', { type: 'postgres', host: 'localhost', database: 'db', user: 'user' }],
       ['postgres://user:pass@localhost:5432/db?sslmode=require', { type: 'postgres', host: 'localhost', port: 5432, database: 'db', user: 'user' }],
       ['postgres://localhost:5432/db', { type: 'postgres', host: 'localhost', port: 5432, database: 'db' }],
+      // SQLite has only a path, read by parseSqliteDsnPath; every path form it
+      // accepts is covered in sqlite-dsn.test.ts
+      ['sqlite:///path/to/database.db', { type: 'sqlite', database: '/path/to/database.db' }],
     ])('should parse %s correctly', (dsn, expected) => {
       expect(parseConnectionInfoFromDSN(dsn)).toEqual(expected);
-    });
-
-    // Test SQLite path variations
-    it.each([
-      ['sqlite:///path/to/database.db', '/path/to/database.db', 'Unix absolute'],
-      ['sqlite:///:memory:', ':memory:', 'memory'],
-      ['sqlite:///./relative/path.db', './relative/path.db', 'relative with ./'],
-      ['sqlite:///~/databases/local.db', '~/databases/local.db', 'home directory'],
-      ['sqlite:///C:/Users/test/database.db', 'C:/Users/test/database.db', 'Windows absolute'],
-    ])('should parse sqlite DSN with %s path', (dsn, expectedDb) => {
-      expect(parseConnectionInfoFromDSN(dsn)).toEqual({ type: 'sqlite', database: expectedDb });
     });
 
     it.each([

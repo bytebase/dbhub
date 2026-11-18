@@ -89,11 +89,7 @@ describe("policyFromReadonly", () => {
   it("readonly=true denies everything beyond read", () => {
     const policy = policyFromReadonly(true);
     expect(isReadOnlyPolicy(policy)).toBe(true);
-    expect(policy.read).toBe("allow");
-    expect(policy.dml).toBe("deny");
-    expect(policy.ddl).toBe("deny");
-    expect(policy.admin).toBe("deny");
-    expect(policy.unknown).toBe("deny");
+    expect(policy).toEqual({ read: "allow", dml: "deny", ddl: "deny", admin: "deny", unknown: "deny" });
   });
 
   it.each([false, undefined] as const)("readonly=%s allows everything", (readonly) => {
