@@ -168,12 +168,14 @@ describe('search_database_objects tool', () => {
       });
     });
 
-    it('should omit table comment in summary when getTableComment returns null', async () => {
+    it.each(['summary', 'full'])('should omit table comment at %s level when getTableComment returns null', async (detailLevel) => {
       vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
+      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([]);
       vi.mocked(mockConnector.executeSQL).mockResolvedValue(countResult(10));
       mockConnector.getTableComment = vi.fn().mockResolvedValue(null);
 
-      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: 'summary' });
+      const { parsed } = await search({ object_type: 'table', pattern: 'users', detail_level: detailLevel });
+      expect(parsed.data.results[0]).toMatchObject({ name: 'users', row_count: 10 });
       expect(parsed.data.results[0]).not.toHaveProperty('comment');
     });
 
