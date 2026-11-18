@@ -32,3 +32,22 @@ export function parseMySQLFamilySslMode(value: string): MySQLFamilySslMode {
   }
   return value as MySQLFamilySslMode;
 }
+
+/**
+ * Read and validate the `sslmode` of a MySQL / MariaDB DSN. Returns undefined
+ * when the DSN has no `sslmode` parameter at all, which leaves TLS off.
+ *
+ * The raw query string is inspected rather than SafeURL's parsed parameters:
+ * SafeURL drops a parameter with no value, so `?sslmode=` and a bare
+ * `?sslmode` would otherwise look exactly like an absent one and connect
+ * unencrypted instead of being rejected. Every occurrence must be valid; with
+ * several, the last one applies, as it did through SafeURL.
+ */
+export function readMySQLFamilySslMode(dsn: string): MySQLFamilySslMode | undefined {
+  const queryStart = dsn.indexOf("?");
+  if (queryStart === -1) {
+    return undefined;
+  }
+  const modes = new URLSearchParams(dsn.substring(queryStart + 1)).getAll("sslmode");
+  return modes.map(parseMySQLFamilySslMode).at(-1);
+}

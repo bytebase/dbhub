@@ -15,7 +15,7 @@ import {
 import { getMySQLFamilyHealthCheck } from "../mysql-family-health-check.js";
 import * as introspection from "../mysql-family-introspection.js";
 import type { MySQLFamilyQuery } from "../mysql-family-introspection.js";
-import { parseMySQLFamilySslMode, type MySQLFamilySslMode } from "../mysql-family-ssl.js";
+import { readMySQLFamilySslMode, type MySQLFamilySslMode } from "../mysql-family-ssl.js";
 import { SafeURL } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword } from "../../utils/dsn-obfuscate.js";
 import { requireDatabaseInDSN, MissingDatabaseError } from "../../utils/dsn-database.js";
@@ -119,13 +119,12 @@ class MariadbDSNParser implements DSNParser {
             : {}),
       };
 
-      // Handle query parameters
-      url.forEachSearchParam((value, key) => {
-        if (key === "sslmode") {
-          connectionConfig.ssl = mariadbSslOptions(parseMySQLFamilySslMode(value));
-        }
-        // Add other parameters as needed
-      });
+      // Read from the raw DSN: a present-but-empty sslmode must be rejected,
+      // and SafeURL would have dropped it (see readMySQLFamilySslMode)
+      const sslmode = readMySQLFamilySslMode(dsn);
+      if (sslmode !== undefined) {
+        connectionConfig.ssl = mariadbSslOptions(sslmode);
+      }
 
       // Auto-detect AWS IAM authentication tokens and ensure SSL is enabled
       // AWS RDS IAM tokens are ~800+ character strings containing "X-Amz-Credential"

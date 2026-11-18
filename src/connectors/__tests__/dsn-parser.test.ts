@@ -445,6 +445,30 @@ describe('DSN Parser - MySQL / MariaDB SSL Modes', () => {
     }
   );
 
+  it.each([
+    ['an empty value', '?sslmode='],
+    ['a bare parameter', '?sslmode'],
+    ['an empty value among other parameters', '?charset=utf8mb4&sslmode=&foo=bar'],
+    ['an empty value after a valid one', '?sslmode=require&sslmode='],
+    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
+  ])('should reject %s instead of connecting unencrypted', async (_, query) => {
+    // SafeURL drops a parameter with no value, so these used to look like no
+    // sslmode at all and left TLS off.
+    const message = "Unsupported sslmode ''. Valid values: disable, require, verify-ca, verify-full";
+    await expect(mysqlParser.parse(mysqlDsn(query))).rejects.toThrow(message);
+    await expect(mariadbParser.parse(mariadbDsn(query))).rejects.toThrow(message);
+  });
+
+  it('should keep the default when sslmode is absent but other parameters are present', async () => {
+    expect((await mysqlParser.parse(mysqlDsn('?charset=utf8mb4'))).ssl).toBeUndefined();
+    expect((await mariadbParser.parse(mariadbDsn('?charset=utf8mb4'))).ssl).toBeUndefined();
+  });
+
+  it('should apply the last sslmode when it is given more than once', async () => {
+    expect((await mysqlParser.parse(mysqlDsn('?sslmode=disable&sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
+    expect((await mariadbParser.parse(mariadbDsn('?sslmode=disable&sslmode=require'))).ssl).toEqual({ rejectUnauthorized: false });
+  });
+
   it('should hand each parse its own ssl object', async () => {
     // Both drivers write defaults back onto the object they are given
     const first = await mysqlParser.parse(mysqlDsn('?sslmode=verify-full'));
