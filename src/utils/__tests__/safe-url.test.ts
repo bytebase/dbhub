@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SafeURL, replaceDSNHostPort } from '../safe-url.js';
+import { SafeURL, rawQueryParamValues, replaceDSNHostPort } from '../safe-url.js';
 
 describe('SafeURL', () => {
   it('should parse a simple DSN correctly', () => {
@@ -179,5 +179,32 @@ describe('replaceDSNHostPort', () => {
     expect(() => replaceDSNHostPort('user:pass@db.internal/mydb', '127.0.0.1', 55000)).toThrow(
       'missing protocol'
     );
+  });
+});
+
+describe('rawQueryParamValues', () => {
+  const dsn = (query: string) => `postgres://user:pass@localhost:5432/db${query}`;
+
+  it.each([
+    ['no query string', '', []],
+    ['the parameter absent', '?application_name=app', []],
+    ['one value', '?sslmode=require', ['require']],
+    ['an empty value', '?sslmode=', ['']],
+    ['a bare parameter', '?sslmode', ['']],
+    ['a repeated parameter, in order', '?sslmode=disable&a=b&sslmode=require', ['disable', 'require']],
+    ['an empty value among valid ones', '?sslmode=require&sslmode=', ['require', '']],
+  ])('returns the values for %s', (_, query, expected) => {
+    expect(rawQueryParamValues(dsn(query), 'sslmode')).toEqual(expected);
+  });
+
+  it('sees what SafeURL drops', () => {
+    // The reason this helper exists: to SafeURL an empty sslmode is no sslmode
+    const empty = dsn('?sslmode=');
+    expect(new SafeURL(empty).getSearchParam('sslmode')).toBeNull();
+    expect(rawQueryParamValues(empty, 'sslmode')).toEqual(['']);
+  });
+
+  it('decodes values', () => {
+    expect(rawQueryParamValues(dsn('?sslrootcert=%2Fetc%2Fca.pem'), 'sslrootcert')).toEqual(['/etc/ca.pem']);
   });
 });

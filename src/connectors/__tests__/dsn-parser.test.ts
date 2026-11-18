@@ -123,6 +123,30 @@ describe('DSN Parser - PostgreSQL SSL Modes', () => {
       );
     }
   );
+
+  it.each([
+    ['an empty value', '?sslmode='],
+    ['a bare parameter', '?sslmode'],
+    ['an empty value among other parameters', '?application_name=app&sslmode=&foo=bar'],
+    ['an empty value after a valid one', '?sslmode=require&sslmode='],
+    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
+  ])('should reject %s instead of connecting unencrypted', async (_, query) => {
+    // SafeURL drops a parameter with no value, so these used to look like no
+    // sslmode at all and left TLS off.
+    await expect(parser.parse(`postgres://user:pass@localhost:5432/db${query}`)).rejects.toThrow(
+      "Unsupported sslmode ''. Valid values: disable, require, verify-ca, verify-full"
+    );
+  });
+
+  it('should keep the default when sslmode is absent but other parameters are present', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?application_name=app');
+    expect(config.ssl).toBeUndefined();
+  });
+
+  it('should apply the last sslmode when it is given more than once', async () => {
+    const config = await parser.parse('postgres://user:pass@localhost:5432/db?sslmode=disable&sslmode=require');
+    expect(config.ssl).toEqual({ rejectUnauthorized: false });
+  });
 });
 
 describe('DSN Parser - PostgreSQL client certificate (sslcert/sslkey)', () => {
@@ -848,5 +872,29 @@ describe('DSN Parser - Oracle', () => {
     ['postgres://app:secret@db:5432/X', 'Invalid Oracle DSN format'],
   ])('rejects %s', async (dsn, message) => {
     await expect(parser.parse(dsn)).rejects.toThrow(message);
+  });
+
+  it.each([
+    ['an empty value', '?sslmode='],
+    ['a bare parameter', '?sslmode'],
+    ['an empty value among other parameters', '?sid=ORCL&sslmode=&foo=bar'],
+    ['an empty value after a valid one', '?sslmode=require&sslmode='],
+    ['an empty value before a valid one', '?sslmode=&sslmode=require'],
+  ])('rejects %s instead of connecting over plain TCP', async (_, query) => {
+    // SafeURL drops a parameter with no value, so these used to look like no
+    // sslmode at all and connected without TLS.
+    await expect(parser.parse(`oracle://app:secret@db:2484/PROD${query}`)).rejects.toThrow(
+      "Unsupported sslmode '' for Oracle. Supported: disable, require, verify-full"
+    );
+  });
+
+  it('keeps plain TCP when sslmode is absent but other parameters are present', async () => {
+    const config = await parser.parse('oracle://app:secret@db:1521/?sid=ORCL');
+    expect(config.pool.connectString).toContain('(PROTOCOL=TCP)');
+  });
+
+  it('applies the last sslmode when it is given more than once', async () => {
+    const config = await parser.parse('oracle://app:secret@db:2484/PROD?sslmode=disable&sslmode=require');
+    expect(config.pool.connectString).toContain('tcps://');
   });
 });

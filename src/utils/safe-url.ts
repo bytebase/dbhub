@@ -192,3 +192,22 @@ export function replaceDSNHostPort(dsn: string, host: string, port: number): str
   const bracketedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
   return `${dsn.slice(0, hostStart)}${bracketedHost}:${port}${dsn.slice(authorityEnd)}`;
 }
+
+/**
+ * Every value a DSN gives a query parameter, read from the raw query string,
+ * in order. A parameter that is present without a value (`?sslmode=`, or a
+ * bare `?sslmode`) yields an empty string.
+ *
+ * SafeURL's own `searchParams` cannot answer this: it drops a parameter that
+ * has no value and keeps only the last of a repeated one. That is fine for
+ * most options, but for one where "absent" has a meaning — no `sslmode` means
+ * no TLS — a present-but-empty value has to be told apart from an absent one
+ * so it can be rejected instead of silently taking the default.
+ */
+export function rawQueryParamValues(dsn: string, name: string): string[] {
+  const queryStart = dsn.indexOf('?');
+  if (queryStart === -1) {
+    return [];
+  }
+  return new URLSearchParams(dsn.substring(queryStart + 1)).getAll(name);
+}
