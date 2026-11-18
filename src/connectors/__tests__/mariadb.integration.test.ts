@@ -33,7 +33,9 @@ describe('MariaDB Connector Integration Tests', () => {
       requireFailure: /SSL|does not support SSL|timeout|ETIMEDOUT|Connection timeout/,
       requireDeadlineMs: 3000,
     },
-    collation: 'utf8mb4_unicode_ci',
+    // Neither the server default (utf8mb4_unicode_ci) nor the default of the
+    // utf8mb4 charset (utf8mb4_general_ci), so it shows the option took effect
+    collation: 'utf8mb4_bin',
     queryTimeout: {
       sessionVariable: 'max_statement_time',
       oneSecond: 1,

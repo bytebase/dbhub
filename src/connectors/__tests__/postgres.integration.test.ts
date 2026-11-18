@@ -238,9 +238,10 @@ describe('PostgreSQL Connector Integration Tests', () => {
         INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30);
         INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35);
         SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%';
-      `, {});
+        SELECT name FROM users WHERE email LIKE 'multi%' ORDER BY name;
+      `, { maxRows: 1 });
 
-      expect(result.resultSets).toHaveLength(3);
+      expect(result.resultSets).toHaveLength(4);
       expect(result.resultSets[0]).toEqual({
         sql: "INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30)",
         rows: [],
@@ -253,6 +254,13 @@ describe('PostgreSQL Connector Integration Tests', () => {
       });
       expect(result.resultSets[2].rows).toHaveLength(1);
       expect(result.resultSets[2].rows[0].total).toBe('2');
+      // maxRows leaves the writes alone and caps a SELECT that shares their
+      // batch, which still reports the statement as it was written
+      expect(result.resultSets[3]).toMatchObject({
+        sql: "SELECT name FROM users WHERE email LIKE 'multi%' ORDER BY name",
+        rows: [{ name: 'Multi User 1' }],
+        truncated: true,
+      });
     });
 
     it('should roll the whole batch back when one of its statements fails', async () => {

@@ -166,10 +166,13 @@ export abstract class MySQLFamilyIntegrationTest<
     });
 
     describe('charset / collation configuration', () => {
-      it('should honor charset and collation set together', async () => {
-        // The collation is what reaches the driver: it implies its character
-        // set, so this is also what a collation configured on its own does.
-        await this.withConnector({ charset: 'utf8mb4', collation: traits.collation }, async (connector) => {
+      // The collation is what reaches the driver: it implies its character
+      // set, with or without a charset configured beside it.
+      it.each([
+        ['on its own', {}],
+        ['together with a charset', { charset: 'utf8mb4' }],
+      ])('should set the connection collation from a collation configured %s', async (_label, charset) => {
+        await this.withConnector({ ...charset, collation: traits.collation }, async (connector) => {
           const result = await connector.executeSQL(
             'SELECT @@session.character_set_connection AS charset, @@session.collation_connection AS collation',
             {}

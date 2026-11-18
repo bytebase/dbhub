@@ -291,14 +291,17 @@ describe('SQLite Connector Integration Tests', () => {
         SELECT a AS before_delete FROM order_check ORDER BY a;
         DELETE FROM order_check;
         SELECT COUNT(*) AS after_delete FROM order_check;
-      `, {});
+      `, { maxRows: 2 });
 
       expect(result.resultSets.map((rs) => rs.sql)).toEqual([
         'SELECT a AS before_delete FROM order_check ORDER BY a',
         'DELETE FROM order_check',
         'SELECT COUNT(*) AS after_delete FROM order_check',
       ]);
-      expect(result.resultSets[0].rows.map((row) => Number(row.before_delete))).toEqual([1, 2, 3]);
+      // maxRows caps the SELECT (which still reports the statement as it was
+      // written, above) and leaves the write that shares its batch alone
+      expect(result.resultSets[0].rows.map((row) => Number(row.before_delete))).toEqual([1, 2]);
+      expect(result.resultSets[0].truncated).toBe(true);
       expect(result.resultSets[1].rowCount).toBe(3);
       expect(Number(result.resultSets[2].rows[0].after_delete)).toBe(0);
 
