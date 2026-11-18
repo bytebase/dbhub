@@ -2,11 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   obfuscateDSNPassword,
   REDACTED_DSN,
-  obfuscateSSHConfig,
   getDatabaseTypeFromDSN,
   parseConnectionInfoFromDSN,
 } from '../dsn-obfuscate.js';
-import type { SSHTunnelConfig } from '../../types/ssh.js';
 
 describe('DSN Obfuscation Utilities', () => {
   describe('obfuscateDSNPassword', () => {
@@ -88,28 +86,6 @@ describe('DSN Obfuscation Utilities', () => {
       const result = obfuscateDSNPassword(dsn);
 
       expect(result).toBe('db2://user:*******@localhost:50000/db');
-    });
-  });
-
-  describe('obfuscateSSHConfig', () => {
-    it('should obfuscate password and passphrase', () => {
-      const config: SSHTunnelConfig = {
-        host: 'bastion.example.com',
-        port: 22,
-        username: 'ubuntu',
-        password: 'secretpassword',
-        passphrase: 'keypassphrase',
-      };
-      const result = obfuscateSSHConfig(config);
-      expect(result.password).toBe('********');
-      expect(result.passphrase).toBe('********');
-      expect(result.host).toBe('bastion.example.com');
-      expect(result.username).toBe('ubuntu');
-    });
-
-    it('should keep the private key path as-is', () => {
-      const config: SSHTunnelConfig = { host: 'bastion.example.com', username: 'ubuntu', privateKey: '/home/user/.ssh/id_rsa' };
-      expect(obfuscateSSHConfig(config).privateKey).toBe('/home/user/.ssh/id_rsa');
     });
   });
 

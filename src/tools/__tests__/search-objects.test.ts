@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSearchDatabaseObjectsToolHandler } from '../search-objects.js';
 import { ConnectorManager } from '../../connectors/manager.js';
+import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, TableColumn, TableIndex } from '../../connectors/interface.js';
 
 // Mock dependencies
@@ -18,7 +19,6 @@ const createMockConnector = (id: ConnectorType = 'sqlite'): Connector => ({
   getSchemas: vi.fn(),
   getTables: vi.fn(),
   getViews: vi.fn(),
-  tableExists: vi.fn(),
   getTableSchema: vi.fn(),
   getTableIndexes: vi.fn(),
   getStoredProcedures: vi.fn(),
@@ -74,6 +74,9 @@ describe('search_database_objects tool', () => {
   };
 
   beforeEach(() => {
+    // Single-source by default, so resolveTrackedToolName resolves to the
+    // bare tool name; multi-source naming is covered separately below.
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['default']);
     mockConnector = createMockConnector('sqlite');
     mockGetCurrentConnector.mockReturnValue(mockConnector);
     handler = createSearchDatabaseObjectsToolHandler();
@@ -739,6 +742,32 @@ describe('search_database_objects tool', () => {
       expect(parsed.data.results.map((r: any) => r.name)).toEqual(['secrets']);
       // getDefaultSchema must not override an explicit caller-provided schema.
       expect((mockConnector as any).getDefaultSchema).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('request tracking', () => {
+    const args = { object_type: 'schema', pattern: '%', detail_level: 'names' };
+
+    beforeEach(() => {
+      vi.mocked(mockConnector.getSchemas).mockResolvedValue(['public']);
+    });
+
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createSearchDatabaseObjectsToolHandler('prod')(args, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'search_objects' }));
+    });
+
+    it('tracks the normalized, suffixed tool name for a multi-source id with special characters', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createSearchDatabaseObjectsToolHandler('prod-pg')(args, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'search_objects_prod_pg' }));
     });
   });
 });

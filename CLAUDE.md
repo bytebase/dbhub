@@ -10,10 +10,12 @@ DBHub is a zero-dependency, token efficient database MCP server implementing the
 
 - Build: `pnpm run build` - Compiles TypeScript to JavaScript using tsup
 - Start: `pnpm run start` - Runs the compiled server
-- Dev: `pnpm run dev` - Runs server with tsx (no compilation needed)
+- Dev: `pnpm run dev` - Runs the backend (tsx, HTTP transport, no compilation) and the workbench frontend together; `pnpm run dev:backend` runs the server alone and accepts flags (`pnpm run dev:backend --config=./dbhub.toml`)
+- Typecheck: `pnpm run typecheck` - `tsc --noEmit` over `src/`, tests included (CI runs it; Vitest and tsx do not check types)
 - Test: `pnpm test` - Run all tests
 - Test Watch: `pnpm test:watch` - Run tests in watch mode
 - Integration Tests: `pnpm test:integration` - Run database integration tests (requires Docker)
+- Build Smoke Test: `pnpm test:build` - After `pnpm run build`, imports each connector chunk in `dist/` to catch CJS drivers bundled into ESM (`scripts/smoke-test-build.mjs`; add new connectors to its file pattern)
 - Claude Code Plugin: `plugin/` packages DBHub as a Claude Code plugin — `.mcp.json` launches `npx @bytebase/dbhub` (pinned to the plugin version) against the bundled read-only `plugin/dbhub.toml` (DSN prompted via `userConfig` in `plugin/.claude-plugin/plugin.json`, passed as `DBHUB_DSN`), plus `/dbhub:setup` and `/dbhub:explore` skills. Validate with `claude plugin validate ./plugin`; test with `claude --plugin-dir ./plugin`.
 - Codex Plugin: the same `plugin/` directory also serves Codex — `plugin/.codex-plugin/plugin.json` is the manifest and points at `plugin/mcp.codex.json` (not `.mcp.json`, whose `${CLAUDE_PLUGIN_ROOT}`/`${user_config.*}` placeholders Codex doesn't expand). Codex has no install-time prompt, so the server forwards `DBHUB_DSN` from Codex's environment (`env_vars`) and finds `./dbhub.toml` via `cwd = "."` (resolved against the installed plugin root). Skills are shared, so keep them host-neutral. The Codex marketplace is `.agents/plugins/marketplace.json` (Codex prefers it over `.claude-plugin/marketplace.json`). Test with a throwaway home: `CODEX_HOME=/tmp/codex-home codex plugin marketplace add . && CODEX_HOME=/tmp/codex-home codex plugin add dbhub@dbhub`, then `codex mcp list`.
 - Versioning: `package.json` is the single source of truth. `pnpm version <bump>` bumps it and auto-runs `scripts/sync-version.mjs`, which propagates the version into `plugin/.claude-plugin/plugin.json`, `plugin/.codex-plugin/plugin.json`, `plugin/.mcp.json`, `plugin/mcp.codex.json`, and `server.json` (files that can't be stamped at build time — the plugin is read straight from git with no build step, and `server.json`'s own version is what the npm publish workflow (`.github/workflows/npm-publish.yml`) checks against the MCP Registry before republishing — the registry publish runs as a post-step of that same workflow, after the npm publish succeeds). `mcpb/manifest.json` needs no sync — `scripts/build-mcpb.mjs` stamps it from `package.json` at build time. `src/__tests__/plugin-consistency.test.ts` fails CI if any of these drift from `package.json`, or if `plugin/dbhub.toml` diverges from `mcpb/dbhub.toml`.
@@ -38,7 +40,7 @@ src/
 │   ├── explain-sql.ts   # Opt-in EXPLAIN plan tool (never executes the target statement)
 │   └── health-check.ts  # Opt-in connection pool + buffer cache metrics tool (Postgres/MySQL/MariaDB/SQL Server/Oracle)
 ├── utils/               # Shared utilities
-│   ├── dsn-obfuscator.ts# DSN security
+│   ├── dsn-obfuscate.ts # DSN security
 │   ├── response-formatter.ts # Output formatting
 │   ├── allowed-keywords.ts  # Read-only SQL classification primitives
 │   ├── result-columns.ts    # Unique column names for result rows (repeats → `_1`, `_2`; connectors fetch rows positionally)
@@ -62,12 +64,14 @@ Key architectural patterns:
   - 2026-07-28 clients get cache hints on `tools/list` (`cacheHints` in `ServerOptions`: 5-minute TTL, `private` scope) and send `Mcp-Method`/`Mcp-Name` headers usable for gateway routing/rate-limiting
   - Tests in `src/__tests__/json-rpc-integration.test.ts`
 - **Tool Handlers**: Clean separation of MCP protocol concerns
+  - Every handler (built-in and custom) runs inside `runToolRequest` (`src/utils/tool-handler-helpers.ts`): it connects lazily, shapes the success/error envelope, classifies connection failures and records the request trace. A handler body returns its data and throws `ToolError(message, code)` for failures it diagnoses itself.
+  - A built-in tool is described in two tables keyed by tool name — metadata in `BUILTIN_TOOL_METADATA` (`src/utils/tool-metadata.ts`, shared by registration and the API tool list) and schema + handler in `BUILTIN_TOOL_HANDLERS` (`src/tools/index.ts`). Adding one means an entry in each plus the name in `src/tools/builtin-tools.ts`; `builtin-tool-table.integration.test.ts` checks they agree.
   - Multi-database routing is by tool name, not by parameter: one tool instance is registered per source, named `execute_sql_{source_id}` / `search_objects_{source_id}` (single-source configs keep the bare `execute_sql` / `search_objects` names). See `src/tools/index.ts` and `src/utils/tool-metadata.ts`. `source_id` appears in tool *output* metadata only.
 - **Token-Efficient Schema Exploration**: Unified search/list tool with progressive disclosure
   - `search_objects`: Single tool for both pattern-based search and listing all objects
   - Pattern parameter defaults to `%` (match all) - optional for listing use cases
   - Detail levels: `names` (minimal), `summary` (with metadata), `full` (complete structure)
-  - Supports: schemas, tables, columns, procedures, indexes
+  - Supports: schemas, tables, views, columns, procedures, functions, indexes
   - Inspired by Anthropic's MCP code execution patterns for reducing token usage
 - **Integration Test Base**: Shared test utilities for consistent connector testing
 
@@ -140,8 +144,7 @@ DBHub supports three configuration methods:
 - `--auth-token`: Comma-separated bearer token(s) required on every HTTP request via `Authorization: Bearer <token>` (env `DBHUB_AUTH_TOKEN`). Unset by default (no auth); configuring a token is itself the opt-in — there is no separate enforcement flag. A comma-separated list supports zero-downtime rotation (add the new token, redeploy, drop the old one) and per-client tokens. `/healthz` is exempt. Not OAuth — a flat shared-secret allow-list, not full identity-based authorization; see `validateAuthToken` in `src/utils/auth-token.ts`.
 - `--config`: Path to TOML configuration file
 - `--demo`: Use bundled SQLite employee database
-- `--readonly`: Restrict to read-only SQL operations (deprecated - use TOML configuration instead)
-- `--max-rows`: Limit rows returned from SELECT queries (deprecated - use TOML configuration instead)
+- `--readonly` / `--max-rows` (and the `READONLY` / `MAX_ROWS` environment variables): removed. Using one exits at startup with a pointer to the TOML `[[tools]]` `readonly` / `max_rows` settings — see `rejectRemovedEnvVars` / `failRemovedSetting` in `src/config/env.ts`
 - SSH tunnel options: `--ssh-host`, `--ssh-port`, `--ssh-user`, `--ssh-password`, `--ssh-key`, `--ssh-passphrase`, `--ssh-agent`
 - Documentation: https://dbhub.ai/config/command-line
 
@@ -182,7 +185,7 @@ outside TOML and follow the same order:
   - SQL Server (NTLM): `sqlserver://user:password@localhost:1433/dbname?authentication=ntlm&domain=MYDOMAIN`
   - Oracle: `oracle://user:password@localhost:1521/FREEPDB1` (path is the service name; `?sid=ORCL` for a SID; `sslmode=require`/`verify-full` switch to TCPS)
   - SQLite: `sqlite:///path/to/database.db` (absolute), `sqlite:///./database.db` (relative: to the working directory, or to the config file when set in TOML) or `sqlite:///:memory:` — all forms and their resolution live in `src/utils/sqlite-dsn.ts`
-- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL only, CA verification), `sslmode=verify-full` (PostgreSQL, SQL Server and Oracle, CA + hostname verification). On PostgreSQL, use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
+- SSL modes: `sslmode=disable` (no SSL), `sslmode=require` (SSL without cert verification), `sslmode=verify-ca` (PostgreSQL, MySQL and MariaDB, CA verification), `sslmode=verify-full` (every network database, CA + hostname verification). MySQL/MariaDB validation and the per-driver mapping live in `src/connectors/mysql-family-ssl.ts` and each connector's `*SslOptions`; unknown values are rejected. On PostgreSQL, use `sslrootcert` to specify CA certificate path for verify modes. PostgreSQL client certificate auth: `sslcert` + `sslkey` (PEM, unencrypted, both required; `sslmode` must be `require`, `verify-ca` or `verify-full` — `disable` or unset is rejected) in the DSN or TOML source.
 
 ## Testing Approach
 
@@ -192,9 +195,8 @@ Key points:
 - Unit tests for individual components and utilities
 - Integration tests using Testcontainers for real database testing
 - All connectors have comprehensive integration test coverage
-- Pre-commit hooks run related tests automatically
 - Test specific databases: `pnpm test src/connectors/__tests__/{db-type}.integration.test.ts`
-- SSH tunnel tests: `pnpm test postgres-ssh-simple.integration.test.ts`
+- SSH tunnel tests: `pnpm test postgres-ssh.integration.test.ts`
 
 ## SSH Tunnel Support
 

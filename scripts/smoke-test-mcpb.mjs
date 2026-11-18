@@ -9,7 +9,7 @@
 // client, exactly as an MCPB client (e.g. Claude Desktop) would:
 //   - launches `node server/index.js --transport stdio --config dbhub.toml`
 //     with the DSN injected via the DBHUB_DSN env var (in-memory SQLite)
-//   - all five connectors must load (drivers resolve from the bundle)
+//   - every connector must load (drivers resolve from the bundle)
 //   - tools/list must expose exactly execute_sql and search_objects
 //   - execute_sql SELECT succeeds
 //   - execute_sql CREATE TABLE is rejected (the bundle config is read-only)

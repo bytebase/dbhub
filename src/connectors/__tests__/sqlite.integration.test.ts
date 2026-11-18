@@ -249,6 +249,106 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].rows.some(row => row.name === 'email')).toBe(true);
     });
 
+    it('should return rows for value-reporting pragmas that no keyword list names', async () => {
+      const version = await sqliteTest.connector.executeSQL('PRAGMA user_version', {});
+      expect(version.resultSets[0].rows).toHaveLength(1);
+      expect(Number(version.resultSets[0].rows[0].user_version)).toBe(0);
+
+      // table_xinfo is what the connector's own getTableSchema reads
+      const xinfo = await sqliteTest.connector.executeSQL('PRAGMA table_xinfo(users)', {});
+      expect(xinfo.resultSets[0].rows.map(row => row.name)).toContain('email');
+
+      // ...and in a batch, alongside a pragma that reports nothing
+      const batch = await sqliteTest.connector.executeSQL(
+        'PRAGMA foreign_keys = ON; PRAGMA foreign_keys; PRAGMA database_list',
+        {}
+      );
+      expect(batch.resultSets[0].rows).toEqual([]);
+      expect(Number(batch.resultSets[1].rows[0].foreign_keys)).toBe(1);
+      expect(batch.resultSets[2].rows[0].name).toBe('main');
+    });
+
+    describe('RETURNING clauses', () => {
+      const countRows = async (where: string): Promise<number> => {
+        const result = await sqliteTest.connector.executeSQL(
+          `SELECT COUNT(*) AS c FROM users WHERE ${where}`,
+          {}
+        );
+        return Number(result.resultSets[0].rows[0].c);
+      };
+
+      // Runs the assertions against whatever runtime the connector sees; each
+      // write must happen exactly once and hand back its RETURNING rows.
+      const expectReturningRows = async (tag: string) => {
+        const single = await sqliteTest.connector.executeSQL(
+          `INSERT INTO users (name, email, age) VALUES ('ret-${tag}', 'ret-${tag}@example.com', 41) RETURNING name, age`,
+          {}
+        );
+        expect(single.resultSets).toHaveLength(1);
+        expect(single.resultSets[0].rows).toHaveLength(1);
+        expect(single.resultSets[0].rows[0].name).toBe(`ret-${tag}`);
+        expect(Number(single.resultSets[0].rows[0].age)).toBe(41);
+        expect(single.resultSets[0].rowCount).toBe(1);
+        expect(await countRows(`email = 'ret-${tag}@example.com'`)).toBe(1);
+
+        const batch = await sqliteTest.connector.executeSQL(
+          `INSERT INTO users (name, email, age) VALUES ('batch-${tag}', 'batch-${tag}@example.com', 20) RETURNING name;
+           UPDATE users SET age = age + 1 WHERE email = 'batch-${tag}@example.com' RETURNING age;
+           DELETE FROM users WHERE email = 'ret-${tag}@example.com' RETURNING email;
+           UPDATE users SET age = age + 1 WHERE email = 'batch-${tag}@example.com'`,
+          {}
+        );
+        expect(batch.resultSets).toHaveLength(4);
+        expect(batch.resultSets[0].rows.map((row) => row.name)).toEqual([`batch-${tag}`]);
+        // 20 + 1: the UPDATE ran once before its row was read back
+        expect(batch.resultSets[1].rows.map((row) => Number(row.age))).toEqual([21]);
+        expect(batch.resultSets[2].rows.map((row) => row.email)).toEqual([`ret-${tag}@example.com`]);
+        // No RETURNING: no rows, and rowCount is the number of rows changed
+        expect(batch.resultSets[3].rows).toEqual([]);
+        expect(batch.resultSets[3].rowCount).toBe(1);
+
+        expect(await countRows(`email = 'ret-${tag}@example.com'`)).toBe(0);
+        expect(await countRows(`email = 'batch-${tag}@example.com'`)).toBe(1);
+        // Two UPDATEs, each applied exactly once
+        const age = await sqliteTest.connector.executeSQL(
+          `SELECT age FROM users WHERE email = 'batch-${tag}@example.com'`,
+          {}
+        );
+        expect(Number(age.resultSets[0].rows[0].age)).toBe(22);
+      };
+
+      it('should return the rows of INSERT / UPDATE / DELETE ... RETURNING, single and batched', async () => {
+        await expectReturningRows('native');
+      });
+
+      it('should do the same on a runtime without StatementSync.columns() (Node 22.5 - 22.16)', async () => {
+        // Hide columns() the way an older runtime lacks it, so both
+        // returnsRows() and readRows() take their fallback paths.
+        const statement = (sqliteTest.connector as any).db.prepare('SELECT 1');
+        const prototype = Object.getPrototypeOf(statement);
+        const original = Object.getOwnPropertyDescriptor(prototype, 'columns');
+        Object.defineProperty(prototype, 'columns', { value: undefined, configurable: true, writable: true });
+        try {
+          expect(typeof (sqliteTest.connector as any).db.prepare('SELECT 1').columns).toBe('undefined');
+          await expectReturningRows('fallback');
+
+          // A word inside a string, comment or quoted identifier is not the keyword
+          const plain = await sqliteTest.connector.executeSQL(
+            `UPDATE users SET name = 'returning' WHERE email = 'batch-fallback@example.com' -- returning`,
+            {}
+          );
+          expect(plain.resultSets[0].rows).toEqual([]);
+          expect(plain.resultSets[0].rowCount).toBe(1);
+        } finally {
+          if (original) {
+            Object.defineProperty(prototype, 'columns', original);
+          } else {
+            delete prototype.columns;
+          }
+        }
+      });
+    });
+
     it('should support SQLite window functions', async () => {
       const result = await sqliteTest.connector.executeSQL(`
         SELECT 

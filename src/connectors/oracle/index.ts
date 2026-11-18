@@ -422,19 +422,6 @@ export class OracleConnector implements Connector {
     }
   }
 
-  async tableExists(tableName: string, schema?: string): Promise<boolean> {
-    try {
-      const rows = await this.query<{ CNT: number }>(
-        { module: "search_objects", action: "tableExists" },
-        `SELECT COUNT(*) AS cnt FROM all_tables WHERE owner = :schema AND table_name = :table_name`,
-        { schema: this.schemaOrDefault(schema), table_name: OracleConnector.foldIdentifier(tableName) }
-      );
-      return Number(rows[0]?.CNT ?? 0) > 0;
-    } catch (error) {
-      throw new Error(`Failed to check if table exists: ${(error as Error).message}`);
-    }
-  }
-
   async getTableSchema(tableName: string, schema?: string): Promise<TableColumn[]> {
     try {
       const rows = await this.query<{

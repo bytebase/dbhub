@@ -363,7 +363,7 @@ export class SSHTunnel {
             // Pipe data between local socket and SSH stream
             localSocket.pipe(stream).pipe(localSocket);
 
-            stream.on('error', (err) => {
+            stream.on('error', (err: Error) => {
               console.error('SSH stream error:', err);
               localSocket.end();
             });

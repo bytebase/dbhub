@@ -11,8 +11,10 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json ./frontend/
 
-# Install pnpm using corepack (built into Node.js 22)
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm using corepack (built into Node.js 22). With no version given,
+# `corepack prepare` installs the one pinned by "packageManager" in
+# package.json, so the image builds with the same pnpm as CI.
+RUN corepack enable && corepack prepare --activate
 
 # Install all dependencies (both root and frontend workspace)
 # This includes devDependencies needed for building

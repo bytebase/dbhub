@@ -141,16 +141,6 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
         }
       });
 
-      it('should check if table exists', async () => {
-        const firstTable = this.config.expectedTables[0];
-        expect(await this.connector.tableExists(firstTable)).toBe(true);
-        expect(await this.connector.tableExists('nonexistent_table')).toBe(false);
-        
-        if (this.config.testSchema && this.config.expectedTestSchemaTable) {
-          expect(await this.connector.tableExists(this.config.expectedTestSchemaTable, this.config.testSchema)).toBe(true);
-          expect(await this.connector.tableExists(this.config.expectedTestSchemaTable, 'public')).toBe(false);
-        }
-      });
     });
   }
 
@@ -250,7 +240,7 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
 
       if (this.config.expectedStoredProcedures?.length) {
         it('should get stored procedure details', async () => {
-          const procedureName = this.config.expectedStoredProcedures[0];
+          const procedureName = this.config.expectedStoredProcedures![0];
           const procedure = await this.connector.getStoredProcedureDetail(procedureName);
           expect(procedure.procedure_name).toBe(procedureName);
           expect(procedure.procedure_type).toMatch(/function|procedure/);

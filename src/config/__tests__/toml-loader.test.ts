@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { loadTomlConfig, buildDSNFromSource, interpolateEnvVars, findUnresolvedEnvVars } from '../toml-loader.js';
-import type { SourceConfig } from '../../types/config.js';
+import type { CustomToolConfig, SourceConfig } from '../../types/config.js';
 import { sourceConfigEquals } from '../../utils/config-watcher.js';
 import { SQLiteConnector } from '../../connectors/sqlite/index.js';
 import { MAX_QUERY_TIMEOUT_SECONDS } from '../../utils/query-timeout.js';
@@ -888,6 +888,10 @@ sslmode = "verify-full"
         ['verify-full', 'postgres', 'postgres://user:pass@localhost:5432/testdb?sslmode=verify-full'],
         ['verify-full', 'sqlserver', 'sqlserver://user:pass@localhost:1433/testdb?sslmode=verify-full'],
         ['verify-full', 'oracle', 'oracle://user:pass@localhost:1521/testdb?sslmode=verify-full'],
+        ['verify-ca', 'mysql', 'mysql://user:pass@localhost:3306/testdb?sslmode=verify-ca'],
+        ['verify-full', 'mysql', 'mysql://user:pass@localhost:3306/testdb?sslmode=verify-full'],
+        ['verify-ca', 'mariadb', 'mariadb://user:pass@localhost:3306/testdb?sslmode=verify-ca'],
+        ['verify-full', 'mariadb', 'mariadb://user:pass@localhost:3306/testdb?sslmode=verify-full'],
       ])('should accept sslmode = %j for %s and carry it into the DSN', (sslmode, type, expectedDSN) => {
         writeSource(`sslmode = "${sslmode}"`, type);
 
@@ -941,8 +945,6 @@ dsn = "postgres://user:pass@localhost:5432/db?sslmode=require"
       });
 
       it.each([
-        ['verify-ca', 'mysql'],
-        ['verify-full', 'mariadb'],
         ['verify-ca', 'sqlserver'],
         ['verify-ca', 'oracle'],
       ])('should reject sslmode = %j for %s', (sslmode, type) => {
@@ -1235,10 +1237,11 @@ aws_iam_auth = true
 
   describe('buildDSNFromSource', () => {
     it('should return DSN if already provided', () => {
-      const source: SourceConfig = {
+      // No `type`: a raw source carries only what the file gave it
+      const source = {
         id: 'test',
         dsn: 'postgres://user:pass@localhost:5432/db',
-      };
+      } as SourceConfig;
 
       const dsn = buildDSNFromSource(source);
 
@@ -1472,13 +1475,13 @@ aws_iam_auth = true
     });
 
     it('should throw error when type is missing', () => {
-      const source: SourceConfig = {
+      const source = {
         id: 'test',
         host: 'localhost',
         database: 'db',
         user: 'user',
         password: 'pass',
-      };
+      } as SourceConfig;
 
       expect(() => buildDSNFromSource(source)).toThrow(
         "'type' field is required when 'dsn' is not provided"
@@ -1702,8 +1705,9 @@ required = true
         name: 'update_status',
         description: 'Update user status',
       });
-      expect(result?.tools![0].readonly).toBeUndefined();
-      expect(result?.tools![0].max_rows).toBeUndefined();
+      const tool = result?.tools![0] as CustomToolConfig;
+      expect(tool.readonly).toBeUndefined();
+      expect(tool.max_rows).toBeUndefined();
     });
 
     it('should throw error for custom tool with invalid readonly type', () => {

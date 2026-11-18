@@ -2,11 +2,10 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { z } from "zod";
 import {
   buildZodSchemaFromParameters,
-  buildInputSchema,
   createCustomToolHandler,
 } from "../custom-tool-handler.js";
 import { ConnectorManager } from "../../connectors/manager.js";
-import type { ToolConfig, ParameterConfig } from "../../types/config.js";
+import type { CustomToolConfig, ParameterConfig } from "../../types/config.js";
 
 // Auto-mock the connector manager so we control connection/execution behavior
 vi.mock("../../connectors/manager.js");
@@ -86,63 +85,6 @@ describe("Custom Tool Handler", () => {
     });
   });
 
-  describe("buildInputSchema", () => {
-    it("should build JSON Schema for string parameter", () => {
-      const schema = buildInputSchema([param("email", "string", { description: "User email" })]);
-
-      expect(schema.type).toBe("object");
-      expect(schema.properties.email).toEqual({
-        type: "string",
-        description: "User email",
-      });
-      expect(schema.required).toEqual(["email"]);
-    });
-
-    it.each([
-      // [parameter type, expected JSON Schema type]
-      ["integer", "integer"],
-      ["float", "number"],
-      ["boolean", "boolean"],
-      ["array", "array"],
-    ] as const)("should build JSON Schema for %s parameter", (paramType, jsonType) => {
-      const schema = buildInputSchema([param("value", paramType)]);
-
-      expect(schema.properties.value.type).toBe(jsonType);
-    });
-
-    it("should include enum for allowed_values", () => {
-      const schema = buildInputSchema([
-        param("status", "string", { allowed_values: ["pending", "active"] }),
-      ]);
-
-      expect(schema.properties.status.enum).toEqual(["pending", "active"]);
-    });
-
-    it("should not include optional params in required array", () => {
-      const schema = buildInputSchema([
-        param("id", "integer"),
-        param("status", "string", { required: false }),
-        param("priority", "integer", { default: 1 }),
-      ]);
-
-      expect(schema.required).toEqual(["id"]);
-    });
-
-    it("should omit required field when all params are optional", () => {
-      const schema = buildInputSchema([param("status", "string", { default: "pending" })]);
-
-      expect(schema.required).toBeUndefined();
-    });
-
-    it("should build empty schema for undefined parameters", () => {
-      const schema = buildInputSchema(undefined);
-
-      expect(schema.type).toBe("object");
-      expect(schema.properties).toEqual({});
-      expect(schema.required).toBeUndefined();
-    });
-  });
-
   describe("createCustomToolHandler connection error classification", () => {
     afterEach(() => {
       vi.clearAllMocks();
@@ -163,11 +105,12 @@ describe("Custom Tool Handler", () => {
         type: "postgres",
       } as any);
 
-      const toolConfig: ToolConfig = {
+      const toolConfig: CustomToolConfig = {
         name: "get_user",
         source: "prod",
+        description: "Get users",
         statement: "SELECT * FROM users",
-      } as any;
+      };
 
       const handler = createCustomToolHandler(toolConfig);
       const res: any = await handler({}, {});

@@ -87,31 +87,6 @@ export async function getViews(query: MySQLFamilyQuery, schema?: string): Promis
   }
 }
 
-export async function tableExists(query: MySQLFamilyQuery, tableName: string, schema?: string): Promise<boolean> {
-  try {
-    // In MySQL and MariaDB, if no schema is provided, use the current active database
-    // DATABASE() function returns the name of the current database
-    const schemaClause = schema ? "WHERE TABLE_SCHEMA = ?" : "WHERE TABLE_SCHEMA = DATABASE()";
-
-    const queryParams = schema ? [schema, tableName] : [tableName];
-
-    const rows = await query(
-      `
-      SELECT COUNT(*) AS COUNT
-      FROM INFORMATION_SCHEMA.TABLES 
-      ${schemaClause} 
-      AND TABLE_NAME = ?
-    `,
-      queryParams
-    );
-
-    return rows[0].COUNT > 0;
-  } catch (error) {
-    console.error("Error checking if table exists:", error);
-    throw error;
-  }
-}
-
 export async function getTableIndexes(query: MySQLFamilyQuery, tableName: string, schema?: string): Promise<TableIndex[]> {
   try {
     // In MySQL and MariaDB, if no schema is provided, use the current active database

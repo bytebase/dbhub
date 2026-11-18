@@ -3,6 +3,8 @@
  * Central location for built-in tool names used throughout the codebase
  */
 
+import type { CustomToolConfig, ToolConfig } from "../types/config.js";
+
 export const BUILTIN_TOOL_EXECUTE_SQL = "execute_sql";
 export const BUILTIN_TOOL_SEARCH_OBJECTS = "search_objects";
 export const BUILTIN_TOOL_EXPLAIN_SQL = "explain_sql";
@@ -49,3 +51,23 @@ export const ALL_BUILTIN_TOOL_NAMES = [
   BUILTIN_TOOL_EXPLAIN_SQL,
   BUILTIN_TOOL_HEALTH_CHECK,
 ] as const;
+
+export type BuiltinToolName = (typeof ALL_BUILTIN_TOOL_NAMES)[number];
+
+export function isBuiltinToolName(name: string): name is BuiltinToolName {
+  return (ALL_BUILTIN_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+/**
+ * Whether a validated tool config is a custom (user-defined SQL) tool. The
+ * ToolConfig union cannot be told apart structurally — a custom tool's name is
+ * any string — so the built-in name list is the discriminator.
+ */
+export function isCustomToolConfig(tool: ToolConfig): tool is CustomToolConfig {
+  return !isBuiltinToolName(tool.name);
+}
+
+/** Whether a built-in tool can never write, whatever its configuration. */
+export function isAlwaysReadOnlyTool(name: string): boolean {
+  return ALWAYS_READ_ONLY_TOOL_NAMES.includes(name);
+}

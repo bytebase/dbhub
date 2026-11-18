@@ -13,6 +13,26 @@ Search and list database objects (schemas, tables, columns, procedures, function
 - `detail_level` (optional): Level of detail - `"names"` (default), `"summary"`, or `"full"`
 - `limit` (optional): Maximum results to return (default: 100, max: 1000)
 
+## Response Format
+
+Results come back in the same envelope as the other tools. `data` echoes the search that ran and adds `count`, `results`, and `truncated` (true when `limit` was reached, so there may be more matches):
+
+```json
+{
+  "success": true,
+  "data": {
+    "object_type": "table",
+    "pattern": "user%",
+    "detail_level": "names",
+    "count": 3,
+    "results": [ ... ],
+    "truncated": false
+  }
+}
+```
+
+The examples below show only `count` and `results`.
+
 ## Detail Levels
 
 <CodeGroup>

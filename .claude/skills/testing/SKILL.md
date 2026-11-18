@@ -14,6 +14,8 @@ pnpm test              # Run all tests (unit + integration)
 pnpm test:unit         # Unit tests only (no Docker needed)
 pnpm test:watch        # Interactive watch mode
 pnpm test:integration  # Integration tests only (requires Docker)
+pnpm test:build        # After `pnpm run build`: import every connector chunk in dist/
+pnpm test:mcpb         # After `pnpm run build:mcpb`: smoke-test the packed bundle over stdio
 ```
 
 Run a specific test file:
@@ -42,26 +44,35 @@ This means the naming convention matters — integration tests MUST have `integr
 
 ### Test File Locations
 
-**Unit tests** (~20 files, no Docker needed):
-- `src/utils/__tests__/` — Utility function tests (SQL parsing, DSN obfuscation, SSH config, allowed keywords, identifier quoting, parameter mapping, row limiting, safe URL, config watcher, AWS RDS signer)
-- `src/tools/__tests__/` — Tool handler tests (execute-sql, search-objects, custom-tool-handler)
+**Unit tests** (`*.test.ts` without `integration` in the name; no Docker needed):
+- `src/utils/__tests__/` — Utility function tests (SQL parsing and classification, access policy, row limiting, DSN obfuscation, SafeURL, SQLite DSNs, SSH config and tunnel, identifier quoting, parameter mapping, result columns, query timeouts, config watcher, auth token, cross-origin, AWS RDS signer, …)
+- `src/tools/__tests__/` — Tool handler tests (execute-sql, search-objects, explain-sql, health-check, custom-tool-handler, registry, builtin-tools)
 - `src/config/__tests__/` — Configuration tests (env parsing, TOML loading)
-- `src/connectors/__tests__/` — Connector unit tests (dsn-parser, manager)
+- `src/connectors/__tests__/` — Connector unit tests (dsn-parser, manager, oracle, per-connector timeout / auth / pool behaviour, read-only transaction strategy)
 - `src/requests/__tests__/` — Request store tests
+- `src/__tests__/` — Connector loading and `plugin-consistency.test.ts` (plugin / bundle / registry manifests stay in step with `package.json`)
 
-**Integration tests** (~11 files, Docker required):
+**Integration tests** (`integration` in the file name). List them with `git ls-files 'src/**/*integration*.test.ts'`.
+
+Need Docker (Testcontainers):
 - `src/connectors/__tests__/postgres.integration.test.ts`
+- `src/connectors/__tests__/postgres-ssh.integration.test.ts`
+- `src/connectors/__tests__/postgres-client-cert.integration.test.ts`
 - `src/connectors/__tests__/mysql.integration.test.ts`
 - `src/connectors/__tests__/mariadb.integration.test.ts`
 - `src/connectors/__tests__/sqlserver.integration.test.ts`
 - `src/connectors/__tests__/oracle.integration.test.ts`
+
+Run without Docker (in-memory SQLite or no database):
 - `src/connectors/__tests__/sqlite.integration.test.ts`
-- `src/connectors/__tests__/postgres-ssh.integration.test.ts`
 - `src/connectors/__tests__/multi-sqlite-sources.integration.test.ts`
 - `src/__tests__/json-rpc-integration.test.ts`
+- `src/__tests__/http-bind-host.integration.test.ts`
 - `src/api/__tests__/sources.integration.test.ts`
 - `src/api/__tests__/requests.integration.test.ts`
 - `src/config/__tests__/ssh-config-integration.test.ts`
+- `src/utils/__tests__/tool-metadata.integration.test.ts`
+- `src/tools/__tests__/builtin-tool-table.integration.test.ts`
 
 ### IntegrationTestBase
 
@@ -117,9 +128,9 @@ Before running integration tests:
 | Database | Image | Notes |
 |----------|-------|-------|
 | PostgreSQL | `postgres:15-alpine` | Fast startup |
-| MySQL | `@testcontainers/mysql` | Supports IAM auth testing |
-| MariaDB | `@testcontainers/mariadb` | Supports IAM auth testing |
-| SQL Server | `@testcontainers/mssqlserver` | Slow startup (3-5 min), needs 4GB+ RAM |
+| MySQL | `@testcontainers/mysql` (`mysql:8.0`) | Supports IAM auth testing |
+| MariaDB | `@testcontainers/mariadb` (`mariadb:10.11`) | Supports IAM auth testing |
+| SQL Server | `@testcontainers/mssqlserver` (`mssql/server:2019-latest`) | Slow startup (3-5 min), needs 4GB+ RAM |
 | Oracle | `@testcontainers/oraclefree` (`gvenzl/oracle-free:23-slim-faststart`) | ~1.2GB pull, 1-2 min startup, needs 2GB+ RAM |
 | SQLite | No container needed | In-memory or file-based |
 

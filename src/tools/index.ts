@@ -1,25 +1,56 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import type { z } from "zod";
 import { createExecuteSqlToolHandler, executeSqlInputSchema } from "./execute-sql.js";
 import { createSearchDatabaseObjectsToolHandler, searchDatabaseObjectsInputSchema } from "./search-objects.js";
 import { createExplainSqlToolHandler, explainSqlInputSchema } from "./explain-sql.js";
 import { createHealthCheckToolHandler, healthCheckInputSchema } from "./health-check.js";
 import { ConnectorManager } from "../connectors/manager.js";
-import {
-  getExecuteSqlMetadata,
-  getSearchObjectsMetadata,
-  getExplainSqlMetadata,
-  getHealthCheckMetadata,
-} from "../utils/tool-metadata.js";
+import { getBuiltinToolMetadata } from "../utils/tool-metadata.js";
+import type { ToolResponse } from "../utils/tool-handler-helpers.js";
 import { classifySQL } from "../utils/sql-access-policy.js";
 import { createCustomToolHandler, getCustomToolInputSchema } from "./custom-tool-handler.js";
-import type { ToolConfig } from "../types/config.js";
+import type { CustomToolConfig } from "../types/config.js";
 import { getToolRegistry } from "./registry.js";
 import {
   BUILTIN_TOOL_EXECUTE_SQL,
   BUILTIN_TOOL_SEARCH_OBJECTS,
   BUILTIN_TOOL_EXPLAIN_SQL,
   BUILTIN_TOOL_HEALTH_CHECK,
+  isCustomToolConfig,
+  type BuiltinToolName,
 } from "./builtin-tools.js";
+
+/**
+ * The executable half of each built-in tool: the input schema it is registered
+ * with and the factory for its per-source handler. The descriptive half (name,
+ * description, annotations) comes from getBuiltinToolMetadata, which the API
+ * tool list shares. Adding a built-in means one entry here and one there;
+ * builtin-tool-table.integration.test.ts fails if either is missing.
+ */
+export const BUILTIN_TOOL_HANDLERS: Record<
+  BuiltinToolName,
+  {
+    inputSchema: z.ZodObject<any>;
+    createHandler: (sourceId: string) => (args: any, extra: any) => Promise<ToolResponse>;
+  }
+> = {
+  [BUILTIN_TOOL_EXECUTE_SQL]: {
+    inputSchema: executeSqlInputSchema,
+    createHandler: createExecuteSqlToolHandler,
+  },
+  [BUILTIN_TOOL_SEARCH_OBJECTS]: {
+    inputSchema: searchDatabaseObjectsInputSchema,
+    createHandler: createSearchDatabaseObjectsToolHandler,
+  },
+  [BUILTIN_TOOL_EXPLAIN_SQL]: {
+    inputSchema: explainSqlInputSchema,
+    createHandler: createExplainSqlToolHandler,
+  },
+  [BUILTIN_TOOL_HEALTH_CHECK]: {
+    inputSchema: healthCheckInputSchema,
+    createHandler: createHealthCheckToolHandler,
+  },
+};
 
 /**
  * Register all tool handlers with the MCP server
@@ -37,106 +68,31 @@ export function registerTools(server: McpServer): void {
 
   // Register all enabled tools (both built-in and custom) for each source
   for (const sourceId of sourceIds) {
-    const enabledTools = registry.getEnabledToolConfigs(sourceId);
-
-    for (const toolConfig of enabledTools) {
-      // Register based on tool name (built-in vs custom)
-      if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
-        registerExecuteSqlTool(server, sourceId);
-      } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
-        registerSearchObjectsTool(server, sourceId);
-      } else if (toolConfig.name === BUILTIN_TOOL_EXPLAIN_SQL) {
-        registerExplainSqlTool(server, sourceId);
-      } else if (toolConfig.name === BUILTIN_TOOL_HEALTH_CHECK) {
-        registerHealthCheckTool(server, sourceId);
-      } else {
-        // Custom tool
+    for (const toolConfig of registry.getEnabledToolConfigs(sourceId)) {
+      if (isCustomToolConfig(toolConfig)) {
         registerCustomTool(server, sourceId, toolConfig);
+      } else {
+        registerBuiltinTool(server, toolConfig.name, sourceId);
       }
     }
   }
 }
 
 /**
- * Register execute_sql tool for a source
+ * Register a built-in tool for a source
  */
-function registerExecuteSqlTool(
-  server: McpServer,
-  sourceId: string
-): void {
-  const metadata = getExecuteSqlMetadata(sourceId);
+function registerBuiltinTool(server: McpServer, name: BuiltinToolName, sourceId: string): void {
+  const metadata = getBuiltinToolMetadata(name, sourceId);
+  const { inputSchema, createHandler } = BUILTIN_TOOL_HANDLERS[name];
+
   server.registerTool(
     metadata.name,
     {
       description: metadata.description,
-      inputSchema: executeSqlInputSchema,
+      inputSchema,
       annotations: metadata.annotations,
     },
-    createExecuteSqlToolHandler(sourceId)
-  );
-}
-
-/**
- * Register search_objects tool for a source
- */
-function registerSearchObjectsTool(
-  server: McpServer,
-  sourceId: string
-): void {
-  const metadata = getSearchObjectsMetadata(sourceId);
-
-  server.registerTool(
-    metadata.name,
-    {
-      description: metadata.description,
-      inputSchema: searchDatabaseObjectsInputSchema,
-      annotations: {
-        title: metadata.title,
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-    },
-    createSearchDatabaseObjectsToolHandler(sourceId)
-  );
-}
-
-/**
- * Register explain_sql tool for a source
- */
-function registerExplainSqlTool(
-  server: McpServer,
-  sourceId: string
-): void {
-  const metadata = getExplainSqlMetadata(sourceId);
-  server.registerTool(
-    metadata.name,
-    {
-      description: metadata.description,
-      inputSchema: explainSqlInputSchema,
-      annotations: metadata.annotations,
-    },
-    createExplainSqlToolHandler(sourceId)
-  );
-}
-
-/**
- * Register health_check tool for a source
- */
-function registerHealthCheckTool(
-  server: McpServer,
-  sourceId: string
-): void {
-  const metadata = getHealthCheckMetadata(sourceId);
-  server.registerTool(
-    metadata.name,
-    {
-      description: metadata.description,
-      inputSchema: healthCheckInputSchema,
-      annotations: metadata.annotations,
-    },
-    createHealthCheckToolHandler(sourceId)
+    createHandler(sourceId)
   );
 }
 
@@ -146,14 +102,14 @@ function registerHealthCheckTool(
 function registerCustomTool(
   server: McpServer,
   sourceId: string,
-  toolConfig: ToolConfig
+  toolConfig: CustomToolConfig
 ): void {
   const sourceConfig = ConnectorManager.getSourceConfig(sourceId)!;
   const dbType = sourceConfig.type;
 
   // Annotations reflect what the statement actually does, not the tool's
   // readonly config: a SELECT-backed custom tool is read-only regardless.
-  const isReadOnly = classifySQL(toolConfig.statement!, dbType) === "read";
+  const isReadOnly = classifySQL(toolConfig.statement, dbType) === "read";
 
   server.registerTool(
     toolConfig.name,

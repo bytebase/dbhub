@@ -9,87 +9,55 @@ on:
   workflow_dispatch:
 
 jobs:
-  unit-tests:
-    name: Unit Tests
+  tests:
+    # One job per suite, run in parallel. The job names are the status check
+    # names ("Unit Tests", "Integration Tests") — keep them stable, branch
+    # protection may require them.
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Unit Tests
+            script: test:unit
+            docker: false
+          - name: Integration Tests
+            script: test:integration
+            docker: true
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10.17.1
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run unit tests
-        run: pnpm test:unit
-
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
+      # Integration tests start database containers with Testcontainers
       - name: Verify Docker is available
+        if: matrix.docker
         run: |
           docker --version
           docker info
 
+      # pnpm must be on PATH before setup-node can use the pnpm store cache
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v3
         with:
           version: 10.17.1
-          run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v3
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
       - name: Install dependencies
         run: pnpm install
 
-      - name: Run integration tests
-        run: pnpm test:integration
+      # Vitest and tsx strip types without checking them, and the tsup build
+      # has let type errors through, so this is the step that fails on a type
+      # error in src/ (tests included). Once per run is enough.
+      - name: Type-check
+        if: ${{ !matrix.docker }}
+        run: pnpm run typecheck
+
+      - name: Run ${{ matrix.name }}
+        run: pnpm ${{ matrix.script }}

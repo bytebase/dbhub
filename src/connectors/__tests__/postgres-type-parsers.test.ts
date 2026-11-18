@@ -32,7 +32,8 @@ describe('PostgreSQL date/time type parsers', () => {
   });
 
   it('returns array element text verbatim for timestamp[]', () => {
-    const parse = postgresTypeParsers.getTypeParser(OID_TIMESTAMP_ARRAY, 'text');
+    // pg's TypeId enum lists scalar types only; array OIDs are valid at runtime
+    const parse = postgresTypeParsers.getTypeParser(OID_TIMESTAMP_ARRAY as any, 'text');
     expect(parse('{"2026-01-01 12:00:00"}')).toBe('{"2026-01-01 12:00:00"}');
   });
 

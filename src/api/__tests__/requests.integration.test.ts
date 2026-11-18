@@ -65,7 +65,7 @@ describe("GET /api/requests - Integration Tests", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toContain("application/json");
 
-      const data = await response.json();
+      const data: any = await response.json();
       expect(data.requests).toEqual([]);
       expect(data.total).toBe(0);
     });
@@ -76,7 +76,7 @@ describe("GET /api/requests - Integration Tests", () => {
       const response = await fetch(`${BASE_URL}/api/requests?source_id=nonexistent`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data: any = await response.json();
       expect(data.requests).toEqual([]);
       expect(data.total).toBe(0);
     });
@@ -91,7 +91,7 @@ describe("GET /api/requests - Integration Tests", () => {
       const response = await fetch(`${BASE_URL}/api/requests`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data: any = await response.json();
       expect(data.requests).toHaveLength(3);
       expect(data.total).toBe(3);
     });
@@ -109,7 +109,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(testRequest);
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(1);
       const returned = data.requests[0];
@@ -138,7 +138,7 @@ describe("GET /api/requests - Integration Tests", () => {
       const response = await fetch(`${BASE_URL}/api/requests?source_id=db1`);
       expect(response.status).toBe(200);
 
-      const data = await response.json();
+      const data: any = await response.json();
       expect(data.requests).toHaveLength(3);
       expect(data.total).toBe(3);
       expect(data.requests.every((r: Request) => r.sourceId === "db1")).toBe(true);
@@ -146,7 +146,7 @@ describe("GET /api/requests - Integration Tests", () => {
 
     it("should return only requests for specified source", async () => {
       const response = await fetch(`${BASE_URL}/api/requests?source_id=db2`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(1);
       expect(data.requests[0].id).toBe("db2-req1");
@@ -160,7 +160,7 @@ describe("GET /api/requests - Integration Tests", () => {
       const response = await fetch(
         `${BASE_URL}/api/requests?source_id=${encodeURIComponent("db_with_underscore")}`
       );
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(1);
       expect(data.requests[0].sourceId).toBe("db_with_underscore");
@@ -168,7 +168,7 @@ describe("GET /api/requests - Integration Tests", () => {
 
     it("should return all requests when source_id not provided", async () => {
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(5);
       expect(data.total).toBe(5);
@@ -192,7 +192,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(4);
       expect(data.requests[0].id).toBe("newest");
@@ -226,7 +226,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests?source_id=db1`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(2);
       expect(data.requests[0].id).toBe("db1-new");
@@ -240,7 +240,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(createRequest({ id: "req3", timestamp: sameTime }));
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       // Should return all 3 requests
       expect(data.requests).toHaveLength(3);
@@ -263,7 +263,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(1);
       expect(data.requests[0].success).toBe(false);
@@ -279,7 +279,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(1);
       expect(data.requests[0].success).toBe(true);
@@ -319,7 +319,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(4);
 
@@ -360,7 +360,7 @@ describe("GET /api/requests - Integration Tests", () => {
       });
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(4);
       const returnedErrors = data.requests.map((r: Request) => r.error);
@@ -374,7 +374,7 @@ describe("GET /api/requests - Integration Tests", () => {
   describe("Response Format", () => {
     it("should return consistent response structure", async () => {
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data).toHaveProperty("requests");
       expect(data).toHaveProperty("total");
@@ -388,7 +388,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(createRequest({ sourceId: "db1" }));
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.total).toBe(data.requests.length);
       expect(data.total).toBe(3);
@@ -410,7 +410,7 @@ describe("GET /api/requests - Integration Tests", () => {
       }
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(150);
       expect(data.total).toBe(150);
@@ -424,7 +424,7 @@ describe("GET /api/requests - Integration Tests", () => {
       );
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests[0].sql).toBe(
         "SELECT * FROM users WHERE name = 'O''Brien' AND role = \"admin\""
@@ -436,7 +436,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(createRequest({ sql: longSql }));
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests[0].sql).toBe(longSql);
     });
@@ -449,7 +449,7 @@ describe("GET /api/requests - Integration Tests", () => {
       });
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests).toHaveLength(4);
       const returnedClients = data.requests.map((r: Request) => r.client);
@@ -463,7 +463,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(createRequest({ durationMs: 0 }));
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests[0].durationMs).toBe(0);
     });
@@ -472,7 +472,7 @@ describe("GET /api/requests - Integration Tests", () => {
       requestStore.add(createRequest({ durationMs: 999999 }));
 
       const response = await fetch(`${BASE_URL}/api/requests`);
-      const data = await response.json();
+      const data: any = await response.json();
 
       expect(data.requests[0].durationMs).toBe(999999);
     });

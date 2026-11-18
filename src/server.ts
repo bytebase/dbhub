@@ -101,7 +101,7 @@ ERROR: Database connection configuration is required.
 Please provide configuration in one of these ways (in order of priority):
 
 1. Use demo mode: --demo (uses in-memory SQLite with sample employee database)
-2. TOML config file: --config=path/to/dbhub.toml or ./dbhub.toml
+2. TOML config file: --config=path/to/dbhub.toml
 3. Command line argument: --dsn="your-connection-string"
 4. Environment variable: export DSN="your-connection-string"
 5. .env file: DSN=your-connection-string

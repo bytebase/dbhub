@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createExecuteSqlToolHandler } from '../execute-sql.js';
 import { ConnectorManager } from '../../connectors/manager.js';
 import { getToolRegistry } from '../registry.js';
+import { requestStore } from '../../requests/index.js';
 import type { Connector, ConnectorType, SQLResult } from '../../connectors/interface.js';
 
 // Mock dependencies
@@ -19,7 +20,7 @@ const createMockConnector = (id: ConnectorType = 'sqlite', sourceId: string = 'd
   clone: vi.fn(),
   getSchemas: vi.fn(),
   getTables: vi.fn(),
-  tableExists: vi.fn(),
+  getViews: vi.fn(),
   getTableSchema: vi.fn(),
   getTableIndexes: vi.fn(),
   getStoredProcedures: vi.fn(),
@@ -39,6 +40,9 @@ describe('execute-sql tool', () => {
 
   beforeEach(() => {
     mockConnector = createMockConnector('sqlite');
+    // Single-source by default, so resolveTrackedToolName resolves to the
+    // bare tool name; multi-source naming is covered separately below.
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['test_source']);
     mockGetCurrentConnector.mockReturnValue(mockConnector);
 
     // Mock tool registry to return empty config (no readonly, no max_rows)
@@ -233,6 +237,30 @@ describe('execute-sql tool', () => {
       const result = await handler({ sql }, null);
 
       expect(parseToolResponse(result).success).toBe(true);
+    });
+  });
+
+  describe('request tracking', () => {
+    const emptyResult: SQLResult = { resultSets: [{ rows: [], rowCount: 0 }] };
+
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod']);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(emptyResult);
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createExecuteSqlToolHandler('prod')({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'execute_sql' }));
+    });
+
+    it('tracks the normalized, suffixed tool name for a multi-source id with special characters', async () => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(['prod-pg', 'staging']);
+      vi.mocked(mockConnector.executeSQL).mockResolvedValue(emptyResult);
+      const addSpy = vi.spyOn(requestStore, 'add');
+
+      await createExecuteSqlToolHandler('prod-pg')({ sql: 'SELECT 1' }, null);
+
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'execute_sql_prod_pg' }));
     });
   });
 });

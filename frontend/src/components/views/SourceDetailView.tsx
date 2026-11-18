@@ -103,19 +103,6 @@ export default function SourceDetailView() {
                 <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.user}</dd>
               </div>
             )}
-
-            <div>
-              <dt className="text-label text-muted-foreground">Default Source</dt>
-              <dd className="mt-1 text-sm text-foreground">
-                {source.is_default ? (
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-primary/10 text-primary">
-                    Yes
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">No</span>
-                )}
-              </dd>
-            </div>
           </dl>
         </div>
 

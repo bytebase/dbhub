@@ -29,6 +29,7 @@
     "dev:frontend": "cd frontend && pnpm run dev",
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
     "generate:api-types": "openapi-typescript src/api/openapi.yaml -o src/api/openapi.d.ts",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:watch": "vitest",
@@ -84,22 +85,9 @@
     "openapi-typescript": "^7.10.1",
     "prettier": "^3.5.3",
     "testcontainers": "^11.0.3",
-    "ts-node": "^10.9.2",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^4.0.6"
-  },
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "esModuleInterop": true,
-    "strict": true,
-    "outDir": "dist",
-    "rootDir": "src"
-  },
-  "include": [
-    "src/**/*"
-  ]
+  }
 }

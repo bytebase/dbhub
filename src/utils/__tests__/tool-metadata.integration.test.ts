@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { ConnectorManager } from "../../connectors/manager.js";
 import { setupManagerWithFixture, FIXTURES, loadFixtureConfig } from "../../__fixtures__/helpers.js";
-import { getExecuteSqlMetadata, getSearchObjectsMetadata } from "../tool-metadata.js";
+import {
+  getExecuteSqlMetadata,
+  getHealthCheckMetadata,
+  getSearchObjectsMetadata,
+  getToolsForSource,
+} from "../tool-metadata.js";
 import { initializeToolRegistry } from "../../tools/registry.js";
 
 // Import SQLite connector to ensure it's registered
@@ -69,6 +74,33 @@ describe("tool-metadata description propagation", () => {
       expect(metadata.description.startsWith("Search and list database objects")).toBe(true);
       expect(metadata.description).toContain("writable_unlimited");
       expect(metadata.description).toContain("sqlite");
+    });
+  });
+
+  describe("getToolsForSource", () => {
+    afterAll(() => {
+      const { sources, tools } = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+      initializeToolRegistry({ sources, tools: tools || [] });
+    });
+
+    it("describes an opt-in health_check as the registered built-in, not as a custom tool", () => {
+      const { sources, tools } = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+      initializeToolRegistry({
+        sources,
+        tools: [...(tools || []), { name: "health_check", source: "readonly_limited" }],
+      });
+
+      const metadata = getHealthCheckMetadata("readonly_limited");
+      const tool = getToolsForSource("readonly_limited").find((t) => t.name.startsWith("health_check"));
+
+      // Multi-source fixture: the registered name carries the source suffix.
+      expect(metadata.name).toBe("health_check_readonly_limited");
+      expect(tool).toEqual({
+        name: metadata.name,
+        description: metadata.description,
+        parameters: [],
+        readonly: true,
+      });
     });
   });
 });

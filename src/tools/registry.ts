@@ -3,8 +3,15 @@
  * Manages tool enablement and configuration across multiple database sources
  */
 
-import type { TomlConfig, ToolConfig, ExecuteSqlToolConfig, SearchObjectsToolConfig, ParameterConfig } from "../types/config.js";
-import { BUILTIN_TOOLS, ALL_BUILTIN_TOOL_NAMES } from "./builtin-tools.js";
+import type {
+  TomlConfig,
+  ToolConfig,
+  UnvalidatedToolConfig,
+  ExecuteSqlToolConfig,
+  SearchObjectsToolConfig,
+  ParameterConfig,
+} from "../types/config.js";
+import { BUILTIN_TOOLS, ALL_BUILTIN_TOOL_NAMES, type BuiltinToolName } from "./builtin-tools.js";
 import { ConnectorManager } from "../connectors/manager.js";
 import { validateParameters } from "../utils/parameter-mapper.js";
 
@@ -83,7 +90,7 @@ export class ToolRegistry {
   /**
    * Validate a custom tool configuration
    */
-  private validateCustomTool(toolConfig: ToolConfig, availableSources: string[]): void {
+  private validateCustomTool(toolConfig: UnvalidatedToolConfig, availableSources: string[]): void {
     // 1. Validate required fields
     if (!toolConfig.name || toolConfig.name.trim() === "") {
       throw new Error("Tool definition missing required field: name");
@@ -209,60 +216,17 @@ export class ToolRegistry {
    * Get built-in tool configuration for a specific source
    * Returns undefined if tool is not enabled or not a built-in
    */
-  getBuiltinToolConfig(
-    toolName: string,
+  getBuiltinToolConfig<N extends BuiltinToolName>(
+    toolName: N,
     sourceId: string
-  ): ToolConfig | undefined {
+  ): Extract<ToolConfig, { name: N }> | undefined {
     if (!this.isBuiltinTool(toolName)) {
       return undefined;
     }
     const tools = this.getEnabledToolConfigs(sourceId);
-    return tools.find((t) => t.name === toolName);
+    return tools.find((t) => t.name === toolName) as Extract<ToolConfig, { name: N }> | undefined;
   }
 
-  /**
-   * Get all unique tools across all sources (for tools/list response)
-   * Returns the union of all enabled tools
-   */
-  getAllTools(): ToolConfig[] {
-    const seen = new Set<string>();
-    const result: ToolConfig[] = [];
-
-    for (const tools of this.toolsBySource.values()) {
-      for (const tool of tools) {
-        if (!seen.has(tool.name)) {
-          seen.add(tool.name);
-          result.push(tool);
-        }
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Get all custom tools (non-builtin) across all sources
-   */
-  getCustomTools(): ToolConfig[] {
-    return this.getAllTools().filter((tool) => !this.isBuiltinTool(tool.name));
-  }
-
-  /**
-   * Get all built-in tool names that are enabled across any source
-   */
-  getEnabledBuiltinToolNames(): string[] {
-    const enabledBuiltins = new Set<string>();
-
-    for (const tools of this.toolsBySource.values()) {
-      for (const tool of tools) {
-        if (this.isBuiltinTool(tool.name)) {
-          enabledBuiltins.add(tool.name);
-        }
-      }
-    }
-
-    return Array.from(enabledBuiltins);
-  }
 }
 
 // Global singleton instance

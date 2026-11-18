@@ -9,7 +9,6 @@ export interface SourceDisplayInfo {
   type: string;
   host: string;
   database: string;
-  readonly: boolean;
   isDemo: boolean;
   tools: string[];
 }
@@ -111,7 +110,6 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
     ...sources.map((s) => {
       const modes: string[] = [];
       if (s.isDemo) modes.push("DEMO");
-      if (s.readonly) modes.push("READ-ONLY");
       return modes.join(" ").length;
     })
   );
@@ -142,7 +140,6 @@ export function generateStartupTable(sources: SourceDisplayInfo[]): string {
     // Mode indicators
     const modes: string[] = [];
     if (source.isDemo) modes.push("DEMO");
-    if (source.readonly) modes.push("READ-ONLY");
     const modeStr = fitString(modes.join(" "), modeWidth);
 
     lines.push(
@@ -187,7 +184,6 @@ export function buildSourceDisplayInfo(
       type: source.type || "sqlite",
       host,
       database,
-      readonly: source.readonly || false,
       isDemo,
       tools: getToolsForSource(source.id),
     };

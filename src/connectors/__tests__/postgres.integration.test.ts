@@ -410,8 +410,6 @@ describe('PostgreSQL Connector Integration Tests', () => {
 
       const views = await postgresTest.connector.getViews();
       expect(views).not.toContain('remote_users');
-
-      expect(await postgresTest.connector.tableExists('remote_users')).toBe(true);
     });
 
     it('should describe foreign tables like regular tables', async () => {

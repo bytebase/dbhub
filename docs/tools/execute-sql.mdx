@@ -116,7 +116,7 @@ source = "production"
 ```
 </CodeGroup>
 
-In read-only mode, each statement must pass a keyword classifier (`SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN` and other read-only statements), and is then executed under the database's own read-only mechanism where the engine has one. See [Read-Only Mode](/config/read-only-mode) for how it is enforced on each database and what it does not cover.
+In read-only mode, each statement must pass a keyword classifier (`SELECT`, `WITH` and `EXPLAIN` everywhere, plus a few read-only statements specific to each database), and is then executed under the database's own read-only mechanism where the engine has one. See [Read-Only Mode](/config/read-only-mode) for how it is enforced on each database and what it does not cover.
 
 <Warning>
 Read-only mode is a guardrail, not a permission boundary. Always connect DBHub with a least-privilege, read-only database user.
@@ -143,6 +143,44 @@ max_rows = 1000
 - If your query already has a `LIMIT` or `TOP` clause, DBHub uses the smaller value
 - Can be configured per-tool in [TOML configuration](/config/toml)
 - When the cap actually cuts off rows, the statement's result carries `"truncated": true` alongside `count`, so a capped result is distinguishable from a table that genuinely has exactly `max_rows` rows (detection is exact — DBHub fetches one probe row past the cap; the flag is omitted for complete results). Run `COUNT(*)` to get the true total when you see it.
+
+## Response Format
+
+The result is a JSON object. Each statement in the call gets its own entry in `statements`, in order — a single query is a `statements` array of length one:
+
+```json
+{
+  "success": true,
+  "data": {
+    "statements": [
+      {
+        "sql": "SELECT id, name FROM users LIMIT 2",
+        "rows": [
+          { "id": 1, "name": "Alice" },
+          { "id": 2, "name": "Bob" }
+        ],
+        "count": 2
+      }
+    ],
+    "source_id": "production"
+  }
+}
+```
+
+- `count` is the number of rows returned, or the number of rows affected for a write.
+- `truncated: true` appears on a statement only when `max_rows` cut its rows off (see [Row Limiting](#row-limiting)).
+- `messages` appears next to `statements` when the database sent informational messages (SQL Server `PRINT` output, for example).
+- Columns that share a name within one result are suffixed `_1`, `_2`, … so no value is lost.
+
+Errors use the same envelope with `success: false`:
+
+```json
+{
+  "success": false,
+  "error": "relation \"userz\" does not exist",
+  "code": "EXECUTION_ERROR"
+}
+```
 
 ## Selective Tool Exposure
 

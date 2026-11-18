@@ -27,7 +27,7 @@ Every other option — transport, port, host, and so on — is set by flag or en
 
 This page covers command-line flags and environment variables. For TOML configuration, see [TOML Configuration](/config/toml).
 
-### --transport
+### `--transport`
 
 <ParamField path="--transport" type="string" env="TRANSPORT" default="stdio">
   Transport protocol for [MCP communication](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports). Env: `TRANSPORT`.
@@ -56,7 +56,7 @@ This page covers command-line flags and environment variables. For TOML configur
   ```
 </ParamField>
 
-### --port
+### `--port`
 
 <ParamField path="--port" type="number" env="PORT" default="8080">
   HTTP server port. Only used when `--transport=http`. Ignored for stdio transport. Env: `PORT`.
@@ -66,7 +66,7 @@ This page covers command-line flags and environment variables. For TOML configur
   ```
 </ParamField>
 
-### --host
+### `--host`
 
 <ParamField path="--host" type="string" env="DBHUB_HOST" default="0.0.0.0">
   HTTP bind address. Only used when `--transport=http`. Ignored for stdio transport. Env: `DBHUB_HOST`.
@@ -87,7 +87,7 @@ This page covers command-line flags and environment variables. For TOML configur
   </Warning>
 </ParamField>
 
-### --allowed-hosts
+### `--allowed-hosts`
 
 <ParamField path="--allowed-hosts" type="string" env="DBHUB_ALLOWED_HOSTS" default="(loopback + this machine)">
   Comma-separated list of additional hostnames the HTTP transport accepts in the
@@ -127,7 +127,7 @@ This page covers command-line flags and environment variables. For TOML configur
   </Warning>
 </ParamField>
 
-### --auth-token
+### `--auth-token`
 
 <ParamField path="--auth-token" type="string" env="DBHUB_AUTH_TOKEN">
   Comma-separated list of bearer tokens required on every HTTP request. Only used when `--transport=http`. Unset by default — auth is off unless you configure this. Env: `DBHUB_AUTH_TOKEN`.
@@ -158,7 +158,7 @@ This page covers command-line flags and environment variables. For TOML configur
   </Warning>
 </ParamField>
 
-### --dsn
+### `--dsn`
 
 <ParamField path="--dsn" type="string" env="DSN">
   Database connection string (Data Source Name). Format: `database_type://username:password@host:port/database_name?options`. Env: `DSN` (see the resolution order at the top of this page).
@@ -295,22 +295,23 @@ This page covers command-line flags and environment variables. For TOML configur
 
   **SSL/TLS Options:**
 
-  | Database   | `disable` | `require` | `verify-ca` | `verify-full` | Default |
+  | Database   | `disable` | `require` | `verify-ca` | `verify-full` | Without `sslmode` |
   | ---------- | :-------: | :-------: | :---------: | :----------: | :-----: |
-  | PostgreSQL |     ✅    |     ✅    |      ✅     |      ✅      | Certificate verification |
-  | MySQL      |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
-  | MariaDB    |     ✅    |     ✅    |      ❌     |      ❌      | Certificate verification |
-  | SQL Server |     ✅    |     ✅    |      ❌     |      ✅      | Certificate verification |
+  | PostgreSQL |     ✅    |     ✅    |      ✅     |      ✅      | Unencrypted |
+  | MySQL      |     ✅    |     ✅    |      ✅     |      ✅      | Unencrypted |
+  | MariaDB    |     ✅    |     ✅    |      ✅     |      ✅      | Unencrypted |
+  | SQL Server |     ✅    |     ✅    |      ❌     |      ✅      | Unencrypted |
   | Oracle     |     ✅    |     ✅    |      ❌     |      ✅      | Plain TCP (`tcps://` only with `require`/`verify-full`) |
   | SQLite     |     ❌    |     ❌    |      ❌     |      ❌      | N/A (file-based) |
 
+  - No `sslmode`: the connection is **not encrypted** — the same as `disable`. Set `require` or a verify mode for any database reached over a network you don't control.
   - `sslmode=disable`: All SSL/TLS encryption is turned off. Data is transmitted in plaintext.
   - `sslmode=require`: Connection is encrypted, but the server's certificate is not verified.
-  - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL only.** Use `sslrootcert` to specify the CA certificate path.
-  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **PostgreSQL, SQL Server, and Oracle.** On PostgreSQL use `sslrootcert` to specify the CA certificate path. SQL Server uses Node's configured trust roots; set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed. Oracle uses the system trust store.
+  - `sslmode=verify-ca`: SSL with CA certificate verification, but no hostname check. **PostgreSQL, MySQL, and MariaDB.** On PostgreSQL use `sslrootcert` to specify the CA certificate path.
+  - `sslmode=verify-full`: SSL with CA certificate and hostname verification. **All network databases.** On PostgreSQL use `sslrootcert` to specify the CA certificate path. MySQL, MariaDB and SQL Server use Node's configured trust roots; set `NODE_EXTRA_CA_CERTS` to a PEM CA bundle before process startup if an additional CA is needed (e.g. the Amazon RDS CA bundle). Oracle uses the system trust store.
 
   <Note>
-  Unlike libpq, DBHub does not upgrade `sslmode=require` to `verify-ca` when `sslrootcert` is present: that combination is rejected at startup, so set `sslmode=verify-ca` explicitly. libpq's `allow` and `prefer` modes are not supported for PostgreSQL either; use `require` (or a verify mode) instead.
+  Unlike libpq, DBHub does not upgrade `sslmode=require` to `verify-ca` when `sslrootcert` is present: that combination is rejected at startup, so set `sslmode=verify-ca` explicitly. libpq's `allow` and `prefer` modes are not supported for PostgreSQL either; use `require` (or a verify mode) instead. MySQL and MariaDB likewise reject any value other than the four above, including MySQL's own `PREFERRED` / `VERIFY_IDENTITY` spellings.
   </Note>
 
   ```bash
@@ -319,12 +320,13 @@ This page covers command-line flags and environment variables. For TOML configur
   postgres://user:password@localhost:5432/dbname?sslmode=require
   postgres://user:password@rds-host:5432/dbname?sslmode=verify-ca&sslrootcert=~/.ssl/rds-ca.pem
   postgres://user:password@pg-host:5432/dbname?sslmode=require&sslcert=~/.ssl/client.crt&sslkey=~/.ssl/client.key
+  mysql://user:password@mysql-host:3306/dbname?sslmode=verify-full
   sqlserver://jsmith:secret@localhost:1433/mydb?authentication=ntlm&domain=CORP
   oracle://app:secret@db.example.com:2484/PROD?sslmode=verify-full
   ```
 </ParamField>
 
-**Environment Variables (Alternative to --dsn)**
+**Environment Variables (Alternative to `--dsn`)**
 
 <ParamField path="DB_*" type="environment">
   Recommended for databases with complex passwords containing special characters:
@@ -349,26 +351,25 @@ This page covers command-line flags and environment variables. For TOML configur
   ```
 </ParamField>
 
-### --id
+### `--id`
 
 <ParamField path="--id" type="string" env="ID">
-  Instance identifier to suffix tool names. Useful when running multiple DBHub instances (e.g., in Cursor). Env: `ID`.
+  Source ID for the database given by the DSN (default: `default`). Env: `ID`.
 
-  Tools will be named `execute_sql_{id}` for each instance.
+  The ID labels the source in tool output (`source_id`), the workbench and the request trace. It does **not** change tool names: a DBHub instance with a single source always exposes the bare `execute_sql` and `search_objects`. Tool names are suffixed only when a [TOML file](/config/toml) defines two or more sources — see [Tool Naming](/tools/overview#tool-naming).
 
   ```bash
   npx @bytebase/dbhub@latest --id prod --dsn "postgres://user:pass@prod-host:5432/db"
-  npx @bytebase/dbhub@latest --id staging --dsn "postgres://user:pass@staging-host:5432/db"
   ```
 
-  Result: `execute_sql_prod` and `execute_sql_staging` tools
+  To tell several single-database instances apart in an MCP client, give each server entry its own name in the client's configuration (`dbhub-prod`, `dbhub-staging`); clients namespace tools by server.
 
   <Warning>
   Cannot be used with `--config` (TOML configuration). TOML config defines source IDs directly in the configuration file. Use command-line DSN configuration instead if you need the `--id` flag.
   </Warning>
 </ParamField>
 
-### --demo
+### `--demo`
 
 <ParamField path="--demo" type="boolean" default="false">
   Run DBHub with a bundled SQLite sample "employee" database for testing.
@@ -378,7 +379,7 @@ This page covers command-line flags and environment variables. For TOML configur
   ```
 </ParamField>
 
-### --config
+### `--config`
 
 <ParamField path="--config" type="string">
   Path to a TOML configuration file, for managing multiple database connections and advanced configurations.
@@ -408,6 +409,8 @@ SSH tunnel configuration for connecting to databases through bastion/jump hosts.
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | Passphrase for encrypted SSH key |
 | `--ssh-agent` | `SSH_AUTH_SOCK` | string | Path to an SSH agent socket (ssh-agent, 1Password, etc.). Makes `--ssh-password` / `--ssh-key` optional |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts for multi-hop SSH. Format: `[user@]host[:port]` (comma-separated for chains) |
+| `--ssh-keepalive-interval` | `SSH_KEEPALIVE_INTERVAL` | number | Seconds between SSH keepalive packets (default: `0`, disabled). Set it when an idle tunnel is dropped by a firewall or NAT |
+| `--ssh-keepalive-count-max` | `SSH_KEEPALIVE_COUNT_MAX` | number | Missed keepalive responses tolerated before the tunnel is considered dead (default: `3`) |
 
 **Examples:**
 
@@ -462,9 +465,9 @@ npx @bytebase/dbhub@latest --dsn "..." \
 | `--allowed-hosts` | `DBHUB_ALLOWED_HOSTS` | string | Extra hostnames accepted in Host/Origin headers (http transport only, default: loopback + this machine) |
 | `--auth-token` | `DBHUB_AUTH_TOKEN` | string | Comma-separated bearer token(s) required on requests (http transport only, default: auth disabled) |
 | `--demo` | - | boolean | Use sample employee database |
-| `--id` | `ID` | string | Instance identifier for tool names |
-| `--config` | - | string | Path to TOML config file (default: `./dbhub.toml`) |
-| `--dsn` | `DSN` | string | Database connection string (required unless using `--demo` or `--config`) |
+| `--id` | `ID` | string | Source ID for the DSN's database (default: `default`) |
+| `--config` | - | string | Path to TOML config file (not loaded unless given) |
+| `--dsn` | `DSN` | string | Database connection string (or use the `DB_*` variables, `--demo`, or `--config`) |
 | - | `DB_TYPE` | string | Database type |
 | - | `DB_HOST` | string | Database hostname |
 | - | `DB_PORT` | number | Database port (varies by type) |
@@ -479,3 +482,5 @@ npx @bytebase/dbhub@latest --dsn "..." \
 | `--ssh-passphrase` | `SSH_PASSPHRASE` | string | SSH key passphrase |
 | `--ssh-agent` | `SSH_AUTH_SOCK` | string | SSH agent socket path |
 | `--ssh-proxy-jump` | `SSH_PROXY_JUMP` | string | ProxyJump hosts |
+| `--ssh-keepalive-interval` | `SSH_KEEPALIVE_INTERVAL` | number | Seconds between SSH keepalive packets (default: `0`, disabled) |
+| `--ssh-keepalive-count-max` | `SSH_KEEPALIVE_COUNT_MAX` | number | Missed keepalive responses before the tunnel is dropped (default: `3`) |

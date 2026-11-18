@@ -25,11 +25,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
+      # `mint` is the current name of the Mintlify CLI (see docs/README.md)
       - name: Install Mintlify CLI
-        run: npm install -g mintlify
+        run: npm install -g mint
 
       - name: Check for broken links
         working-directory: ./docs
-        run: mintlify broken-links
+        run: mint broken-links

@@ -41,16 +41,9 @@ else {
 /**
  * Load SQL file contents
  */
-export function loadSqlFile(fileName: string): string {
+function loadSqlFile(fileName: string): string {
   const filePath = path.join(DEMO_DATA_DIR, fileName);
   return fs.readFileSync(filePath, "utf8");
-}
-
-/**
- * Get SQLite DSN for in-memory database
- */
-export function getInMemorySqliteDSN(): string {
-  return "sqlite:///:memory:";
 }
 
 /**

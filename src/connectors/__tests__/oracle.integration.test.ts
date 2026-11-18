@@ -148,11 +148,13 @@ describe('Oracle Connector Integration Tests', () => {
 
   describe('Oracle-specific: identifier case', () => {
     it('finds tables and columns by their unquoted (lower-case) DDL spelling', async () => {
-      expect(await oracleTest.connector.tableExists('users')).toBe(true);
-      expect(await oracleTest.connector.tableExists('USERS')).toBe(true);
-      expect(await oracleTest.connector.tableExists('users', 'test')).toBe(true);
-      // Mixed case is taken as spelled (a quoted identifier), so this is a different name.
-      expect(await oracleTest.connector.tableExists('Users')).toBe(false);
+      // Mixed case is taken as spelled (a quoted identifier), so 'Users' would
+      // be a different name; the unquoted spellings all resolve to USERS.
+      for (const name of ['users', 'USERS']) {
+        expect((await oracleTest.connector.getTableSchema(name)).length).toBeGreaterThan(0);
+      }
+      expect((await oracleTest.connector.getTableSchema('users', 'test')).length).toBeGreaterThan(0);
+      expect(await oracleTest.connector.getTableSchema('Users')).toEqual([]);
 
       const columns = await oracleTest.connector.getTableSchema('users');
       expect(columns.map((c) => c.column_name)).toEqual(['ID', 'NAME', 'EMAIL', 'AGE']);

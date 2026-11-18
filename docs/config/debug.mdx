@@ -8,7 +8,7 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a web-
 
 - Testing DBHub server functionality before integrating with AI tools
 - Debugging connection issues
-- Exploring available resources and tools
+- Exploring the available tools and their input schemas
 - Verifying SQL query execution
 
 Start DBHub with HTTP transport:
@@ -21,7 +21,7 @@ npx @bytebase/dbhub@latest --transport http --port 8080 --dsn "postgres://user:p
 npx @modelcontextprotocol/inspector
 ```
 
-The inspector will open in your browser where you can connect to `http://localhost:8080/mcp` and test all available tools and resources.
+The inspector will open in your browser where you can connect to `http://localhost:8080/mcp` and test all available tools.
 
 ![MCP Inspector with DBHub](https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/mcp-inspector.webp)
 
@@ -34,7 +34,7 @@ If you can't connect to DBHub:
 1. Verify DBHub is running with HTTP transport (`--transport http`)
 2. Check the port matches (default: 8080)
 3. Ensure no firewall is blocking the connection
-4. Test the endpoint directly: `curl http://localhost:8080/mcp`
+4. Check the server is up: `curl http://localhost:8080/healthz` should return `OK`. (`/mcp` itself only answers JSON-RPC POST requests, and needs the bearer token when `--auth-token` is set.)
 
 ### Server Fails to Start in an MCP Client
 
@@ -46,7 +46,7 @@ Run the same command the client runs in a terminal to see it. For Claude Code, `
 npx @bytebase/dbhub@latest --transport stdio --dsn "sqlite:///./shop.db"
 ```
 
-A common cause with SQLite is the path: `sqlite:///shop.db` is `/shop.db` at the root of the filesystem. Use `sqlite:///./shop.db` for a relative path. The startup output prints the absolute path DBHub opened, and the error names the file it could not open. See the [SQLite DSN formats](/config/command-line#--dsn).
+A common cause with SQLite is the path: `sqlite:///shop.db` is `/shop.db` at the root of the filesystem. Use `sqlite:///./shop.db` for a relative path. The startup output prints the absolute path DBHub opened, and the error names the file it could not open. See the [SQLite DSN formats](/config/command-line#param-dsn).
 
 ### Database Connection Errors
 

@@ -58,9 +58,6 @@ export default function SourceList({ sources, isLoading }: SourceListProps) {
             <span className="flex-1 flex items-center gap-1.5 min-w-0">
               <span className="truncate">{source.id}</span>
             </span>
-            {source.is_default && (
-              <span className="text-xs text-muted-foreground">default</span>
-            )}
           </Link>
         );
       })}
