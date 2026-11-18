@@ -32,6 +32,7 @@ describe('MySQL Connector Integration Tests', () => {
       sessionVariable: 'max_execution_time',
       oneSecond: 1000,
       clientTimeoutCode: 'PROTOCOL_SEQUENCE_TIMEOUT',
+      poolOfOne: true,
     },
   });
 

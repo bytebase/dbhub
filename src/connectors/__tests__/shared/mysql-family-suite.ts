@@ -18,6 +18,13 @@ export interface MySQLFamilyTraits {
     oneSecond: number;
     /** The error code of the client-side fallback. */
     clientTimeoutCode: string;
+    /**
+     * Run the client-side fallback on a pool of one. Only where the connector
+     * has `pool_max_connections` (MySQL): its kill has to reuse the slot of
+     * the connection it replaces. MariaDB has no such option (the TOML loader
+     * rejects it there) and its driver kills over a connection of its own.
+     */
+    poolOfOne?: boolean;
   };
 }
 
@@ -240,14 +247,12 @@ export abstract class MySQLFamilyIntegrationTest<
     });
 
     describe('query_timeout: client-side fallback', () => {
-      const { sessionVariable, oneSecond, clientTimeoutCode } = traits.queryTimeout;
+      const { sessionVariable, oneSecond, clientTimeoutCode, poolOfOne } = traits.queryTimeout;
 
       it('should fall back to the client-side timeout and kill the statement when the server limit is cleared', async () => {
         const probe = 'dbhub_client_timeout_probe';
-        // A pool of one where the connector supports the setting (MySQL): its
-        // kill has to reuse the slot of the connection it replaces. MariaDB's
-        // driver kills over a connection of its own.
-        await this.withConnector({ queryTimeoutSeconds: 1, poolMaxConnections: 1 }, (connector) =>
+        const pool = poolOfOne ? { poolMaxConnections: 1 } : {};
+        await this.withConnector({ queryTimeoutSeconds: 1, ...pool }, (connector) =>
           this.withConnector(undefined, async (observer) => {
             const runningProbeCount = async (): Promise<number> => {
               const result = await observer.executeSQL(
