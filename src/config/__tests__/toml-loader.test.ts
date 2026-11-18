@@ -509,6 +509,7 @@ wallet_password = "fieldSecret"
         ['search_path on PostgreSQL', 'postgres', 'search_path = "app"', "Use 'search_path' instead"],
         ['max_execution_time on ClickHouse', 'clickhouse', 'max_execution_time = 30', "Use 'query_timeout' instead"],
         ['readonly on ClickHouse', 'clickhouse', 'readonly = 2', "Use a tool's 'readonly' option"],
+        ['the errors-as-rows setting on ClickHouse', 'clickhouse', 'http_write_exception_in_output_format = 1', 'which DBHub turns off itself'],
         ['an HTTP interface parameter on ClickHouse', 'clickhouse', 'session_id = "abc"', "a parameter of ClickHouse's HTTP interface"],
         ['a query parameter binding on ClickHouse', 'clickhouse', 'param_tenant = "acme"', "a parameter of ClickHouse's HTTP interface"],
         ['an array value', 'mysql', 'sql_mode = ["ANSI"]', "invalid value for 'sql_mode'"],

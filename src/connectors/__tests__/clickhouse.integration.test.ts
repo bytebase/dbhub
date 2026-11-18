@@ -150,6 +150,16 @@ class ClickHouseIntegrationTest extends IntegrationTestBase<ClickHouseTestContai
       CREATE USER ro2 IDENTIFIED BY 'ro2pass' SETTINGS readonly = 2;
       GRANT SELECT, INSERT ON ${APP_DATABASE}.* TO ro1, ro2;
     `, {});
+
+    // readonly = 1 users with profiles a connector cannot adjust: one whose
+    // errors arrive as rows of the result, and one whose results arrive a row
+    // at a time, which keeps a slow response's socket busy.
+    await connector.executeSQL(`
+      CREATE USER ro1_errors_as_rows IDENTIFIED BY 'ro1pass'
+        SETTINGS http_write_exception_in_output_format = 1, max_block_size = 1000, readonly = 1;
+      CREATE USER ro1_row_at_a_time IDENTIFIED BY 'ro1pass' SETTINGS max_block_size = 1, readonly = 1;
+      GRANT SELECT ON ${APP_DATABASE}.* TO ro1_errors_as_rows, ro1_row_at_a_time;
+    `, {});
   }
 }
 
@@ -406,6 +416,30 @@ describe('ClickHouse Connector Integration Tests', () => {
       }
     });
 
+    it('should return decimals exactly for a readonly = 1 user, who cannot ask for them quoted', async () => {
+      const sql = `SELECT toDecimal128('12345678901234567890.12', 2) AS amount, toDecimal64('1.50', 2) AS small,
+                          [toDecimal128('12345678901234567890.12', 2)] AS nested, toUInt64(18446744073709551615) AS big`;
+      const expected = {
+        amount: '12345678901234567890.12',
+        small: '1.5',
+        nested: ['12345678901234567890.12'],
+        big: '18446744073709551615',
+      };
+
+      const restricted = clickhouseTest.createConnector();
+      try {
+        await restricted.connect(clickhouseTest.dsnFor('ro1', 'ro1pass'));
+        const result = await restricted.executeSQL(sql, { readonly: true });
+        expect({ ...result.resultSets[0].rows[0] }).toEqual(expected);
+      } finally {
+        await restricted.disconnect();
+      }
+
+      // The same values, in the same form, for a user whose settings can be set.
+      const unrestricted = await clickhouseTest.connector.executeSQL(sql, { readonly: true });
+      expect({ ...unrestricted.resultSets[0].rows[0] }).toEqual(expected);
+    });
+
     it('should refuse [sources.session] for a readonly = 1 user instead of dropping it', async () => {
       const connector = clickhouseTest.createConnector();
       await expect(
@@ -436,6 +470,69 @@ describe('ClickHouse Connector Integration Tests', () => {
         await connector.disconnect();
       }
     });
+
+    it('should not let a read-only statement lift a session limit for a readonly = 2 user', async () => {
+      const connector = clickhouseTest.createConnector();
+      try {
+        await connector.connect(clickhouseTest.dsnFor('ro2', 'ro2pass'), undefined, {
+          sessionSettings: { max_rows_to_read: 100 },
+        });
+        const overBudget = 'SELECT sum(number) FROM numbers(1000000)';
+        await expect(connector.executeSQL(overBudget, { readonly: true })).rejects.toMatchObject({
+          type: 'TOO_MANY_ROWS',
+        });
+        // The server would accept these from this user: the connector refuses them.
+        for (const clause of ['SETTINGS max_rows_to_read = 0', 'SETTINGS `max_rows_to_read` = 0']) {
+          await expect(
+            connector.executeSQL(`${overBudget} ${clause}`, { readonly: true })
+          ).rejects.toThrow(/SETTINGS clause is not allowed/);
+        }
+      } finally {
+        await connector.disconnect();
+      }
+    });
+  });
+
+  describe('Errors raised after rows were sent', () => {
+    // Fails 300,000 rows in, long after the response outgrew the server's buffer.
+    const failsLate = (expression: string): string =>
+      `SELECT ${expression} FROM numbers(400000)`;
+
+    it('should reject, whatever the number of columns', async () => {
+      for (const sql of [
+        failsLate("throwIf(number > 300000, 'review exception') AS n") + ' SETTINGS max_block_size = 1000',
+        failsLate("toString(throwIf(number > 300000, 'review exception')) AS s") + ' SETTINGS max_block_size = 1000',
+        failsLate("number, throwIf(number > 300000, 'review exception') AS n") + ' SETTINGS max_block_size = 1000',
+      ]) {
+        await expect(clickhouseTest.connector.executeSQL(sql, {})).rejects.toThrow(/review exception/);
+      }
+    });
+
+    it('should reject for a user whose profile has errors written as rows', async () => {
+      const connector = clickhouseTest.createConnector();
+      try {
+        await connector.connect(clickhouseTest.dsnFor('ro1_errors_as_rows', 'ro1pass'));
+        for (const expression of [
+          // A column that cannot hold text, and one that can
+          "throwIf(number > 300000, 'review exception') AS n",
+          "toString(throwIf(number > 300000, 'review exception')) AS s",
+        ]) {
+          await expect(
+            connector.executeSQL(failsLate(expression), { readonly: true })
+          ).rejects.toThrow(/review exception/);
+        }
+
+        // Text that reads as an error but is data is still returned.
+        const data = await connector.executeSQL(
+          "SELECT 'Code: 60. DB::Exception: Unknown table. (UNKNOWN_TABLE)' AS message", { readonly: true }
+        );
+        expect(value(data.resultSets[0].rows[0], 'message')).toBe(
+          'Code: 60. DB::Exception: Unknown table. (UNKNOWN_TABLE)'
+        );
+      } finally {
+        await connector.disconnect();
+      }
+    });
   });
 
   describe('Timeouts and scan budgets', () => {
@@ -451,6 +548,30 @@ describe('ClickHouse Connector Integration Tests', () => {
         const after = await connector.executeSQL('SELECT 1 AS ok', { readonly: true });
         expect(after.resultSets[0].rows[0]).toMatchObject({ ok: 1 });
       });
+    }, 30_000);
+
+    it('should stop a response that keeps sending rows past the client-side deadline', async () => {
+      // No server-side limit can be sent for a readonly = 1 user, and this
+      // response never goes quiet: a row arrives every 100 ms for 8 seconds.
+      const connector = clickhouseTest.createConnector();
+      try {
+        await connector.connect(clickhouseTest.dsnFor('ro1_row_at_a_time', 'ro1pass'), undefined, {
+          queryTimeoutSeconds: 0.1,
+        });
+        const started = Date.now();
+        await expect(
+          connector.executeSQL(
+            "SELECT repeat('x', 100000) AS s, sleepEachRow(0.1) FROM numbers(80)", { readonly: true }
+          )
+        ).rejects.toMatchObject({ code: 'DBHUB_CLIENT_QUERY_TIMEOUT' });
+        // query_timeout plus the client-side grace period, not the query's 8 seconds
+        expect(Date.now() - started).toBeLessThan(7000);
+
+        const after = await connector.executeSQL('SELECT 1 AS ok', { readonly: true });
+        expect(after.resultSets[0].rows[0]).toMatchObject({ ok: 1 });
+      } finally {
+        await connector.disconnect();
+      }
     }, 30_000);
 
     it('should apply [sources.session] scan budgets to every statement, read-only or not', async () => {

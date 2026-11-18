@@ -105,6 +105,9 @@ export function validateSessionSettings(
       if (name === "readonly") {
         return "sets 'readonly', which DBHub manages through each tool's 'readonly' option. Use a tool's 'readonly' option, or a read-only database user, instead.";
       }
+      if (name === "http_write_exception_in_output_format") {
+        return `sets '${name}', which DBHub turns off itself: with it on, an error raised part-way through a result could not be told from a row.`;
+      }
       // `param_<name>` binds a query parameter rather than changing a setting.
       if (CLICKHOUSE_HTTP_PARAMETERS.has(name) || name.startsWith("param_")) {
         return `sets '${name}', which is a parameter of ClickHouse's HTTP interface rather than a setting.`;

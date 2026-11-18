@@ -2,6 +2,7 @@ import https from "node:https";
 import {
   createClient,
   parseError,
+  ClickHouseError,
   ClickHouseLogLevel,
   type ClickHouseClient,
   type ClickHouseSettings,
@@ -22,7 +23,7 @@ import {
 } from "../interface.js";
 import { SafeURL, rawQueryParamValues } from "../../utils/safe-url.js";
 import { obfuscateDSNPassword, getDefaultPortForType } from "../../utils/dsn-obfuscate.js";
-import { splitSQLStatements } from "../../utils/sql-parser.js";
+import { splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { objectRows } from "../../utils/result-columns.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
 import { ClientQueryTimeoutError, clientQueryTimeoutMs } from "../../utils/query-timeout.js";
@@ -129,11 +130,22 @@ const ROW_FORMAT = "JSONCompactEachRowWithNamesAndTypes";
  */
 const RESPONSE_BUFFER_BYTES = 1024 * 1024;
 
-/** Largest delay a Node timer honours; used as "no client-side timeout". */
+/**
+ * Largest delay a Node timer honours. The client's own request timeout counts
+ * socket inactivity, which neither bounds a query that keeps sending rows nor
+ * tolerates one that computes for a while before its first row, so it is
+ * switched off with this value and Deadline bounds elapsed time instead.
+ */
 const NO_REQUEST_TIMEOUT_MS = 2_147_483_647;
 
-/** What the HTTP client reports when its request timeout fires. */
-const CLIENT_TIMEOUT_MESSAGE = "Timeout error.";
+/**
+ * Setting that makes the server report an error raised after it has started
+ * sending rows as one more row of the output format, a one-string array in
+ * ROW_FORMAT, which a single-column result cannot tell from data. Sent as 0
+ * wherever settings can be sent, so such an error arrives as text no row can
+ * be mistaken for.
+ */
+const EXCEPTION_IN_FORMAT_SETTING = "http_write_exception_in_output_format";
 
 /** Engines whose rows come from a stored SELECT rather than stored data. */
 const VIEW_ENGINES = "('View', 'MaterializedView', 'LiveView', 'WindowView')";
@@ -154,21 +166,104 @@ interface QuerySummary {
 }
 
 /**
- * JSON.parse reviver that keeps an integer too large for a double as its
- * source text. ClickHouse writes UInt64/Int64 as bare numbers unless
- * `output_format_json_quote_64bit_integers` is on (its default changed between
- * releases), and a plain JSON.parse would silently round e.g. a 64-bit id.
+ * JSON.parse reviver that keeps a number a double cannot hold exactly as its
+ * source text. ClickHouse writes 64-bit integers and decimals as bare numbers
+ * unless the output settings quote them, which a user restricted to
+ * `readonly = 1` cannot ask for, and a plain JSON.parse would silently round
+ * a 64-bit id or a Decimal(38, 2) amount.
+ *
+ * A literal is exact when the double it parses to prints back as the same
+ * digits. Floats pass, since ClickHouse writes them in the shortest form that
+ * round-trips, as JavaScript does; exponent notation is only ever a float.
  */
-function keepLargeIntegers(_key: string, value: unknown, context?: { source?: string }): unknown {
-  if (
-    typeof value === "number" &&
-    !Number.isSafeInteger(value) &&
-    context?.source !== undefined &&
-    /^-?\d+$/.test(context.source)
-  ) {
-    return context.source;
+export function keepExactNumbers(
+  _key: string,
+  value: unknown,
+  context?: { source?: string }
+): unknown {
+  const source = context?.source;
+  if (typeof value !== "number" || source === undefined || !/^-?\d+(?:\.\d+)?$/.test(source)) {
+    return value;
   }
-  return value;
+  // 1.50 and 1.5 are the same number; so are -0.0 and 0.
+  const digits = source.includes(".") ? source.replace(/\.?0+$/, "") : source;
+  return digits === String(value) || value === 0 ? value : source;
+}
+
+/** A type with its `Nullable(...)` and `LowCardinality(...)` wrappers removed. */
+function unwrapType(type: string): string {
+  const wrapped = /^(?:LowCardinality|Nullable)\((.*)\)$/s.exec(type);
+  return wrapped ? unwrapType(wrapped[1]) : type;
+}
+
+/** Whether a column of this type can hold arbitrary text, such as the text of an error. */
+function holdsFreeText(type: string): boolean {
+  return /^(?:String|FixedString|Enum|Variant|Dynamic|JSON|Object)/.test(unwrapType(type));
+}
+
+/** Whether a row is a single string that reads as a ClickHouse error message. */
+function isErrorMessageRow(values: unknown[]): values is [string] {
+  return (
+    values.length === 1 &&
+    typeof values[0] === "string" &&
+    parseError(values[0]) instanceof ClickHouseError
+  );
+}
+
+/**
+ * Whether a statement carries a `SETTINGS` clause, at any depth. Matched on
+ * the statement with comments, strings and quoted names blanked, so a quoted
+ * setting name (`SETTINGS \`max_threads\` = 1`) counts and the `system.settings`
+ * table does not.
+ */
+export function hasSettingsClause(statement: string): boolean {
+  return /\bsettings\b\s*(?:[a-z_][\w.]*\s*)?=/i.test(
+    stripCommentsAndStrings(statement, "clickhouse")
+  );
+}
+
+/**
+ * An elapsed-time limit on one request, from sending it to reading the last
+ * of its response. Passing the deadline aborts the request and, once the
+ * response is being read, closes it.
+ */
+class Deadline {
+  private readonly controller = new AbortController();
+  private timer?: NodeJS.Timeout;
+  private closeResponse?: () => void;
+  expired = false;
+
+  constructor(private readonly timeoutMs: number | undefined) {
+    if (timeoutMs !== undefined) {
+      this.timer = setTimeout(() => {
+        this.expired = true;
+        this.controller.abort();
+        this.closeResponse?.();
+      }, timeoutMs);
+    }
+  }
+
+  /** Signal for the request; undefined when there is no limit. */
+  get signal(): AbortSignal | undefined {
+    return this.timeoutMs === undefined ? undefined : this.controller.signal;
+  }
+
+  /** Register how to stop reading the response the request produced. */
+  whileReading(close: () => void): void {
+    this.closeResponse = close;
+    if (this.expired) {
+      close();
+    }
+  }
+
+  /** The error to report for `error`: the timeout, when that is what ended the request. */
+  explain(error: unknown): unknown {
+    return this.expired ? new ClientQueryTimeoutError(this.timeoutMs!) : error;
+  }
+
+  clear(): void {
+    clearTimeout(this.timer);
+  }
 }
 
 /**
@@ -220,7 +315,7 @@ function responseError(text: string): Error {
 function parseRowLine(text: string): unknown[] {
   let value: unknown;
   try {
-    value = JSON.parse(text, keepLargeIntegers as (key: string, value: unknown) => unknown);
+    value = JSON.parse(text, keepExactNumbers as (key: string, value: unknown) => unknown);
   } catch {
     throw responseError(text);
   }
@@ -305,8 +400,14 @@ export class ClickHouseConnector implements Connector {
   private userReadonly = 0;
   /** Settings sent with every request, when the user may change settings */
   private baseSettings: ClickHouseSettings = {};
-  /** Client-side request timeout, when query_timeout is configured */
-  private requestTimeoutMs?: number;
+  /** Client-side limit on a request's elapsed time, when query_timeout is configured */
+  private clientDeadlineMs?: number;
+  /**
+   * Whether the server may report an error as a row of the result (see
+   * EXCEPTION_IN_FORMAT_SETTING). False wherever the connector could turn that
+   * off; it can stay true only for a user restricted to `readonly = 1`.
+   */
+  private errorsAsRows = false;
   // Source ID is set by ConnectorManager after cloning
   private sourceId: string = "default";
 
@@ -325,11 +426,10 @@ export class ClickHouseConnector implements Connector {
         config?.queryTimeoutSeconds !== undefined
           ? Math.ceil(config.queryTimeoutSeconds * 1000)
           : undefined;
-      // The client's request timeout counts socket inactivity, and a running
-      // query sends nothing until it has rows, so without a query_timeout it
-      // must not fire at all. With one, it trails the server-side limit (see
-      // query-timeout.ts).
-      this.requestTimeoutMs =
+      // The client-side deadline trails the server-side limit (see
+      // query-timeout.ts). It is the only limit for a user who cannot be sent
+      // max_execution_time.
+      this.clientDeadlineMs =
         queryTimeoutMs !== undefined ? clientQueryTimeoutMs(queryTimeoutMs) : undefined;
 
       this.client = createClient({
@@ -338,7 +438,7 @@ export class ClickHouseConnector implements Connector {
         password: parsed.password,
         database: parsed.database,
         application: "dbhub",
-        request_timeout: this.requestTimeoutMs ?? NO_REQUEST_TIMEOUT_MS,
+        request_timeout: NO_REQUEST_TIMEOUT_MS,
         // Failures are thrown to the caller; the client's own logging of them
         // would only repeat each one on stderr.
         log: { level: ClickHouseLogLevel.OFF },
@@ -374,6 +474,7 @@ export class ClickHouseConnector implements Connector {
           );
         }
         this.baseSettings = {};
+        this.errorsAsRows = await this.profileWritesErrorsAsRows();
       } else {
         this.baseSettings = {
           // 64-bit integers as JSON numbers (keepLargeIntegers keeps the ones a
@@ -388,11 +489,23 @@ export class ClickHouseConnector implements Connector {
             max_execution_time: Math.ceil(queryTimeoutMs / 1000),
           }),
           ...(sessionSettings !== undefined && toClickHouseSettings(sessionSettings)),
+          [EXCEPTION_IN_FORMAT_SETTING]: 0,
         };
+        this.errorsAsRows = false;
         // A setting the server does not know, or will not take from this user,
         // would otherwise fail every statement. Fail the connection instead,
         // with the server's error naming the setting.
-        await this.catalog("SELECT 1");
+        try {
+          await this.catalog("SELECT 1");
+        } catch (error) {
+          // A server from before the setting existed never writes an error as
+          // a row, so there is nothing to turn off: go on without it.
+          if (!ClickHouseConnector.isUnknownSetting(error, EXCEPTION_IN_FORMAT_SETTING)) {
+            throw error;
+          }
+          delete this.baseSettings[EXCEPTION_IN_FORMAT_SETTING];
+          await this.catalog("SELECT 1");
+        }
       }
 
       if (initScript) {
@@ -437,6 +550,32 @@ export class ClickHouseConnector implements Connector {
     }
   }
 
+  private static isUnknownSetting(error: unknown, setting: string): boolean {
+    return (
+      error instanceof ClickHouseError &&
+      error.type === "UNKNOWN_SETTING" &&
+      error.message.includes(setting)
+    );
+  }
+
+  /**
+   * For a user who cannot change settings: whether their profile has the
+   * server write errors as rows. Anything short of a clear "no" counts as
+   * yes, which only costs the extra scrutiny runStatement gives a last row.
+   */
+  private async profileWritesErrorsAsRows(): Promise<boolean> {
+    try {
+      const rows = await this.catalog<{ value: string }>(
+        "SELECT value FROM system.settings WHERE name = {name:String}",
+        { name: EXCEPTION_IN_FORMAT_SETTING }
+      );
+      // No such setting: a server from before it existed.
+      return rows.length > 0 && rows[0].value !== "0";
+    } catch {
+      return true;
+    }
+  }
+
   async disconnect(): Promise<void> {
     if (this.client) {
       const client = this.client;
@@ -470,30 +609,23 @@ export class ClickHouseConnector implements Connector {
     };
   }
 
-  /** Report the client's request timeout the way the other connectors report theirs. */
-  private translateError(error: unknown): unknown {
-    if (
-      this.requestTimeoutMs !== undefined &&
-      error instanceof Error &&
-      error.message === CLIENT_TIMEOUT_MESSAGE
-    ) {
-      return new ClientQueryTimeoutError(this.requestTimeoutMs);
-    }
-    return error;
-  }
-
   /** Run a catalog query, read-only, and return its rows as objects. */
   private async catalog<T>(query: string, params: Record<string, unknown> = {}): Promise<T[]> {
+    const deadline = new Deadline(this.clientDeadlineMs);
     try {
       const resultSet = await this.requireClient().query({
         query,
         format: "JSONEachRow",
         query_params: params,
         clickhouse_settings: this.settingsFor(true),
+        abort_signal: deadline.signal,
       });
+      deadline.whileReading(() => resultSet.close());
       return await resultSet.json<T>();
     } catch (error) {
-      throw this.translateError(error);
+      throw deadline.explain(error);
+    } finally {
+      deadline.clear();
     }
   }
 
@@ -694,6 +826,15 @@ export class ClickHouseConnector implements Connector {
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
     const client = this.requireClient();
     const statements = splitSQLStatements(sql, "clickhouse");
+    // Under `readonly = 1` the server refuses a statement that changes
+    // settings. A user whose own profile is `readonly = 2` cannot be sent that
+    // setting and may change others, so the same refusal is made here: without
+    // it a read-only statement could lift the limits [sources.session] sets.
+    if (options.readonly && this.userReadonly === 2 && statements.some(hasSettingsClause)) {
+      throw new Error(
+        "Read-only mode: a SETTINGS clause is not allowed, as it could override the limits configured for this source"
+      );
+    }
     const queryParams =
       parameters && parameters.length > 0
         ? Object.fromEntries(parameters.map((value, index) => [`p${index + 1}`, value]))
@@ -735,19 +876,36 @@ export class ClickHouseConnector implements Connector {
   ): Promise<{ resultSet: SQLResultSet; summary?: QuerySummary }> {
     const maxRows = options.maxRows;
     let columnNames: string[] | undefined;
-    let typesSeen = false;
+    let columnTypes: string[] | undefined;
     const rows: unknown[][] = [];
-    let truncated = false;
+    // Widened: it is set inside `accept`, which narrowing does not follow.
+    let truncated = false as boolean;
     let bytes = 0;
     let summary: QuerySummary | undefined;
+    // A row that reads as an error message, held back until the next line
+    // shows it was data or the end of the response shows it was the last.
+    let heldBack: [string] | undefined;
 
+    /** Take a row into the result; false once the cap says to stop reading. */
+    const accept = (values: unknown[]): boolean => {
+      if (maxRows && rows.length >= maxRows) {
+        truncated = true;
+        return false;
+      }
+      rows.push(values);
+      return true;
+    };
+
+    const deadline = new Deadline(this.clientDeadlineMs);
     try {
       const response = await client.query({
         query: statement,
         format: ROW_FORMAT,
         query_params: queryParams,
         clickhouse_settings: this.settingsFor(options.readonly),
+        abort_signal: deadline.signal,
       });
+      deadline.whileReading(() => response.close());
       summary = parseSummary(response.response_headers["x-clickhouse-summary"]);
       try {
         reading: for await (const lines of response.stream()) {
@@ -756,19 +914,28 @@ export class ClickHouseConnector implements Connector {
             const values = parseRowLine(line.text);
             if (columnNames === undefined) {
               columnNames = values.map(String);
-            } else if (!typesSeen) {
-              typesSeen = true;
-            } else if (values.length !== columnNames.length) {
-              // Not a row of this result: a server that writes exceptions in
-              // the output format sends one as a single-string array.
-              throw responseError(
-                values.length === 1 && typeof values[0] === "string" ? values[0] : line.text
-              );
-            } else if (maxRows && rows.length >= maxRows) {
-              truncated = true;
+              continue;
+            }
+            if (columnTypes === undefined) {
+              columnTypes = values.map(String);
+              continue;
+            }
+            if (values.length !== columnNames.length) {
+              // Not a row of this result: an error written as a row is a
+              // single string, whatever the number of columns.
+              throw responseError(isErrorMessageRow(values) ? values[0] : line.text);
+            }
+            if (heldBack !== undefined) {
+              const wasData = heldBack;
+              heldBack = undefined;
+              if (!accept(wasData)) {
+                break reading;
+              }
+            }
+            if (this.errorsAsRows && isErrorMessageRow(values)) {
+              heldBack = values;
+            } else if (!accept(values)) {
               break reading;
-            } else {
-              rows.push(values);
             }
           }
         }
@@ -776,9 +943,37 @@ export class ClickHouseConnector implements Connector {
         // Releases the socket when reading stopped early; a no-op otherwise.
         response.close();
       }
+      if (heldBack !== undefined && !truncated) {
+        // The response ended on a one-string row that reads as an error, from
+        // a server that writes errors as rows. It is the error when the column
+        // could not hold such text, or when the response had outgrown the
+        // server's buffer: an error raised before that point is sent as an
+        // HTTP error instead, so a row this early is data.
+        const isError =
+          !holdsFreeText(columnTypes?.[0] ?? "") || bytes >= RESPONSE_BUFFER_BYTES;
+        if (isError) {
+          throw responseError(heldBack[0]);
+        }
+        accept(heldBack);
+      }
     } catch (error) {
-      throw this.translateError(error);
+      throw deadline.explain(error);
+    } finally {
+      deadline.clear();
     }
+
+    // Decimal columns as text for every user: a server that could not be told
+    // to quote them sends bare numbers, of which keepExactNumbers has already
+    // kept the inexact ones as text.
+    columnTypes?.forEach((type, column) => {
+      if (unwrapType(type).startsWith("Decimal")) {
+        for (const row of rows) {
+          if (typeof row[column] === "number") {
+            row[column] = String(row[column]);
+          }
+        }
+      }
+    });
 
     const summaryIsFinal = !truncated && bytes < RESPONSE_BUFFER_BYTES;
     const resultSet: SQLResultSet = {

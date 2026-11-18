@@ -9,6 +9,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   ClickHouseConnector,
   describeSummary,
+  hasSettingsClause,
+  keepExactNumbers,
   splitKeyExpression,
 } from '../clickhouse/index.js';
 import type { ConnectorConfig } from '../interface.js';
@@ -34,6 +36,8 @@ interface FakeResponse {
   summary?: Record<string, string>;
   /** Overrides the X-ClickHouse-Format header (default: the format the request asked for). */
   format?: string;
+  /** Sends `body` forever, one copy every few milliseconds, instead of once. */
+  endless?: boolean;
 }
 
 /** Body of a ROW_FORMAT result. */
@@ -49,6 +53,8 @@ class FakeClickHouse {
   readonly requests: SeenRequest[] = [];
   /** The `readonly` level the connected user reports. */
   readonly = '0';
+  /** The user's http_write_exception_in_output_format, or null on a server without the setting. */
+  exceptionInFormat: string | null = '0';
   respond: (request: SeenRequest) => FakeResponse = () => ({});
   private readonly server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
@@ -65,11 +71,21 @@ class FakeClickHouse {
         res.end(JSON.stringify({ database: 'analytics', readonly: this.readonly }) + '\n');
         return;
       }
+      if (seen.body.includes('FROM system.settings WHERE name = {name:String}')) {
+        res.writeHead(200, { 'X-ClickHouse-Format': format });
+        res.end(this.exceptionInFormat === null ? '' : JSON.stringify({ value: this.exceptionInFormat }) + '\n');
+        return;
+      }
       const response = this.respond(seen);
       res.writeHead(response.status ?? 200, {
         'X-ClickHouse-Format': response.format ?? format,
         ...(response.summary && { 'X-ClickHouse-Summary': JSON.stringify(response.summary) }),
       });
+      if (response.endless) {
+        const drip = setInterval(() => res.write(response.body ?? ''), 20);
+        res.on('close', () => clearInterval(drip));
+        return;
+      }
       res.end(response.body ?? '');
     });
   });
@@ -143,6 +159,20 @@ describe('ClickHouseConnector', () => {
       expect(check.params.get('readonly')).toBe('1');
     });
 
+    it('goes without http_write_exception_in_output_format on a server that predates it', async () => {
+      fake.respond = ({ params }) =>
+        params.has('http_write_exception_in_output_format')
+          ? { status: 400, body: "Code: 115. DB::Exception: Unknown setting 'http_write_exception_in_output_format'. (UNKNOWN_SETTING)" }
+          : {};
+
+      await connect({ sessionSettings: { max_rows_to_read: 1000 } });
+      await connector.executeSQL('SELECT 1', {});
+
+      const { params } = fake.statements[0];
+      expect(params.has('http_write_exception_in_output_format')).toBe(false);
+      expect(params.get('max_rows_to_read')).toBe('1000');
+    });
+
     it('authenticates with the DSN credentials', async () => {
       let authorization: string | undefined;
       const server = http.createServer((req, res) => {
@@ -214,6 +244,7 @@ describe('ClickHouseConnector', () => {
       expect(request.params.get('output_format_json_quote_64bit_integers')).toBe('0');
       expect(request.params.get('output_format_json_quote_decimals')).toBe('1');
       expect(request.params.get('cancel_http_readonly_queries_on_client_close')).toBe('1');
+      expect(request.params.get('http_write_exception_in_output_format')).toBe('0');
       expect(request.params.get('buffer_size')).toBe('1048576');
     });
 
@@ -292,8 +323,15 @@ describe('ClickHouseConnector', () => {
       await connect({ queryTimeoutSeconds: 30 });
       await connector.executeSQL('SELECT 1', { readonly: true });
 
-      // Nothing but the probe at connect time: there are no settings to check.
-      expect(fake.connectRequests).toBe(1);
+      // At connect time: the probe, and a look at one profile setting. Neither sends a setting.
+      expect(fake.connectRequests).toBe(2);
+      expect([...fake.requests[1].params.keys()].sort()).toEqual([
+        'buffer_size',
+        'database',
+        'default_format',
+        'param_name',
+        'query_id',
+      ]);
       // What is left are parameters of the HTTP interface, which are not settings.
       expect([...fake.statements[0].params.keys()].sort()).toEqual([
         'buffer_size',
@@ -320,6 +358,103 @@ describe('ClickHouseConnector', () => {
       expect(params.get('max_rows_to_read')).toBe('1000');
       expect(params.has('readonly')).toBe(false);
     });
+  });
+
+  describe('a SETTINGS clause from a readonly = 2 user', () => {
+    beforeEach(async () => {
+      fake.readonly = '2';
+      await connect({ sessionSettings: { max_rows_to_read: 100 } });
+    });
+
+    it.each([
+      ['a trailing clause', 'SELECT sum(number) FROM numbers(1000000) SETTINGS max_rows_to_read = 0'],
+      ['a quoted setting name', 'SELECT 1 SETTINGS `max_rows_to_read` = 0'],
+      ['a clause inside a subquery', 'SELECT * FROM (SELECT 1 SETTINGS max_threads = 1)'],
+      ['a clause in a later statement of the batch', 'SELECT 1; SELECT 2 SETTINGS max_threads = 1'],
+    ])('is refused for a read-only tool: %s', async (_label, sql) => {
+      await expect(connector.executeSQL(sql, { readonly: true })).rejects.toThrow(
+        /SETTINGS clause is not allowed/
+      );
+      // Refused before anything is sent, the earlier statements of a batch included.
+      expect(fake.statements).toHaveLength(0);
+    });
+
+    it('leaves statements without one alone, the system.settings table included', async () => {
+      await connector.executeSQL(
+        "SELECT name, value FROM system.settings WHERE name = 'max_threads' -- SETTINGS x = 1",
+        { readonly: true }
+      );
+      expect(fake.statements).toHaveLength(1);
+    });
+
+    it('is left to the server for a tool that is not read-only', async () => {
+      await connector.executeSQL('SELECT 1 SETTINGS max_threads = 1', {});
+      expect(fake.statements).toHaveLength(1);
+    });
+  });
+
+  describe('errors a readonly = 1 profile has the server write as rows', () => {
+    const errorText =
+      "Code: 395. DB::Exception: review exception: while executing 'FUNCTION throwIf()'. (FUNCTION_THROW_IF_VALUE_IS_NON_ZERO) (version 25.8.1.1)";
+    // More rows than fit the server's buffer, so the response is one it had begun to send.
+    const streamed = (value: unknown) => Array.from({ length: 150000 }, () => [value]);
+
+    beforeEach(async () => {
+      fake.readonly = '1';
+      fake.exceptionInFormat = '1';
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await connect();
+    });
+
+    it('rejects when the last row of a one-column result is the error', async () => {
+      fake.respond = () => ({ body: result(['n'], ['UInt8'], [[0], [0], [errorText]]) });
+
+      await expect(connector.executeSQL('SELECT throwIf(...) AS n FROM t', {})).rejects.toMatchObject({
+        code: '395',
+        type: 'FUNCTION_THROW_IF_VALUE_IS_NON_ZERO',
+      });
+    });
+
+    it('rejects when a text column of a response that had begun streaming ends on the error', async () => {
+      fake.respond = () => ({ body: result(['s'], ['String'], [...streamed('some text'), [errorText]]) });
+
+      await expect(connector.executeSQL('SELECT s FROM t', {})).rejects.toMatchObject({ code: '395' });
+    });
+
+    it('returns error text that is data: in a short result, or followed by more rows', async () => {
+      fake.respond = () => ({ body: result(['exception'], ['String'], [['ok'], [errorText]]) });
+      const short = await connector.executeSQL('SELECT exception FROM system.query_log', {});
+      expect(short.resultSets[0].rows.map((row) => row.exception)).toEqual(['ok', errorText]);
+
+      fake.respond = () => ({
+        body: result(['exception'], ['Nullable(String)'], [...streamed('x'), [errorText], ['after']]),
+      });
+      const long = await connector.executeSQL('SELECT exception FROM system.query_log', {});
+      expect(long.resultSets[0].rowCount).toBe(150002);
+      expect(long.resultSets[0].rows.at(-2)?.exception).toBe(errorText);
+    });
+
+    it('counts a held-back row against max_rows like any other', async () => {
+      fake.respond = () => ({ body: result(['s'], ['String'], [['a'], [errorText], ['b'], ['c']]) });
+
+      const { resultSets } = await connector.executeSQL('SELECT s FROM t', { maxRows: 2 });
+
+      expect(resultSets[0].rows.map((row) => row.s)).toEqual(['a', errorText]);
+      expect(resultSets[0].truncated).toBe(true);
+    });
+  });
+
+  it('returns error-like text as data when the server cannot write errors as rows', async () => {
+    await connect();
+    const errorText = 'Code: 60. DB::Exception: Unknown table. (UNKNOWN_TABLE)';
+    fake.respond = () => ({
+      body: result(['exception'], ['String'], [...Array.from({ length: 150000 }, () => ['x']), [errorText]]),
+    });
+
+    const { resultSets } = await connector.executeSQL('SELECT exception FROM system.query_log', {});
+
+    expect(resultSets[0].rowCount).toBe(150001);
+    expect(resultSets[0].rows.at(-1)?.exception).toBe(errorText);
   });
 
   describe('executeSQL result', () => {
@@ -360,6 +495,28 @@ describe('ClickHouseConnector', () => {
         arr: ['9007199254740993', 1],
         f: 1.5,
       });
+    });
+
+    it('keeps decimals exact when the server sends them as bare numbers', async () => {
+      // What a readonly = 1 user gets: no setting can ask for quoted decimals.
+      fake.readonly = '1';
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      await connect();
+      fake.respond = () => ({
+        body:
+          '["amount","small","nullable","nested","ratio"]\n' +
+          '["Decimal(38, 2)","Decimal(18, 2)","Nullable(Decimal(9, 3))","Array(Decimal(38, 2))","Float64"]\n' +
+          '[12345678901234567890.12,1.50,0.125,[12345678901234567890.12,2.5],0.1]\n' +
+          '[-0.01,100,null,[],1e-7]\n',
+      });
+
+      const { resultSets } = await connector.executeSQL('SELECT ...', {});
+
+      expect(resultSets[0].rows.map((row) => ({ ...row }))).toEqual([
+        // Decimal columns are text whether or not a double could hold the value
+        { amount: '12345678901234567890.12', small: '1.5', nullable: '0.125', nested: ['12345678901234567890.12', 2.5], ratio: 0.1 },
+        { amount: '-0.01', small: '100', nullable: null, nested: [], ratio: 1e-7 },
+      ]);
     });
 
     it('returns an empty result for a query with columns but no rows', async () => {
@@ -538,6 +695,23 @@ describe('ClickHouseConnector', () => {
         code: '62',
       });
       expect(fake.statements.map((request) => request.body)).toEqual(['SELECT 1 AS n', 'boom']);
+    });
+
+    it('times out a response that keeps sending rows past the deadline', async () => {
+      await connect({ queryTimeoutSeconds: 1 });
+      fake.respond = ({ body }) =>
+        body.includes('slow')
+          ? { body: result(['n'], ['UInt8'], [[1]]), endless: true }
+          : { body: result(['n'], ['UInt8'], [[1]]) };
+
+      const started = Date.now();
+      await expect(connector.executeSQL('SELECT n FROM slow', {})).rejects.toMatchObject({
+        code: 'DBHUB_CLIENT_QUERY_TIMEOUT',
+      });
+      expect(Date.now() - started).toBeLessThan(2000);
+
+      const after = await connector.executeSQL('SELECT 1 AS n', {});
+      expect(after.resultSets[0].rows.map((row) => row.n)).toEqual([1]);
     });
 
     it('reports the client-side request timeout as a query timeout', async () => {
@@ -759,6 +933,65 @@ describe.skipIf(certificate === null)('ClickHouseConnector over HTTPS', () => {
 
   it('speaks plain HTTP when no sslmode is given, which a TLS-only server does not answer', async () => {
     await expect(connector.connect(`clickhouse://default:pw@localhost:${port}/default`)).rejects.toThrow();
+  });
+});
+
+describe('keepExactNumbers', () => {
+  const parse = (text: string): unknown =>
+    JSON.parse(text, keepExactNumbers as (key: string, value: unknown) => unknown);
+
+  it.each([
+    ['a 64-bit integer past the safe range', '18446744073709551615', '18446744073709551615'],
+    ['the first integer a double skips', '9007199254740993', '9007199254740993'],
+    ['a decimal with more digits than a double holds', '12345678901234567890.12', '12345678901234567890.12'],
+    ['a negative one', '-99999999999999999.99', '-99999999999999999.99'],
+    ['a small decimal a double prints in exponent form', '0.0000001', '0.0000001'],
+  ])('keeps %s as text', (_label, literal, expected) => {
+    expect(parse(literal)).toBe(expected);
+  });
+
+  it.each([
+    ['a small integer', '42', 42],
+    ['an integer a double holds exactly, however large', '9007199254740992', 9007199254740992],
+    ['a float', '0.1', 0.1],
+    ['a float printed in full', '0.30000000000000004', 0.30000000000000004],
+    ['a large float printed without an exponent', '123456789012345680000', 123456789012345680000],
+    ['a decimal with trailing zeros', '1.50', 1.5],
+    ['zero in any spelling', '-0.00', -0],
+    ['exponent notation', '1e-7', 1e-7],
+  ])('leaves %s a number', (_label, literal, expected) => {
+    expect(parse(literal)).toBe(expected);
+  });
+
+  it('applies inside arrays and objects, and leaves strings alone', () => {
+    expect(parse('[[18446744073709551615, 1], {"a": 0.5, "b": "18446744073709551615"}]')).toEqual([
+      ['18446744073709551615', 1],
+      { a: 0.5, b: '18446744073709551615' },
+    ]);
+  });
+});
+
+describe('hasSettingsClause', () => {
+  it.each([
+    'SELECT 1 SETTINGS max_threads = 1',
+    'SELECT 1 settings max_threads=1, max_rows_to_read = 0',
+    'SELECT 1 SETTINGS `max_threads` = 1',
+    'SELECT 1 SETTINGS /* why */ max_threads = 1',
+    'SELECT * FROM (SELECT 1 SETTINGS max_threads = 1) FORMAT JSON',
+    'EXPLAIN SELECT 1 SETTINGS max_threads = 1',
+  ])('finds the clause in %j', (sql) => {
+    expect(hasSettingsClause(sql)).toBe(true);
+  });
+
+  it.each([
+    'SELECT * FROM system.settings',
+    "SELECT * FROM system.settings WHERE name = 'max_threads'",
+    'SELECT name FROM system.settings AS s WHERE s.changed = 1',
+    "SELECT 'SETTINGS max_threads = 1' AS text",
+    'SELECT 1 -- SETTINGS max_threads = 1',
+    'SELECT merge_tree_settings FROM t',
+  ])('finds none in %j', (sql) => {
+    expect(hasSettingsClause(sql)).toBe(false);
   });
 });
 
