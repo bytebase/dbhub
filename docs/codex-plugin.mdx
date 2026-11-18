@@ -1,0 +1,53 @@
+---
+title: "Codex Plugin"
+description: "Install DBHub in Codex as a plugin — read-only MCP server plus setup and schema-exploration skills"
+---
+
+The Codex plugin is the native install path for [Codex](https://developers.openai.com/codex): two commands register the DBHub MCP server and add two skills that teach Codex how to connect and how to explore schemas token-efficiently. Like the [MCP Bundle](/mcpb) and the [Claude Code Plugin](/claude-code-plugin), it is **read-only by design**.
+
+It is the same [`plugin/`](https://github.com/bytebase/dbhub/tree/main/plugin) directory the Claude Code plugin uses, with a Codex manifest alongside, and includes:
+
+- **MCP server** — runs `npx @bytebase/dbhub` (pinned to the plugin version) over stdio against a bundled read-only configuration.
+- **`dbhub:setup`** — helps you build the connection string, troubleshoot connection failures, and graduate to a multi-database TOML config when you outgrow the plugin.
+- **`dbhub:explore`** — teaches Codex the progressive-disclosure workflow for [`search_objects`](/tools/search-objects) (`names` → `summary` → `full`), keeping schema exploration cheap on large databases.
+
+## Install
+
+Set your database connection string (DSN) in the environment Codex starts from — for example in `~/.zshrc`:
+
+```bash
+export DBHUB_DSN="postgres://user:password@localhost:5432/dbname"
+```
+
+Then add the DBHub marketplace (defined in this repository) and install the plugin:
+
+```bash
+codex plugin marketplace add bytebase/dbhub
+codex plugin add dbhub@dbhub
+```
+
+Start Codex from a shell that has `DBHUB_DSN` set and run `/mcp` to confirm the `dbhub` server is connected.
+
+<Note>
+Codex has no install-time prompt for plugin settings, so the plugin forwards `DBHUB_DSN` from Codex's own environment instead of storing the connection string anywhere. If the variable is unset, the server exits at startup with `references unset environment variable(s): DBHUB_DSN`.
+</Note>
+
+<Note>
+Requires Node.js >= 22.5.0 on the machine running Codex — `npx` fetches the `@bytebase/dbhub` package on first launch, which can take up to a minute (the plugin allows 120 seconds). The machine connects **directly** to the database, so the database must be reachable from it (VPN or network allow-list).
+</Note>
+
+For development on the plugin itself, add a checkout as a local marketplace instead: `codex plugin marketplace add ./dbhub`.
+
+## Read-only by design
+
+The plugin ships the same bundled read-only policy as the [MCP Bundle](/mcpb#read-only-by-design): `readonly = true` and `max_rows = 1000` on `execute_sql`, plus engine-level read-only enforcement. Still, connect with a least-privilege, read-only database account — defense in depth beats configuration alone. See [Read-Only Mode](/config/read-only-mode) for what the setting does and does not cover.
+
+## When to use the plugin vs. `codex mcp add`
+
+The plugin covers the common case: one database, read-only, zero config files. For write access, multiple databases, SSH tunnels, or [custom tools](/tools/custom-tools), register DBHub directly with your own [TOML configuration](/config/toml):
+
+```bash
+codex mcp add dbhub -- npx -y @bytebase/dbhub@latest --transport stdio --config /path/to/dbhub.toml
+```
+
+Remove the plugin afterwards (`codex plugin remove dbhub@dbhub`) to avoid two overlapping DBHub instances. See the [Installation guide](/installation#codex) for all Codex registration options.

@@ -1,4 +1,5 @@
 ---
+name: explore
 description: Explore a database schema token-efficiently via the DBHub tools; use before writing SQL against a schema you haven't seen.
 ---
 

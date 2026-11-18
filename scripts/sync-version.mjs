@@ -1,6 +1,6 @@
 // Propagates package.json's version into the files that can't be stamped at
-// build/install time: the Claude Code plugin (source-distributed — read
-// straight from git, no build step) and server.json (its own version field
+// build/install time: the Claude Code / Codex plugin (source-distributed —
+// read straight from git, no build step) and server.json (its own version field
 // is what triggers the MCP Registry publish workflow on push).
 //
 // mcpb/manifest.json is NOT included here — scripts/build-mcpb.mjs stamps it
@@ -32,16 +32,23 @@ function writeJsonIfChanged(relPath, mutate) {
   }
 }
 
-writeJsonIfChanged("plugin/.claude-plugin/plugin.json", (manifest) => {
-  manifest.version = version;
-});
+// plugin/ is one directory serving two hosts: Claude Code reads
+// .claude-plugin/plugin.json + .mcp.json, Codex reads .codex-plugin/plugin.json
+// + mcp.codex.json.
+for (const manifestPath of ["plugin/.claude-plugin/plugin.json", "plugin/.codex-plugin/plugin.json"]) {
+  writeJsonIfChanged(manifestPath, (manifest) => {
+    manifest.version = version;
+  });
+}
 
-writeJsonIfChanged("plugin/.mcp.json", (mcp) => {
-  const args = mcp.mcpServers.dbhub.args;
-  const i = args.findIndex((a) => a.startsWith("@bytebase/dbhub@"));
-  if (i === -1) throw new Error("plugin/.mcp.json: could not find '@bytebase/dbhub@<version>' in args");
-  args[i] = `@bytebase/dbhub@${version}`;
-});
+for (const mcpPath of ["plugin/.mcp.json", "plugin/mcp.codex.json"]) {
+  writeJsonIfChanged(mcpPath, (mcp) => {
+    const args = mcp.mcpServers.dbhub.args;
+    const i = args.findIndex((a) => a.startsWith("@bytebase/dbhub@"));
+    if (i === -1) throw new Error(`${mcpPath}: could not find '@bytebase/dbhub@<version>' in args`);
+    args[i] = `@bytebase/dbhub@${version}`;
+  });
+}
 
 writeJsonIfChanged("server.json", (server) => {
   server.version = version;
