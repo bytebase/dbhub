@@ -1,410 +1,49 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { MySqlContainer, StartedMySqlContainer } from '@testcontainers/mysql';
+import { describe, it, expect } from 'vitest';
+import { MySqlContainer, type StartedMySqlContainer } from '@testcontainers/mysql';
 import mysql from 'mysql2/promise';
 import { MySQLConnector, applyOnEveryConnection } from '../mysql/index.js';
-import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
-import { settle, waitFor } from './shared/query-timeout-helpers.js';
+import { MySQLFamilyIntegrationTest } from './shared/mysql-family-suite.js';
+import { settle } from './shared/query-timeout-helpers.js';
 import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from '../../utils/query-timeout.js';
 import type { Connector } from '../interface.js';
 
-class MySQLTestContainer implements TestContainer {
-  constructor(private container: StartedMySqlContainer) {}
-  
-  getConnectionUri(): string {
-    return this.container.getConnectionUri();
-  }
-  
-  async stop(): Promise<void> {
-    await this.container.stop();
-  }
-}
-
-class MySQLIntegrationTest extends IntegrationTestBase<MySQLTestContainer> {
-  constructor() {
-    const config: DatabaseTestConfig = {
-      expectedSchemas: ['testdb'],
-      expectedTables: ['users', 'orders', 'products'],
-      supportsStoredProcedures: false, // Disabled due to container privilege restrictions
-      supportsComments: true,
-    };
-    super(config);
-  }
-
-  async createContainer(): Promise<MySQLTestContainer> {
-    const container = await new MySqlContainer('mysql:8.0')
+class MySQLIntegrationTest extends MySQLFamilyIntegrationTest<StartedMySqlContainer> {
+  createContainer(): Promise<StartedMySqlContainer> {
+    return new MySqlContainer('mysql:8.0')
       .withDatabase('testdb')
       .withRootPassword('rootpass')
       .start();
-    
-    return new MySQLTestContainer(container);
   }
 
   createConnector(): Connector {
     return new MySQLConnector();
   }
-
-  createSSLTests(): void {
-    describe('SSL Connection Tests', () => {
-      it('should handle SSL mode disable connection', async () => {
-        const baseUri = this.connectionString;
-        const sslDisabledUri = baseUri.includes('?') ? 
-          `${baseUri}&sslmode=disable` : 
-          `${baseUri}?sslmode=disable`;
-        
-        const sslDisabledConnector = new MySQLConnector();
-        
-        // Should connect successfully with sslmode=disable
-        await expect(sslDisabledConnector.connect(sslDisabledUri)).resolves.not.toThrow();
-        
-        // Check SSL status - cipher should be empty when SSL is disabled
-        const result = await sslDisabledConnector.executeSQL("SHOW SESSION STATUS LIKE 'Ssl_cipher'", {});
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].Variable_name).toBe('Ssl_cipher');
-        expect(result.resultSets[0].rows[0].Value).toBe('');
-        
-        await sslDisabledConnector.disconnect();
-      });
-
-      it('should handle SSL mode require connection', async () => {
-        const baseUri = this.connectionString;
-        const sslRequiredUri = baseUri.includes('?') ? 
-          `${baseUri}&sslmode=require` : 
-          `${baseUri}?sslmode=require`;
-        
-        const sslRequiredConnector = new MySQLConnector();
-        
-        // In test containers, SSL may not be supported, so we expect either success or SSL not supported error
-        try {
-          await sslRequiredConnector.connect(sslRequiredUri);
-          
-          // If connection succeeds, check SSL status - cipher should be non-empty when SSL is enabled
-          const result = await sslRequiredConnector.executeSQL("SHOW SESSION STATUS LIKE 'Ssl_cipher'", {});
-          expect(result.resultSets[0].rows).toHaveLength(1);
-          expect(result.resultSets[0].rows[0].Variable_name).toBe('Ssl_cipher');
-          expect(result.resultSets[0].rows[0].Value).not.toBe('');
-          expect(result.resultSets[0].rows[0].Value).toBeTruthy();
-          
-          await sslRequiredConnector.disconnect();
-        } catch (error) {
-          // If SSL is not supported by the test container, that's expected
-          expect(error instanceof Error).toBe(true);
-          expect((error as Error).message).toMatch(/SSL|does not support SSL/);
-        }
-      });
-    });
-  }
-
-  async setupTestData(connector: Connector): Promise<void> {
-    // Create users table
-    await connector.executeSQL(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        age INT
-      )
-    `, {});
-
-    // Create orders table
-    await connector.executeSQL(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT,
-        total DECIMAL(10,2),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
-    `, {});
-
-    // Create products table in main database
-    await connector.executeSQL(`
-      CREATE TABLE IF NOT EXISTS products (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        price DECIMAL(10,2)
-      )
-    `, {});
-
-    // Add table and column comments
-    await connector.executeSQL(`ALTER TABLE users COMMENT = 'Application users'`, {});
-    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN name VARCHAR(100) NOT NULL COMMENT 'Full name of the user'`, {});
-    await connector.executeSQL(`ALTER TABLE users MODIFY COLUMN email VARCHAR(100) UNIQUE NOT NULL COMMENT 'Unique email address'`, {});
-
-    // Insert test data
-    await connector.executeSQL(`
-      INSERT IGNORE INTO users (name, email, age) VALUES
-      ('John Doe', 'john@example.com', 30),
-      ('Jane Smith', 'jane@example.com', 25),
-      ('Bob Johnson', 'bob@example.com', 35)
-    `, {});
-
-    await connector.executeSQL(`
-      INSERT IGNORE INTO orders (user_id, total) VALUES 
-      (1, 99.99),
-      (1, 149.50),
-      (2, 75.25)
-    `, {});
-
-    await connector.executeSQL(`
-      INSERT IGNORE INTO products (name, price) VALUES 
-      ('Widget A', 19.99),
-      ('Widget B', 29.99)
-    `, {});
-
-    // Note: Stored procedures/functions are skipped in tests due to container privilege restrictions
-  }
 }
 
-// Create the test suite
 const mysqlTest = new MySQLIntegrationTest();
 
 describe('MySQL Connector Integration Tests', () => {
-  beforeAll(async () => {
-    await mysqlTest.setup();
-  }, 120000);
+  mysqlTest.registerLifecycle();
 
-  afterAll(async () => {
-    await mysqlTest.cleanup();
-  });
-
-  // Include all common tests
-  mysqlTest.createConnectionTests();
-  mysqlTest.createSchemaTests();
-  mysqlTest.createTableTests();
-  mysqlTest.createSQLExecutionTests();
-  if (mysqlTest.config.supportsStoredProcedures) {
-    mysqlTest.createStoredProcedureTests();
-  }
-  mysqlTest.createCommentTests();
-  mysqlTest.createErrorHandlingTests();
-  mysqlTest.createSSLTests();
-
-  describe('MySQL-specific Features', () => {
-    it('should exclude server-level system databases from getSchemas()', async () => {
-      const schemas = await mysqlTest.connector.getSchemas();
-      expect(schemas).toContain('testdb');
-      expect(schemas).not.toContain('information_schema');
-      expect(schemas).not.toContain('performance_schema');
-      expect(schemas).not.toContain('mysql');
-      expect(schemas).not.toContain('sys');
-    });
-
-    it('should report the DSN-configured database as the default schema', async () => {
-      expect(await mysqlTest.connector.getDefaultSchema!()).toBe('testdb');
-    });
-
-    it('should report connection pool state and buffer cache hit ratio via getHealthCheck', async () => {
-      const health = await mysqlTest.connector.getHealthCheck!();
-
-      expect(health.connections).toBeDefined();
-      // Without the PROCESS privilege, MySQL's PROCESSLIST visibility can be
-      // restricted to the querying connection itself (excluded here via
-      // `ID <> CONNECTION_ID()`), so total may legitimately be 0.
-      expect(health.connections!.total).toBeGreaterThanOrEqual(0);
-      expect(health.connections!.maxConnections).toBeGreaterThan(0);
-      expect(health.connections!.idleInTransaction).toBeGreaterThanOrEqual(0);
-      expect(health.connections!.idleInTransactionAborted).toBeUndefined();
-
-      expect(health.bufferCache).toBeDefined();
-      expect(health.bufferCache!.blocksHit + health.bufferCache!.blocksRead).toBeGreaterThan(0);
-      if (health.bufferCache!.hitRatioPct !== null) {
-        expect(health.bufferCache!.hitRatioPct).toBeGreaterThanOrEqual(0);
-        expect(health.bufferCache!.hitRatioPct).toBeLessThanOrEqual(100);
-      }
-    });
-
-    it('should execute multiple statements with native support', async () => {
-      // First insert the test data
-      await mysqlTest.connector.executeSQL(`
-        INSERT INTO users (name, email, age) VALUES ('Multi User 1', 'multi1@example.com', 30);
-        INSERT INTO users (name, email, age) VALUES ('Multi User 2', 'multi2@example.com', 35);
-      `, {});
-      
-      // Then check the count
-      const result = await mysqlTest.connector.executeSQL(
-        "SELECT COUNT(*) as total FROM users WHERE email LIKE 'multi%'",
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(Number(result.resultSets[0].rows[0].total)).toBe(2);
-    });
-
-    it('should handle MySQL-specific data types', async () => {
-      await mysqlTest.connector.executeSQL(`
-        CREATE TABLE IF NOT EXISTS mysql_types_test (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          json_data JSON,
-          timestamp_val TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          enum_val ENUM('small', 'medium', 'large') DEFAULT 'medium'
-        )
-      `, {});
-
-      await mysqlTest.connector.executeSQL(`
-        INSERT INTO mysql_types_test (json_data, enum_val) 
-        VALUES ('{"key": "value"}', 'large')
-      `, {});
-
-      const result = await mysqlTest.connector.executeSQL(
-        'SELECT * FROM mysql_types_test WHERE id = LAST_INSERT_ID()',
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].enum_val).toBe('large');
-      expect(result.resultSets[0].rows[0].json_data).toBeDefined();
-    });
-
-    it('should handle MySQL auto-increment properly', async () => {
-      // Execute INSERT and SELECT LAST_INSERT_ID() in a single call to ensure same connection
-      const result = await mysqlTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('Auto Inc Test', 'autoinc@example.com', 40); SELECT LAST_INSERT_ID() as last_id",
-        {}
-      );
-
-      expect(result).toBeDefined();
-      // One resultSet per statement, in source order: INSERT then SELECT.
-      expect(result.resultSets).toHaveLength(2);
-      expect(result.resultSets[0].rows).toHaveLength(0);
-      expect(result.resultSets[1].rows).toHaveLength(1);
-      expect(Number(result.resultSets[1].rows[0].last_id)).toBeGreaterThan(0);
-    });
-
-    it('should work with MySQL-specific functions', async () => {
-      const result = await mysqlTest.connector.executeSQL(`
-        SELECT 
-          VERSION() as mysql_version,
-          DATABASE() as current_db,
-          USER() as current_user_info,
-          NOW() as timestamp_val
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].mysql_version).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_db).toBe('testdb');
-      expect(result.resultSets[0].rows[0].current_user_info).toBeDefined();
-      expect(result.resultSets[0].rows[0].timestamp_val).toBeDefined();
-    });
-
-    it('should handle MySQL transactions correctly', async () => {
-      // Test explicit transaction
-      await mysqlTest.connector.executeSQL(`
-        START TRANSACTION;
-        INSERT INTO users (name, email, age) VALUES ('Transaction Test 1', 'trans1@example.com', 45);
-        INSERT INTO users (name, email, age) VALUES ('Transaction Test 2', 'trans2@example.com', 50);
-        COMMIT;
-      `, {});
-      
-      const result = await mysqlTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'",
-        {}
-      );
-      expect(Number(result.resultSets[0].rows[0].count)).toBe(2);
-    });
-
-    it('should handle MySQL rollback correctly', async () => {
-      // Get initial count
-      const beforeResult = await mysqlTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
-        {}
-      );
-      const beforeCount = Number(beforeResult.resultSets[0].rows[0].count);
-      
-      // Test rollback
-      await mysqlTest.connector.executeSQL(`
-        START TRANSACTION;
-        INSERT INTO users (name, email, age) VALUES ('Rollback Test', 'rollback@example.com', 55);
-        ROLLBACK;
-      `, {});
-      
-      const afterResult = await mysqlTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
-        {}
-      );
-      const afterCount = Number(afterResult.resultSets[0].rows[0].count);
-      
-      expect(afterCount).toBe(beforeCount);
-    });
-
-    it('should respect maxRows limit for SELECT queries', async () => {
-      // Test basic SELECT with maxRows limit
-      const result = await mysqlTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        { maxRows: 2 }
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
-      // The cap provably cut off rows (users has more than 2)
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should respect existing LIMIT clause when lower than maxRows', async () => {
-      // Test when existing LIMIT is lower than maxRows
-      const result = await mysqlTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id LIMIT 1',
-        { maxRows: 3 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      // The user's own LIMIT fired, not the cap — no truncation flag
-      expect(result.resultSets[0].truncated).toBeUndefined();
-    });
-
-    it('should not affect non-SELECT queries', async () => {
-      // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
-      const insertResult = await mysqlTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('MaxRows Test', 'maxrows@mysql.com', 25)",
-        { maxRows: 1 }
-      );
-      
-      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs don't return rows by default
-      
-      // Verify the insert worked
-      const selectResult = await mysqlTest.connector.executeSQL(
-        "SELECT * FROM users WHERE email = 'maxrows@mysql.com'",
-        {}
-      );
-      expect(selectResult.resultSets[0].rows).toHaveLength(1);
-      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
-    });
-
-    it('should handle maxRows with multiple SELECT statements', async () => {
-      // Test maxRows with multiple SELECT statements only  
-      const result = await mysqlTest.connector.executeSQL(`
-        SELECT name FROM users WHERE age > 20 ORDER BY name LIMIT 10;
-        SELECT name FROM users WHERE age > 25 ORDER BY name LIMIT 10;
-      `, { maxRows: 1 });
-
-      // One resultSet per statement, in source order. Each SELECT is capped
-      // at maxRows independently, so each set has at most 1 row.
-      expect(result.resultSets).toHaveLength(2);
-      const totalRows = result.resultSets.reduce((sum, set) => sum + set.rows.length, 0);
-      expect(totalRows).toBeGreaterThan(0);
-      expect(totalRows).toBeLessThanOrEqual(2);
-      for (const set of result.resultSets) {
-        expect(set.rows.length).toBeLessThanOrEqual(1);
-        if (set.rows.length > 0) {
-          expect(set.rows[0]).toHaveProperty('name');
-        }
-      }
-    });
-
+  // Everything shared with MariaDB, including the common connector tests.
+  mysqlTest.createFamilyTests({
+    collation: 'utf8mb4_0900_ai_ci',
+    queryTimeout: {
+      sessionVariable: 'max_execution_time',
+      oneSecond: 1000,
+      clientTimeoutCode: 'PROTOCOL_SEQUENCE_TIMEOUT',
+    },
   });
 
   describe('timezone configuration', () => {
-    it('should interpret DATETIME using the configured timezone offset', async () => {
-      const connector = new MySQLConnector();
-      try {
-        // With timezone "+09:00", the driver reads the naive DATETIME as KST and
-        // produces the correct UTC instant. KST is UTC+9, so 02:31:23 on Sep 29
-        // is 17:31:23 UTC on the previous day (Sep 28).
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          timezone: '+09:00',
-        });
-
+    // The driver reads the naive DATETIME in the configured zone and produces
+    // the matching UTC instant. KST is UTC+9, so 02:31:23 on Sep 29 is
+    // 17:31:23 UTC on the previous day (Sep 28); "Z" reads it as UTC already.
+    it.each([
+      { timezone: '+09:00', instant: '2025-09-28T17:31:23.000Z' },
+      { timezone: 'Z', instant: '2025-09-29T02:31:23.000Z' },
+    ])('should interpret DATETIME in the configured timezone $timezone', async ({ timezone, instant }) => {
+      await mysqlTest.withConnector({ timezone }, async (connector) => {
         const result = await connector.executeSQL(
           "SELECT CAST('2025-09-29 02:31:23' AS DATETIME) AS dt",
           {}
@@ -412,217 +51,54 @@ describe('MySQL Connector Integration Tests', () => {
 
         expect(result.resultSets[0].rows).toHaveLength(1);
         const iso = new Date(result.resultSets[0].rows[0].dt as string | Date).toISOString();
-        expect(iso).toBe('2025-09-28T17:31:23.000Z');
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should treat DATETIME as UTC when timezone is "Z"', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          timezone: 'Z',
-        });
-
-        const result = await connector.executeSQL(
-          "SELECT CAST('2025-09-29 02:31:23' AS DATETIME) AS dt",
-          {}
-        );
-
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        const iso = new Date(result.resultSets[0].rows[0].dt as string | Date).toISOString();
-        expect(iso).toBe('2025-09-29T02:31:23.000Z');
-      } finally {
-        await connector.disconnect();
-      }
+        expect(iso).toBe(instant);
+      });
     });
   });
 
-  describe('charset / collation configuration', () => {
+  describe('charset configuration', () => {
     it('should use the charset default collation when charset is configured', async () => {
-      const connector = new MySQLConnector();
-      try {
-        // mysql2 maps charset "utf8mb4" to its default collation utf8mb4_general_ci,
-        // which differs from mysql2's built-in default (utf8mb4_unicode_ci), so a
-        // match proves the option took effect.
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          charset: 'utf8mb4',
-        });
-
+      // mysql2 maps charset "utf8mb4" to its default collation utf8mb4_general_ci,
+      // which differs from mysql2's built-in default (utf8mb4_unicode_ci), so a
+      // match proves the option took effect.
+      await mysqlTest.withConnector({ charset: 'utf8mb4' }, async (connector) => {
         const result = await connector.executeSQL(
           'SELECT @@session.collation_connection AS collation',
           {}
         );
 
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_general_ci');
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should set the connection collation from the configured collation', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          collation: 'utf8mb4_0900_ai_ci',
-        });
-
-        const result = await connector.executeSQL(
-          'SELECT @@session.collation_connection AS collation',
-          {}
-        );
-
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_0900_ai_ci');
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should honor charset and collation set together', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          charset: 'utf8mb4',
-          collation: 'utf8mb4_0900_ai_ci',
-        });
-
-        const result = await connector.executeSQL(
-          'SELECT @@session.character_set_connection AS charset, @@session.collation_connection AS collation',
-          {}
-        );
-
-        expect(result.resultSets[0].rows).toHaveLength(1);
-        expect(result.resultSets[0].rows[0].charset).toBe('utf8mb4');
-        expect(result.resultSets[0].rows[0].collation).toBe('utf8mb4_0900_ai_ci');
-      } finally {
-        await connector.disconnect();
-      }
-    });
-  });
-
-  describe('Per-tool readonly engine backstop (options.readonly)', () => {
-    // The READ ONLY transaction blocks DML; the session-level READ ONLY set
-    // around it blocks DDL, which commits implicitly and would otherwise escape
-    // the transaction. (Stacked-DDL payloads such as `SELECT 1--1;DROP TABLE t`
-    // are also rejected upstream by the read-only classifier — see the unit
-    // tests in allowed-keywords.test.ts.)
-    it('should block a stacked UPDATE hidden after -- via the READ ONLY transaction', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString);
-
-        // multipleStatements is on, so MySQL sees this as SELECT then UPDATE. The
-        // READ ONLY transaction must reject the UPDATE (DML) at the engine.
-        await expect(
-          connector.executeSQL("SELECT 1--1;UPDATE users SET name='hacked'", { readonly: true })
-        ).rejects.toThrow(/read only|read-only/i);
-
-        // No row should have been renamed.
-        const check = await connector.executeSQL(
-          "SELECT COUNT(*) AS c FROM users WHERE name='hacked'",
-          {}
-        );
-        expect(Number(check.resultSets[0].rows[0].c)).toBe(0);
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should block INSERT and keep the connection writable afterward', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString);
-
-        await expect(
-          connector.executeSQL("INSERT INTO users (name, email) VALUES ('ro', 'ro@ro.com')", {
-            readonly: true,
-          })
-        ).rejects.toThrow(/read only|read-only/i);
-
-        // Non-read-only call on the same pooled connection still works.
-        const insert = await connector.executeSQL(
-          "INSERT INTO users (name, email) VALUES ('rw', 'rw@rw.com')",
-          {}
-        );
-        expect(insert.resultSets[0].rowCount).toBe(1);
-        await connector.executeSQL("DELETE FROM users WHERE email = 'rw@rw.com'", {});
-      } finally {
-        await connector.disconnect();
-      }
-    });
-
-    it('should stop DDL, which commits implicitly, and leave the connection writable afterward', async () => {
-      const connector = new MySQLConnector();
-      const table = 'dbhub_readonly_ddl';
-      const exists = async (): Promise<boolean> => {
-        const result = await connector.executeSQL(
-          `SELECT COUNT(*) AS c FROM information_schema.tables
-           WHERE table_schema = DATABASE() AND table_name = '${table}'`,
-          {}
-        );
-        return Number(result.resultSets[0].rows[0].c) > 0;
-      };
-      try {
-        await connector.connect(mysqlTest.connectionString);
-
-        // CREATE TABLE performs an implicit COMMIT that ends the READ ONLY
-        // transaction, so only the session-level READ ONLY stops it
-        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION).
-        const blocked = await settle(
-          connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly: true })
-        );
-        expect(blocked.error?.errno).toBe(1792);
-        expect(await exists()).toBe(false);
-
-        // The session flag is cleared afterwards: the same pooled connection
-        // serves writable tools too.
-        await connector.executeSQL(`CREATE TABLE ${table} (id INT)`, {});
-        expect(await exists()).toBe(true);
-      } finally {
-        await settle(connector.executeSQL(`DROP TABLE IF EXISTS ${table}`, {}));
-        await connector.disconnect();
-      }
+        expect(result.resultSets[0].rows).toEqual([{ collation: 'utf8mb4_general_ci' }]);
+      });
     });
   });
 
   describe('pool_max_connections', () => {
     it('should stop waiting for a free connection after connection_timeout', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          poolMaxConnections: 1,
-          connectionTimeoutSeconds: 1,
-        });
+      await mysqlTest.withConnector(
+        { poolMaxConnections: 1, connectionTimeoutSeconds: 1 },
+        async (connector) => {
+          const busy = connector.executeSQL('SELECT SLEEP(3)', {});
+          const waiting = await settle(connector.executeSQL('SELECT 1 AS ok', {}));
 
-        const busy = connector.executeSQL('SELECT SLEEP(3)', {});
-        const waiting = await settle(connector.executeSQL('SELECT 1 AS ok', {}));
+          expect(waiting.error?.message).toBe(
+            'Timed out after 1000 ms waiting for a free connection from the pool'
+          );
+          expect(waiting.elapsedMs).toBeGreaterThanOrEqual(900);
+          expect(waiting.elapsedMs).toBeLessThan(2500);
 
-        expect(waiting.error?.message).toBe(
-          'Timed out after 1000 ms waiting for a free connection from the pool'
-        );
-        expect(waiting.elapsedMs).toBeGreaterThanOrEqual(900);
-        expect(waiting.elapsedMs).toBeLessThan(2500);
-
-        // The abandoned request gets the connection once SLEEP(3) ends and
-        // hands it straight back, so the pool of one is still usable.
-        await busy;
-        const after = await connector.executeSQL('SELECT 1 AS ok', {});
-        expect(Number(after.resultSets[0].rows[0].ok)).toBe(1);
-      } finally {
-        await connector.disconnect();
-      }
+          // The abandoned request gets the connection once SLEEP(3) ends and
+          // hands it straight back, so the pool of one is still usable.
+          await busy;
+          const after = await connector.executeSQL('SELECT 1 AS ok', {});
+          expect(Number(after.resultSets[0].rows[0].ok)).toBe(1);
+        }
+      );
     }, 20_000);
   });
 
-  describe('query_timeout', () => {
+  describe('query_timeout: server-side limit', () => {
     it('should let the server stop a read-only SELECT and keep the connection usable', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, { queryTimeoutSeconds: 1 });
-
+      await mysqlTest.withConnector({ queryTimeoutSeconds: 1 }, async (connector) => {
         const limit = await connector.executeSQL(
           'SELECT @@session.max_execution_time AS met',
           { readonly: true }
@@ -643,137 +119,75 @@ describe('MySQL Connector Integration Tests', () => {
 
         const after = await connector.executeSQL('SELECT 1 AS ok', { readonly: true });
         expect(Number(after.resultSets[0].rows[0].ok)).toBe(1);
-      } finally {
-        await connector.disconnect();
-      }
+      });
     }, 20_000);
-
-    it('should fall back to the client-side timeout and kill the statement when the server limit is cleared', async () => {
-      const connector = new MySQLConnector();
-      const observer = new MySQLConnector();
-      const probe = 'dbhub_client_timeout_probe';
-
-      const runningProbeCount = async (): Promise<number> => {
-        const result = await observer.executeSQL(
-          `SELECT COUNT(*) AS count FROM information_schema.processlist
-           WHERE info LIKE '%${probe}%' AND info NOT LIKE '%processlist%'`,
-          {}
-        );
-        return Number(result.resultSets[0].rows[0].count);
-      };
-
-      try {
-        // A pool of one: the kill has to reuse the slot of the connection it replaces.
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          queryTimeoutSeconds: 1,
-          poolMaxConnections: 1,
-        });
-        await observer.connect(mysqlTest.connectionString);
-
-        // The batch clears the session limit first, so only the client-side
-        // fallback is left to bound the SELECT.
-        const result = await settle(
-          connector.executeSQL(
-            `SET SESSION max_execution_time = 0; SELECT SLEEP(30), '${probe}'`,
-            {}
-          )
-        );
-
-        expect(result.error?.code).toBe('PROTOCOL_SEQUENCE_TIMEOUT');
-        expect(result.elapsedMs).toBeGreaterThanOrEqual(1000 + CLIENT_QUERY_TIMEOUT_GRACE_MS - 100);
-        expect(result.elapsedMs).toBeLessThan(10_000);
-        expect(await waitFor(async () => (await runningProbeCount()) === 0, 2_000)).toBe(true);
-
-        // The abandoned connection was discarded; a fresh one carries the limit again.
-        const after = await connector.executeSQL(
-          'SELECT @@session.max_execution_time AS met',
-          { readonly: true }
-        );
-        expect(Number(after.resultSets[0].rows[0].met)).toBe(1000);
-      } finally {
-        await connector.disconnect();
-        await observer.disconnect();
-      }
-    }, 30_000);
   });
 
   describe('[sources.session] settings', () => {
-    const tableExists = async (name: string): Promise<boolean> => {
-      const observer = new MySQLConnector();
-      try {
-        await observer.connect(mysqlTest.connectionString);
+    const tableExists = (name: string): Promise<boolean> =>
+      mysqlTest.withConnector(undefined, async (observer) => {
         const result = await observer.executeSQL(
           `SELECT COUNT(*) AS c FROM information_schema.tables
            WHERE table_schema = 'testdb' AND table_name = '${name}'`,
           {}
         );
         return Number(result.resultSets[0].rows[0].c) > 0;
-      } finally {
-        await observer.disconnect();
-      }
-    };
+      });
 
     it('should apply each setting to every new connection as its default', async () => {
-      const connector = new MySQLConnector();
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
+      await mysqlTest.withConnector(
+        {
           queryTimeoutSeconds: 30,
           sessionSettings: { lock_wait_timeout: 5, time_zone: '+09:00', sql_safe_updates: true },
-        });
-
-        const show =
-          'SELECT SLEEP(0.2) AS s, @@session.lock_wait_timeout AS lwt, @@session.time_zone AS tz, ' +
-          '@@session.sql_safe_updates AS safe, @@session.max_execution_time AS met';
-        // Concurrent calls check out separate pool connections.
-        const results = await Promise.all(
-          [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
-        );
-        for (const result of results) {
-          const row = result.resultSets[0].rows[0];
-          expect(Number(row.lwt)).toBe(5);
-          expect(row.tz).toBe('+09:00');
-          expect(Number(row.safe)).toBe(1);
-          // The query_timeout hook still applies alongside.
-          expect(Number(row.met)).toBe(30000);
+        },
+        async (connector) => {
+          const show =
+            'SELECT SLEEP(0.2) AS s, @@session.lock_wait_timeout AS lwt, @@session.time_zone AS tz, ' +
+            '@@session.sql_safe_updates AS safe, @@session.max_execution_time AS met';
+          // Concurrent calls check out separate pool connections.
+          const results = await Promise.all(
+            [0, 1, 2].map(() => connector.executeSQL(show, { readonly: true }))
+          );
+          for (const result of results) {
+            const row = result.resultSets[0].rows[0];
+            expect(Number(row.lwt)).toBe(5);
+            expect(row.tz).toBe('+09:00');
+            expect(Number(row.safe)).toBe(1);
+            // The query_timeout hook still applies alongside.
+            expect(Number(row.met)).toBe(30000);
+          }
         }
-      } finally {
-        await connector.disconnect();
-      }
+      );
     });
 
     it('should keep a read-only session default in force after a read-only execution', async () => {
-      const connector = new MySQLConnector();
       const table = 'dbhub_session_ro';
-      try {
-        await connector.connect(mysqlTest.connectionString, undefined, {
-          sessionSettings: { transaction_read_only: 1 },
-        });
-
-        // The read-only backstop raises and then restores the session flag; a
-        // value configured here must survive it, so DDL is refused
-        // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION) on read-only and writable
-        // executions alike, in either order. The SELECT in between is what a
-        // read-only tool could run to tamper with server-side state the
-        // restore might read from: the restore must not depend on any.
-        for (const readonly of [true, false, true]) {
-          const result = await settle(
-            connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
-          );
-          expect(result.error?.errno).toBe(1792);
-          await connector.executeSQL('SELECT @dbhub_tx_read_only := 0 AS tampered', { readonly: true });
+      await mysqlTest.withConnector(
+        { sessionSettings: { transaction_read_only: 1 } },
+        async (connector) => {
+          // The read-only backstop raises and then restores the session flag; a
+          // value configured here must survive it, so DDL is refused
+          // (ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION) on read-only and writable
+          // executions alike, in either order. The SELECT in between is what a
+          // read-only tool could run to tamper with server-side state the
+          // restore might read from: the restore must not depend on any.
+          for (const readonly of [true, false, true]) {
+            const result = await settle(
+              connector.executeSQL(`CREATE TABLE ${table} (id INT)`, { readonly })
+            );
+            expect(result.error?.errno).toBe(1792);
+            await connector.executeSQL('SELECT @dbhub_tx_read_only := 0 AS tampered', { readonly: true });
+          }
+          const flag = await connector.executeSQL('SELECT @@session.transaction_read_only AS ro', {});
+          expect(Number(flag.resultSets[0].rows[0].ro)).toBe(1);
+          expect(await tableExists(table)).toBe(false);
         }
-        const flag = await connector.executeSQL('SELECT @@session.transaction_read_only AS ro', {});
-        expect(Number(flag.resultSets[0].rows[0].ro)).toBe(1);
-        expect(await tableExists(table)).toBe(false);
-      } finally {
-        await connector.disconnect();
-      }
+      );
     });
 
     it('should fail to connect when the server rejects a setting', async () => {
-      const connector = new MySQLConnector();
       await expect(
-        connector.connect(mysqlTest.connectionString, undefined, {
+        new MySQLConnector().connect(mysqlTest.connectionString, undefined, {
           sessionSettings: { no_such_variable: 1 },
         })
       ).rejects.toThrow(/Unknown system variable/);

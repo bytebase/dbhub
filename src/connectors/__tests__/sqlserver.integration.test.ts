@@ -1,32 +1,22 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { MSSQLServerContainer, StartedMSSQLServerContainer } from '@testcontainers/mssqlserver';
+import { describe, it, expect } from 'vitest';
+import { MSSQLServerContainer, type StartedMSSQLServerContainer } from '@testcontainers/mssqlserver';
 import { SQLServerConnector } from '../sqlserver/index.js';
 import { IntegrationTestBase, type TestContainer, type DatabaseTestConfig } from './shared/integration-test-base.js';
 import type { Connector } from '../interface.js';
 
 class SQLServerTestContainer implements TestContainer {
   constructor(private container: StartedMSSQLServerContainer) {}
-  
+
   getConnectionUri(): string {
-    // Get the container's connection details
-    const host = this.container.getHost();
-    const port = this.container.getMappedPort(1433);
-    
     // Convert to our expected DSN format: sqlserver://username:password@host:port/database
     // Use sslmode=disable for test containers to avoid certificate issues
+    const host = this.container.getHost();
+    const port = this.container.getMappedPort(1433);
     return `sqlserver://sa:Password123!@${host}:${port}/master?sslmode=disable`;
   }
-  
-  getHost(): string {
-    return this.container.getHost();
-  }
-  
-  getMappedPort(port: number): number {
-    return this.container.getMappedPort(port);
-  }
-  
-  async stop(): Promise<void> {
-    await this.container.stop();
+
+  stop(): Promise<unknown> {
+    return this.container.stop();
   }
 }
 
@@ -38,6 +28,9 @@ class SQLServerIntegrationTest extends IntegrationTestBase<SQLServerTestContaine
       supportsStoredProcedures: true,
       expectedStoredProcedures: ['GetUserCount', 'CalculateTotalAge'],
       supportsComments: true,
+      beginTransaction: 'BEGIN TRANSACTION',
+      // No readonlyWriteError: SQL Server has no READ ONLY transaction, so a
+      // read-only write succeeds inside a transaction that is rolled back.
     };
     super(config);
   }
@@ -53,6 +46,10 @@ class SQLServerIntegrationTest extends IntegrationTestBase<SQLServerTestContaine
 
   createConnector(): Connector {
     return new SQLServerConnector();
+  }
+
+  protected userLimitedSQL(rows: number): string {
+    return `SELECT TOP ${rows} * FROM users ORDER BY id`;
   }
 
   async setupTestData(connector: Connector): Promise<void> {
@@ -157,57 +154,180 @@ class SQLServerIntegrationTest extends IntegrationTestBase<SQLServerTestContaine
   }
 }
 
-// Create the test suite
+
 const sqlServerTest = new SQLServerIntegrationTest();
 
 // NOTE: SQL Server containers may take several minutes to start due to licensing requirements
 // and initialization time. If tests time out, consider increasing timeout or running with
 // more Docker resources allocated.
 describe('SQL Server Connector Integration Tests', () => {
-  beforeAll(async () => {
-    await sqlServerTest.setup();
-  }, 300000); // 5 minutes timeout for SQL Server container
+  sqlServerTest.registerLifecycle(300_000); // 5 minutes for the SQL Server container
 
-  afterAll(async () => {
-    await sqlServerTest.cleanup();
-  });
+  sqlServerTest.createCommonTests();
 
-  // Include all common tests
-  sqlServerTest.createConnectionTests();
-  sqlServerTest.createSchemaTests();
-  sqlServerTest.createTableTests();
-  sqlServerTest.createSQLExecutionTests();
-  if (sqlServerTest.config.supportsStoredProcedures) {
-    sqlServerTest.createStoredProcedureTests();
-  }
-  sqlServerTest.createCommentTests();
-  sqlServerTest.createErrorHandlingTests();
+  const execute = (sql: string, options: { readonly?: boolean; maxRows?: number } = {}, parameters?: any[]) =>
+    sqlServerTest.connector.executeSQL(sql, options, parameters);
+  const planOf = async (...args: Parameters<typeof execute>): Promise<string> =>
+    (await execute(...args)).resultSets[0].rows[0].plan as string;
 
   describe('SQL Server SSL/TLS Configuration', () => {
-    it('should connect successfully with sslmode=disable (unencrypted)', async () => {
-      const connector = new SQLServerConnector();
-      const host = (sqlServerTest as any).container.getHost();
-      const port = (sqlServerTest as any).container.getMappedPort(1433);
-      const dsn = `sqlserver://sa:Password123!@${host}:${port}/master?sslmode=disable`;
-      
-      await connector.connect(dsn);
-      
-      // Verify this is an unencrypted connection by checking connection properties
-      const encryptionResult = await connector.executeSQL(`
-        SELECT 
-          CAST(CONNECTIONPROPERTY('protocol_type') AS NVARCHAR(100)) as protocol_type,
-          CASE 
-            WHEN CAST(CONNECTIONPROPERTY('protocol_type') AS NVARCHAR(100)) LIKE '%TLS%' 
-              OR CAST(CONNECTIONPROPERTY('protocol_type') AS NVARCHAR(100)) LIKE '%SSL%' 
-            THEN 'Encrypted' 
-            ELSE 'Unencrypted' 
-          END as encryption_status
-      `, {});
-      
-      expect(encryptionResult.resultSets[0].rows[0].encryption_status).toBe('Unencrypted');
-      expect(encryptionResult.resultSets[0].rows[0].protocol_type).not.toMatch(/TLS|SSL/i);
-      
-      await connector.disconnect();
+    it('should connect unencrypted with sslmode=disable', async () => {
+      // The suite's own DSN carries sslmode=disable.
+      const result = await execute(
+        'SELECT encrypt_option FROM sys.dm_exec_connections WHERE session_id = @@SPID'
+      );
+      expect(result.resultSets[0].rows).toEqual([{ encrypt_option: 'FALSE' }]);
+    });
+  });
+
+  describe('EXPLAIN emulation', () => {
+    it('should return an execution plan for EXPLAIN <query> (SHOWPLAN_XML)', async () => {
+      const result = await execute('EXPLAIN SELECT * FROM users WHERE age > 30');
+
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      const planXml = result.resultSets[0].rows[0].plan as string;
+      expect(typeof planXml).toBe('string');
+      // SHOWPLAN_XML output is a ShowPlanXML document referencing the query.
+      expect(planXml).toContain('ShowPlanXML');
+      expect(planXml).toContain('users');
+    });
+
+    it('should return an actual execution plan for EXPLAIN ANALYZE <query> (STATISTICS XML)', async () => {
+      const result = await execute('EXPLAIN ANALYZE SELECT * FROM users WHERE age > 30');
+
+      expect(result.resultSets[0].rows).toHaveLength(1);
+      const planXml = result.resultSets[0].rows[0].plan as string;
+      expect(typeof planXml).toBe('string');
+      expect(planXml).toContain('ShowPlanXML');
+      expect(planXml).toContain('users');
+      // RunTimeInformation/ActualRows only appear in an *actual* plan
+      // (SET STATISTICS XML). SHOWPLAN_XML never emits them.
+      expect(planXml).toContain('RunTimeInformation');
+      expect(planXml).toMatch(/ActualRows/i);
+    });
+
+    // Which plan each spelling selects. A disabled ANALYZE must read as a
+    // plain estimated EXPLAIN, in the parenthesized form and in the bare and
+    // equals spellings alike: that is how the read-only classifier reads them
+    // (it does not count a disabled ANALYZE as executing), and erroring or
+    // executing here would disagree with what that layer waves through.
+    it.each([
+      { sql: '/* inspect plan */ EXPLAIN SELECT * FROM users', actual: false },
+      { sql: '/* real numbers please */ EXPLAIN ANALYZE SELECT * FROM users', actual: true },
+      { sql: 'EXPLAIN (ANALYZE) SELECT name FROM users WHERE age > 30', actual: true },
+      { sql: 'EXPLAIN (ANALYZE = true) SELECT name FROM users WHERE age > 30', actual: true },
+      { sql: 'EXPLAIN (ANALYZE false) SELECT name FROM users WHERE age > 30', actual: false },
+      { sql: 'EXPLAIN (ANALYZE = false) SELECT name FROM users WHERE age > 30', actual: false },
+      { sql: 'EXPLAIN (ANALYZE = 0) SELECT name FROM users WHERE age > 30', actual: false },
+      { sql: 'EXPLAIN ANALYZE = false SELECT name FROM users WHERE age > 30', actual: false },
+      { sql: 'EXPLAIN ANALYZE false SELECT name FROM users WHERE age > 30', actual: false },
+    ])('should return a plan with runtime counters: $actual for "$sql"', async ({ sql, actual }) => {
+      const plan = await planOf(sql);
+      expect(plan).toContain('ShowPlanXML');
+      // An estimated plan has no runtime counters.
+      expect(plan.includes('RunTimeInformation')).toBe(actual);
+    });
+
+    // Whether the explained statement runs, and whether its write sticks.
+    it.each([
+      // SHOWPLAN_XML compiles without executing.
+      { form: 'EXPLAIN', readonly: false, persisted: 0, tag: 'noexec' },
+      { form: 'EXPLAIN (ANALYZE off)', readonly: false, persisted: 0, tag: 'analyze-off' },
+      // Unlike EXPLAIN, EXPLAIN ANALYZE really runs the statement...
+      { form: 'EXPLAIN ANALYZE', readonly: false, persisted: 1, tag: 'analyze-exec' },
+      // ...and in read-only mode that run is rolled back.
+      { form: 'EXPLAIN ANALYZE', readonly: true, persisted: 0, tag: 'analyze-ro' },
+    ])(
+      'should leave $persisted row(s) behind for $form <INSERT> (readonly: $readonly)',
+      async ({ form, readonly, persisted, tag }) => {
+        const email = `explain-${tag}@example.com`;
+        const count = async (): Promise<number> => {
+          const result = await execute(`SELECT COUNT(*) as count FROM users WHERE email = '${email}'`);
+          return Number(result.resultSets[0].rows[0].count);
+        };
+        expect(await count()).toBe(0);
+
+        // The plan comes back either way.
+        const plan = await planOf(
+          `${form} INSERT INTO users (name, email, age) VALUES ('Explained', '${email}', 42)`,
+          { readonly }
+        );
+        expect(plan).toContain('ShowPlanXML');
+
+        expect(await count()).toBe(persisted);
+      }
+    );
+
+    it('should reject SET SHOWPLAN smuggled into an EXPLAIN query', async () => {
+      const before = await execute('SELECT COUNT(*) as count FROM users');
+
+      await expect(
+        execute('EXPLAIN SET SHOWPLAN_XML OFF DELETE FROM users')
+      ).rejects.toThrow(/SET SHOWPLAN/i);
+
+      const after = await execute('SELECT COUNT(*) as count FROM users');
+      expect(Number(after.resultSets[0].rows[0].count)).toBe(Number(before.resultSets[0].rows[0].count));
+    });
+
+    it.each([
+      // Empty and comment-only statements.
+      { sql: 'EXPLAIN   ', error: /requires a statement/i },
+      { sql: 'EXPLAIN /* just a comment */', error: /requires a statement/i },
+      { sql: 'EXPLAIN ANALYZE   ', error: /requires a statement/i },
+      { sql: 'EXPLAIN (ANALYZE)   ', error: /requires a statement/i },
+      { sql: 'EXPLAIN ANALYZE SET STATISTICS XML OFF SELECT * FROM users', error: /SET STATISTICS/i },
+      // PostgreSQL-only options are refused by name, not silently dropped.
+      { sql: 'EXPLAIN (ANALYZE, BUFFERS) SELECT name FROM users', error: /BUFFERS/i },
+      { sql: 'EXPLAIN ANALYZE VERBOSE SELECT name FROM users', error: /VERBOSE/i },
+      { sql: 'EXPLAIN (COSTS) SELECT name FROM users', error: /COSTS/i },
+      { sql: 'EXPLAIN (ANALYZE SELECT name FROM users', error: /option list/i },
+      // Read-only EXPLAIN ANALYZE executes, guarded only by the rollback.
+      // OPENQUERY executes on the remote source, so the rollback never
+      // reaches it — the same escape the plain EXPLAIN path blocks.
+      {
+        sql: "EXPLAIN ANALYZE SELECT * FROM OPENQUERY(remote, 'SELECT 1')",
+        readonly: true,
+        error: /pass-through data sources/i,
+      },
+      { sql: 'EXPLAIN ANALYZE EXEC GetUserCount', readonly: true, error: /dynamic SQL/i },
+    ])('should reject "$sql" with $error', async ({ sql, readonly, error }) => {
+      await expect(execute(sql, { readonly })).rejects.toThrow(error);
+    });
+
+    it('should bind parameters for EXPLAIN ANALYZE', async () => {
+      // Binding is what makes this work at all: an unbound @p1 fails with
+      // "Must declare the scalar variable", so succeeding proves it was bound.
+      const plan = await planOf(
+        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
+        {},
+        [2]
+      );
+
+      expect(plan).toContain('RunTimeInformation');
+      // Two of the three rows pass the filter, so the value reached the server
+      // rather than merely being declared.
+      expect(plan).toMatch(/ActualRows="2"/);
+    });
+
+    it('should bind parameters for plain EXPLAIN', async () => {
+      // SHOWPLAN compiles without executing, so the DECLARE/SET node-mssql
+      // prepends never assigns — but the statement must still compile, and the
+      // plan comes back estimated.
+      const plan = await planOf('EXPLAIN SELECT name FROM users WHERE age > @p1', {}, [30]);
+
+      expect(plan).toContain('ShowPlanXML');
+      expect(plan).not.toContain('RunTimeInformation');
+    });
+
+    it('should bind parameters for EXPLAIN ANALYZE in readonly mode', async () => {
+      const plan = await planOf(
+        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
+        { readonly: true },
+        [1]
+      );
+
+      expect(plan).toContain('RunTimeInformation');
+      expect(plan).toMatch(/ActualRows="1"/);
     });
   });
 
@@ -231,522 +351,38 @@ describe('SQL Server Connector Integration Tests', () => {
       }
     });
 
-    it('should return an execution plan for EXPLAIN <query> (SHOWPLAN_XML)', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN SELECT * FROM users WHERE age > 30',
-        {}
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      const planXml = result.resultSets[0].rows[0].plan as string;
-      expect(typeof planXml).toBe('string');
-      // SHOWPLAN_XML output is a ShowPlanXML document referencing the query.
-      expect(planXml).toContain('ShowPlanXML');
-      expect(planXml).toContain('users');
-    });
-
-    it('should not execute the statement under EXPLAIN', async () => {
-      const before = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
-        {}
-      );
-      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
-
-      // SHOWPLAN_XML compiles without executing, so this INSERT must not run.
-      await sqlServerTest.connector.executeSQL(
-        "EXPLAIN INSERT INTO users (name, email, age) VALUES ('NoExec', 'explain-noexec@example.com', 99)",
-        {}
-      );
-
-      const after = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-noexec@example.com'",
-        {}
-      );
-      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
-    });
-
-    it('should translate EXPLAIN even when preceded by a comment', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        '/* inspect plan */ EXPLAIN SELECT * FROM users',
-        {}
-      );
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].plan as string).toContain('ShowPlanXML');
-    });
-
-    it('should reject SET SHOWPLAN smuggled into an EXPLAIN query', async () => {
-      const before = await sqlServerTest.connector.executeSQL(
-        'SELECT COUNT(*) as count FROM users',
-        {}
-      );
-
-      await expect(
-        sqlServerTest.connector.executeSQL(
-          'EXPLAIN SET SHOWPLAN_XML OFF DELETE FROM users',
-          {}
-        )
-      ).rejects.toThrow(/SET SHOWPLAN/i);
-
-      const after = await sqlServerTest.connector.executeSQL(
-        'SELECT COUNT(*) as count FROM users',
-        {}
-      );
-      expect(Number(after.resultSets[0].rows[0].count)).toBe(Number(before.resultSets[0].rows[0].count));
-    });
-
-    it('should reject an empty EXPLAIN', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN   ', {})
-      ).rejects.toThrow(/requires a statement/i);
-    });
-
-    it('should reject a comment-only EXPLAIN', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN /* just a comment */', {})
-      ).rejects.toThrow(/requires a statement/i);
-    });
-
-    it('should return an actual execution plan for EXPLAIN ANALYZE <query> (STATISTICS XML)', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN ANALYZE SELECT * FROM users WHERE age > 30',
-        {}
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      const planXml = result.resultSets[0].rows[0].plan as string;
-      expect(typeof planXml).toBe('string');
-      expect(planXml).toContain('ShowPlanXML');
-      expect(planXml).toContain('users');
-      // RunTimeInformation/ActualRows only appear in an *actual* plan
-      // (SET STATISTICS XML). SHOWPLAN_XML never emits them.
-      expect(planXml).toContain('RunTimeInformation');
-      expect(planXml).toMatch(/ActualRows/i);
-    });
-
-    it('should execute the statement under EXPLAIN ANALYZE', async () => {
-      const before = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
-        {}
-      );
-      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
-
-      // Unlike EXPLAIN, EXPLAIN ANALYZE really runs the statement.
-      await sqlServerTest.connector.executeSQL(
-        "EXPLAIN ANALYZE INSERT INTO users (name, email, age) VALUES ('Exec', 'explain-analyze-exec@example.com', 42)",
-        {}
-      );
-
-      const after = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-exec@example.com'",
-        {}
-      );
-      expect(Number(after.resultSets[0].rows[0].count)).toBe(1);
-    });
-
-    it('should roll back writes under EXPLAIN ANALYZE in readonly mode', async () => {
-      const before = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
-        {}
-      );
-      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
-
-      const result = await sqlServerTest.connector.executeSQL(
-        "EXPLAIN ANALYZE INSERT INTO users (name, email, age) VALUES ('RO', 'explain-analyze-ro@example.com', 42)",
-        { readonly: true }
-      );
-      // The plan still comes back...
-      expect(result.resultSets[0].rows[0].plan as string).toContain('ShowPlanXML');
-
-      // ...but the write must not persist.
-      const after = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'explain-analyze-ro@example.com'",
-        {}
-      );
-      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
-    });
-
-    it('should translate EXPLAIN ANALYZE even when preceded by a comment', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        '/* real numbers please */ EXPLAIN ANALYZE SELECT * FROM users',
-        {}
-      );
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
-    });
-
-    it('should reject SET STATISTICS smuggled into an EXPLAIN ANALYZE query', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL(
-          'EXPLAIN ANALYZE SET STATISTICS XML OFF SELECT * FROM users',
-          {}
-        )
-      ).rejects.toThrow(/SET STATISTICS/i);
-    });
-
-    it('should reject an empty EXPLAIN ANALYZE', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE   ', {})
-      ).rejects.toThrow(/requires a statement/i);
-    });
-
-    it('should accept the parenthesized EXPLAIN (ANALYZE) form', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN (ANALYZE) SELECT name FROM users WHERE age > 30',
-        {}
-      );
-      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
-    });
-
-    it('should treat EXPLAIN (ANALYZE false) as a plain estimated EXPLAIN', async () => {
-      // Matches the read-only classifier, which does not count disabled ANALYZE
-      // as executing. An estimated plan has no runtime counters.
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN (ANALYZE false) SELECT name FROM users WHERE age > 30',
-        {}
-      );
-      const plan = result.resultSets[0].rows[0].plan as string;
-      expect(plan).toContain('ShowPlanXML');
-      expect(plan).not.toContain('RunTimeInformation');
-    });
-
-    it('should accept the equals spelling the read-only classifier recognizes', async () => {
-      // The classifier reads `ANALYZE = false` as a disabled ANALYZE, i.e. a
-      // plain EXPLAIN. Erroring here would reject what that layer waves through.
-      for (const sql of [
-        'EXPLAIN (ANALYZE = false) SELECT name FROM users WHERE age > 30',
-        'EXPLAIN (ANALYZE = 0) SELECT name FROM users WHERE age > 30',
-        'EXPLAIN ANALYZE = false SELECT name FROM users WHERE age > 30',
-        'EXPLAIN ANALYZE false SELECT name FROM users WHERE age > 30',
-      ]) {
-        const result = await sqlServerTest.connector.executeSQL(sql, {});
-        const plan = result.resultSets[0].rows[0].plan as string;
-        expect(plan, sql).toContain('ShowPlanXML');
-        expect(plan, sql).not.toContain('RunTimeInformation');
-      }
-    });
-
-    it('should still enable ANALYZE for the equals spelling', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN (ANALYZE = true) SELECT name FROM users WHERE age > 30',
-        {}
-      );
-      expect(result.resultSets[0].rows[0].plan as string).toContain('RunTimeInformation');
-    });
-
-    it('should block pass-through data sources under readonly EXPLAIN ANALYZE', async () => {
-      // OPENQUERY executes on the remote source, so the rollback guard never
-      // reaches it — the same escape the plain EXPLAIN path blocks.
-      await expect(
-        sqlServerTest.connector.executeSQL(
-          "EXPLAIN ANALYZE SELECT * FROM OPENQUERY(remote, 'SELECT 1')",
-          { readonly: true }
-        )
-      ).rejects.toThrow(/pass-through data sources/i);
-    });
-
-    it('should bind parameters for EXPLAIN ANALYZE', async () => {
-      // Binding is what makes this work at all: an unbound @p1 fails with
-      // "Must declare the scalar variable", so succeeding proves it was bound.
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
-        {},
-        [2]
-      );
-
-      const plan = result.resultSets[0].rows[0].plan as string;
-      expect(plan).toContain('RunTimeInformation');
-      // Two of the three rows pass the filter, so the value reached the server
-      // rather than merely being declared.
-      expect(plan).toMatch(/ActualRows="2"/);
-    });
-
-    it('should bind parameters for plain EXPLAIN', async () => {
-      // SHOWPLAN compiles without executing, so the DECLARE/SET node-mssql
-      // prepends never assigns — but the statement must still compile, and the
-      // plan comes back estimated.
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN SELECT name FROM users WHERE age > @p1',
-        {},
-        [30]
-      );
-
-      const plan = result.resultSets[0].rows[0].plan as string;
-      expect(plan).toContain('ShowPlanXML');
-      expect(plan).not.toContain('RunTimeInformation');
-    });
-
-    it('should bind parameters for EXPLAIN ANALYZE in readonly mode', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'EXPLAIN ANALYZE SELECT n FROM (VALUES (1), (2), (3)) AS t(n) WHERE n <= @p1',
-        { readonly: true },
-        [1]
-      );
-
-      const plan = result.resultSets[0].rows[0].plan as string;
-      expect(plan).toContain('RunTimeInformation');
-      expect(plan).toMatch(/ActualRows="1"/);
-    });
-
-    it('should block dynamic SQL under readonly EXPLAIN ANALYZE', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE EXEC GetUserCount', {
-          readonly: true,
-        })
-      ).rejects.toThrow(/dynamic SQL/i);
-    });
-
-    it('should not execute the statement under EXPLAIN (ANALYZE off)', async () => {
-      const before = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
-        {}
-      );
-      expect(Number(before.resultSets[0].rows[0].count)).toBe(0);
-
-      await sqlServerTest.connector.executeSQL(
-        "EXPLAIN (ANALYZE off) INSERT INTO users (name, email, age) VALUES ('Off', 'analyze-off@example.com', 7)",
-        {}
-      );
-
-      const after = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'analyze-off@example.com'",
-        {}
-      );
-      expect(Number(after.resultSets[0].rows[0].count)).toBe(0);
-    });
-
-    it('should reject PostgreSQL-only EXPLAIN options with a clear message', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE, BUFFERS) SELECT name FROM users', {})
-      ).rejects.toThrow(/BUFFERS/i);
-
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN ANALYZE VERBOSE SELECT name FROM users', {})
-      ).rejects.toThrow(/VERBOSE/i);
-
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN (COSTS) SELECT name FROM users', {})
-      ).rejects.toThrow(/COSTS/i);
-    });
-
-    it('should reject an unterminated EXPLAIN option list', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE SELECT name FROM users', {})
-      ).rejects.toThrow(/option list/i);
-    });
-
-    it('should reject an empty EXPLAIN (ANALYZE) with no statement', async () => {
-      await expect(
-        sqlServerTest.connector.executeSQL('EXPLAIN (ANALYZE)   ', {})
-      ).rejects.toThrow(/requires a statement/i);
-    });
-
-    it('should handle SQL Server IDENTITY columns', async () => {
-      await sqlServerTest.connector.executeSQL(`
-        CREATE TABLE identity_test (
-          id INT IDENTITY(1,1) PRIMARY KEY,
-          name NVARCHAR(50)
-        )
-      `, {});
-
-      await sqlServerTest.connector.executeSQL(`
-        INSERT INTO identity_test (name) VALUES ('Test 1'), ('Test 2')
-      `, {});
-
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT * FROM identity_test ORDER BY id',
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0].id).toBe(1);
-      expect(result.resultSets[0].rows[1].id).toBe(2);
-      expect(result.resultSets[0].rows[0].name).toBe('Test 1');
-    });
-
-    it('should handle SQL Server-specific data types', async () => {
-      await sqlServerTest.connector.executeSQL(`
-        CREATE TABLE sqlserver_types_test (
-          id INT IDENTITY(1,1) PRIMARY KEY,
-          unicode_text NVARCHAR(MAX),
-          datetime_val DATETIME2,
-          unique_id UNIQUEIDENTIFIER DEFAULT NEWID(),
-          xml_data XML,
-          binary_data VARBINARY(100)
-        )
-      `, {});
-
-      await sqlServerTest.connector.executeSQL(`
-        INSERT INTO sqlserver_types_test (unicode_text, datetime_val, xml_data, binary_data) 
-        VALUES (N'Unicode Text 测试', GETDATE(), '<root><item>test</item></root>', 0x48656C6C6F)
-      `, {});
-
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT * FROM sqlserver_types_test',
-        {}
-      );
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].unicode_text).toBe('Unicode Text 测试');
-      expect(result.resultSets[0].rows[0].unique_id).toBeDefined();
-      expect(result.resultSets[0].rows[0].xml_data).toBeDefined();
-    });
-
-    it('should work with SQL Server-specific functions', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          @@VERSION as sql_version,
-          DB_NAME() as current_db,
-          SUSER_NAME() as current_user_name,
-          GETDATE() as current_datetime,
-          NEWID() as new_guid
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].sql_version).toContain('Microsoft SQL Server');
-      expect(result.resultSets[0].rows[0].current_db).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_user_name).toBeDefined();
-      expect(result.resultSets[0].rows[0].current_datetime).toBeDefined();
-      expect(result.resultSets[0].rows[0].new_guid).toBeDefined();
-    });
-
-    it('should handle SQL Server transactions correctly', async () => {
-      // Test explicit transaction
-      await sqlServerTest.connector.executeSQL(`
-        BEGIN TRANSACTION;
-        INSERT INTO users (name, email, age) VALUES ('Transaction Test 1', 'trans1@example.com', 45);
-        INSERT INTO users (name, email, age) VALUES ('Transaction Test 2', 'trans2@example.com', 50);
-        COMMIT TRANSACTION;
-      `, {});
-      
-      const result = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email LIKE 'trans%@example.com'",
-        {}
-      );
-      expect(Number(result.resultSets[0].rows[0].count)).toBe(2);
-    });
-
-    it('should handle SQL Server rollback correctly', async () => {
-      // Get initial count
-      const beforeResult = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
-        {}
-      );
-      const beforeCount = Number(beforeResult.resultSets[0].rows[0].count);
-      
-      // Test rollback
-      await sqlServerTest.connector.executeSQL(`
-        BEGIN TRANSACTION;
-        INSERT INTO users (name, email, age) VALUES ('Rollback Test', 'rollback@example.com', 55);
-        ROLLBACK TRANSACTION;
-      `, {});
-      
-      const afterResult = await sqlServerTest.connector.executeSQL(
-        "SELECT COUNT(*) as count FROM users WHERE email = 'rollback@example.com'",
-        {}
-      );
-      const afterCount = Number(afterResult.resultSets[0].rows[0].count);
-      
-      expect(afterCount).toBe(beforeCount);
-    });
-
-    it('should handle SQL Server OUTPUT clause', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
+    it('should return the rows of a write with an OUTPUT clause as its only result set', async () => {
+      const result = await execute(`
         INSERT INTO users (name, email, age) 
         OUTPUT INSERTED.id, INSERTED.name
         VALUES ('Output Test', 'output@example.com', 40)
-      `, {});
+      `);
       
+      // The rows the write returned are not counted again as a write-only set.
+      expect(result.resultSets).toHaveLength(1);
       expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.resultSets[0].rows[0].id).toBeDefined();
       expect(result.resultSets[0].rows[0].name).toBe('Output Test');
     });
 
-    it('should handle SQL Server window functions', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          name,
-          age,
-          ROW_NUMBER() OVER (ORDER BY age DESC) as age_rank,
-          AVG(CAST(age AS FLOAT)) OVER () as avg_age
-        FROM users
-        WHERE age IS NOT NULL
-        ORDER BY age DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('age_rank');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('avg_age');
-    });
-
-    it('should handle SQL Server CTEs (Common Table Expressions)', async () => {
-      const result = await sqlServerTest.connector.executeSQL(`
-        WITH UserOrderSummary AS (
-          SELECT 
-            u.name,
-            COUNT(o.id) as order_count,
-            SUM(o.total) as total_spent
-          FROM users u
-          LEFT JOIN orders o ON u.id = o.user_id
-          GROUP BY u.id, u.name
-        )
-        SELECT * FROM UserOrderSummary 
-        WHERE order_count > 0
-        ORDER BY total_spent DESC
-      `, {});
-      
-      expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('order_count');
-      expect(result.resultSets[0].rows[0]).toHaveProperty('total_spent');
-    });
-
-    it('should handle SQL Server JSON functions (SQL Server 2016+)', async () => {
-      await sqlServerTest.connector.executeSQL(`
-        CREATE TABLE json_test (
-          id INT IDENTITY(1,1) PRIMARY KEY,
-          data NVARCHAR(MAX)
-        )
-      `, {});
-
-      await sqlServerTest.connector.executeSQL(`
-        INSERT INTO json_test (data) VALUES 
-        (N'{"name": "John", "tags": ["admin", "user"], "settings": {"theme": "dark"}}'),
-        (N'{"name": "Jane", "tags": ["user"], "settings": {"theme": "light"}}')
-      `, {});
-
-      const result = await sqlServerTest.connector.executeSQL(`
-        SELECT 
-          JSON_VALUE(data, '$.name') as name,
-          JSON_VALUE(data, '$.settings.theme') as theme,
-          JSON_QUERY(data, '$.tags') as tags
-        FROM json_test
-        WHERE JSON_VALUE(data, '$.name') = 'John'
-      `, {});
-      
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0].name).toBe('John');
-      expect(result.resultSets[0].rows[0].theme).toBe('dark');
-      expect(result.resultSets[0].rows[0].tags).toBeDefined();
-    });
-
-    it('should handle SQL Server MERGE statement', async () => {
+    it('should send a MERGE with the terminating semicolon it requires', async () => {
       // Create a staging table
-      await sqlServerTest.connector.executeSQL(`
+      await execute(`
         CREATE TABLE users_staging (
           id INT,
           name NVARCHAR(100),
           email NVARCHAR(100),
           age INT
         )
-      `, {});
+      `);
 
-      await sqlServerTest.connector.executeSQL(`
+      await execute(`
         INSERT INTO users_staging (id, name, email, age) VALUES 
         (1, 'John Doe Updated', 'john@example.com', 31),
         (999, 'New User', 'new@example.com', 25)
-      `, {});
+      `);
 
-      const result = await sqlServerTest.connector.executeSQL(`
+      const result = await execute(`
         MERGE users AS target
         USING users_staging AS source
         ON target.id = source.id
@@ -755,7 +391,7 @@ describe('SQL Server Connector Integration Tests', () => {
         WHEN NOT MATCHED THEN
           INSERT (name, email, age) VALUES (source.name, source.email, source.age)
         OUTPUT $action, INSERTED.name;
-      `, {});
+      `);
       
       expect(result.resultSets[0].rows.length).toBeGreaterThan(0);
       // Should have both UPDATE and INSERT actions
@@ -763,67 +399,31 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(actions).toContain('UPDATE');
       expect(actions).toContain('INSERT');
     });
+  });
 
-    it('should respect maxRows limit for SELECT queries', async () => {
-      // Test basic SELECT with maxRows limit
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT * FROM users ORDER BY id',
-        { maxRows: 2 }
-      );
-      
-      // The dropped probe row must not surface as a spurious extra result set.
-      expect(result.resultSets).toHaveLength(1);
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      expect(result.resultSets[0].rows[1]).toHaveProperty('name');
-      // The cap provably cut off rows (users has more than 2)
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should respect existing TOP clause when lower than maxRows', async () => {
-      // Test when existing TOP is lower than maxRows
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT TOP 1 * FROM users ORDER BY id',
-        { maxRows: 3 }
-      );
-
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].rows[0]).toHaveProperty('name');
-      // The user's own TOP fired, not the cap — no truncation flag
-      expect(result.resultSets[0].truncated).toBeUndefined();
-    });
-
+  describe('maxRows: T-SQL query shapes', () => {
     // Query shapes from issue #453: each used to be rewritten into a syntax
-    // error, or to slip past max_rows entirely.
-    it('should cap SELECT DISTINCT with maxRows', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT DISTINCT name FROM users ORDER BY name',
-        { maxRows: 2 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should cap SELECT ALL with maxRows', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT ALL name FROM users ORDER BY name',
-        { maxRows: 2 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should respect a parenthesised TOP (n) when lower than maxRows', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT TOP (1) name FROM users ORDER BY id',
-        { maxRows: 3 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(1);
-      expect(result.resultSets[0].truncated).toBeUndefined();
+    // error, or to slip past max_rows entirely. (Plain SELECT and TOP n are in
+    // the shared maxRows tests.)
+    it.each([
+      { sql: 'SELECT DISTINCT name FROM users ORDER BY name', maxRows: 2, rows: 2, truncated: true },
+      { sql: 'SELECT ALL name FROM users ORDER BY name', maxRows: 2, rows: 2, truncated: true },
+      // A parenthesised TOP (n) within the cap is respected.
+      { sql: 'SELECT TOP (1) name FROM users ORDER BY id', maxRows: 3, rows: 1, truncated: undefined },
+      { sql: 'SELECT name FROM users ORDER BY id OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY', maxRows: 2, rows: 2, truncated: true },
+      { sql: 'SELECT name FROM users ORDER BY id OFFSET 0 ROWS', maxRows: 2, rows: 2, truncated: true },
+      // Capped by the rows it really returns: integer division ties every age
+      // (all well below 1000) at 0, so TOP 1 WITH TIES returns the whole table.
+      { sql: 'SELECT TOP 1 WITH TIES name FROM users ORDER BY ISNULL(age, 0) / 1000', maxRows: 2, rows: 2, truncated: true },
+      { sql: 'SELECT TOP 100 PERCENT name FROM users', maxRows: 2, rows: 2, truncated: true },
+    ])('should return $rows row(s), truncated: $truncated, for "$sql" under maxRows $maxRows', async ({ sql, maxRows, rows, truncated }) => {
+      const result = await execute(sql, { maxRows });
+      expect(result.resultSets[0].rows).toHaveLength(rows);
+      expect(result.resultSets[0].truncated).toBe(truncated);
     });
 
     it('should respect an OFFSET ... FETCH that is within maxRows', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
+      const result = await execute(
         'SELECT name FROM users ORDER BY id OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY',
         { maxRows: 3 }
       );
@@ -832,63 +432,22 @@ describe('SQL Server Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBeUndefined();
     });
 
-    it('should cap an OFFSET ... FETCH that exceeds maxRows', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT name FROM users ORDER BY id OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY',
-        { maxRows: 2 }
+    it('should cap every statement of a batch inside the read-only rollback transaction', async () => {
+      const result = await execute(
+        'SELECT 1 AS a; SELECT name FROM users ORDER BY id;',
+        { maxRows: 2, readonly: true }
       );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
+      expect(result.resultSets).toHaveLength(2);
+      expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
+      expect(result.resultSets[0].truncated).toBeUndefined();
+      expect(result.resultSets[1].rows).toHaveLength(2);
+      expect(result.resultSets[1].truncated).toBe(true);
     });
-
-    it('should cap an OFFSET without FETCH', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT name FROM users ORDER BY id OFFSET 0 ROWS',
-        { maxRows: 2 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should cap TOP n WITH TIES by the rows it really returns', async () => {
-      // Integer division ties every age (all well below 1000) at 0, so
-      // TOP 1 WITH TIES returns the whole table.
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT TOP 1 WITH TIES name FROM users ORDER BY ISNULL(age, 0) / 1000',
-        { maxRows: 2 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it('should cap TOP n PERCENT by the rows it really returns', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT TOP 100 PERCENT name FROM users',
-        { maxRows: 2 }
-      );
-      expect(result.resultSets[0].rows).toHaveLength(2);
-      expect(result.resultSets[0].truncated).toBe(true);
-    });
-
-    it.each([{ readonly: false }, { readonly: true }])(
-      'should cap every statement of a multi-statement batch (readonly: $readonly)',
-      async ({ readonly }) => {
-        const result = await sqlServerTest.connector.executeSQL(
-          'SELECT 1 AS a; SELECT name FROM users ORDER BY id;',
-          { maxRows: 2, readonly }
-        );
-        expect(result.resultSets).toHaveLength(2);
-        expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
-        expect(result.resultSets[0].truncated).toBeUndefined();
-        expect(result.resultSets[1].rows).toHaveLength(2);
-        expect(result.resultSets[1].truncated).toBe(true);
-      }
-    );
 
     it('should keep a batch delimiter out of a trailing line comment', async () => {
       // The splitter trims each segment, so the rejoined semicolon must not
       // land on the same line as a trailing `--` comment.
-      const result = await sqlServerTest.connector.executeSQL(
+      const result = await execute(
         'SELECT 1 AS a -- note\n; SELECT name FROM users ORDER BY id;',
         { maxRows: 2 }
       );
@@ -902,65 +461,47 @@ describe('SQL Server Connector Integration Tests', () => {
       // Semicolons inside the body split like batch statements; the
       // rewrite must not reach them, or TOP would be stored in the
       // procedure's definition.
-      await sqlServerTest.connector.executeSQL(
+      await execute(
         'CREATE PROCEDURE dbo.max_rows_probe AS BEGIN SELECT 1 AS a; SELECT name FROM users ORDER BY id; END;',
         { maxRows: 2 }
       );
       try {
-        const definition = await sqlServerTest.connector.executeSQL(
-          "SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.max_rows_probe')) AS body",
-          {}
+        const definition = await execute(
+          "SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.max_rows_probe')) AS body"
         );
         expect(definition.resultSets[0].rows[0].body).not.toMatch(/\bTOP\b/i);
 
         // The procedure's output is still capped when it is executed.
-        const result = await sqlServerTest.connector.executeSQL('EXEC dbo.max_rows_probe', { maxRows: 2 });
+        const result = await execute('EXEC dbo.max_rows_probe', { maxRows: 2 });
         expect(result.resultSets[0].rows).toEqual([{ a: 1 }]);
         expect(result.resultSets[1].rows).toHaveLength(2);
         expect(result.resultSets[1].truncated).toBe(true);
       } finally {
-        await sqlServerTest.connector.executeSQL('DROP PROCEDURE dbo.max_rows_probe', {});
+        await execute('DROP PROCEDURE dbo.max_rows_probe');
       }
     });
+  });
 
-    it('should not affect non-SELECT queries', async () => {
-      // Test that maxRows doesn't affect INSERT/UPDATE/DELETE
-      const insertResult = await sqlServerTest.connector.executeSQL(
-        "INSERT INTO users (name, email, age) VALUES ('MaxRows Test', 'maxrows@sqlserver.com', 25)",
-        { maxRows: 1 }
-      );
-      
-      expect(insertResult.resultSets[0].rows).toHaveLength(0); // INSERTs without OUTPUT don't return rows by default
-      
-      // Verify the insert worked
-      const selectResult = await sqlServerTest.connector.executeSQL(
-        "SELECT * FROM users WHERE email = 'maxrows@sqlserver.com'",
-        {}
-      );
-      expect(selectResult.resultSets[0].rows).toHaveLength(1);
-      expect(selectResult.resultSets[0].rows[0].name).toBe('MaxRows Test');
-    });
+  describe('Multi-statement result sets and messages', () => {
+    it.each([{ readonly: false }, { readonly: true }])(
+      'should return every result set from a multi-statement SELECT batch (readonly: $readonly)',
+      async ({ readonly }) => {
+        const result = await execute('SELECT 1 AS a; SELECT 2 AS b;', { readonly });
 
-    it('should return every result set from a multi-statement SELECT batch', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT 1 AS a; SELECT 2 AS b;',
-        {}
-      );
-
-      // One resultSet per SELECT recordset, in order - not flattened together.
-      expect(result.resultSets).toEqual([
-        { rows: [{ a: 1 }], rowCount: 1 },
-        { rows: [{ b: 2 }], rowCount: 1 },
-      ]);
-    });
+        // One resultSet per SELECT recordset, in order - not flattened together.
+        expect(result.resultSets).toEqual([
+          { rows: [{ a: 1 }], rowCount: 1 },
+          { rows: [{ b: 2 }], rowCount: 1 },
+        ]);
+      }
+    );
 
     it('should sum rowCount across a mixed write/read multi-statement batch', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
+      const result = await execute(
         `
         INSERT INTO users (name, email, age) VALUES ('Batch User', 'batch@sqlserver.com', 40);
         SELECT name, email FROM users WHERE email = 'batch@sqlserver.com';
-        `,
-        {}
+        `
       );
 
       // One resultSet for the SELECT's recordset, plus a trailing write-only
@@ -972,23 +513,8 @@ describe('SQL Server Connector Integration Tests', () => {
       ]);
     });
 
-    it('should return every result set from a multi-statement SELECT batch in readonly mode', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT 1 AS a; SELECT 2 AS b;',
-        { readonly: true }
-      );
-
-      expect(result.resultSets).toEqual([
-        { rows: [{ a: 1 }], rowCount: 1 },
-        { rows: [{ b: 2 }], rowCount: 1 },
-      ]);
-    });
-
     it('should capture PRINT output in messages', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        "PRINT 'hello from sql server'; SELECT 1 as value;",
-        {}
-      );
+      const result = await execute("PRINT 'hello from sql server'; SELECT 1 as value;");
 
       expect(result.resultSets[0].rows).toHaveLength(1);
       expect(result.resultSets[0].rows[0].value).toBe(1);
@@ -998,9 +524,8 @@ describe('SQL Server Connector Integration Tests', () => {
     });
 
     it('should capture SET STATISTICS TIME output in messages', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SET STATISTICS TIME ON; SELECT COUNT(*) as cnt FROM users; SET STATISTICS TIME OFF;',
-        {}
+      const result = await execute(
+        'SET STATISTICS TIME ON; SELECT COUNT(*) as cnt FROM users; SET STATISTICS TIME OFF;'
       );
 
       expect(result.resultSets[0].rows).toHaveLength(1);
@@ -1014,15 +539,11 @@ describe('SQL Server Connector Integration Tests', () => {
     });
 
     it('should not include messages field when no informational messages are emitted', async () => {
-      const result = await sqlServerTest.connector.executeSQL(
-        'SELECT 1 as value',
-        {}
-      );
+      const result = await execute('SELECT 1 as value');
 
       expect(result.resultSets[0].rows).toHaveLength(1);
       // messages should be undefined (not present) when no info messages were emitted
       expect(result.messages).toBeUndefined();
     });
-
   });
 });
