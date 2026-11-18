@@ -105,4 +105,5 @@ export async function setupManagerWithFixture(fixtureName: string): Promise<Conn
 export const FIXTURES = {
   MULTI_SQLITE: 'multi-sqlite',
   READONLY_MAXROWS: 'readonly-maxrows',
+  TUNNELED_CREDENTIALS: 'tunneled-credentials',
 } as const;

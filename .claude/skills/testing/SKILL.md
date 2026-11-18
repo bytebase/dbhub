@@ -105,6 +105,7 @@ Located in `src/__fixtures__/`:
 - `helpers.ts` — Utilities: `fixtureTomlPath()`, `loadFixtureConfig()`, `setupManagerWithFixture()`
 - `toml/multi-sqlite.toml` — Three in-memory SQLite databases (database_a, database_b, database_c)
 - `toml/readonly-maxrows.toml` — Sources with readonly/max_rows tool configurations
+- `toml/tunneled-credentials.toml` — A lazy (never connected) PostgreSQL source with a database password and SSH tunnel credentials, for asserting what the sources API exposes and withholds
 
 Usage:
 ```typescript

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupManagerWithFixture, FIXTURES, loadFixtureConfig } from '../../__fixtures__/helpers.js';
-import type { ConnectorManager } from '../../connectors/manager.js';
+import { FIXTURES, loadFixtureConfig } from '../../__fixtures__/helpers.js';
+import { ConnectorManager } from '../../connectors/manager.js';
 import { listSources, getSource } from '../sources.js';
 import type { components } from '../openapi.js';
 import { initializeToolRegistry } from '../../tools/registry.js';
@@ -11,10 +11,14 @@ import '../../connectors/sqlite/index.js';
 
 type ErrorResponse = components['schemas']['Error'];
 
-const executeSqlTool = (sourceId: string, options: { readonly?: boolean; max_rows?: number } = {}) => ({
+const executeSqlTool = (
+  sourceId: string,
+  options: { readonly?: boolean; max_rows?: number } = {},
+  type = 'sqlite'
+) => ({
   name: `execute_sql_${sourceId}`,
   // The description names the source and its database type
-  description: expect.stringContaining(`'${sourceId}' sqlite database`),
+  description: expect.stringContaining(`'${sourceId}' ${type} database`),
   parameters: [{ name: 'sql', type: 'string', required: true, description: expect.stringContaining('SQL') }],
   ...options,
 });
@@ -47,6 +51,23 @@ const expectedSources = [
       expect.objectContaining({ name: 'search_objects_writable_unlimited', readonly: true }),
     ],
   },
+  {
+    // The tunneled-credentials fixture: a network source reached over SSH.
+    // Host, port, database and user are shown, and where the tunnel goes;
+    // the DSN, the database password and the SSH password are not.
+    id: 'tunneled_pg',
+    type: 'postgres',
+    description: 'Reached through a bastion',
+    host: 'db.internal',
+    port: 5433,
+    database: 'appdb',
+    user: 'app_user',
+    ssh_tunnel: { enabled: true, ssh_host: 'bastion.example.com', ssh_port: 2222, ssh_user: 'deploy' },
+    tools: [
+      executeSqlTool('tunneled_pg', {}, 'postgres'),
+      expect.objectContaining({ name: 'search_objects_tunneled_pg', readonly: true }),
+    ],
+  },
 ];
 
 describe('Data Sources API Integration Tests', () => {
@@ -55,9 +76,12 @@ describe('Data Sources API Integration Tests', () => {
 
   beforeAll(async () => {
     // Initialize ConnectorManager and ToolRegistry with the readonly-maxrows
-    // fixture: 3 SQLite sources with different execution options
-    manager = await setupManagerWithFixture(FIXTURES.READONLY_MAXROWS);
-    const { sources, tools } = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+    // fixture (3 SQLite sources with different execution options) plus the
+    // tunneled-credentials one (a lazy PostgreSQL source, never connected)
+    const { sources: sqliteSources, tools } = loadFixtureConfig(FIXTURES.READONLY_MAXROWS);
+    const sources = [...sqliteSources, ...loadFixtureConfig(FIXTURES.TUNNELED_CREDENTIALS).sources];
+    manager = new ConnectorManager();
+    await manager.connectWithSources(sources);
     initializeToolRegistry({ sources, tools: tools || [] });
 
     server = await startApiServer({ '/api/sources': listSources, '/api/sources/:sourceId': getSource });
@@ -74,7 +98,11 @@ describe('Data Sources API Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toEqual(expectedSources);
+      const body = await response.text();
+      expect(JSON.parse(body)).toEqual(expectedSources);
+      // No credential reaches the response under any field, tool text included
+      expect(body).not.toContain('db-secret-password');
+      expect(body).not.toContain('ssh-secret-password');
     });
   });
 
