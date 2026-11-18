@@ -1,4 +1,5 @@
 import sql from "mssql";
+import type { DatabaseMessage } from "../interface.js";
 import { stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import {
   sqlServerDynamicSqlKeywords,
@@ -11,7 +12,8 @@ import {
  * Request-level helpers shared by the SQL Server connector's execution paths
  * (executeSQL / executeReadOnly in index.ts and the EXPLAIN emulation in
  * explain.ts), kept in one place so the paths cannot drift in how they bind
- * parameters or which read-only escapes they reject.
+ * parameters, which read-only escapes they reject, or how a read-only
+ * transaction is rolled back.
  */
 
 /**
@@ -96,5 +98,67 @@ export function assertNoReadOnlyEscapes(
         .map((k) => k.toUpperCase())
         .join(", ")}) are not allowed`,
     );
+  }
+}
+
+/**
+ * Collect a request's informational messages (SET STATISTICS TIME/IO output,
+ * PRINT, ...) as they arrive. Call before running the request; the returned
+ * array fills in while it executes.
+ */
+export function collectInfoMessages(request: sql.Request): DatabaseMessage[] {
+  const messages: DatabaseMessage[] = [];
+  request.on(
+    "info",
+    (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
+      messages.push({
+        text: info.message,
+        // SQL Server reports severity as a numeric class; info messages are < 10.
+        severity: info.class !== undefined ? String(info.class) : undefined,
+        code: info.number,
+        line: info.lineNumber,
+      });
+    }
+  );
+  return messages;
+}
+
+/**
+ * Run `run` on a request inside a transaction that is always rolled back, so
+ * nothing the request does can persist. SQL Server has no READ ONLY
+ * transaction mode; this is the engine-level backstop every read-only
+ * execution path shares.
+ *
+ * A failed request has already aborted the transaction, so a rollback error
+ * after one is expected noise and the request's own error is what surfaces.
+ * After a *successful* request a rollback error means the writes may still be
+ * live — that must surface, and does.
+ *
+ * Callers reject the constructs that could escape the transaction first; see
+ * assertNoReadOnlyEscapes.
+ */
+export async function runRolledBack<T>(
+  connection: sql.ConnectionPool,
+  run: (request: sql.Request) => Promise<T>
+): Promise<T> {
+  const transaction = new sql.Transaction(connection);
+  await transaction.begin();
+
+  let requestFailed = false;
+  try {
+    return await run(new sql.Request(transaction));
+  } catch (error) {
+    requestFailed = true;
+    throw error;
+  } finally {
+    try {
+      await transaction.rollback();
+    } catch (rollbackError) {
+      if (!requestFailed) {
+        throw new Error(
+          `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`
+        );
+      }
+    }
   }
 }

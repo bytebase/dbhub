@@ -6,7 +6,6 @@ import {
   DSNParser,
   SQLResult,
   SQLResultSet,
-  DatabaseMessage,
   TableColumn,
   TableIndex,
   StoredProcedure,
@@ -22,7 +21,12 @@ import { SQLRowLimiter } from "../../utils/sql-row-limiter.js";
 import { objectRows } from "../../utils/result-columns.js";
 import { LEADING_SQL_NOISE, splitSQLStatements, stripCommentsAndStrings } from "../../utils/sql-parser.js";
 import { closeQuietly } from "../../utils/resource-cleanup.js";
-import { assertNoReadOnlyEscapes, bindParameters } from "./request-helpers.js";
+import {
+  assertNoReadOnlyEscapes,
+  bindParameters,
+  collectInfoMessages,
+  runRolledBack,
+} from "./request-helpers.js";
 import { explainAnalyzeQuery, explainQuery, parseExplainPrefix } from "./explain.js";
 
 /**
@@ -769,40 +773,25 @@ export class SQLServerConnector implements Connector {
       // BEGIN TRANSACTION READ ONLY, so we wrap in a transaction and
       // unconditionally ROLLBACK to prevent any modifications from persisting.
       // This is defense-in-depth behind the keyword classifier.
-      if (options.readonly) {
-        return await this.executeReadOnly(
-          processedSQL,
-          parameters,
-          isSingleStatement ? sqlQuery : undefined,
-          options.maxRows,
-        );
-      }
+      // Both modes run the same request; read-only only changes what it runs in.
+      const run = async (request: sql.Request) => {
+        // Informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
+        const messages = collectInfoMessages(request);
+        bindParameters(request, parameters);
+        // Positional rows; buildResultSets rebuilds the objects (see objectRows).
+        request.arrayRowMode = true;
+        return { result: await request.query(processedSQL), messages };
+      };
 
-      // Create request and collect informational messages (e.g. SET STATISTICS TIME/IO, PRINT)
-      const request = this.connection.request();
-      const messages: DatabaseMessage[] = [];
-      request.on(
-        'info',
-        (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-          messages.push({
-            text: info.message,
-            // SQL Server reports severity as a numeric class; info messages are < 10.
-            severity: info.class !== undefined ? String(info.class) : undefined,
-            code: info.number,
-            line: info.lineNumber,
-          });
-        }
-      );
-
-      bindParameters(request, parameters);
-      // Positional rows; buildResultSets rebuilds the objects (see objectRows).
-      request.arrayRowMode = true;
-
-      const result = await request.query(processedSQL);
+      const { result, messages } = options.readonly
+        ? await this.executeReadOnly(processedSQL, run)
+        : await run(this.connection.request());
 
       const resultSets = SQLServerConnector.buildResultSets(
         result.recordsets,
         result.rowsAffected,
+        // Original (pre-rewrite) statement text for attribution; undefined for
+        // multi-statement batches, where attribution would be a guess.
         isSingleStatement ? sqlQuery : undefined,
         options.maxRows,
       );
@@ -918,75 +907,21 @@ export class SQLServerConnector implements Connector {
   }
 
   /**
-   * Execute a query inside a transaction that always rolls back, preventing
+   * Run a request inside a transaction that always rolls back, preventing
    * any modifications from persisting. SQL Server has no native READ ONLY
    * transaction mode, so this is the defense-in-depth backstop behind the
-   * keyword classifier.
+   * keyword classifier (see runRolledBack).
    *
    * Dangerous constructs are rejected before the transaction opens; see
    * assertNoReadOnlyEscapes.
    */
-  private async executeReadOnly(
+  private async executeReadOnly<T>(
     processedSQL: string,
-    parameters: any[] | undefined,
-    // Original (pre-rewrite) statement text for attribution; undefined for
-    // multi-statement batches, where attribution would be a guess.
-    sourceSql: string | undefined,
-    maxRows: number | undefined,
-  ): Promise<SQLResult> {
+    run: (request: sql.Request) => Promise<T>
+  ): Promise<T> {
     assertNoReadOnlyEscapes(processedSQL, { transactionControl: true });
-
-    const transaction = new sql.Transaction(this.connection!);
-    await transaction.begin();
-
-    const request = new sql.Request(transaction);
-    const messages: DatabaseMessage[] = [];
-    request.on(
-      'info',
-      (info: { message: string; number?: number; class?: number; lineNumber?: number }) => {
-        messages.push({
-          text: info.message,
-          severity: info.class !== undefined ? String(info.class) : undefined,
-          code: info.number,
-          line: info.lineNumber,
-        });
-      },
-    );
-
-    bindParameters(request, parameters);
-    // Positional rows; buildResultSets rebuilds the objects (see objectRows).
-    request.arrayRowMode = true;
-
-    let result;
-    let queryFailed = false;
-    try {
-      result = await request.query(processedSQL);
-    } catch (error) {
-      queryFailed = true;
-      throw error;
-    } finally {
-      try {
-        await transaction.rollback();
-      } catch (rollbackError) {
-        if (!queryFailed) {
-          throw new Error(
-            `Read-only rollback failed — data may have been modified: ${(rollbackError as Error).message}`,
-          );
-        }
-      }
-    }
-    const resultSets = SQLServerConnector.buildResultSets(
-      result.recordsets,
-      result.rowsAffected,
-      sourceSql,
-      maxRows,
-    );
-    return {
-      resultSets,
-      ...(messages.length > 0 ? { messages } : {}),
-    };
+    return runRolledBack(this.connection!, run);
   }
-
 }
 
 // Create and register the connector
