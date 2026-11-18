@@ -248,12 +248,8 @@ This page covers command-line flags and environment variables. For TOML configur
       ```
 
       <Note>
-        DBHub talks to ClickHouse over its **HTTP interface**, so the port is
-        the HTTP port (`8123`), or the HTTPS port (`8443`) with
-        `sslmode=require` or `verify-full` — not the native protocol port
-        (`9000`/`9440`). When the port is omitted, DBHub picks `8123` or `8443`
-        from the `sslmode`. The user defaults to `default` and the database to
-        `default`.
+        The port is the **HTTP interface** port (`8123`, or `8443` with
+        `sslmode=require` / `verify-full`), not the native protocol port.
       </Note>
     </Tab>
 

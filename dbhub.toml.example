@@ -258,26 +258,17 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 # CLICKHOUSE
 # ============================================================================
 
-# DBHub uses ClickHouse's HTTP interface: port 8123, or 8443 over HTTPS
-# (sslmode=require or verify-full), which is what ClickHouse Cloud exposes.
+# The port is the HTTP interface port: 8123, or 8443 with sslmode=require or
+# verify-full (ClickHouse Cloud).
 # [[sources]]
-# id = "analytics"
+# id = "local_clickhouse"
 # dsn = "clickhouse://default:secret@localhost:8123/analytics"
 # # ClickHouse Cloud:
 # # dsn = "clickhouse://default:secret@abc123.us-east-1.aws.clickhouse.cloud:8443/default?sslmode=verify-full"
-# # A query that returns ten rows can still scan billions. Bound what a query
-# # may cost: query_timeout stops it on the server, and [sources.session]
-# # settings are sent with every request. A read-only tool cannot override them.
-# query_timeout = 30
-# [sources.session]
-# max_rows_to_read = 1000000000
-# max_bytes_to_read = 50000000000
-# max_memory_usage = 10000000000
 
-# ClickHouse - Individual parameters (password may be omitted for a
-# passwordless `default` user)
+# ClickHouse - Individual parameters
 # [[sources]]
-# id = "analytics"
+# id = "local_clickhouse"
 # type = "clickhouse"
 # host = "localhost"
 # port = 8123
@@ -497,5 +488,5 @@ dsn = "postgres://postgres:postgres@localhost:5432/myapp"
 #   MySQL/MariaDB:  ?, ?, ?
 #   SQL Server:     @p1, @p2, @p3
 #   Oracle:         :1, :2, :3
-#   ClickHouse:     {p1:String}, {p2:UInt32}  (the type is part of the placeholder)
+#   ClickHouse:     {p1:String}, {p2:UInt32}
 #   SQLite:         ?, ?, ?

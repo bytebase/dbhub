@@ -16,6 +16,5 @@ Searching `object_type: "column"` with a pattern like `%email%` is the fastest w
 ## Querying
 
 - Always add `LIMIT` (`TOP` on SQL Server, `FETCH FIRST n ROWS ONLY` on Oracle) when sampling data — start with `LIMIT 10`. Prefer aggregates (`COUNT`, `GROUP BY`) over pulling rows to characterize data.
-- On ClickHouse, filter on the leading columns of the table's `PRIMARY KEY` / `ORDER BY` (listed under `indexes`) and on a time range: a query that returns a few rows can still scan the whole table. These keys do not make rows unique, so a `ReplacingMergeTree` table can hold several versions of a row until `FINAL` is used.
 - Check a table's `full` detail before writing JOINs so you use real column names — don't guess and retry.
 - This plugin is read-only; if a write is rejected, tell the user rather than trying to work around it.

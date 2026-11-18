@@ -183,16 +183,7 @@ outside TOML and follow the same order:
   - `src/connectors/introspection-utils.ts`: `groupIndexColumns`, for catalogs that list an index one column per row.
   - `src/utils/home-dir.ts`: `expandHomeDir`, the one `~/` expansion for every path option (SQLite database paths have their own rules in `sqlite-dsn.ts`).
   - `src/utils/safe-url.ts`: `SafeURL`, plus `rawQueryParamValues` for a parameter (like `sslmode`) whose empty value must be rejected rather than treated as absent.
-- ClickHouse (`src/connectors/clickhouse/index.ts`) differs from the pooled connectors in ways worth knowing before changing it:
-  - It is stateless: one HTTP request per statement, no session, so `SET`/`USE`/temporary tables do not carry between statements. `[sources.session]` settings and `query_timeout` (`max_execution_time`) are sent as settings with every request.
-  - Read-only is the `readonly = 1` setting on the request, enforced by the server. A user whose own profile is `readonly = 1` may not change any setting (nothing is sent; `[sources.session]` fails the connect) and one at `readonly = 2` may not change `readonly` (it is left off); the level is probed at connect time.
-  - `max_rows` is applied by reading rows off the streamed response and closing it, never by rewriting SQL; `sql-row-limiter.ts` is not used.
-  - Rows are read as `JSONCompactEachRowWithNamesAndTypes` (positional, so repeated column names survive). Numbers a double cannot hold exactly (64-bit integers, wide decimals) stay strings (`keepExactNumbers`), and `Decimal` columns are always strings.
-  - An error raised after rows were sent must never come back as data. `http_write_exception_in_output_format = 0` is sent so it arrives as text; for a `readonly = 1` user whose profile has it on, a final one-string row that reads as an error is judged by column type and response size (`runStatement`).
-  - `query_timeout` is bounded on the client by elapsed time (`Deadline`), covering the request and the reading of its response; the HTTP client's own inactivity timeout is switched off.
-  - For a `readonly = 2` user, a read-only statement with a `SETTINGS` clause is refused in the connector (`hasSettingsClause`), since the server would let it lift `[sources.session]` limits.
-  - `SQLResult.messages` carries rows/bytes read per statement from the `X-ClickHouse-Summary` header, only when the response fit the server-side `buffer_size` and was read to the end (otherwise the header is not final).
-  - Custom-tool placeholders are `{p1:Type}`, `{p2:Type}` (`braced` style in `parameter-mapper.ts`). `getTableIndexes` reports `PRIMARY KEY`, `ORDER BY` and skipping indexes, never as unique. No `getHealthCheck`.
+- ClickHouse (`src/connectors/clickhouse/index.ts`) is stateless: one HTTP request per statement, with `readonly = 1`, `query_timeout` (`max_execution_time`) and `[sources.session]` sent as settings on each request. `max_rows` is applied by reading the streamed response, not by `sql-row-limiter.ts`. The connector's comments cover the rest (read-only user levels, errors raised mid-stream, exact numbers, the client-side deadline).
 - DSN Examples:
   - PostgreSQL: `postgres://user:password@localhost:5432/dbname?sslmode=disable`
   - MySQL: `mysql://user:password@localhost:3306/dbname?sslmode=disable`

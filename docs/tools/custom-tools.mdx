@@ -162,31 +162,16 @@ The same tool pattern works across different databases, just adjust the paramete
 
   <Tab title="ClickHouse">
     ```toml
-    # Placeholders are {p1:Type}, {p2:Type}, ... in parameter order; the type
-    # is the ClickHouse type the value is parsed as.
     [[tools]]
-    name = "tenant_daily_events"
-    description = "Events per day for one tenant since a given date"
-    source = "analytics"
-    readonly = true
-    max_rows = 400
-    statement = """
-      SELECT toDate(ts) AS day, count() AS events
-      FROM events
-      WHERE tenant_id = {p1:UInt32} AND ts >= {p2:Date}
-      GROUP BY day
-      ORDER BY day
-    """
+    name = "get_product"
+    description = "Get product by ID"
+    source = "clickhouse_db"
+    statement = "SELECT * FROM products WHERE id = {p1:UInt64}"
 
     [[tools.parameters]]
-    name = "tenant_id"
+    name = "product_id"
     type = "integer"
-    description = "Tenant ID"
-
-    [[tools.parameters]]
-    name = "since"
-    type = "string"
-    description = "First day to include, as YYYY-MM-DD"
+    description = "Product ID"
     ```
   </Tab>
 </Tabs>

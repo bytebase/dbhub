@@ -197,15 +197,6 @@ When using `detail_level: "summary"` or `"full"`, the tool includes database com
 | ClickHouse | `COMMENT` clause of `CREATE TABLE` / `ALTER TABLE ... MODIFY COMMENT` | `COMMENT` on the column definition |
 | SQLite     | Not supported | Not supported |
 
-## ClickHouse
-
-- **Schemas** are ClickHouse databases. Searches default to the database in the DSN; the `system` and `INFORMATION_SCHEMA` databases are not listed (query them with `execute_sql`).
-- **Indexes** report the table's keys, since ClickHouse has no unique indexes: `PRIMARY KEY` (the sparse index queries are read through), `ORDER BY` when the sorting key has more columns than the primary key, and each data-skipping index by name. None is marked unique: a key orders rows, it does not deduplicate them, so a `ReplacingMergeTree` table can return several versions of a row until `FINAL` is used. A key column may be an expression such as `toDate(ts)`.
-- **Views** include materialized views. The table a materialized view writes to is listed as a table.
-- **Columns** show nullability from the type (`Nullable(...)`), and computed columns with their keyword in the default: `MATERIALIZED toDate(ts)`, `ALIAS domain(url)`. Such columns are not part of `SELECT *`.
-- **Functions** are SQL user-defined functions (`CREATE FUNCTION`), which are server-wide. There are no procedures.
-- **Row counts** come from table metadata and are exact for MergeTree tables.
-
 ## Usage Patterns
 
 <CodeGroup>

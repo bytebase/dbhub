@@ -32,22 +32,6 @@ Only a single statement is accepted (no `;`-separated batches), and the input mu
 
 A leading PostgreSQL option list such as `(FORMAT JSON) SELECT ...` is accepted only when every option is one that cannot execute the statement: `VERBOSE`, `COSTS`, `SETTINGS`, `GENERIC_PLAN`, `BUFFERS`, `SERIALIZE`, `WAL`, `TIMING`, `SUMMARY`, `MEMORY`, `FORMAT`. `ANALYZE`, quoted option names, and any other option are rejected.
 
-### ClickHouse
-
-For a query, the tool sends `EXPLAIN indexes = 1`. Besides the plan's steps, the output lists for each table the parts and granules that its primary key, partition key and skipping indexes leave to read, which is how to tell whether a query will scan a slice of a table or all of it before running it. The output is along these lines:
-
-```text
-ReadFromMergeTree (analytics.events)
-Indexes:
-  PrimaryKey
-    Keys: tenant_id, toDate(ts)
-    Condition: and((tenant_id in [42, 42]), (toDate(ts) in [20454, +Inf)))
-    Parts: 3/12
-    Granules: 18/5321
-```
-
-To get another kind of plan, start the input with it: `ESTIMATE SELECT ...` (rows, marks and parts per table), `PIPELINE SELECT ...`, `SYNTAX SELECT ...`, or EXPLAIN settings of your own such as `actions = 1 SELECT ...`. Such input is passed on unchanged after `EXPLAIN`. No ClickHouse `EXPLAIN` runs the query, though planning may evaluate a constant subquery such as `(SELECT max(ts) FROM t)`.
-
 <Tip>
 Because plain `EXPLAIN` never executes the target statement, `explain_sql` is safe to run against write statements too. `explain_sql` on `DELETE FROM users WHERE id = 1` returns the plan without deleting anything.
 </Tip>

@@ -144,17 +144,6 @@ max_rows = 1000
 - Can be configured per-tool in [TOML configuration](/config/toml)
 - When the cap actually cuts off rows, the statement's result carries `"truncated": true` alongside `count`, so a capped result is distinguishable from a table that genuinely has exactly `max_rows` rows (detection is exact — DBHub fetches one probe row past the cap; the flag is omitted for complete results). Run `COUNT(*)` to get the true total when you see it.
 
-## ClickHouse
-
-ClickHouse is reached over its HTTP interface, which changes a few things compared with the other databases:
-
-- **No session.** Each statement of a call is its own request. `SET`, `USE` and temporary tables do not carry over to the next statement, and there are no transactions. Put settings that should always apply in [`[sources.session]`](/config/toml#session).
-- **Row limiting by reading.** `max_rows` is applied by reading that many rows and closing the response, not by rewriting the query, so it also caps `SHOW`, `DESCRIBE` and queries with `LIMIT BY` or a trailing `SETTINGS` clause. It limits what is returned, not what is scanned: use `query_timeout` and `[sources.session]` limits such as `max_rows_to_read` for that.
-- **What a statement cost.** `messages` reports the rows and bytes each statement read (and wrote), e.g. `Read 1000000 rows (8000000 bytes) in 0.012s`. It is left out when the counters are not final: for a result cut off by `max_rows`, or one larger than about 1 MB.
-- **No `FORMAT` clause.** DBHub chooses the output format; a statement with its own `FORMAT` is rejected.
-- **Numbers.** 64-bit integers are returned as JSON numbers when a double holds them exactly and as strings otherwise; `Decimal` columns are returned as strings. No value is rounded, including for a database user who cannot change output settings.
-- **Read-only tools.** A statement cannot carry a `SETTINGS` clause, because `readonly = 1` forbids changing settings (see [Read-Only Mode](/config/read-only-mode)).
-
 ## Response Format
 
 The result is a JSON object. Each statement in the call gets its own entry in `statements`, in order — a single query is a `statements` array of length one:
