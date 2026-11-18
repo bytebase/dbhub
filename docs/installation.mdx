@@ -682,52 +682,73 @@ VS Code has native MCP support through GitHub Copilot. Create `.vscode/mcp.json`
 
 ### Codex
 
+The Codex CLI, desktop app, and IDE extension share the same MCP configuration.
+
 <Tabs>
   <Tab title="CLI">
     ```bash
     # Connect to your database
-    codex mcp add dbhub -- npx @bytebase/dbhub@latest --transport stdio --dsn "postgres://user:password@localhost:5432/dbname"
+    codex mcp add dbhub --env DSN="postgres://user:password@localhost:5432/dbname" -- npx -y @bytebase/dbhub@latest --transport stdio
 
     # Or use demo mode for testing
-    codex mcp add dbhub -- npx @bytebase/dbhub@latest --transport stdio --demo
+    codex mcp add dbhub -- npx -y @bytebase/dbhub@latest --transport stdio --demo
     ```
+
+    `--env` stores the DSN in `~/.codex/config.toml`. To keep credentials out of that file, forward the variable from your shell instead (see the TOML tab).
   </Tab>
 
   <Tab title="TOML">
     ```toml ~/.codex/config.toml
-    # Connect to your database
     [mcp_servers.dbhub]
     command = "npx"
-    args = ["@bytebase/dbhub@latest", "--transport", "stdio", "--dsn", "postgres://user:password@localhost:5432/dbname"]
-
-    # Or use demo mode for testing
-    [mcp_servers.dbhub]
-    command = "npx"
-    args = ["@bytebase/dbhub@latest", "--transport", "stdio", "--demo"]
+    args = ["-y", "@bytebase/dbhub@latest", "--transport", "stdio"]
+    # Forward DSN from the environment Codex is launched in,
+    # so the connection string never lands in this file
+    env_vars = ["DSN"]
+    # The first npx run downloads the package; allow more than the 10s default
+    startup_timeout_sec = 30
     ```
+
+    Then export the DSN before starting Codex:
+
+    ```bash
+    export DSN="postgres://user:password@localhost:5432/dbname"
+    ```
+
+    To expose only some tools to Codex, add an allow list:
+
+    ```toml
+    enabled_tools = ["search_objects", "execute_sql"]
+    ```
+  </Tab>
+
+  <Tab title="Config File">
+    For multi-database setups, use a [TOML config file](/config/toml):
+
+    ```toml ~/.codex/config.toml
+    [mcp_servers.dbhub]
+    command = "npx"
+    args = ["-y", "@bytebase/dbhub@latest", "--transport", "stdio", "--config", "/path/to/dbhub.toml"]
+    startup_timeout_sec = 30
+    ```
+
+    To scope the server to one repository, put the same table in `.codex/config.toml` at the root of a trusted project.
   </Tab>
 
   <Tab title="Verification">
     ```bash
-    /mcp
+    codex mcp list
 
-    🔌  MCP Tools
-
-      • dbhub
-        • Status: enabled
-        • Auth: Unsupported
-        • Command: npx -y @bytebase/dbhub@latest --demo
-        • Tools: execute_sql
-        • Resources: schemas (db://schemas)
-        • Resource templates: tables_in_schema (db://schemas/{schemaName}/tables), table_structure_in_schema (db://schemas/{schemaName}/
-    tables/{tableName}), indexes_in_table (db://schemas/{schemaName}/tables/{tableName}/indexes), procedures_in_schema (db://schemas/
-    {schemaName}/procedures), procedure_detail_in_schema (db://schemas/{schemaName}/procedures/{procedureName})
+    Name   Command  Args                                         Env        Cwd  Status   Auth
+    dbhub  npx      -y @bytebase/dbhub@latest --transport stdio  DSN=*****  -    enabled  Unsupported
     ```
+
+    Inside a Codex session, run `/mcp` to see the tools DBHub exposes (`execute_sql` and `search_objects` by default).
   </Tab>
 </Tabs>
 
 **References:**
-- [Codex MCP Documentation](https://developers.openai.com/codex/mcp/)
+- [Codex MCP Documentation](https://learn.chatgpt.com/docs/extend/mcp)
 
 ### Dify
 
