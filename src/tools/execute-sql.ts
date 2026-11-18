@@ -7,6 +7,7 @@ import { getToolRegistry } from "./registry.js";
 import { BUILTIN_TOOL_EXECUTE_SQL } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
+  resolveTrackedToolName,
   toStatementsPayload,
   trackToolRequest,
   tryClassifyConnectionError,
@@ -87,7 +88,7 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "execute_sql" : `execute_sql_${effectiveSourceId}`,
+          toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_EXECUTE_SQL),
           sql,
         },
         startTime,

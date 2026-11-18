@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
+import { BUILTIN_TOOL_HEALTH_CHECK } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
+  resolveTrackedToolName,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
@@ -77,7 +79,7 @@ export function createHealthCheckToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "health_check" : `health_check_${effectiveSourceId}`,
+          toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_HEALTH_CHECK),
           sql: "",
         },
         startTime,

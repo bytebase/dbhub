@@ -7,7 +7,12 @@ import { executeSqlSchema } from "../tools/execute-sql.js";
 import { explainSqlSchema } from "../tools/explain-sql.js";
 import { healthCheckSchema } from "../tools/health-check.js";
 import { getToolRegistry } from "../tools/registry.js";
-import { BUILTIN_TOOL_EXECUTE_SQL } from "../tools/builtin-tools.js";
+import {
+  BUILTIN_TOOL_EXECUTE_SQL,
+  BUILTIN_TOOL_EXPLAIN_SQL,
+  BUILTIN_TOOL_HEALTH_CHECK,
+  BUILTIN_TOOL_SEARCH_OBJECTS,
+} from "../tools/builtin-tools.js";
 import type { ParameterConfig, ToolConfig } from "../types/config.js";
 
 /**
@@ -371,6 +376,20 @@ function buildExplainSqlTool(sourceId: string): Tool {
 }
 
 /**
+ * Build health_check tool metadata for API response
+ */
+function buildHealthCheckTool(sourceId: string): Tool {
+  const healthMetadata = getHealthCheckMetadata(sourceId);
+
+  return {
+    name: healthMetadata.name,
+    description: healthMetadata.description,
+    parameters: zodToParameters(healthMetadata.schema),
+    readonly: true, // health_check is always readonly
+  };
+}
+
+/**
  * Build custom tool metadata for API response
  */
 function buildCustomTool(toolConfig: ToolConfig): Tool {
@@ -398,12 +417,14 @@ export function getToolsForSource(sourceId: string): Tool[] {
   // Uniform iteration: map each enabled tool config to its API representation
   return enabledToolConfigs.map((toolConfig) => {
     // Dispatch based on tool name
-    if (toolConfig.name === "execute_sql") {
+    if (toolConfig.name === BUILTIN_TOOL_EXECUTE_SQL) {
       return buildExecuteSqlTool(sourceId, toolConfig);
-    } else if (toolConfig.name === "search_objects") {
+    } else if (toolConfig.name === BUILTIN_TOOL_SEARCH_OBJECTS) {
       return buildSearchObjectsTool(sourceId);
-    } else if (toolConfig.name === "explain_sql") {
+    } else if (toolConfig.name === BUILTIN_TOOL_EXPLAIN_SQL) {
       return buildExplainSqlTool(sourceId);
+    } else if (toolConfig.name === BUILTIN_TOOL_HEALTH_CHECK) {
+      return buildHealthCheckTool(sourceId);
     } else {
       // Custom tool
       return buildCustomTool(toolConfig);

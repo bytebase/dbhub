@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SafeURL } from '../safe-url.js';
+import { SafeURL, replaceDSNHostPort } from '../safe-url.js';
 
 describe('SafeURL', () => {
   it('should parse a simple DSN correctly', () => {
@@ -140,5 +140,44 @@ describe('SafeURL', () => {
       expect(url.hostname).toBe('localhost');
       expect(url.pathname).toBe('/we@ird');
     });
+  });
+});
+
+describe('replaceDSNHostPort', () => {
+  it.each([
+    ['host and port', 'postgres://user:pass@db.internal:5432/mydb', 'postgres://user:pass@127.0.0.1:55000/mydb'],
+    ['host without a port', 'postgres://user:pass@db.internal/mydb', 'postgres://user:pass@127.0.0.1:55000/mydb'],
+    ['no credentials', 'mysql://db.internal:3306/mydb', 'mysql://127.0.0.1:55000/mydb'],
+    ['no path', 'mysql://user:pass@db.internal:3306', 'mysql://user:pass@127.0.0.1:55000'],
+    ['query without a path', 'mysql://user:pass@db.internal?sslmode=require', 'mysql://user:pass@127.0.0.1:55000?sslmode=require'],
+    ['bracketed IPv6 host', 'postgres://user:pass@[2001:db8::1]:5432/mydb', 'postgres://user:pass@127.0.0.1:55000/mydb'],
+    ['an @ in the password', 'postgres://user:p@ss@db.internal:5432/mydb', 'postgres://user:p@ss@127.0.0.1:55000/mydb'],
+    ['an @ in the path', 'sqlserver://user:pass@db.internal/we@ird', 'sqlserver://user:pass@127.0.0.1:55000/we@ird'],
+    ['an @ and / in the query', 'postgres://db.internal/mydb?sslrootcert=/a@b/ca.pem', 'postgres://127.0.0.1:55000/mydb?sslrootcert=/a@b/ca.pem'],
+  ])('replaces %s', (_, dsn, expected) => {
+    expect(replaceDSNHostPort(dsn, '127.0.0.1', 55000)).toBe(expected);
+  });
+
+  it('leaves credentials and query exactly as written', () => {
+    // Raw and percent-encoded characters both survive: nothing is decoded or
+    // re-encoded, so the connector parses the same DSN the user wrote.
+    const dsn = 'postgres://us%40er:pa#ss%2Fword@db.internal:5432/mydb?options=-c%20search_path%3Dapp';
+
+    const rewritten = replaceDSNHostPort(dsn, '127.0.0.1', 55000);
+
+    expect(rewritten).toBe('postgres://us%40er:pa#ss%2Fword@127.0.0.1:55000/mydb?options=-c%20search_path%3Dapp');
+    expect(new SafeURL(rewritten).password).toBe(new SafeURL(dsn).password);
+  });
+
+  it('brackets an IPv6 replacement host', () => {
+    expect(replaceDSNHostPort('postgres://user:pass@db.internal:5432/mydb', '::1', 55000)).toBe(
+      'postgres://user:pass@[::1]:55000/mydb'
+    );
+  });
+
+  it('rejects a string without a protocol', () => {
+    expect(() => replaceDSNHostPort('user:pass@db.internal/mydb', '127.0.0.1', 55000)).toThrow(
+      'missing protocol'
+    );
   });
 });

@@ -3,8 +3,10 @@ import { ConnectorManager } from "../connectors/manager.js";
 import { createToolSuccessResponse, createToolErrorResponse } from "../utils/response-formatter.js";
 import type { Connector } from "../connectors/interface.js";
 import { quoteQualifiedIdentifier } from "../utils/identifier-quoter.js";
+import { BUILTIN_TOOL_SEARCH_OBJECTS } from "./builtin-tools.js";
 import {
   getEffectiveSourceId,
+  resolveTrackedToolName,
   trackToolRequest,
   tryClassifyConnectionError,
 } from "../utils/tool-handler-helpers.js";
@@ -735,7 +737,7 @@ export function createSearchDatabaseObjectsToolHandler(sourceId?: string) {
       trackToolRequest(
         {
           sourceId: effectiveSourceId,
-          toolName: effectiveSourceId === "default" ? "search_objects" : `search_objects_${effectiveSourceId}`,
+          toolName: resolveTrackedToolName(sourceId, BUILTIN_TOOL_SEARCH_OBJECTS),
           sql: `search_objects(object_type=${object_type}, pattern=${pattern}, schema=${schema || "all"}, table=${table || "all"}, detail_level=${detail_level})`,
         },
         startTime,

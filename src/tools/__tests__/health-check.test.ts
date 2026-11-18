@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHealthCheckToolHandler } from "../health-check.js";
 import { ConnectorManager } from "../../connectors/manager.js";
+import { requestStore } from "../../requests/index.js";
 import type { Connector, ConnectorType, HealthCheckResult } from "../../connectors/interface.js";
 
 vi.mock("../../connectors/manager.js");
@@ -32,6 +33,12 @@ const parseToolResponse = (response: any) => JSON.parse(response.content[0].text
 
 describe("health-check tool", () => {
   const mockGetCurrentConnector = vi.mocked(ConnectorManager.getCurrentConnector);
+
+  beforeEach(() => {
+    // Single-source by default, so resolveTrackedToolName resolves to the
+    // bare tool name; multi-source naming is covered separately below.
+    vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(["test_source"]);
+  });
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -109,5 +116,28 @@ describe("health-check tool", () => {
     expect(parsed.success).toBe(false);
     expect(parsed.error).toBe("boom");
     expect(parsed.code).toBe("EXECUTION_ERROR");
+  });
+
+  describe("request tracking", () => {
+    const track = async (sourceIds: string[], sourceId: string) => {
+      vi.mocked(ConnectorManager.getAvailableSourceIds).mockReturnValue(sourceIds);
+      const mockConnector = createMockConnector("postgres", sourceId);
+      mockGetCurrentConnector.mockReturnValue(mockConnector);
+      vi.mocked(mockConnector.getHealthCheck!).mockResolvedValue({} as HealthCheckResult);
+      const addSpy = vi.spyOn(requestStore, "add");
+
+      await createHealthCheckToolHandler(sourceId)({}, null);
+      return addSpy;
+    };
+
+    it('tracks the bare tool name for a single source configured with --id (not "default")', async () => {
+      const addSpy = await track(["prod"], "prod");
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: "health_check" }));
+    });
+
+    it("tracks the normalized, suffixed tool name for a multi-source id with special characters", async () => {
+      const addSpy = await track(["prod-pg", "staging"], "prod-pg");
+      expect(addSpy).toHaveBeenCalledWith(expect.objectContaining({ toolName: "health_check_prod_pg" }));
+    });
   });
 });

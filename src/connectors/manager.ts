@@ -5,7 +5,7 @@ import type { SourceConfig } from "../types/config.js";
 import { buildDSNFromSource } from "../config/toml-loader.js";
 import { getDatabaseTypeFromDSN, getDefaultPortForType } from "../utils/dsn-obfuscate.js";
 import { redactDSN } from "../config/env.js";
-import { SafeURL } from "../utils/safe-url.js";
+import { SafeURL, replaceDSNHostPort } from "../utils/safe-url.js";
 import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
@@ -216,9 +216,12 @@ export class ConnectorManager {
       }
 
       // Parse DSN to get target host and port
-      const url = new URL(dsn);
+      // SafeURL, like every other DSN consumer: the WHATWG URL parser rejects
+      // DSNs whose password carries raw special characters (e.g. '#'), so a DSN
+      // that connects directly would otherwise fail only once a tunnel is added.
+      const url = new SafeURL(dsn);
       const targetHost = url.hostname;
-      const targetPort = parseInt(url.port) || this.getDefaultPort(dsn);
+      const targetPort = parseInt(url.port, 10) || this.getDefaultPort(dsn);
 
       // Create and establish SSH tunnel
       tunnel = new SSHTunnel();
@@ -236,9 +239,7 @@ export class ConnectorManager {
       }
 
       // Update DSN to use local tunnel endpoint
-      url.hostname = "127.0.0.1";
-      url.port = tunnelInfo.localPort.toString();
-      actualDSN = url.toString();
+      actualDSN = replaceDSNHostPort(dsn, "127.0.0.1", tunnelInfo.localPort);
 
       // Store tunnel for later cleanup
       this.sshTunnels.set(sourceId, tunnel);

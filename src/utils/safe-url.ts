@@ -176,3 +176,36 @@ export class SafeURL implements ISafeURL {
     this.searchParams.forEach((value, key) => callback(value, key));
   }
 }
+
+/**
+ * Point a DSN at a different host and port, leaving every other part exactly
+ * as written (credentials, path and query are not decoded or re-encoded).
+ *
+ * Used to redirect a DSN through a local SSH tunnel endpoint. The authority
+ * boundaries follow SafeURL's own rules — the query starts at the first '?',
+ * the path at the first '/', and credentials end at the last '@' before the
+ * path — so any DSN SafeURL can parse can be rewritten.
+ *
+ * @param dsn - The DSN to rewrite
+ * @param host - The new host (an IPv6 literal is bracketed automatically)
+ * @param port - The new port
+ * @returns The DSN with its host and port replaced
+ */
+export function replaceDSNHostPort(dsn: string, host: string, port: number): string {
+  const protocolSeparator = dsn.indexOf('://');
+  if (protocolSeparator === -1) {
+    throw new Error('Invalid URL format: missing protocol (e.g., "mysql://")');
+  }
+  const authorityStart = protocolSeparator + 3;
+
+  const queryStart = dsn.indexOf('?', authorityStart);
+  const beforeQuery = queryStart === -1 ? dsn.length : queryStart;
+  const pathStart = dsn.indexOf('/', authorityStart);
+  const authorityEnd = pathStart === -1 || pathStart > beforeQuery ? beforeQuery : pathStart;
+
+  const atIndex = dsn.lastIndexOf('@', authorityEnd - 1);
+  const hostStart = atIndex >= authorityStart ? atIndex + 1 : authorityStart;
+
+  const bracketedHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return `${dsn.slice(0, hostStart)}${bracketedHost}:${port}${dsn.slice(authorityEnd)}`;
+}

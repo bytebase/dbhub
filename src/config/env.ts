@@ -15,6 +15,53 @@ import { buildSqliteDSN, normalizeSqliteDsn, resolveSqliteFilePath } from "../ut
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * A setting that used to live on the command line / in the environment and is
+ * now configured per tool in dbhub.toml.
+ */
+interface RemovedSetting {
+  /** The `[[tools]]` line that replaces it */
+  tomlLine: string;
+  /** Anchor on https://dbhub.ai/tools/execute-sql describing the replacement */
+  docsAnchor: string;
+}
+
+const REMOVED_READONLY: RemovedSetting = { tomlLine: "readonly = true", docsAnchor: "read-only-mode" };
+const REMOVED_MAX_ROWS: RemovedSetting = { tomlLine: "max_rows = 1000", docsAnchor: "row-limiting" };
+
+/**
+ * Exit with the migration hint for a removed setting. Silently ignoring one
+ * would be worse than failing: someone who set READONLY expects writes to be
+ * rejected.
+ */
+function failRemovedSetting(label: string, setting: RemovedSetting): never {
+  console.error(`\nERROR: ${label} is no longer supported.`);
+  console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
+  console.error("  [[sources]]");
+  console.error("  id = \"default\"");
+  console.error("  dsn = \"...\"\n");
+  console.error("  [[tools]]");
+  console.error("  name = \"execute_sql\"");
+  console.error("  source = \"default\"");
+  console.error(`  ${setting.tomlLine}\n`);
+  console.error(`See https://dbhub.ai/tools/execute-sql#${setting.docsAnchor} for details.\n`);
+  process.exit(1);
+}
+
+/**
+ * Reject the removed READONLY / MAX_ROWS environment variables, whether they
+ * were exported or came from a .env file. Called at startup and again after a
+ * .env file is loaded, so the check does not depend on such a file existing.
+ */
+export function rejectRemovedEnvVars(): void {
+  if (process.env.READONLY !== undefined) {
+    failRemovedSetting("READONLY environment variable", REMOVED_READONLY);
+  }
+  if (process.env.MAX_ROWS !== undefined) {
+    failRemovedSetting("MAX_ROWS environment variable", REMOVED_MAX_ROWS);
+  }
+}
+
 // Parse command line arguments
 export function parseCommandLineArgs() {
   // Check if any args start with '--' (the way tsx passes them)
@@ -27,33 +74,12 @@ export function parseCommandLineArgs() {
       const parts = arg.substring(2).split("=");
       const key = parts[0];
 
-      // Fail immediately on deprecated flags
+      // Fail immediately on removed flags
       if (key === "readonly") {
-        console.error("\nERROR: --readonly flag is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  readonly = true\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
-        process.exit(1);
+        failRemovedSetting("--readonly flag", REMOVED_READONLY);
       }
-
       if (key === "max-rows") {
-        console.error("\nERROR: --max-rows flag is no longer supported.");
-        console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-        console.error("  [[sources]]");
-        console.error("  id = \"default\"");
-        console.error("  dsn = \"...\"\n");
-        console.error("  [[tools]]");
-        console.error("  name = \"execute_sql\"");
-        console.error("  source = \"default\"");
-        console.error("  max_rows = 1000\n");
-        console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
-        process.exit(1);
+        failRemovedSetting("--max-rows flag", REMOVED_MAX_ROWS);
       }
 
       const value = parts.length > 1 ? parts.slice(1).join("=") : undefined;
@@ -117,34 +143,8 @@ export function loadEnvFiles(): string | null {
   if (envPath) {
     dotenv.config({ path: envPath });
 
-    // Check for deprecated environment variables
-    if (process.env.READONLY !== undefined) {
-      console.error("\nERROR: READONLY environment variable is no longer supported.");
-      console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-      console.error("  [[sources]]");
-      console.error("  id = \"default\"");
-      console.error("  dsn = \"...\"\n");
-      console.error("  [[tools]]");
-      console.error("  name = \"execute_sql\"");
-      console.error("  source = \"default\"");
-      console.error("  readonly = true\n");
-      console.error("See https://dbhub.ai/tools/execute-sql#read-only-mode for details.\n");
-      process.exit(1);
-    }
-
-    if (process.env.MAX_ROWS !== undefined) {
-      console.error("\nERROR: MAX_ROWS environment variable is no longer supported.");
-      console.error("Use dbhub.toml with [[tools]] configuration instead:\n");
-      console.error("  [[sources]]");
-      console.error("  id = \"default\"");
-      console.error("  dsn = \"...\"\n");
-      console.error("  [[tools]]");
-      console.error("  name = \"execute_sql\"");
-      console.error("  source = \"default\"");
-      console.error("  max_rows = 1000\n");
-      console.error("See https://dbhub.ai/tools/execute-sql#row-limiting for details.\n");
-      process.exit(1);
-    }
+    // The file may have just defined a removed variable
+    rejectRemovedEnvVars();
 
     // Return the name of the file that was loaded
     return path.basename(envPath);
@@ -718,6 +718,10 @@ export function resolveSSHConfig(): { config: SSHTunnelConfig; source: string } 
  * Returns array of source configs and the source of the configuration
  */
 export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[]; tools?: import("../types/config.js").ToolConfig[]; source: string } | null> {
+  // Before anything else: an exported READONLY / MAX_ROWS must stop startup
+  // even when no .env file is ever loaded (e.g. `docker run -e READONLY=true`).
+  rejectRemovedEnvVars();
+
   // Load .env before parsing TOML so `${VAR}` interpolation in the config file
   // resolves against it — keeping credentials in .env and referencing them as
   // `dsn = "${DSN}"` is the recommended pattern, and it only works if the file
@@ -852,6 +856,7 @@ export async function resolveSourceConfigs(): Promise<{ sources: SourceConfig[];
       source.ssh_key_discovered = sshResult.config.privateKeyDiscovered;
       source.ssh_passphrase = sshResult.config.passphrase;
       source.ssh_agent = sshResult.config.agent;
+      source.ssh_proxy_jump = sshResult.config.proxyJump;
       source.ssh_keepalive_interval = sshResult.config.keepaliveInterval;
       source.ssh_keepalive_count_max = sshResult.config.keepaliveCountMax;
     }

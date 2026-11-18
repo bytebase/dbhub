@@ -30,7 +30,6 @@ export interface DataSource {
   port?: number;
   database?: string;
   user?: string;
-  is_default: boolean;
   ssh_tunnel?: SSHTunnel;
   tools: Tool[];
 }

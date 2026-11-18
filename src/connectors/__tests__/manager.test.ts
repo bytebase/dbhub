@@ -542,6 +542,35 @@ describe("ConnectorManager IAM refresh recovery", () => {
     expect(manager.getSourceIds()).toEqual([]);
   });
 
+  it("should tunnel a DSN whose password has raw special characters, leaving it as written", async () => {
+    // new URL() rejects this DSN ('#' starts a fragment, leaving an invalid
+    // port), so it used to connect directly but fail once ssh_host was set.
+    const instances = stubConnectorRegistry();
+    mocks.looksLikeSSHAlias.mockReturnValue(false);
+    const establishSpy = vi
+      .spyOn(SSHTunnel.prototype, "establish")
+      .mockResolvedValue({ localPort: 55555, targetHost: "db.internal", targetPort: 5432 });
+    vi.spyOn(SSHTunnel.prototype, "close").mockResolvedValue(undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new ConnectorManager();
+    await manager.connectWithSources([{
+      id: "pg_ssh",
+      type: "postgres",
+      dsn: "postgres://user:pa#ss@db.internal/mydb?sslmode=require",
+      ssh_host: "bastion.example.com",
+      ssh_user: "ubuntu",
+      ssh_password: "secret",
+    }]);
+
+    expect(establishSpy.mock.calls[0][1]).toEqual({ targetHost: "db.internal", targetPort: 5432 });
+    expect(instances[0].connect.mock.calls[0][0]).toBe(
+      "postgres://user:pa#ss@127.0.0.1:55555/mydb?sslmode=require"
+    );
+
+    await manager.disconnect();
+  });
+
   it("should not list a source as available when it can neither serve nor reconnect", () => {
     const manager = new ConnectorManager();
     (manager as any).sourceIds = ["alive", "dead"];

@@ -249,6 +249,25 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].rows.some(row => row.name === 'email')).toBe(true);
     });
 
+    it('should return rows for value-reporting pragmas that no keyword list names', async () => {
+      const version = await sqliteTest.connector.executeSQL('PRAGMA user_version', {});
+      expect(version.resultSets[0].rows).toHaveLength(1);
+      expect(Number(version.resultSets[0].rows[0].user_version)).toBe(0);
+
+      // table_xinfo is what the connector's own getTableSchema reads
+      const xinfo = await sqliteTest.connector.executeSQL('PRAGMA table_xinfo(users)', {});
+      expect(xinfo.resultSets[0].rows.map(row => row.name)).toContain('email');
+
+      // ...and in a batch, alongside a pragma that reports nothing
+      const batch = await sqliteTest.connector.executeSQL(
+        'PRAGMA foreign_keys = ON; PRAGMA foreign_keys; PRAGMA database_list',
+        {}
+      );
+      expect(batch.resultSets[0].rows).toEqual([]);
+      expect(Number(batch.resultSets[1].rows[0].foreign_keys)).toBe(1);
+      expect(batch.resultSets[2].rows[0].name).toBe('main');
+    });
+
     it('should support SQLite window functions', async () => {
       const result = await sqliteTest.connector.executeSQL(`
         SELECT 

@@ -513,21 +513,32 @@ export class SQLiteConnector implements Connector {
 
   /**
    * Whether a statement returns rows (and so must run via `all()` rather than
-   * `run()`). Classified on the comment/string-stripped text so a leading
-   * attribution comment cannot hide a SELECT, matching the row limiter and the
-   * read-only classifier.
+   * `run()`).
+   *
+   * The prepared statement's own column list is the driver's answer and is
+   * used where the runtime exposes it (`columns()`, Node 22.17+/24+): it covers
+   * every pragma that reports a value (`PRAGMA user_version`,
+   * `PRAGMA table_xinfo(t)`, ...) and `INSERT ... RETURNING`, none of which a
+   * keyword list can enumerate.
+   *
+   * The keyword check stays as the fallback for older runtimes and for
+   * statements that have always been read through `all()` despite having no
+   * columns (ANALYZE). It is classified on the comment/string-stripped text so
+   * a leading attribution comment cannot hide a SELECT, matching the row
+   * limiter and the read-only classifier. Every PRAGMA counts: `all()` runs a
+   * pragma that reports nothing just as well, returning no rows.
    */
-  private returnsRows(statement: string): boolean {
+  private returnsRows(prepared: StatementSync, statement: string): boolean {
+    const withColumns = prepared as unknown as { columns?: () => unknown[] };
+    if (typeof withColumns.columns === "function" && withColumns.columns().length > 0) {
+      return true;
+    }
     const stripped = stripCommentsAndStrings(statement, "sqlite").toLowerCase().trim();
     return stripped.startsWith('select') ||
            stripped.startsWith('with') ||
            stripped.startsWith('explain') ||
            stripped.startsWith('analyze') ||
-           (stripped.startsWith('pragma') &&
-            (stripped.includes('table_info') ||
-             stripped.includes('index_info') ||
-             stripped.includes('index_list') ||
-             stripped.includes('foreign_key_list')));
+           stripped.startsWith('pragma');
   }
 
   async executeSQL(sql: string, options: ExecuteOptions, parameters?: any[]): Promise<SQLResult> {
@@ -551,7 +562,6 @@ export class SQLiteConnector implements Connector {
       if (statements.length === 1) {
         // Single statement - determine if it returns data
         let processedStatement = statements[0];
-        const isReadStatement = this.returnsRows(statements[0]);
 
         // Apply maxRows limit (with a truncation probe row) to SELECT queries
         // if specified (not PRAGMA/ANALYZE)
@@ -566,20 +576,16 @@ export class SQLiteConnector implements Connector {
           probeApplied = rewrite.probeApplied;
         }
 
-        if (isReadStatement) {
+        const prepared = this.prepare(processedStatement);
+        if (this.returnsRows(prepared, statements[0])) {
           // Pass parameters if provided
-          const rows = this.readRows(this.prepare(processedStatement), parameters ?? []);
+          const rows = this.readRows(prepared, parameters ?? []);
           const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount: rows.length };
           SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
           return { resultSets: [resultSet] };
         } else {
           // Use run() for statements that don't return data
-          let result;
-          if (parameters && parameters.length > 0) {
-            result = this.prepare(processedStatement).run(...parameters);
-          } else {
-            result = this.prepare(processedStatement).run();
-          }
+          const result = prepared.run(...(parameters ?? []));
           // node:sqlite returns `changes` as BigInt when BigInt reads are
           // enabled; normalize to a number to match the SQLResult contract.
           return {
@@ -603,19 +609,20 @@ export class SQLiteConnector implements Connector {
           if (options.readonly) {
             this.db.exec("PRAGMA query_only = ON");
           }
-          if (this.returnsRows(statement)) {
-            // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
-            const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-              statement,
-              options.maxRows,
-              "sqlite"
-            );
-            const rows = this.readRows(this.prepare(processedStatement), []);
+          // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
+          const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+            statement,
+            options.maxRows,
+            "sqlite"
+          );
+          const prepared = this.prepare(processedStatement);
+          if (this.returnsRows(prepared, statement)) {
+            const rows = this.readRows(prepared, []);
             const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
             SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
             resultSets.push(resultSet);
           } else {
-            const result = this.prepare(statement).run();
+            const result = prepared.run();
             resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
           }
         }

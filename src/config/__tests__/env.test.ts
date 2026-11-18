@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -248,6 +248,82 @@ describe('Environment Configuration Tests', () => {
       expect(message).toMatch(/Invalid DSN format/);
       expect(message).toContain('<redacted DSN>');
       expect(message).not.toContain('hunter2');
+    });
+  });
+
+  describe('resolveSourceConfigs with an SSH tunnel', () => {
+    const sshArgs = [
+      '--dsn=postgres://user:pass@db.internal:5432/app',
+      '--ssh-host=target.internal',
+      '--ssh-user=ubuntu',
+      '--ssh-password=secret',
+    ];
+
+    it('should carry --ssh-proxy-jump onto the source', async () => {
+      process.argv = ['node', 'script.js', ...sshArgs, '--ssh-proxy-jump=bastion.example.com'];
+
+      const result = await resolveSourceConfigs();
+
+      expect(result!.sources[0]).toMatchObject({
+        ssh_host: 'target.internal',
+        ssh_proxy_jump: 'bastion.example.com',
+      });
+    });
+
+    it('should carry SSH_PROXY_JUMP onto the source', async () => {
+      process.argv = ['node', 'script.js', ...sshArgs];
+      process.env.SSH_PROXY_JUMP = 'jump1.example.com,admin@jump2.example.com:2222';
+
+      const result = await resolveSourceConfigs();
+
+      expect(result!.sources[0].ssh_proxy_jump).toBe('jump1.example.com,admin@jump2.example.com:2222');
+    });
+  });
+
+  describe('removed READONLY / MAX_ROWS settings', () => {
+    let exitSpy: MockInstance;
+    let errorSpy: MockInstance;
+
+    beforeEach(() => {
+      exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+        throw new Error(`process.exit: ${code}`);
+      }) as never);
+      errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      exitSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it.each([
+      ['READONLY', 'true', 'readonly = true'],
+      ['READONLY', 'false', 'readonly = true'],
+      ['MAX_ROWS', '100', 'max_rows = 1000'],
+    ])('should reject an exported %s=%s even when no .env file is loaded', async (name, value, tomlLine) => {
+      // --dsn resolves the source before any .env file is looked for, which
+      // used to skip the check and start the server writable.
+      process.argv = ['node', 'script.js', '--dsn=sqlite:///:memory:'];
+      process.env[name] = value;
+
+      await expect(resolveSourceConfigs()).rejects.toThrow('process.exit: 1');
+
+      const output = errorSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(output).toContain(`${name} environment variable is no longer supported`);
+      expect(output).toContain(tomlLine);
+    });
+
+    it.each([
+      ['--readonly', '--readonly flag', 'readonly = true'],
+      ['--max-rows=100', '--max-rows flag', 'max_rows = 1000'],
+    ])('should reject the %s flag', async (flag, label, tomlLine) => {
+      process.argv = ['node', 'script.js', '--dsn=sqlite:///:memory:', flag];
+
+      await expect(resolveSourceConfigs()).rejects.toThrow('process.exit: 1');
+
+      const output = errorSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(output).toContain(`${label} is no longer supported`);
+      expect(output).toContain(tomlLine);
     });
   });
 
