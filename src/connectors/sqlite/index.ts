@@ -538,79 +538,51 @@ export class SQLiteConnector implements Connector {
     }
 
     try {
-      // Check if this is a multi-statement query
       const statements = splitSQLStatements(sql, "sqlite");
+      const isSingleStatement = statements.length === 1;
 
-      if (statements.length === 1) {
-        // Single statement - determine if it returns data
-        let processedStatement = statements[0];
+      // Parameters are not supported for multi-statement queries
+      if (!isSingleStatement && parameters && parameters.length > 0) {
+        throw new Error("Parameters are not supported for multi-statement queries in SQLite");
+      }
+      const statementParameters = isSingleStatement ? (parameters ?? []) : [];
+
+      // Execute each statement individually, in source order, so a later
+      // statement sees the effects of earlier ones and result sets line up
+      // with the batch as written.
+      const resultSets: SQLResultSet[] = [];
+      for (const statement of statements) {
+        // Re-assert the read-only backstop before each statement so an earlier
+        // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
+        // cannot disable it for the ones that follow.
+        if (options.readonly) {
+          this.db.exec("PRAGMA query_only = ON");
+        }
 
         // Apply maxRows limit (with a truncation probe row) to SELECT queries
         // if specified (not PRAGMA/ANALYZE)
-        let probeApplied = false;
-        if (options.maxRows) {
-          const rewrite = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-            processedStatement,
-            options.maxRows,
-            "sqlite"
-          );
-          processedStatement = rewrite.sql;
-          probeApplied = rewrite.probeApplied;
-        }
+        const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
+          statement,
+          options.maxRows,
+          "sqlite"
+        );
 
         const prepared = this.prepare(processedStatement);
-        if (this.returnsRows(prepared, statements[0])) {
-          // Pass parameters if provided
-          const rows = this.readRows(prepared, parameters ?? []);
-          const resultSet: SQLResultSet = { sql: statements[0], rows, rowCount: rows.length };
+        if (this.returnsRows(prepared, statement)) {
+          const rows = this.readRows(prepared, statementParameters);
+          const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
           SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
-          return { resultSets: [resultSet] };
+          resultSets.push(resultSet);
         } else {
-          // Use run() for statements that don't return data
-          const result = prepared.run(...(parameters ?? []));
+          // Use run() for statements that don't return data.
           // node:sqlite returns `changes` as BigInt when BigInt reads are
           // enabled; normalize to a number to match the SQLResult contract.
-          return {
-            resultSets: [{ sql: statements[0], rows: [], rowCount: Number(result.changes) }],
-          };
+          const result = prepared.run(...statementParameters);
+          resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
         }
-      } else {
-        // Multiple statements - parameters not supported for multi-statement queries
-        if (parameters && parameters.length > 0) {
-          throw new Error("Parameters are not supported for multi-statement queries in SQLite");
-        }
-
-        // Execute each statement individually, in source order, so a later
-        // statement sees the effects of earlier ones and result sets line up
-        // with the batch as written.
-        const resultSets: SQLResultSet[] = [];
-        for (const statement of statements) {
-          // Re-assert the read-only backstop before each statement so an earlier
-          // statement in the batch (e.g. `PRAGMA query_only = OFF` / `query_only(0)`)
-          // cannot disable it for the ones that follow.
-          if (options.readonly) {
-            this.db.exec("PRAGMA query_only = ON");
-          }
-          // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
-          const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(
-            statement,
-            options.maxRows,
-            "sqlite"
-          );
-          const prepared = this.prepare(processedStatement);
-          if (this.returnsRows(prepared, statement)) {
-            const rows = this.readRows(prepared, []);
-            const resultSet: SQLResultSet = { sql: statement, rows, rowCount: rows.length };
-            SQLRowLimiter.flagTruncation(resultSet, options.maxRows, probeApplied);
-            resultSets.push(resultSet);
-          } else {
-            const result = prepared.run();
-            resultSets.push({ sql: statement, rows: [], rowCount: Number(result.changes) });
-          }
-        }
-
-        return { resultSets };
       }
+
+      return { resultSets };
     } finally {
       // Restore the connection to writable so non-read-only tools on the same
       // shared connection are unaffected. Best-effort: if this throws it must not
