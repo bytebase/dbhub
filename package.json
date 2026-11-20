@@ -25,6 +25,7 @@
     "test:mcpb": "node scripts/smoke-test-mcpb.mjs",
     "start": "node dist/index.js",
     "dev": "concurrently --kill-others \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "dev:demo": "concurrently --kill-others \"pnpm run dev:backend --demo\" \"pnpm run dev:frontend\"",
     "dev:backend": "NODE_ENV=development tsx src/index.ts --transport=http",
     "dev:frontend": "cd frontend && pnpm run dev",
     "crossdev": "cross-env NODE_ENV=development tsx src/index.ts",
