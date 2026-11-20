@@ -154,7 +154,7 @@ export default function SourceDetailView() {
 
         <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
           <h2 className="text-section text-foreground mb-4">
-            Available Tools
+            Available tools
           </h2>
           {source.tools.length > 0 ? (
             <div className="divide-y-[length:var(--border-hairline)] divide-border">
@@ -171,43 +171,40 @@ export default function SourceDetailView() {
                             <Lock className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-label="Read-only" />
                           )}
                         </div>
-                        <div className="text-caption text-muted-foreground">
-                          ({tool.parameters.length} {tool.parameters.length === 1 ? 'parameter' : 'parameters'})
-                        </div>
                       </div>
-                      <div className="mt-1.5 text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">
+                      <div className="mt-2 text-body text-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">
                         {tool.description}
                       </div>
                     </div>
 
                     {tool.parameters.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="text-label text-muted-foreground">
-                          Parameters
-                        </div>
-                        <ul className="space-y-3">
+                      <table role="table" aria-label={`${tool.name} parameters`} className="block w-full text-start text-sm md:table md:table-fixed">
+                        <colgroup className="hidden md:table-column-group">
+                          <col className="w-[23%]" />
+                          <col className="w-[15%]" />
+                          <col className="w-[17%]" />
+                          <col className="w-[45%]" />
+                        </colgroup>
+                        <thead role="rowgroup" className="hidden md:table-header-group">
+                          <tr role="row" className="border-b-[length:var(--border-hairline)] border-border">
+                            {['Name', 'Type', 'Requirement', 'Description'].map(label => (
+                              <th key={label} role="columnheader" scope="col" className="pb-2 pe-4 text-start text-caption font-medium text-muted-foreground last:pe-0">{label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody role="rowgroup" className="block md:table-row-group">
                           {tool.parameters.map((param) => (
-                            <li key={param.name} className="text-sm">
-                              <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="font-mono text-foreground font-medium [overflow-wrap:anywhere]">
-                                  {param.name}
-                                </span>
-                                <span className="text-caption font-mono text-muted-foreground">
-                                  {param.type}
-                                </span>
-                                <span className="text-caption text-muted-foreground">
-                                  {param.required ? 'required' : 'optional'}
-                                </span>
-                              </div>
-                              {param.description && (
-                                <div className="mt-2 text-caption text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">
-                                  {param.description}
-                                </div>
-                              )}
-                            </li>
+                            <tr key={param.name} role="row" className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 py-3 md:table-row md:py-0">
+                              <th role="rowheader" scope="row" className="min-w-0 text-start align-top font-mono font-medium [overflow-wrap:anywhere] md:py-2.5 md:pe-4">{param.name}</th>
+                              <td role="cell" className="align-top font-mono text-caption text-muted-foreground [overflow-wrap:anywhere] md:py-2.5 md:pe-4">{param.type}</td>
+                              <td role="cell" className="align-top text-caption text-muted-foreground md:py-2.5 md:pe-4">{param.required ? 'Required' : 'Optional'}</td>
+                              <td role="cell" className="col-span-3 align-top text-foreground [overflow-wrap:anywhere] md:py-2.5">
+                                {param.description || <span className="sr-only">No description</span>}
+                              </td>
+                            </tr>
                           ))}
-                        </ul>
-                      </div>
+                        </tbody>
+                      </table>
                     )}
                   </div>
                 </div>
