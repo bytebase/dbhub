@@ -43,12 +43,12 @@ export default function Gutter({ sources }: GutterProps) {
     <TooltipProvider delay={300}>
       <aside
         className={cn(
-          'shrink-0 min-h-0 flex flex-col bg-card border-e border-border',
+          'shrink-0 min-h-0 flex flex-col bg-card border-e-[length:var(--border-hairline)] border-border',
           expanded ? 'w-56' : 'w-24'
         )}
         aria-label="Main navigation"
       >
-        <div className="flex h-16 shrink-0 items-center justify-center border-b border-border px-2">
+        <div className="flex h-16 shrink-0 items-center justify-center border-b-[length:var(--border-hairline)] border-border px-2">
           <Tooltip>
             <TooltipTrigger render={
               <Button
@@ -72,7 +72,7 @@ export default function Gutter({ sources }: GutterProps) {
             <GutterSourceItem key={source.id} source={source} expanded={expanded} />
           ))}
         </nav>
-        <div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
+        <div className="flex shrink-0 flex-col gap-1 border-t-[length:var(--border-hairline)] border-border p-2">
           <GutterIcon icon={<ActivityIcon />} to="/requests" tooltip="Requests" expanded={expanded} />
           <GutterIcon icon={<HelpIcon />} href="https://dbhub.ai" tooltip="Help" expanded={expanded} />
         </div>

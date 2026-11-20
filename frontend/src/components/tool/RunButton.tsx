@@ -44,11 +44,11 @@ export function RunButton({ onShortcut, disabled = false, loading = false }: Run
   const shortcutKey = isMac ? '⌘' : 'Ctrl';
 
   return (
-    <Button type="submit" disabled={disabled || loading} aria-busy={loading} className="min-h-11 min-w-40" title={`Run (${shortcutKey}+Enter)`}>
+    <Button type="submit" disabled={disabled || loading} aria-busy={loading} className="h-9 min-h-9 w-fit pointer-coarse:h-11 pointer-coarse:min-h-11" title={`Run (${shortcutKey}+Enter)`}>
       {loading ? (
         <>
           <Spinner className="size-4" />
-          Running...
+          Running…
         </>
       ) : (
         <>

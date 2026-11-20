@@ -127,7 +127,7 @@ export function ResultsTabs({
   };
 
   const progress = (
-    <div role="status" className={cn("flex items-center gap-3 rounded-xl bg-card", tabs.length ? "p-4" : "min-h-32 p-6")}>
+    <div role="status" className={cn("flex items-center gap-3 rounded-xl border border-border bg-card", tabs.length ? "p-4" : "min-h-32 p-6")}>
       <Spinner aria-hidden="true" role="presentation" className="mt-0.5 size-4 shrink-0 text-brand-accent" />
       <div className="space-y-1">
         <p className="text-label">Running query…</p>
@@ -140,7 +140,7 @@ export function ResultsTabs({
 
   if (tabs.length === 0) {
     return isLoading ? progress : (
-      <div className="flex min-h-32 flex-col justify-center gap-2 rounded-xl bg-card p-6">
+      <div className="flex min-h-32 flex-col justify-center gap-2 rounded-xl border border-border bg-card p-6">
         <Table2 aria-hidden="true" className="mb-1 size-5 text-brand-accent" />
         <h2 className="text-label">Results appear here</h2>
         <p className="max-w-prose text-sm text-muted-foreground">Enter a SQL statement or fill in the tool parameters, then select Run.</p>
@@ -151,10 +151,10 @@ export function ResultsTabs({
   return (
     <div className="space-y-3">
       {isLoading && progress}
-      <div className="flex min-w-0 items-start border-b border-border">
+      <div className="flex min-w-0 items-start border-b-[length:var(--border-hairline)] border-border">
         {(canScrollLeft || canScrollRight) && (
           <button type="button" onClick={() => scroll('left')} disabled={!canScrollLeft}
-            className="hidden min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
+            className="hidden min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
             aria-label="Scroll result tabs left" aria-controls={`${id}-list`}>
             <ChevronLeftIcon className="size-4" aria-hidden="true" />
           </button>
@@ -172,13 +172,13 @@ export function ResultsTabs({
                   ref={node => { if (node) tabRefs.current.set(tab.id, node); else tabRefs.current.delete(tab.id); }}
                   onClick={() => onTabSelect(tab.id)} onKeyDown={event => handleTabKeyDown(event, index)}
                   onFocus={() => revealTab(tab.id)}
-                  className={cn('flex min-h-11 min-w-11 items-center gap-2 whitespace-nowrap px-3 text-caption tabular-nums touch-manipulation hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', selected ? 'text-foreground' : 'text-muted-foreground')}>
+                  className={cn('flex min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 items-center gap-2 whitespace-nowrap px-3 text-caption tabular-nums touch-manipulation hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', selected ? 'text-foreground' : 'text-muted-foreground')}>
                   <span>{formatTabLabel(tab)}</span>
                   {tab.error && <span className="flex items-center gap-1 text-destructive-foreground"><AlertCircle className="size-3.5" aria-hidden="true" />Failed</span>}
                 </button>
                 <button type="button" tabIndex={selected ? 0 : -1} onClick={() => closeTab(tab.id)}
                   aria-label={`Close ${label.toLowerCase()}`} title="Close result (Delete when tab is focused)"
-                  className="flex min-h-11 min-w-11 items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring touch-manipulation">
+                  className="flex min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring touch-manipulation">
                   <XIcon className="size-3.5" aria-hidden="true" />
                 </button>
               </div>
@@ -187,7 +187,7 @@ export function ResultsTabs({
         </div>
         {(canScrollLeft || canScrollRight) && (
           <button type="button" onClick={() => scroll('right')} disabled={!canScrollRight}
-            className="hidden min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
+            className="hidden min-h-9 min-w-9 pointer-coarse:min-h-11 pointer-coarse:min-w-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring disabled:text-disabled-foreground disabled:cursor-default sm:flex touch-manipulation"
             aria-label="Scroll result tabs right" aria-controls={`${id}-list`}>
             <ChevronRightIcon className="size-4" aria-hidden="true" />
           </button>

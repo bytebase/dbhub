@@ -374,12 +374,12 @@ export default function ToolDetailView() {
           <p className="text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{tool.description}</p>
         </div>
 
-        <form ref={formRef} noValidate onSubmit={event => { event.preventDefault(); void handleRun(); }} className="space-y-6">
+        <form ref={formRef} noValidate onSubmit={event => { event.preventDefault(); void handleRun(); }} className="space-y-4">
           {/* Parameter Form (custom tools only, show before SQL) */}
           {toolType === 'custom' && tool.parameters.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-label text-foreground">Parameters</h2>
-              <div className="rounded-xl bg-card p-4 sm:p-6">
+              <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
                 <ParameterForm
                   key={`${sourceId}/${toolName}`}
                   parameters={tool.parameters}
@@ -400,7 +400,7 @@ export default function ToolDetailView() {
                 type="button"
                 variant="ghost"
                 onClick={handleCopy}
-                className="min-h-11 min-w-24 text-muted-foreground"
+                className="min-h-9 min-w-20 pointer-coarse:min-h-11 text-muted-foreground"
                 aria-label={copied ? 'SQL copied' : 'Copy SQL'}
                 title="Copy SQL"
               >

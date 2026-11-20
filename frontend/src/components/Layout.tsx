@@ -32,13 +32,13 @@ export default function Layout({ sources, isLoading }: LayoutProps) {
         <Gutter sources={sources} />
         {showSidebar && <Sidebar sources={sources} isLoading={isLoading} />}
       </div>
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-sidebar px-3 md:hidden">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b-[length:var(--border-hairline)] border-border bg-sidebar px-3 md:hidden">
         <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
           <SheetTrigger render={<Button variant="ghost" size="icon-xl" aria-label="Open navigation" className="touch-manipulation" />}>
             <Menu aria-hidden="true" />
           </SheetTrigger>
           <SheetPopup side="left" showCloseButton={false} className="w-[min(24rem,100%)] motion-reduce:transition-none">
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-3">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b-[length:var(--border-hairline)] border-border px-3">
               <SheetTitle className="text-label">Navigation</SheetTitle>
               <SheetClose render={<Button variant="ghost" size="icon-xl" aria-label="Close navigation" className="touch-manipulation" />}>
                 <X aria-hidden="true" />

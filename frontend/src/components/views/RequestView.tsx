@@ -199,7 +199,7 @@ export default function RequestView() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedSource(null)}
-                className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-full transition-colors ${
+                className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors ${
                   selectedSource === null
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -214,7 +214,7 @@ export default function RequestView() {
                   <button
                     key={sourceId}
                     onClick={() => setSelectedSource(sourceId)}
-                    className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-full transition-colors flex items-center gap-1.5 ${
+                    className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors flex items-center gap-1.5 ${
                       selectedSource === sourceId
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -232,7 +232,7 @@ export default function RequestView() {
                 );
               })}
             </div>
-            <div className="overflow-x-auto rounded-xl bg-card">
+            <div className="overflow-x-auto rounded-xl border border-border bg-card">
               <table className="w-full">
               <thead>
                 <tr className="border-b-[length:var(--border-hairline)] border-border bg-muted">
@@ -295,7 +295,7 @@ export default function RequestView() {
         )}
 
         {requests.length === 0 && (
-          <div className="space-y-3 rounded-xl bg-card p-6 sm:p-8">
+          <div className="space-y-3 rounded-xl border border-border bg-card p-6 sm:p-8">
             <History aria-hidden="true" className="size-5 text-brand-accent" />
             <h2 className="text-label">No requests yet</h2>
             <p className="text-sm text-muted-foreground max-w-prose text-pretty">

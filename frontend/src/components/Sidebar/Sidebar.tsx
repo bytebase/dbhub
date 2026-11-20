@@ -20,7 +20,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
 
   return (
     <aside
-      className="flex min-h-0 min-w-0 flex-1 flex-col border-e border-border bg-sidebar md:w-64 md:flex-none"
+      className="flex min-h-0 min-w-0 flex-1 flex-col border-e-[length:var(--border-hairline)] border-border bg-sidebar md:w-64 md:flex-none"
       aria-label="Tools sidebar"
     >
       <Logo />

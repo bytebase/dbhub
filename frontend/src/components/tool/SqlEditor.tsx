@@ -108,20 +108,19 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
           minHeight: '120px',
         },
         '&.cm-focused': {
-          outline: '2px solid var(--ring)',
-          outlineOffset: '-2px',
+          outline: 'none',
         },
         '.cm-gutters': {
-          backgroundColor: 'var(--muted)',
+          backgroundColor: 'var(--background)',
           color: 'var(--muted-foreground)',
-          borderColor: 'var(--border)',
+          borderColor: 'var(--border-subtle)',
         },
         '.cm-activeLine': {
           backgroundColor: 'var(--muted)',
         },
         '.cm-activeLineGutter': {
-          backgroundColor: 'var(--accent)',
-          color: 'var(--accent-foreground)',
+          backgroundColor: 'var(--muted)',
+          color: 'var(--foreground)',
         },
         '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
           backgroundColor: 'var(--selection)',
@@ -199,7 +198,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, SqlEditorProps>(function Sq
   return (
     <div
       ref={containerRef}
-      className="border border-input rounded-lg bg-background overflow-hidden text-base sm:text-code"
+      className="border border-input rounded-lg bg-background overflow-hidden text-base focus-within:border-ring focus-within:outline-1 focus-within:outline-offset-0 focus-within:outline-ring sm:text-code"
     />
   );
 });

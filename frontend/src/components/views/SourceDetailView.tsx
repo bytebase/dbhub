@@ -66,7 +66,7 @@ export default function SourceDetailView() {
           <span className="min-w-0 [overflow-wrap:anywhere]">{source.id}</span>
         </h1>
 
-        <div className="rounded-xl bg-card p-4 sm:p-6">
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
           <h2 className="text-section text-foreground mb-4">
             Connection Details
           </h2>
@@ -108,7 +108,7 @@ export default function SourceDetailView() {
 
 
         {source.ssh_tunnel?.enabled && (
-          <div className="rounded-xl bg-card p-4 sm:p-6">
+          <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
             <h2 className="text-section text-foreground mb-4">
               SSH Tunnel
             </h2>
@@ -152,7 +152,7 @@ export default function SourceDetailView() {
           </div>
         )}
 
-        <div className="rounded-xl bg-card p-4 sm:p-6">
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
           <h2 className="text-section text-foreground mb-4">
             Available Tools
           </h2>

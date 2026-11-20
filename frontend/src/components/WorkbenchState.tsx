@@ -11,7 +11,7 @@ export function PageLoading({ label, layout = 'details' }: { label: string; layo
         <Skeleton className="h-7 w-48 max-w-full" />
         <Skeleton className="h-4 w-80 max-w-full" />
       </div>
-      <div aria-hidden="true" className="space-y-6 rounded-xl bg-card p-4 sm:p-6">
+      <div aria-hidden="true" className="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6">
         {layout === 'table' ? (
           <div className="space-y-5">
             {Array.from({ length: 7 }, (_, row) => (
@@ -41,7 +41,7 @@ export function PageLoading({ label, layout = 'details' }: { label: string; layo
 export function PageLoadError({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
   return (
     <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-8 sm:py-10">
-      <div className="space-y-4 rounded-xl bg-card p-4 sm:p-6">
+      <div className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
         <div role="alert" className="flex items-start gap-3">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-foreground" />
           <div className="min-w-0 space-y-2">

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 export default function Logo() {
   return (
-    <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
+    <div className="flex h-16 shrink-0 items-center border-b-[length:var(--border-hairline)] border-border px-4">
       <Link
         to="/"
         aria-label="DBHub home"

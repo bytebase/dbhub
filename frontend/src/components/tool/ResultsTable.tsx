@@ -1,6 +1,6 @@
 import { useRef, useState, useMemo, useCallback, useId, useLayoutEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronDown, X } from 'lucide-react';
 import type { QueryResult } from '../../api/tools';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -14,7 +14,7 @@ interface ResultsTableProps {
   executionTimeMs?: number;
 }
 
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 36;
 
 function formatExecutionTime(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(2)} s`;
@@ -52,6 +52,8 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
   const filterRef = useRef<HTMLInputElement>(null);
   const filterId = useId();
   const hintId = useId();
+  const sqlId = useId();
+  const [sqlExpanded, setSqlExpanded] = useState(Boolean(error));
   const [headerHeight, setHeaderHeight] = useState(ROW_HEIGHT + 1);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCell, setSelectedCell] = useState<{ column: string; row: number; value: unknown } | null>(null);
@@ -107,12 +109,25 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
     }
   };
 
+  const sqlToggle = executedSql ? (
+    <button type="button" aria-expanded={sqlExpanded} aria-controls={sqlId}
+      onClick={() => setSqlExpanded(expanded => !expanded)}
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm text-caption text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring pointer-coarse:min-h-11 touch-manipulation">
+      <ChevronDown aria-hidden="true" className={cn('size-3.5', !sqlExpanded && '-rotate-90')} />
+      {sqlExpanded ? 'Hide executed SQL' : 'View executed SQL'}
+    </button>
+  ) : null;
+  const sqlPanel = executedSql ? (
+    <pre id={sqlId} hidden={!sqlExpanded} aria-label="Executed SQL" tabIndex={0}
+      className="max-h-40 overflow-auto rounded-lg border border-border bg-muted p-3 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">{executedSql}</pre>
+  ) : null;
+
   if (!result && !error) return null;
 
   if (error || !result || result.rows.length === 0) {
     return (
       <div className="space-y-3">
-        <div className="space-y-4 rounded-xl bg-card p-4 sm:p-6">
+        <div className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
           <div role={error ? 'alert' : 'status'} className="flex items-start gap-3">
             {error ? <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive-foreground" aria-hidden="true" />
               : <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-query-complete" aria-hidden="true" />}
@@ -124,12 +139,15 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
                   : 'No rows returned.')}
               </p>
               {error && <p className="text-caption text-muted-foreground">Review the statement and parameters before running it again.</p>}
-              {executionTimeMs !== undefined && <p className="text-caption tabular-nums text-muted-foreground">{formatExecutionTime(executionTimeMs)}</p>}
             </div>
           </div>
-          {error && <Button variant="outline" className="min-h-11" onClick={onEditQuery}>Edit query</Button>}
+          <div className="flex flex-wrap items-center gap-x-4 text-caption tabular-nums text-muted-foreground">
+            {executionTimeMs !== undefined && <span>{formatExecutionTime(executionTimeMs)}</span>}
+            {sqlToggle}
+          </div>
+          {sqlPanel}
+          {error && <Button variant="outline" className="min-h-9 pointer-coarse:min-h-11" onClick={onEditQuery}>Edit query</Button>}
         </div>
-        <ExecutedSql sql={executedSql} />
       </div>
     );
   }
@@ -141,37 +159,40 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
     <Dialog onOpenChange={() => setCopyState('idle')}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="w-full space-y-1.5 sm:w-64">
-            <label htmlFor={filterId} className="text-label">Filter results</label>
+          <div className="w-full sm:w-64">
+            <label htmlFor={filterId} className="sr-only">Filter results</label>
             <input
               ref={filterRef}
               id={filterId}
               type="search"
-              placeholder="Search all columns…"
+              placeholder="Filter results…"
               value={searchTerm}
               onChange={(event) => {
                 setSearchTerm(event.target.value);
                 parentRef.current?.scrollTo({ top: 0, left: 0 });
               }}
-              className="min-h-11 w-full rounded-md border border-input bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:text-sm"
+              className="min-h-9 pointer-coarse:min-h-11 w-full rounded-lg border border-input bg-card px-3 text-base text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-1 focus-visible:outline-offset-0 focus-visible:outline-ring sm:text-sm"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-caption tabular-nums text-muted-foreground">
+          <div className="flex flex-wrap items-center min-h-9 gap-x-4 gap-y-1 pointer-coarse:min-h-11 text-caption tabular-nums text-muted-foreground">
             <span role="status">{query ? `${filteredRows.length} of ${result.rowCount}` : result.rowCount} {result.rowCount === 1 ? 'row' : 'rows'}</span>
             {executionTimeMs !== undefined && <span className="whitespace-nowrap">{formatExecutionTime(executionTimeMs)}</span>}
+            {sqlToggle}
           </div>
         </div>
+
+        {sqlPanel}
 
         <div ref={parentRef} role="region" aria-label="Query results" tabIndex={0} aria-describedby={hintId}
           className="isolate max-h-[min(28rem,60dvh)] overflow-auto rounded-lg border border-border bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
           <table aria-label="Query result data" aria-rowcount={filteredRows.length + 1} aria-colcount={columns.length + 1}
             className="grid w-full border-separate border-spacing-0 font-mono text-code" style={{ minWidth }}>
             <thead ref={headerRef} className="sticky top-0 z-20 grid bg-muted">
-              <tr className="grid border-b border-border" style={{ gridTemplateColumns }}>
-                <th scope="col" className="sticky start-0 z-10 flex min-h-11 items-center justify-end border-e border-border bg-muted px-3 text-caption font-normal text-muted-foreground"><span aria-hidden="true">#</span><span className="sr-only">Row</span></th>
+              <tr className="grid border-b-[length:var(--border-hairline)] border-border" style={{ gridTemplateColumns }}>
+                <th scope="col" className="sticky start-0 z-10 flex min-h-9 pointer-coarse:min-h-11 items-center justify-end border-e-[length:var(--border-hairline)] border-border bg-muted px-3 text-caption font-normal text-muted-foreground"><span aria-hidden="true">#</span><span className="sr-only">Row</span></th>
                 {columns.map((column, index) => (
                   <th key={index} scope="col" title={column.name}
-                    className={cn('flex min-h-11 min-w-0 items-center border-e border-border-subtle px-3 py-2 text-label last:border-e-0', column.numeric ? 'justify-end text-end' : 'text-start')}>
+                    className={cn('flex min-h-9 pointer-coarse:min-h-11 min-w-0 items-center border-e-[length:var(--border-hairline)] border-border-subtle px-3 py-1.5 text-label last:border-e-0', column.numeric ? 'justify-end text-end' : 'text-start')}>
                     <span className="truncate">{column.name}</span>
                   </th>
                 ))}
@@ -182,19 +203,19 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
                 const row = filteredRows[virtualRow.index];
                 return (
                   <tr key={virtualRow.key} data-index={virtualRow.index} aria-rowindex={virtualRow.index + 2} ref={rowVirtualizer.measureElement}
-                    className="group absolute grid w-full border-b border-border-subtle hover:bg-muted last:border-b-0"
+                    className="group absolute grid w-full border-b-[length:var(--border-hairline)] border-border-subtle hover:bg-muted last:border-b-0"
                     style={{ gridTemplateColumns, transform: `translateY(${virtualRow.start - headerHeight}px)` }}>
-                    <th scope="row" className="sticky start-0 z-10 flex min-h-11 items-center justify-end border-e border-border bg-card px-3 text-caption font-normal tabular-nums text-muted-foreground group-hover:bg-muted">{row.index + 1}</th>
+                    <th scope="row" className="sticky start-0 z-10 flex min-h-9 pointer-coarse:min-h-11 items-center justify-end border-e-[length:var(--border-hairline)] border-border bg-card px-3 text-caption font-normal tabular-nums text-muted-foreground group-hover:bg-muted">{row.index + 1}</th>
                     {columns.map((column, cellIndex) => {
                       const cell = row.values[cellIndex];
                       const text = formatValue(cell);
                       return (
-                        <td key={cellIndex} className="min-w-0 border-e border-border-subtle last:border-e-0">
+                        <td key={cellIndex} className="min-w-0 border-e-[length:var(--border-hairline)] border-border-subtle last:border-e-0">
                           <DialogTrigger
                             render={<button type="button" />}
                             onClick={() => setSelectedCell({ column: column.name, row: row.index + 1, value: cell })}
                             title={`View ${column.name}, row ${row.index + 1}`}
-                            className={cn('block min-h-11 w-full cursor-pointer truncate px-3 py-2 touch-manipulation hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', column.numeric ? 'text-end tabular-nums' : 'text-start', (cell === null || cell === '') && 'text-muted-foreground')}>
+                            className={cn('block min-h-9 pointer-coarse:min-h-11 w-full cursor-pointer truncate px-3 py-1.5 touch-manipulation hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring', column.numeric ? 'text-end tabular-nums' : 'text-start', (cell === null || cell === '') && 'text-muted-foreground')}>
                             {cell === '' ? <span className="text-caption">Empty string</span> : highlightText(text, query)}
                           </DialogTrigger>
                         </td>
@@ -209,12 +230,11 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
             <div className="space-y-2 p-6 text-center">
               <p className="text-label">No matching rows</p>
               <p className="text-sm text-muted-foreground">Try a different search or clear the filter.</p>
-              <Button variant="outline" className="min-h-11" onClick={clearFilter}>Clear filter</Button>
+              <Button variant="outline" className="min-h-9 pointer-coarse:min-h-11" onClick={clearFilter}>Clear filter</Button>
             </div>
           )}
         </div>
         <p id={hintId} className="text-caption text-muted-foreground">Select a cell to view and copy its full value.</p>
-        <ExecutedSql sql={executedSql} />
       </div>
       <DialogPopup showCloseButton={false} bottomStickOnMobile={false} className="max-w-2xl motion-reduce:transition-none">
         <div className="flex items-start justify-between gap-4 border-b-[length:var(--border-hairline)] border-border p-4">
@@ -222,26 +242,16 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
             <DialogTitle className="text-section">Cell value</DialogTitle>
             <DialogDescription className="font-mono text-caption [overflow-wrap:anywhere]">Row {selectedCell?.row} · {selectedCell?.column}</DialogDescription>
           </div>
-          <DialogClose render={<Button variant="ghost" size="icon-xl" className="min-h-11 min-w-11" aria-label="Close cell value" />}><X aria-hidden="true" /></DialogClose>
+          <DialogClose render={<Button variant="ghost" size="icon-xl" className="min-h-9 pointer-coarse:min-h-11 min-w-11" aria-label="Close cell value" />}><X aria-hidden="true" /></DialogClose>
         </div>
         <div tabIndex={0} role="region" aria-label="Full cell value" className="max-h-[50dvh] overflow-auto p-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring">
           <pre className="font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]">{selectedCell?.value === '' ? 'Empty string (0 characters)' : selectedCell && formatValue(selectedCell.value, true)}</pre>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t-[length:var(--border-hairline)] border-border p-4">
           <span role="status" className="text-caption text-muted-foreground">{copyState === 'copied' ? 'Copied to clipboard' : copyState === 'error' ? 'Could not copy. Select the value and copy it manually.' : ''}</span>
-          <Button variant="outline" className="min-h-11" onClick={copyValue}>Copy value</Button>
+          <Button variant="outline" className="min-h-9 pointer-coarse:min-h-11" onClick={copyValue}>Copy value</Button>
         </div>
       </DialogPopup>
     </Dialog>
-  );
-}
-
-function ExecutedSql({ sql }: { sql?: string }) {
-  if (!sql) return null;
-  return (
-    <details className="text-caption text-muted-foreground">
-      <summary className="w-fit cursor-pointer rounded-sm py-2 touch-manipulation focus-visible:outline-2 focus-visible:outline-ring">Executed SQL</summary>
-      <pre className="mt-1 max-h-40 overflow-auto rounded-md border border-border bg-muted p-3 font-mono text-code whitespace-pre-wrap [overflow-wrap:anywhere]">{sql}</pre>
-    </details>
   );
 }

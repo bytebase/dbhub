@@ -56,11 +56,11 @@
 }
 
 @theme inline {
+  /* Corners: small controls 4px, navigation 6px, controls 8px, surfaces 12px. */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
   --shadow-xs: var(--elevation-control);
   --shadow-sm: var(--elevation-raised);
   --shadow-md: var(--elevation-floating);
@@ -144,7 +144,8 @@
   --selection-foreground: var(--foreground);
   --muted-foreground: oklch(0.48 0.012 286);
 
-  /* Input edges and focus indicators are stronger than layout dividers. */
+  /* Cards use 1px borders; pane and table dividers use --border-hairline.
+     Input edges stay 1px and stronger than layout dividers in both themes. */
   --border: oklch(0 0 0 / 0.08);
   --border-subtle: oklch(0 0 0 / 0.05);
   --input: oklch(0.65 0.01 286);
