@@ -3,18 +3,20 @@ title: "Introduction"
 ---
 
 <img
-  className="block dark:hidden"
+  className="mx-auto mb-8 block h-auto w-80 max-w-full sm:w-[400px] dark:hidden"
   src="/images/logo/full-light.svg"
   alt="DBHub"
 />
 
 <img
-  className="hidden dark:block"
+  className="mx-auto mb-8 hidden h-auto w-80 max-w-full sm:w-[400px] dark:block"
   src="/images/logo/full-dark.svg"
   alt="DBHub"
 />
 
 DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two tools by default with opt-in extras. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases.
+
+<div style={{ width: "640px", maxWidth: "100%", marginInline: "auto" }}>
 
 ```
  +------------------+    +--------------+    +------------------+
@@ -37,7 +39,13 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
      MCP Clients           MCP Server             Databases
 ```
 
-> DBHub is the official example in the [Claude Code docs](https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database) for connecting to PostgreSQL via MCP.
+</div>
+
+<Tip>
+  **Featured in the official Claude Code docs.** DBHub is the
+  [PostgreSQL connection example](https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database)
+  for connecting via MCP.
+</Tip>
 
 ## Token Efficiency
 
