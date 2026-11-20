@@ -44,7 +44,9 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
 - **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
 - **Secure Access**: SSH tunneling and SSL/TLS encryption
 
-> DBHub is the official example in the [Claude Code docs](https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database) for connecting to PostgreSQL via MCP.
+<p align="center">
+ <img src="docs/images/community-logo-wall.png" alt="Our community includes developers from 24 companies and 10 universities, including Microsoft, NVIDIA, Amazon, Google, Oxford, Cornell, Duke, Tsinghua, Peking, KAIST, UBC, and Waseda." width="100%" />
+</p>
 
 ## Token Efficiency
 
