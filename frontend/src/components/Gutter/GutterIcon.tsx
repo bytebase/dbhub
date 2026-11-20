@@ -14,9 +14,9 @@ export default function GutterIcon({ icon, tooltip, to, href, expanded }: Gutter
   const location = useLocation();
   const isActive = to ? location.pathname === to : false;
   const className = cn(
-    'flex min-h-11 w-full items-center rounded-md border-s-2 p-2 touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+    'flex min-h-11 w-full items-center rounded-md p-2 touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
     expanded ? 'justify-start gap-3' : 'justify-center',
-    isActive ? 'border-primary bg-selection text-selection-foreground' : 'border-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+    isActive ? 'bg-selection text-selection-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
   );
   const content = <>
     <span aria-hidden="true">{icon}</span>

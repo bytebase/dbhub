@@ -11,7 +11,7 @@ interface SidebarProps {
   isLoading: boolean;
 }
 
-const itemClassName = 'flex min-h-11 items-center gap-2 rounded-md border-s-2 px-3 py-2 text-sm touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
+const itemClassName = 'flex min-h-11 items-center gap-2 rounded-md px-3 py-2 text-sm touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring';
 
 export default function Sidebar({ sources, isLoading }: SidebarProps) {
   const { sourceId, toolName } = useParams<{ sourceId: string; toolName: string }>();
@@ -43,8 +43,8 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               className={cn(
                 itemClassName,
                 !toolName
-                  ? 'border-primary bg-selection text-selection-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent'
+                  ? 'bg-selection text-selection-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
             >
               <LayoutDashboard className="size-4 shrink-0" aria-hidden="true" />
@@ -64,8 +64,8 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                   className={cn(
                     itemClassName,
                     toolName === tool.name
-                      ? 'border-primary bg-selection text-selection-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-accent'
+                      ? 'bg-selection text-selection-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   )}
                 >
                   <span className="min-w-0 flex-1 font-mono text-caption [overflow-wrap:anywhere]"><Identifier>{tool.name}</Identifier></span>

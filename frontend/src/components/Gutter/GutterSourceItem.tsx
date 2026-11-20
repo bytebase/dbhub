@@ -23,9 +23,9 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
             aria-label={source.id}
             aria-current={isActive ? 'location' : undefined}
             className={cn(
-              'w-full min-h-11 rounded-md border-s-2 p-2 flex items-center touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+              'w-full min-h-11 rounded-md p-2 flex items-center touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               expanded ? 'gap-3 justify-start' : 'flex-col justify-center gap-1.5',
-              isActive ? 'border-primary bg-selection text-selection-foreground' : 'border-transparent hover:bg-accent'
+              isActive ? 'bg-selection text-selection-foreground' : 'hover:bg-accent'
             )}
           >
             <img
