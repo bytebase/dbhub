@@ -112,10 +112,10 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
   if (error || !result || result.rows.length === 0) {
     return (
       <div className="space-y-3">
-        <div className="space-y-4 rounded-xl bg-card p-4 shadow-sm sm:p-6">
+        <div className="space-y-4 rounded-xl bg-card p-4 sm:p-6">
           <div role={error ? 'alert' : 'status'} className="flex items-start gap-3">
             {error ? <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive-foreground" aria-hidden="true" />
-              : <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success-foreground" aria-hidden="true" />}
+              : <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-query-complete" aria-hidden="true" />}
             <div className="min-w-0 space-y-2">
               <h3 className="text-label">{error ? 'Query failed' : 'Query completed'}</h3>
               <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">

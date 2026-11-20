@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useLayoutEffect, useCallback, useId, type KeyboardEvent } from 'react';
-import { AlertCircle, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { AlertCircle, Table2, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ResultsTable } from './ResultsTable';
 import type { ResultTab } from './types';
@@ -127,8 +127,8 @@ export function ResultsTabs({
   };
 
   const progress = (
-    <div role="status" className={cn("flex items-center gap-3 rounded-xl bg-card shadow-sm", tabs.length ? "p-4" : "min-h-32 p-6")}>
-      <Spinner aria-hidden="true" role="presentation" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    <div role="status" className={cn("flex items-center gap-3 rounded-xl bg-card", tabs.length ? "p-4" : "min-h-32 p-6")}>
+      <Spinner aria-hidden="true" role="presentation" className="mt-0.5 size-4 shrink-0 text-brand-accent" />
       <div className="space-y-1">
         <p className="text-label">Running query…</p>
         <p className="text-caption text-muted-foreground">
@@ -140,7 +140,8 @@ export function ResultsTabs({
 
   if (tabs.length === 0) {
     return isLoading ? progress : (
-      <div className="flex min-h-32 flex-col justify-center gap-2 rounded-xl bg-card p-6 shadow-sm">
+      <div className="flex min-h-32 flex-col justify-center gap-2 rounded-xl bg-card p-6">
+        <Table2 aria-hidden="true" className="mb-1 size-5 text-brand-accent" />
         <h2 className="text-label">Results appear here</h2>
         <p className="max-w-prose text-sm text-muted-foreground">Enter a SQL statement or fill in the tool parameters, then select Run.</p>
       </div>

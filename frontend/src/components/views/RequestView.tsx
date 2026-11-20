@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { History } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from '@/components/ui/tooltip';
 import { fetchRequests } from '../../api/requests';
@@ -231,7 +232,7 @@ export default function RequestView() {
                 );
               })}
             </div>
-            <div className="overflow-x-auto rounded-xl bg-card shadow-sm">
+            <div className="overflow-x-auto rounded-xl bg-card">
               <table className="w-full">
               <thead>
                 <tr className="border-b-[length:var(--border-hairline)] border-border bg-muted">
@@ -294,7 +295,8 @@ export default function RequestView() {
         )}
 
         {requests.length === 0 && (
-          <div className="space-y-3 rounded-xl bg-card p-6 shadow-sm sm:p-8">
+          <div className="space-y-3 rounded-xl bg-card p-6 sm:p-8">
+            <History aria-hidden="true" className="size-5 text-brand-accent" />
             <h2 className="text-label">No requests yet</h2>
             <p className="text-sm text-muted-foreground max-w-prose text-pretty">
               Run a tool in the workbench or through your MCP client. Its request will appear here when you return.

@@ -65,6 +65,8 @@
   --shadow-sm: var(--elevation-raised);
   --shadow-md: var(--elevation-floating);
   --shadow-lg: var(--elevation-floating);
+  --color-brand-accent: var(--brand-accent);
+  --color-query-complete: var(--query-complete);
   --color-canvas: var(--canvas);
   --color-border-subtle: var(--border-subtle);
   --color-selection: var(--selection);
@@ -115,9 +117,11 @@
 }
 
 :root {
-  /* Brand artwork stays exact; UI roles use the supporting Zinc ramp. */
+  /* Zinc surfaces keep the Aurora artwork prominent; focus rings use muted teal. */
   --brand-zinc: oklch(0.319 0.007 286);
   --brand-white: oklch(1 0 0);
+  --brand-accent: oklch(0.48 0.08 245);
+  --query-complete: oklch(0.48 0.07 185);
   --radius: 0.5rem;
   --border-hairline: 1px;
 
@@ -144,7 +148,7 @@
   --border: oklch(0 0 0 / 0.08);
   --border-subtle: oklch(0 0 0 / 0.05);
   --input: oklch(0.65 0.01 286);
-  --ring: var(--color-zinc-600);
+  --ring: oklch(0.5 0.07 185);
 
   --primary: var(--brand-zinc);
   --primary-foreground: var(--brand-white);
@@ -180,6 +184,8 @@
 }
 
 .dark {
+  --brand-accent: oklch(0.75 0.06 245);
+  --query-complete: oklch(0.72 0.06 185);
   --canvas: var(--color-zinc-950);
   --background: var(--color-zinc-900);
   --card: var(--color-zinc-900);
@@ -195,7 +201,7 @@
   --border: var(--color-zinc-800);
   --border-subtle: oklch(0.25 0.006 286);
   --input: oklch(0.56 0.012 286);
-  --ring: var(--color-zinc-400);
+  --ring: oklch(0.72 0.06 185);
   --primary: var(--brand-white);
   --primary-foreground: var(--brand-zinc);
   --disabled: var(--color-zinc-800);

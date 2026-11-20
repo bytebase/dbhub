@@ -8,7 +8,7 @@ function Spinner({
   return (
     <Loader2Icon
       aria-label="Loading"
-      className={cn("animate-spin motion-reduce:animate-none", className)}
+      className={cn("animate-spin text-brand-accent motion-reduce:animate-none", className)}
       role="status"
       {...props}
     />

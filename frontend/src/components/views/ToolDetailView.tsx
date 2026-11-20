@@ -33,6 +33,7 @@ export default function ToolDetailView() {
   const [resultTabs, setResultTabs] = useState<ResultTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [justCompleted, setJustCompleted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState('');
   const [sqlError, setSqlError] = useState('');
@@ -41,6 +42,12 @@ export default function ToolDetailView() {
   const runGeneration = useRef(0);
   const syncedSearch = useRef<string | null>(null);
   const hydratedTool = useRef<Tool | null>(null);
+
+  useEffect(() => {
+    if (!justCompleted) return;
+    const timer = setTimeout(() => setJustCompleted(false), 2500);
+    return () => clearTimeout(timer);
+  }, [justCompleted]);
 
   useEffect(() => {
     if (!copied) return;
@@ -55,6 +62,7 @@ export default function ToolDetailView() {
     runGeneration.current++;
     runningRef.current = false;
     setIsRunning(false);
+    setJustCompleted(false);
     setIsLoading(true);
     setError(null);
     // Reset result state when switching tools
@@ -217,6 +225,7 @@ export default function ToolDetailView() {
     }
     runningRef.current = true;
     setIsRunning(true);
+    setJustCompleted(false);
 
     const startTime = performance.now();
     const generation = runGeneration.current;
@@ -255,6 +264,7 @@ export default function ToolDetailView() {
       }));
       setResultTabs(prev => [...newTabs, ...prev]);
       setActiveTabId(newTabs[0]?.id ?? null);
+      setJustCompleted(true);
     } catch (err) {
       if (generation !== runGeneration.current) return;
       const errorTab: ResultTab = {
@@ -369,7 +379,7 @@ export default function ToolDetailView() {
           {toolType === 'custom' && tool.parameters.length > 0 && (
             <div className="space-y-2">
               <h2 className="text-label text-foreground">Parameters</h2>
-              <div className="rounded-xl bg-card p-4 shadow-sm sm:p-6">
+              <div className="rounded-xl bg-card p-4 sm:p-6">
                 <ParameterForm
                   key={`${sourceId}/${toolName}`}
                   parameters={tool.parameters}
@@ -428,10 +438,15 @@ export default function ToolDetailView() {
           </div>
 
           {/* Run Button */}
-          <RunButton
-            onShortcut={handleRun}
-            loading={isRunning}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <RunButton
+              onShortcut={handleRun}
+              loading={isRunning}
+            />
+            <span role="status" className="flex items-center gap-1.5 text-caption text-muted-foreground">
+              {justCompleted && <><span aria-hidden="true" className="text-query-complete"><CheckIcon /></span>Query completed</>}
+            </span>
+          </div>
 
         </form>
 
