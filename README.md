@@ -9,14 +9,11 @@
    <img alt="GitHub Trending Repository of the Day" src="https://api.star-history.com/badge?repo=bytebase/dbhub&type=trending" />
   </picture>
  </a>
-</p>
-
-<p align="center">
  <a href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
   <picture>
    <source media="(prefers-color-scheme: dark)" srcset="docs/images/featured-by-claude-code-dark.svg" />
    <source media="(prefers-color-scheme: light)" srcset="docs/images/featured-by-claude-code-light.svg" />
-   <img alt="Featured in the official Claude Code docs — read the DBHub example" src="docs/images/featured-by-claude-code-light.svg" width="560" />
+   <img alt="Featured in the official Claude Code docs — read the DBHub example" src="docs/images/featured-by-claude-code-light.svg" width="280" height="64" />
   </picture>
  </a>
 </p>
