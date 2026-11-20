@@ -12,6 +12,16 @@
 </p>
 
 <p align="center">
+ <a href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
+  <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="docs/images/featured-by-claude-code-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="docs/images/featured-by-claude-code-light.svg" />
+   <img alt="Featured in the official Claude Code docs — read the DBHub example" src="docs/images/featured-by-claude-code-light.svg" width="560" />
+  </picture>
+ </a>
+</p>
+
+<p align="center">
 <a href="https://dbhub.ai/" target="_blank">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bytebase/dbhub/main/docs/images/logo/full-dark.svg" width="75%">
