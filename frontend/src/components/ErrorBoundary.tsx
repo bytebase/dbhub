@@ -35,10 +35,10 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className="flex h-dvh overflow-auto bg-background px-4 py-6">
           <div className="m-auto w-full max-w-md shrink-0">
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
-              <h1 className="text-2xl font-bold text-destructive mb-4">
+              <h1 className="text-page text-foreground mb-4">
                 Something went wrong
               </h1>
-              <p className="text-destructive/90 mb-4">
+              <p className="text-body text-destructive-foreground mb-4 [overflow-wrap:anywhere]">
                 {error.message}
               </p>
               {isApiError && (

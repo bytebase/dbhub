@@ -9,7 +9,7 @@ import { SqlEditor, ParameterForm, RunButton, ResultsTabs, type ResultTab, type 
 import { parseParameterValues, validateParameterInput, type ParameterValues } from '../tool/ParameterForm';
 import { Button } from '../ui/button';
 import { PageLoading, PageLoadError } from '../WorkbenchState';
-import LockIcon from '../icons/LockIcon';
+import { Lock, PencilLine } from 'lucide-react';
 import CopyIcon from '../icons/CopyIcon';
 import CheckIcon from '../icons/CheckIcon';
 
@@ -337,14 +337,9 @@ export default function ToolDetailView() {
     return (
       <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-4xl">
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="min-w-0 text-page text-foreground font-mono tracking-normal [overflow-wrap:anywhere]">{tool.name}</h1>
-            {tool.readonly && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-warning/10 text-warning-foreground">
-                <LockIcon className="w-3 h-3" />
-                Read-Only
-              </span>
-            )}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-page text-foreground [overflow-wrap:anywhere]">{tool.name}</h1>
+            <ToolAccessBadge readonly={tool.readonly} />
           </div>
           <p className="text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{tool.description}</p>
           <div className="border border-border rounded-lg bg-card p-8 text-center">
@@ -362,14 +357,9 @@ export default function ToolDetailView() {
       <div className="space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <h1 className="min-w-0 text-page text-foreground font-mono tracking-normal [overflow-wrap:anywhere]">{tool.name}</h1>
-            {tool.readonly && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full whitespace-nowrap text-xs font-medium bg-warning/10 text-warning-foreground">
-                <LockIcon className="w-3 h-3" />
-                Read-Only
-              </span>
-            )}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-2">
+            <h1 className="min-w-0 text-page text-foreground [overflow-wrap:anywhere]">{tool.name}</h1>
+            <ToolAccessBadge readonly={tool.readonly} />
           </div>
           <p className="text-body text-muted-foreground max-w-prose text-pretty [overflow-wrap:anywhere]">{tool.description}</p>
         </div>
@@ -394,7 +384,7 @@ export default function ToolDetailView() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 id="sql-statement-label" className="text-label text-foreground">
-                SQL Statement
+                SQL statement
               </h2>
               <Button
                 type="button"
@@ -465,5 +455,20 @@ export default function ToolDetailView() {
         />
       </div>
     </div>
+  );
+}
+
+function ToolAccessBadge({ readonly }: { readonly?: boolean }) {
+  const isReadOnly = readonly === true;
+  const Icon = isReadOnly ? Lock : PencilLine;
+
+  return (
+    <span
+      title={isReadOnly ? 'This tool is restricted to read-only operations.' : 'This tool allows write operations, subject to database permissions.'}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${isReadOnly ? 'bg-muted text-muted-foreground' : 'bg-warning/10 text-warning-foreground'}`}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      {isReadOnly ? 'Read-only' : 'Write access'}
+    </span>
   );
 }

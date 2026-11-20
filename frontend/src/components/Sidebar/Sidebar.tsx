@@ -68,7 +68,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   )}
                 >
-                  <span className="min-w-0 flex-1 font-mono text-caption [overflow-wrap:anywhere]"><Identifier>{tool.name}</Identifier></span>
+                  <span className="min-w-0 flex-1 font-mono text-sm [overflow-wrap:anywhere]"><Identifier>{tool.name}</Identifier></span>
                   {tool.readonly && (
                     <span aria-hidden="true" className="shrink-0">
                       <LockIcon className="size-3.5 shrink-0" />

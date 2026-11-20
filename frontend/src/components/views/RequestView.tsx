@@ -188,7 +188,7 @@ export default function RequestView() {
     <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-6xl">
       <div className="space-y-6">
         <div>
-          <h1 className="text-page text-foreground mb-2">Recent Requests</h1>
+          <h1 className="text-page text-foreground mb-2">Recent requests</h1>
           <p className="text-muted-foreground text-body max-w-prose text-pretty">
             Up to 100 requests per source
           </p>

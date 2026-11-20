@@ -72,7 +72,7 @@ export default function SourceDetailView() {
           </h2>
           <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <dt className="text-label text-muted-foreground">Database Type</dt>
+              <dt className="text-label text-muted-foreground">Database type</dt>
               <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">{source.type}</dd>
             </div>
 
@@ -124,7 +124,7 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_host && (
                 <div>
-                  <dt className="text-label text-muted-foreground">SSH Host</dt>
+                  <dt className="text-label text-muted-foreground">SSH host</dt>
                   <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_host}
                   </dd>
@@ -133,7 +133,7 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_port && (
                 <div>
-                  <dt className="text-label text-muted-foreground">SSH Port</dt>
+                  <dt className="text-label text-muted-foreground">SSH port</dt>
                   <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_port}
                   </dd>
@@ -142,7 +142,7 @@ export default function SourceDetailView() {
 
               {source.ssh_tunnel.ssh_user && (
                 <div>
-                  <dt className="text-label text-muted-foreground">SSH User</dt>
+                  <dt className="text-label text-muted-foreground">SSH user</dt>
                   <dd className="mt-1 text-code text-foreground font-mono [overflow-wrap:anywhere]">
                     {source.ssh_tunnel.ssh_user}
                   </dd>

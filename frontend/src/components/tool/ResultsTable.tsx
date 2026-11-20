@@ -192,7 +192,7 @@ export function ResultsTable({ result, error, onEditQuery, executedSql, executio
                 <th scope="col" className="sticky start-0 z-10 flex min-h-9 pointer-coarse:min-h-11 items-center justify-end border-e-[length:var(--border-hairline)] border-border bg-muted px-3 text-caption font-normal text-muted-foreground"><span aria-hidden="true">#</span><span className="sr-only">Row</span></th>
                 {columns.map((column, index) => (
                   <th key={index} scope="col" title={column.name}
-                    className={cn('flex min-h-9 pointer-coarse:min-h-11 min-w-0 items-center border-e-[length:var(--border-hairline)] border-border-subtle px-3 py-1.5 text-label last:border-e-0', column.numeric ? 'justify-end text-end' : 'text-start')}>
+                    className={cn('flex min-h-9 pointer-coarse:min-h-11 min-w-0 items-center border-e-[length:var(--border-hairline)] border-border-subtle px-3 py-1.5 font-sans text-label last:border-e-0', column.numeric ? 'justify-end text-end' : 'text-start')}>
                     <span className="truncate">{column.name}</span>
                   </th>
                 ))}

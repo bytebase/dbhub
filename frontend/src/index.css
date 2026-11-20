@@ -36,12 +36,13 @@
   --text-2xl--line-height: 1.25;
   --text-3xl: 1.75rem;
   --text-3xl--line-height: 1.2;
+  /* UI hierarchy: page 24px, section/body 16px, labels/code 14px, captions 13px. */
   --text-page: 1.5rem;
   --text-page--line-height: 1.25;
-  --text-page--letter-spacing: -0.025em;
+  --text-page--letter-spacing: -0.02em;
   --text-page--font-weight: 600;
-  --text-section: 1.125rem;
-  --text-section--line-height: 1.4;
+  --text-section: 1rem;
+  --text-section--line-height: 1.5;
   --text-section--font-weight: 600;
   --text-body: 1rem;
   --text-body--line-height: 1.6;
@@ -49,7 +50,7 @@
   --text-label--line-height: 1.5;
   --text-label--font-weight: 500;
   --text-code: 0.875rem;
-  --text-code--line-height: 1.6;
+  --text-code--line-height: 1.5;
 
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
