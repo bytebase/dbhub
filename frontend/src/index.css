@@ -246,6 +246,10 @@
     text-wrap: balance;
   }
 
+  :is(button, [role="button"]):not(:disabled):not([aria-disabled="true"]):not([data-disabled]) {
+    cursor: pointer;
+  }
+
   ::selection {
     background: var(--selection);
     color: var(--selection-foreground);
