@@ -45,20 +45,17 @@ export function RunButton({ onShortcut, disabled = false, loading = false }: Run
 
   return (
     <Button type="submit" disabled={disabled || loading} aria-busy={loading} className="h-9 min-h-9 w-fit pointer-coarse:h-11 pointer-coarse:min-h-11" title={`Run (${shortcutKey}+Enter)`}>
-      {loading ? (
-        <>
-          <Spinner className="size-4" />
-          Running…
-        </>
-      ) : (
-        <>
+      <span className="grid">
+        <span aria-hidden={loading || undefined} className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${loading ? 'invisible' : ''}`}>
           <PlayIcon className="size-4" />
           Run
-          <span className="ml-2 text-xs opacity-80">
-            {shortcutKey}+Enter
-          </span>
-        </>
-      )}
+          <span className="ml-2 text-xs opacity-80">{shortcutKey}+Enter</span>
+        </span>
+        <span aria-hidden={!loading || undefined} className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${loading ? '' : 'invisible'}`}>
+          <Spinner className="size-4" />
+          Running…
+        </span>
+      </span>
     </Button>
   );
 }

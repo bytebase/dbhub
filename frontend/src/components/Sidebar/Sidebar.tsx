@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { LayoutDashboard } from 'lucide-react';
+import { PanelsTopLeft } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { DataSource } from '../../types/datasource';
 import LockIcon from '../icons/LockIcon';
@@ -42,11 +42,11 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
               className={cn(
                 itemClassName,
                 !toolName
-                  ? 'bg-selection font-medium text-selection-foreground'
+                  ? 'bg-selection text-selection-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-selection/50'
               )}
             >
-              <LayoutDashboard className="size-4 shrink-0" aria-hidden="true" />
+              <PanelsTopLeft className="size-4 shrink-0" aria-hidden="true" />
               Overview
             </Link>
             <div className="mb-2 mt-4 flex items-center justify-between px-3">
@@ -63,7 +63,7 @@ export default function Sidebar({ sources, isLoading }: SidebarProps) {
                   className={cn(
                     itemClassName,
                     toolName === tool.name
-                      ? 'bg-selection font-medium text-selection-foreground'
+                      ? 'bg-selection text-selection-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-selection/50'
                   )}
                 >

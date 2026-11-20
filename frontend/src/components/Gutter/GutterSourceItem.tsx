@@ -25,7 +25,7 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
             className={cn(
               'w-full rounded-md flex items-center touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               expanded ? 'min-h-9 gap-3 justify-start px-2 py-1.5 pointer-coarse:min-h-11' : 'min-h-11 flex-col justify-center gap-1.5 p-2',
-              isActive ? 'bg-selection font-medium text-selection-foreground' : 'hover:bg-selection/50'
+              isActive ? 'bg-selection text-selection-foreground' : 'hover:bg-selection/50'
             )}
           >
             <img

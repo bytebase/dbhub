@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { History } from 'lucide-react';
+import { Check, Copy, History } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Tooltip, TooltipTrigger, TooltipPopup, TooltipProvider } from '@/components/ui/tooltip';
+import { Dialog, DialogTrigger, DialogPopup, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../ui/dialog';
 import { fetchRequests } from '../../api/requests';
 import { fetchSources } from '../../api/sources';
 import { ApiError } from '../../api/errors';
@@ -74,60 +74,59 @@ function parseUserAgent(ua: string): string {
   return ua.length > 20 ? ua.substring(0, 20) + '...' : ua;
 }
 
-function SqlTooltip({ sql, children }: { sql: string; children: React.ReactElement }) {
+function RequestTextDialog({ title, text, children, className }: {
+  title: string;
+  text: string;
+  children: React.ReactNode;
+  className: string;
+}) {
+  const [copyStatus, setCopyStatus] = useState('');
   return (
-    <Tooltip>
-      <TooltipTrigger render={children} />
-      <TooltipPopup
-        className="whitespace-pre-wrap [overflow-wrap:anywhere] max-w-md text-caption"
-        sideOffset={5}
-      >
-        {sql}
-      </TooltipPopup>
-    </Tooltip>
-  );
-}
-
-function ErrorTooltip({ error, children }: { error: string; children: React.ReactElement }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={children} />
-      <TooltipPopup
-        className="whitespace-pre-wrap [overflow-wrap:anywhere] max-w-md text-caption"
-        sideOffset={5}
-        side="top"
-        align="end"
-      >
-        {error}
-      </TooltipPopup>
-    </Tooltip>
+    <Dialog onOpenChange={() => setCopyStatus('')}>
+      <DialogTrigger className={className} aria-label={`View ${title.toLowerCase()}`}>
+        {children}
+      </DialogTrigger>
+      <DialogPopup className="max-w-2xl motion-reduce:transition-none">
+        <DialogHeader>
+          <DialogTitle className="text-section pe-8">{title}</DialogTitle>
+          <DialogDescription>Select text or copy the full value.</DialogDescription>
+        </DialogHeader>
+        <pre tabIndex={0} className="mx-6 max-h-[50dvh] min-h-0 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 font-mono text-code [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-ring">
+          {text}
+        </pre>
+        <DialogFooter variant="bare" className="items-center">
+          <p role="status" className="text-caption text-muted-foreground">{copyStatus}</p>
+          <Button variant="outline" className="min-h-9 pointer-coarse:min-h-11" onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(text);
+              setCopyStatus('Copied');
+            } catch {
+              setCopyStatus('Could not copy. Select the text and copy it manually.');
+            }
+          }}>
+            {copyStatus === 'Copied' ? <Check className="size-4" /> : <Copy className="size-4" />}
+            Copy
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 }
 
 function StatusBadge({ success, error }: { success: boolean; error?: string }) {
-  if (success) {
+  const icon = (
+    <svg aria-hidden="true" className="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={success ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'} />
+    </svg>
+  );
+  if (!success && error) {
     return (
-      <span className="inline-flex items-center justify-center w-4 h-4 text-success-foreground">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      </span>
+      <RequestTextDialog title="Request error" text={error} className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-destructive-foreground hover:bg-destructive/10 pointer-coarse:min-h-11 pointer-coarse:min-w-11 focus-visible:outline-2 focus-visible:outline-ring">
+        {icon}
+      </RequestTextDialog>
     );
   }
-
-  const errorIcon = (
-    <span className="inline-flex items-center justify-center w-4 h-4 text-destructive-foreground cursor-help">
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-      </svg>
-    </span>
-  );
-
-  if (error) {
-    return <ErrorTooltip error={error}>{errorIcon}</ErrorTooltip>;
-  }
-
-  return errorIcon;
+  return <span role="img" aria-label={success ? 'Succeeded' : 'Failed'} className={success ? 'text-success-foreground' : 'text-destructive-foreground'}>{icon}</span>;
 }
 
 export default function RequestView() {
@@ -184,7 +183,6 @@ export default function RequestView() {
   if (error) return <PageLoadError title="Could not load recent requests" message={error} onRetry={() => setLoadAttempt(attempt => attempt + 1)} />;
 
   return (
-    <TooltipProvider>
     <div className="container mx-auto px-4 py-6 sm:px-8 sm:py-10 max-w-6xl">
       <div className="space-y-6">
         <div>
@@ -198,8 +196,9 @@ export default function RequestView() {
           <>
             <div className="flex flex-wrap gap-2">
               <button
+                aria-pressed={selectedSource === null}
                 onClick={() => setSelectedSource(null)}
-                className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors ${
+                className={`min-h-9 pointer-coarse:min-h-11 px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
                   selectedSource === null
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -213,8 +212,9 @@ export default function RequestView() {
                 return (
                   <button
                     key={sourceId}
+                    aria-pressed={selectedSource === sourceId}
                     onClick={() => setSelectedSource(sourceId)}
-                    className={`px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors flex items-center gap-1.5 ${
+                    className={`min-h-9 pointer-coarse:min-h-11 px-3 py-1 text-label tabular-nums whitespace-nowrap rounded-md transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring flex items-center gap-1.5 ${
                       selectedSource === sourceId
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
@@ -270,14 +270,12 @@ export default function RequestView() {
                         )}
                       </Link>
                     </td>
-                    <td className="px-4 py-2 text-code font-mono text-foreground max-w-0">
-                      <SqlTooltip sql={request.sql}>
-                        <span className="block overflow-hidden text-ellipsis whitespace-nowrap cursor-help">
-                          {request.sql}
-                        </span>
-                      </SqlTooltip>
+                    <td className="px-4 py-0 text-code font-mono text-foreground max-w-0">
+                      <RequestTextDialog title="Executed SQL" text={request.sql} className="block min-h-9 w-full truncate rounded-sm text-start underline-offset-4 hover:underline pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-ring">
+                        {request.sql}
+                      </RequestTextDialog>
                     </td>
-                    <td className="px-4 py-2 text-sm">
+                    <td className="px-4 py-0 text-sm">
                       <div className="flex items-center gap-2">
                         <StatusBadge success={request.success} error={request.error} />
                         <span className="text-caption tabular-nums whitespace-nowrap text-muted-foreground">{request.durationMs}&nbsp;ms</span>
@@ -306,6 +304,5 @@ export default function RequestView() {
         )}
       </div>
     </div>
-    </TooltipProvider>
   );
 }
