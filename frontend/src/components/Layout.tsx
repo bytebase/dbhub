@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import Gutter from './Gutter';
+import Logo from './Logo';
 import Sidebar from './Sidebar/Sidebar';
 import { Button } from './ui/button';
 import { Sheet, SheetTrigger, SheetPopup, SheetTitle, SheetClose } from './ui/sheet';
@@ -18,23 +19,37 @@ export default function Layout({ sources, isLoading }: LayoutProps) {
   const showSidebar = location.pathname.startsWith('/source/');
   const [navigationOpen, setNavigationOpen] = useState(false);
   const isMobile = useIsMobile();
+  const [preferExpanded, setPreferExpanded] = useState(() => {
+    try {
+      return window.localStorage.getItem('dbhub.navigation.expanded') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const expanded = !showSidebar || preferExpanded;
+  const toggleExpanded = () => {
+    const next = !preferExpanded;
+    setPreferExpanded(next);
+    try {
+      window.localStorage.setItem('dbhub.navigation.expanded', String(next));
+    } catch {
+      // Navigation remains usable when persistent storage is unavailable.
+    }
+  };
 
   useEffect(() => {
     setNavigationOpen(false);
   }, [location.pathname, isMobile]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-canvas md:flex-row">
+    <div className="flex h-dvh flex-col overflow-hidden bg-canvas">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:p-3 focus:outline-2 focus:outline-ring">
         Skip to content
       </a>
-      <div className="hidden min-h-0 md:flex">
-        <Gutter sources={sources} />
-        {showSidebar && <Sidebar sources={sources} isLoading={isLoading} />}
-      </div>
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b-[length:var(--border-hairline)] border-border bg-sidebar px-3 md:hidden">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b-[length:var(--border-hairline)] border-border bg-sidebar px-4 md:hidden">
+        <Logo />
         <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-          <SheetTrigger render={<Button variant="ghost" size="icon-xl" aria-label="Open navigation" className="touch-manipulation" />}>
+          <SheetTrigger render={<Button variant="ghost" size="icon-xl" aria-label="Open navigation" className="touch-manipulation md:hidden" />}>
             <Menu aria-hidden="true" />
           </SheetTrigger>
           <SheetPopup side="left" showCloseButton={false} className="w-[min(24rem,100%)] motion-reduce:transition-none">
@@ -47,16 +62,26 @@ export default function Layout({ sources, isLoading }: LayoutProps) {
             <div className="flex min-h-0 flex-1" onClick={(event) => {
               if ((event.target as HTMLElement).closest('a[href]')) setNavigationOpen(false);
             }}>
-              <Gutter sources={sources} />
+              <Gutter sources={sources} hasSidebar />
               <Sidebar sources={sources} isLoading={isLoading} />
             </div>
           </SheetPopup>
         </Sheet>
-        <span className="text-label">DBHub Workbench</span>
       </header>
-      <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-auto [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring" aria-label="Main content">
-        <Outlet />
-      </main>
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="hidden min-h-0 shrink-0 flex-col bg-sidebar md:flex">
+          <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b-[length:var(--border-hairline)] border-e-[length:var(--border-hairline)] border-border px-4">
+            <Logo />
+          </header>
+          <div className="flex min-h-0 flex-1">
+            <Gutter sources={sources} hasSidebar={showSidebar} expanded={expanded} onToggleExpanded={showSidebar ? toggleExpanded : undefined} />
+            {showSidebar && <Sidebar sources={sources} isLoading={isLoading} />}
+          </div>
+        </div>
+        <main id="main-content" tabIndex={-1} className="min-h-0 min-w-0 flex-1 overflow-auto [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring" aria-label="Main content">
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

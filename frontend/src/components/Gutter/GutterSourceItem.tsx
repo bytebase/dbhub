@@ -23,9 +23,9 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
             aria-label={source.id}
             aria-current={isActive ? 'location' : undefined}
             className={cn(
-              'w-full min-h-11 rounded-md p-2 flex items-center touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
-              expanded ? 'gap-3 justify-start' : 'flex-col justify-center gap-1.5',
-              isActive ? 'bg-selection text-selection-foreground' : 'hover:bg-accent'
+              'w-full rounded-md flex items-center touch-manipulation transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+              expanded ? 'min-h-9 gap-3 justify-start px-2 py-1.5 pointer-coarse:min-h-11' : 'min-h-11 flex-col justify-center gap-1.5 p-2',
+              isActive ? 'bg-selection font-medium text-selection-foreground' : 'hover:bg-selection/50'
             )}
           >
             <img
@@ -33,7 +33,7 @@ export default function GutterSourceItem({ source, expanded }: GutterSourceItemP
               alt=""
               width={24}
               height={24}
-              className="size-6 shrink-0"
+              className={cn('shrink-0', expanded ? 'size-5' : 'size-6')}
             />
             <span className={cn(
               expanded
