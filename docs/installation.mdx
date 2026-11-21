@@ -523,11 +523,25 @@ Prefer a one-click, read-only install with no JSON editing? Use the [MCP Bundle]
 
 ### VS Code
 
-VS Code has native MCP support through GitHub Copilot. Create `.vscode/mcp.json` in your project root:
+Connect DBHub to VS Code with the demo install below, or use the manual configuration tabs. The npm setup requires **Node.js 22.5+**.
 
 <Tabs>
+  <Tab title="One-Click Install">
+    Start with the built-in demo database; no database credentials are needed.
+
+    <a href="vscode:mcp/install?%7B%22name%22%3A%22dbhub%22%2C%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40bytebase%2Fdbhub%40latest%22%2C%22--transport%22%2C%22stdio%22%2C%22--demo%22%5D%7D">Install DBHub in VS Code →</a>
+
+    Review the configuration in VS Code and choose to install it. Open an agent chat and ask: **"What tables are in the database?"**
+
+    To connect your own database, replace `"--demo"` in the server's `args` with `"--dsn", "YOUR_CONNECTION_STRING"`. See **Stdio (Local)** for an example and [DSN Configuration](/config/command-line#param-dsn) for connection strings.
+
+    <Note>
+    The install link and `.vscode/mcp.json` examples use VS Code's editor-managed configuration. For a native Copilot session, run **MCP: Add Server**, choose a stdio command (`npx -y @bytebase/dbhub@latest --transport stdio --demo`), and select **Global → Copilot Global**. Verify the connection with a tool call in your intended session. See [VS Code's configuration guide](https://code.visualstudio.com/docs/agents/reference/mcp-configuration).
+    </Note>
+  </Tab>
+
   <Tab title="Stdio (Local)">
-    For local database connections, use stdio transport:
+    For local database connections, create `.vscode/mcp.json` in your project root:
 
     ```json .vscode/mcp.json
     {

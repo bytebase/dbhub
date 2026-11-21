@@ -164,7 +164,7 @@
   min-width: 0;
 }
 
-.dbhub-cursor-install {
+.dbhub-client-install {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -175,7 +175,7 @@
   font-size: 14px;
 }
 
-.dbhub-cursor-install a {
+.dbhub-client-install a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -183,7 +183,7 @@
   text-decoration: none;
 }
 
-.dbhub-cursor-button {
+.dbhub-client-button {
   padding: 0 16px;
   border: 1px solid var(--home-border);
   border-radius: 8px;
@@ -191,23 +191,23 @@
   font-weight: 600;
 }
 
-.dbhub-cursor-button:hover {
+.dbhub-client-button:hover {
   background: var(--home-surface);
 }
 
-.dbhub-cursor-button:active {
+.dbhub-client-button:active {
   transform: translateY(1px);
 }
 
-.dbhub-cursor-guide {
+.dbhub-client-guide {
   color: var(--home-muted);
 }
 
-.dbhub-cursor-guide:hover {
+.dbhub-client-guide:hover {
   text-decoration: underline;
 }
 
-.dbhub-cursor-install p {
+.dbhub-client-install p {
   flex-basis: 100%;
   margin: 0;
   color: var(--home-muted);
