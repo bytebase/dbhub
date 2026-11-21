@@ -1,7 +1,7 @@
 {
   "name": "dbhub",
   "description": "Token-efficient database MCP server for PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite, with skills for connection setup and schema exploration",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "author": {
     "name": "Bytebase",
     "url": "https://www.bytebase.com"
