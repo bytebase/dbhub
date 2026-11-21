@@ -403,37 +403,31 @@ export class PostgresConnector implements Connector {
       // Use the configured default schema (from search_path config, defaults to 'public')
       const schemaToUse = schema || this.defaultSchema;
 
-      // Query to get all indexes for the table. attname is of type `name`;
-      // node-pg has no parser for name[] and would hand back the raw '{id}'
-      // string, so the aggregate is cast to text[] to get a real array.
+      // Walk indkey positionally: INCLUDE columns follow indnkeyatts, and
+      // expression keys have attnum 0 (no matching pg_attribute row).
       const result = await client.query(
         `
         SELECT
           i.relname as index_name,
-          array_agg(a.attname::text) as column_names,
+          array_agg(
+            COALESCE(a.attname::text, pg_get_indexdef(i.oid, k.position::int, true))
+            ORDER BY k.position
+          ) FILTER (WHERE k.position <= ix.indnkeyatts) as column_names,
+          array_agg(a.attname::text ORDER BY k.position)
+            FILTER (WHERE k.position > ix.indnkeyatts) as included_columns,
           ix.indisunique as is_unique,
           ix.indisprimary as is_primary
-        FROM
-          pg_class t,
-          pg_class i,
-          pg_index ix,
-          pg_attribute a,
-          pg_namespace ns
-        WHERE
-          t.oid = ix.indrelid
-          AND i.oid = ix.indexrelid
-          AND a.attrelid = t.oid
-          AND a.attnum = ANY(ix.indkey)
-          AND t.relkind IN ('r','p')
+        FROM pg_class t
+        JOIN pg_namespace ns ON ns.oid = t.relnamespace
+        JOIN pg_index ix ON ix.indrelid = t.oid
+        JOIN pg_class i ON i.oid = ix.indexrelid
+        CROSS JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS k(attnum, position)
+        LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+        WHERE t.relkind IN ('r','p')
           AND t.relname = $1
-          AND ns.oid = t.relnamespace
           AND ns.nspname = $2
-        GROUP BY
-          i.relname,
-          ix.indisunique,
-          ix.indisprimary
-        ORDER BY
-          i.relname
+        GROUP BY i.oid, i.relname, ix.indisunique, ix.indisprimary
+        ORDER BY i.relname
       `,
         [tableName, schemaToUse]
       );
@@ -441,6 +435,7 @@ export class PostgresConnector implements Connector {
       return result.rows.map((row) => ({
         index_name: row.index_name,
         column_names: row.column_names,
+        ...(row.included_columns?.length ? { included_columns: row.included_columns } : {}),
         is_unique: row.is_unique,
         is_primary: row.is_primary,
       }));
