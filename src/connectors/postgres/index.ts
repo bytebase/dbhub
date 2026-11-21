@@ -767,7 +767,7 @@ export class PostgresConnector implements Connector {
       //
       // Engine-level read-only enforcement: when the tool is read-only, the
       // transaction is opened READ ONLY so the database itself rejects any
-      // write, even one the keyword classifier failed to catch (e.g. SELECT
+      // write, even one the AST classifier cannot establish (e.g. SELECT
       // setval()). Defense in depth, not a parser.
       const inTransaction = !isSingleStatement || options.readonly === true;
 
@@ -780,6 +780,10 @@ export class PostgresConnector implements Connector {
         await client.query(options.readonly ? 'BEGIN READ ONLY' : 'BEGIN');
       }
       try {
+        if (options.readonly) {
+          // Match libpg-query even if a prior writable request changed the session.
+          await client.query("SET LOCAL standard_conforming_strings = on");
+        }
         for (const statement of statements) {
           // Apply maxRows limit (with a truncation probe row) to SELECT queries if specified
           const { sql: processedStatement, probeApplied } = SQLRowLimiter.applyMaxRowsWithTruncationProbe(

@@ -1,3 +1,4 @@
+import { classifyPostgresSQL, postgresExplainOptions } from "./postgres-sql.js";
 import { ConnectorType } from "../connectors/interface.js";
 import { stripCommentsAndStringsVariants } from "./sql-parser.js";
 
@@ -7,7 +8,7 @@ import { stripCommentsAndStringsVariants } from "./sql-parser.js";
  * but also other queries that are not destructive
  */
 export const allowedKeywords: Record<ConnectorType, string[]> = {
-  postgres: ["select", "with", "explain", "show"],
+  postgres: ["select", "with", "values", "table", "explain", "show"],
   mysql: ["select", "with", "explain", "show", "describe", "desc"],
   mariadb: ["select", "with", "explain", "show", "describe", "desc"],
   sqlite: ["select", "with", "explain", "pragma"],
@@ -126,13 +127,6 @@ export const sqlServerPassThroughPattern = new RegExp(
  * - MySQL/MariaDB: LOAD_FILE reads server-side files (FILE privilege);
  *   GET_LOCK / RELEASE_LOCK / RELEASE_ALL_LOCKS take or release server-wide
  *   advisory locks (a session side effect).
- * - PostgreSQL: pg_read_file / pg_read_binary_file / pg_ls_dir read the
- *   server filesystem (pg_read_server_files role; default_transaction_read_only
- *   does not apply). set_config is SET in function form: it rewrites session
- *   state such as the statement_timeout DBHub applies from query_timeout or
- *   the configured search_path, and the change outlives the statement on the
- *   pooled connection (issue #448). current_setting is read-only and stays
- *   allowed.
  * - SQL Server: OPENQUERY / OPENROWSET / OPENDATASOURCE run on a
  *   remote/ad-hoc source outside the local read-only transaction
  *   (sqlServerPassThroughKeywords, reused here as the single source of truth).
@@ -164,7 +158,6 @@ export const sqlServerPassThroughPattern = new RegExp(
 export const escapeHatchFunctionKeywords: Partial<Record<ConnectorType, readonly string[]>> = {
   mysql: ["load_file", "get_lock", "release_lock", "release_all_locks"],
   mariadb: ["load_file", "get_lock", "release_lock", "release_all_locks"],
-  postgres: ["pg_read_file", "pg_read_binary_file", "pg_ls_dir", "set_config"],
   sqlserver: sqlServerPassThroughKeywords,
   // Oracle packages a SELECT can call to reach outside the database, matched
   // as `package.member(` (see escapeHatchCallSuffix).
@@ -254,8 +247,7 @@ const mutatingPatternSqlServer = new RegExp(
 );
 
 /** Per-dialect mutating keyword pattern */
-const mutatingPatterns: Record<ConnectorType, RegExp> = {
-  postgres: mutatingPattern,
+const mutatingPatterns: Partial<Record<ConnectorType, RegExp>> = {
   mysql: mutatingPatternWithReplace,
   mariadb: mutatingPatternWithReplace,
   sqlite: mutatingPatternWithReplace,
@@ -309,19 +301,7 @@ export const explainAnalyzeKeyword = /^analy[sz]e\b/i;
  * an extension, and a quoted name (`"analyze"`), which PostgreSQL honours but
  * stripCommentsAndStrings has already blanked out.
  */
-export const nonExecutingExplainOptions: ReadonlySet<string> = new Set([
-  "verbose",
-  "costs",
-  "settings",
-  "generic_plan",
-  "buffers",
-  "serialize",
-  "wal",
-  "timing",
-  "summary",
-  "memory",
-  "format",
-]);
+export const nonExecutingExplainOptions: ReadonlySet<string> = postgresExplainOptions;
 
 /**
  * A parenthesis that opens a query rather than an EXPLAIN option list, as in
@@ -392,13 +372,15 @@ function statementExecutedByExplain(afterExplain: string): string | null {
 }
 
 /**
- * Check if a SQL query is read-only.
+ * Check if a SQL query is read-only. PostgreSQL uses its native AST parser.
+ * Other dialects use the following keyword checks:
  * 1. Strips comments and string literals before analyzing.
  * 2. Verifies the first keyword is in the allow-list.
  * 3. For WITH/SELECT statements, checks for mutating keywords and SELECT INTO.
  * 4. For EXPLAIN statements, rejects EXPLAIN ANALYZE with DML.
  */
 export function isReadOnlySQL(sql: string, connectorType: ConnectorType | string): boolean {
+  if (connectorType === "postgres") return classifyPostgresSQL(sql) === "read";
   return stripCommentsAndStringsVariants(sql, connectorType as ConnectorType).every((cleaned) =>
     checkReadOnly(cleaned.trim().toLowerCase(), connectorType)
   );

@@ -127,18 +127,24 @@ describe('explain-sql tool', () => {
       await expectInvalidInput(sql, 'ANALYZE');
     });
 
-    // A quoted option name is still the option to PostgreSQL, so an option
-    // list is only accepted when every name in it is recognized as written.
     it.each([
       '("analyze") SELECT * FROM users',
       '("analyze" true) SELECT * FROM users',
       '(VERBOSE, "analyze") SELECT * FROM users',
-      '(U&"\\0061nalyze") SELECT * FROM users',
-      '(RUN_IT) SELECT * FROM users',
-      '() SELECT * FROM users',
-    ])('rejects a leading option list with an unrecognized option: %s', async (sql) => {
-      await expectInvalidInput(sql, 'only accepts these EXPLAIN options');
+      String.raw`(U&"\0061nalyze") SELECT * FROM users`,
+    ])('rejects a parsed ANALYZE option: %s', async (sql) => {
+      await expectInvalidInput(sql, 'ANALYZE');
     });
+
+    it('rejects unknown EXPLAIN options', async () => {
+      await expectInvalidInput('(RUN_IT) SELECT 1', 'only accepts these EXPLAIN options');
+    });
+
+    it.each(['() SELECT 1', 'SELECT analyse FROM users'])(
+      'rejects invalid PostgreSQL syntax: %s', async (sql) => {
+        await expectInvalidInput(sql, 'valid PostgreSQL EXPLAIN syntax');
+      }
+    );
 
     it.each([
       // Only looks like an option list or ANALYZE
@@ -147,7 +153,7 @@ describe('explain-sql tool', () => {
       '((SELECT 1)) UNION (SELECT 2)',
       '(VALUES (1)) UNION (VALUES (2))',
       'VERBOSE SELECT * FROM users',
-      'SELECT analyse FROM users',
+      'SELECT "analyse" FROM users',
       // A leading option list that does not contain ANALYZE
       '(FORMAT JSON) SELECT * FROM users',
       // A write statement: plain EXPLAIN never executes it

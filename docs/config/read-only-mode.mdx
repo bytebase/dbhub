@@ -35,7 +35,9 @@ The [MCP Bundle](/mcpb), the [Claude Code Plugin](/claude-code-plugin) and the [
 
 A statement goes through two layers.
 
-**1. Keyword classifier.** Before anything reaches the database, DBHub strips comments and string literals and checks each statement against an [allow-list of read-only keywords](https://github.com/bytebase/dbhub/blob/main/src/utils/allowed-keywords.ts) for the dialect: `SELECT`, `WITH` and `EXPLAIN` everywhere, plus `SHOW` (PostgreSQL, MySQL, MariaDB, ClickHouse), `DESCRIBE` (MySQL, MariaDB, ClickHouse), `EXISTS` (ClickHouse) and `PRAGMA` (SQLite). When several statements are sent together, every one of them must pass.
+**1. SQL classifier.** PostgreSQL uses `libpg-query` (the PostgreSQL 18 parser) to inspect every statement and nested operation, including modifying CTEs, `SELECT INTO`, EXPLAIN options, and restricted function calls. Syntax the parser cannot read and statement types the classifier does not support are rejected in read-only mode; there is no keyword fallback. Writable tools still permit unknown SQL. Other dialects use the existing comment/string-aware keyword classifier. Every statement in a batch must pass before execution.
+
+PostgreSQL read-only transactions set `standard_conforming_strings = on` locally to match the parser's string interpretation. Database permissions and read-only transactions remain necessary: parsing does not resolve user-defined functions or prove that they have no side effects.
 
 **2. Engine-level backstop.** The statement then runs under the database's own read-only mechanism, so the database rejects or discards a write even if the classifier is evaded:
 
