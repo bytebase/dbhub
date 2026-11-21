@@ -18,6 +18,7 @@
 }
 
 .dbhub-home {
+  --home-accent: #2aa1fe;
   --home-text: #323236;
   --home-muted: oklch(0.48 0.012 286);
   --home-border: rgb(0 0 0 / 8%);
@@ -297,7 +298,7 @@
 
 .dbhub-home-details {
   max-width: 800px;
-  margin: 64px auto 0;
+  margin: 0 auto;
 }
 
 @media (max-width: 900px) {
@@ -317,5 +318,109 @@
   .dbhub-hero {
     padding-top: 8px;
     padding-bottom: 40px;
+  }
+}
+
+
+.dbhub-token-comparison {
+  max-width: 800px;
+  margin: 24px auto 96px;
+}
+
+.dbhub-comparison-intro {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.dbhub-token-comparison .dbhub-comparison-subtitle {
+  margin: 12px 0 0;
+  font-size: 18px;
+}
+
+.dbhub-token-comparison h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.dbhub-token-comparison p {
+  margin: 16px 0 24px;
+  color: var(--home-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.dbhub-token-chart {
+  display: grid;
+  gap: 24px;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dbhub-token-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dbhub-token-label small {
+  margin-left: 8px;
+  color: var(--home-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.dbhub-token-label strong {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.dbhub-token-track {
+  height: 20px;
+  background: var(--home-surface);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dbhub-token-bar {
+  height: 100%;
+  background: var(--home-muted);
+  border-radius: 0 4px 4px 0;
+}
+
+.dbhub-token-row-primary .dbhub-token-bar {
+  background: var(--home-accent);
+}
+
+
+@media (max-width: 600px) {
+  .dbhub-token-label > span > small {
+    display: block;
+    margin: 4px 0 0;
+  }
+}
+
+.dbhub-token-comparison .dbhub-comparison-note {
+  margin: 24px 0 0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.dbhub-comparison-note a {
+  color: var(--home-text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 900px) {
+  .dbhub-token-comparison {
+    margin: 24px auto 64px;
   }
 }
