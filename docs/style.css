@@ -2,6 +2,15 @@
   display: none;
 }
 
+#navigation-items > .sidebar-group:has(> li[id="/installation"]),
+#navigation-items > .sidebar-group:has(> li[id="/quickstart"]) {
+  margin-top: 1px;
+}
+
+#navigation-items > div:has(> .sidebar-group-header) {
+  margin-top: 1rem;
+}
+
 .is-custom #search-bar-entry,
 .is-custom #search-bar-entry-mobile,
 .is-custom button:has(> div > .sr-only) {
@@ -44,7 +53,7 @@
   }
 
   #sidebar #sidebar-content {
-    top: 4.5rem;
+    top: 3rem;
   }
 }
 

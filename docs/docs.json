@@ -12,20 +12,15 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "groups": [
+    "pages": [
+      "introduction",
       {
-        "group": "Getting Started",
-        "pages": [
-          "introduction",
-          {
-            "group": "Installation",
-            "root": "installation",
-            "expanded": true,
-            "pages": ["mcpb", "claude-code-plugin", "codex-plugin"]
-          },
-          "quickstart"
-        ]
+        "group": "Installation",
+        "root": "installation",
+        "expanded": true,
+        "pages": ["mcpb", "claude-code-plugin", "codex-plugin"]
       },
+      "quickstart",
       {
         "group": "MCP Tools",
         "pages": [
