@@ -100,6 +100,11 @@ describe('explain-sql tool', () => {
       }
     );
 
+    it('rejects a PostgreSQL statement the splitter would send separately', async () => {
+      // One string constant to the parser; the splitter does not read the tag.
+      await expectInvalidInput('SELECT $\u00e9$; COMMIT; $\u00e9$', 'single SQL statement');
+    });
+
     it('rejects input already starting with EXPLAIN', async () => {
       await expectInvalidInput('EXPLAIN SELECT * FROM users', 'must not itself start with EXPLAIN');
     });

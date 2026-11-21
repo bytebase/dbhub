@@ -1,5 +1,6 @@
 import { loadModule, parseSync, SqlError, type Node, type ExplainStmt } from "libpg-query";
 import type { StatementClass } from "./sql-access-policy.js";
+import { splitSQLStatements } from "./sql-parser.js";
 
 // Keep initialization failures operational: they must not become an SQL verdict.
 await loadModule();
@@ -139,12 +140,34 @@ function classifyNode(node: Node): StatementClass {
   return "unknown";
 }
 
-export function classifyPostgresSQL(sql: string): StatementClass {
+/**
+ * The strictest class among the statements the parser reads in `sql`: null
+ * when it reads none (a comment), "unknown" when it cannot read the text.
+ */
+function classifyText(sql: string): StatementClass | null {
   const parsed = parsePostgresSQL(sql);
-  if (!parsed?.stmts?.length) return "unknown";
+  if (!parsed) return "unknown";
+  if (!parsed.stmts?.length) return null;
   return parsed.stmts.reduce<StatementClass>(
     (result, raw) => strictest(result, raw.stmt ? classifyNode(raw.stmt) : "unknown"),
     "read"
+  );
+}
+
+/**
+ * Classify SQL as the connector will run it. PostgresConnector.executeSQL sends
+ * each piece splitSQLStatements produces as its own query, so every piece is
+ * classified as well as the whole text: a piece the parser reads differently
+ * from the whole (the two disagreeing on where a statement ends) is a
+ * statement the whole-text parse never saw. A piece holding no statement runs
+ * nothing.
+ */
+export function classifyPostgresSQL(sql: string): StatementClass {
+  const whole = classifyText(sql);
+  if (whole === null) return "unknown";
+  return splitSQLStatements(sql, "postgres").reduce<StatementClass>(
+    (result, piece) => strictest(result, classifyText(piece) ?? "read"),
+    whole
   );
 }
 
@@ -160,9 +183,14 @@ export function validatePostgresExplain(sql: string): string | null {
   if (input?.stmts?.some((raw) => raw.stmt && "ExplainStmt" in raw.stmt)) {
     return "explain_sql input must not itself start with EXPLAIN";
   }
-  const parsed = parsePostgresSQL(`EXPLAIN ${sql}`);
+  const explain = `EXPLAIN ${sql}`;
+  const parsed = parsePostgresSQL(explain);
   if (!parsed) return "explain_sql requires valid PostgreSQL EXPLAIN syntax";
-  if (parsed.stmts?.length !== 1) return "explain_sql only supports a single SQL statement";
+  // The connector runs each piece splitSQLStatements produces, so it must see
+  // the one statement the parser does.
+  if (parsed.stmts?.length !== 1 || splitSQLStatements(explain, "postgres").length !== 1) {
+    return "explain_sql only supports a single SQL statement";
+  }
   const node = parsed.stmts[0].stmt;
   if (!node || !("ExplainStmt" in node)) return "explain_sql requires an EXPLAIN statement";
   for (const option of node.ExplainStmt.options ?? []) {

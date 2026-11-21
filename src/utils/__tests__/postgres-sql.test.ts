@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classifyPostgresSQL, isPostgresSelect } from "../postgres-sql.js";
 import { policyFromReadonly, sqlVerdict } from "../sql-access-policy.js";
+import { splitSQLStatements } from "../sql-parser.js";
 
 describe("PostgreSQL AST classification", () => {
   it.each([
@@ -39,6 +40,21 @@ describe("PostgreSQL AST classification", () => {
     const sql = "SELECT * FROM `t`";
     expect(sqlVerdict(policyFromReadonly(true), sql, "postgres")).toBe("deny");
     expect(sqlVerdict(policyFromReadonly(false), sql, "postgres")).toBe("allow");
+  });
+
+  // The connector sends each piece splitSQLStatements produces as its own
+  // query, so a piece the whole-text parse never saw as a statement must count.
+  it("classifies the statements the connector will send", () => {
+    // `a$$` is an identifier: the parser and the splitter both see one SELECT and a comment.
+    const commented = "SELECT 1 AS a$$ -- $$ ; COMMIT; DELETE FROM t";
+    expect(splitSQLStatements(commented, "postgres")).toEqual([commented]);
+    expect(classifyPostgresSQL(commented)).toBe("read");
+    // One string constant to the parser, but the splitter does not read a
+    // non-ASCII tag and would send COMMIT on its own.
+    const split = "SELECT $\u00e9$; COMMIT; $\u00e9$";
+    expect(splitSQLStatements(split, "postgres")).toContain("COMMIT");
+    expect(classifyPostgresSQL(split)).toBe("unknown");
+    expect(classifyPostgresSQL("SELECT 1; -- done")).toBe("read");
   });
 
   it("does not limit writes or multiple statements as an ordinary SELECT", () => {
