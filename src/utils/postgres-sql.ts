@@ -1,9 +1,30 @@
-import { loadModule, parseSync, SqlError, type Node, type ExplainStmt } from "libpg-query";
+import type { ExplainStmt, Node, ParseResult, SqlError } from "libpg-query";
 import type { StatementClass } from "./sql-access-policy.js";
 import { splitSQLStatements } from "./sql-parser.js";
 
-// Keep initialization failures operational: they must not become an SQL verdict.
-await loadModule();
+// Loaded at import so that classification can stay synchronous. A failure is
+// kept and raised the first time PostgreSQL SQL is parsed: it must not become
+// an SQL verdict, and it must not stop a server that has no PostgreSQL source.
+let parser: typeof import("libpg-query") | undefined;
+let parserLoadError: unknown;
+try {
+  const loaded = await import("libpg-query");
+  await loaded.loadModule();
+  parser = loaded;
+} catch (error) {
+  parserLoadError = error;
+}
+
+function loadedParser(): typeof import("libpg-query") {
+  if (!parser) {
+    const reason =
+      parserLoadError instanceof Error ? parserLoadError.message : String(parserLoadError);
+    throw new Error(`The PostgreSQL SQL parser (libpg-query) failed to load: ${reason}`, {
+      cause: parserLoadError,
+    });
+  }
+  return parser;
+}
 
 const severity: Record<StatementClass, number> = { read: 0, dml: 1, ddl: 2, admin: 3, unknown: 4 };
 const restrictedFunctions = new Set([
@@ -58,14 +79,41 @@ function strictest(a: StatementClass, b: StatementClass): StatementClass {
   return severity[a] >= severity[b] ? a : b;
 }
 
-export function parsePostgresSQL(sql: string) {
-  if (!sql.trim()) return null;
+/** The parse of `sql`, or the parser's own error when it cannot read it. */
+function parseOrError(sql: string): { parsed: ParseResult } | { error: SqlError } {
+  const pg = loadedParser();
   try {
-    return parseSync(sql);
+    return { parsed: pg.parseSync(sql) };
   } catch (error) {
-    if (error instanceof SqlError) return null;
+    if (error instanceof pg.SqlError) return { error };
     throw error;
   }
+}
+
+export function parsePostgresSQL(sql: string): ParseResult | null {
+  if (!sql.trim()) return null;
+  const outcome = parseOrError(sql);
+  return "parsed" in outcome ? outcome.parsed : null;
+}
+
+/**
+ * Why the parser cannot read `sql` as the connector will run it, or null when
+ * it can: the parser's message for the whole text (with the 1-based character
+ * position PostgreSQL itself would report), else for the first piece
+ * splitSQLStatements produces that it cannot read.
+ */
+export function postgresSyntaxError(sql: string): string | null {
+  if (!sql.trim()) return null;
+  const whole = parseOrError(sql);
+  if ("error" in whole) {
+    const position = whole.error.sqlDetails?.cursorPosition ?? 0;
+    return position > 0 ? `${whole.error.message} (position ${position + 1})` : whole.error.message;
+  }
+  for (const piece of splitSQLStatements(sql, "postgres")) {
+    const outcome = parseOrError(piece);
+    if ("error" in outcome) return outcome.error.message;
+  }
+  return null;
 }
 
 function explainExecutes(stmt: ExplainStmt): boolean {
@@ -90,50 +138,66 @@ function explainExecutes(stmt: ExplainStmt): boolean {
   return analyze;
 }
 
+function isRestrictedName(name: Node | undefined): boolean {
+  return !!name && "String" in name && restrictedFunctions.has(name.String.sval ?? "");
+}
+
+/**
+ * Whether the node calls a restricted function, in either notation PostgreSQL
+ * accepts: `name(args)`, or `(arg).name` for a function of one argument, which
+ * the parser reads as a field selection rather than a call.
+ */
+function callsRestrictedFunction(node: Node): boolean {
+  if ("FuncCall" in node) return isRestrictedName(node.FuncCall.funcname?.slice(-1)[0]);
+  if ("A_Indirection" in node) return !!node.A_Indirection.indirection?.some(isRestrictedName);
+  return false;
+}
+
 // Walk expression containers, but classify nested statements as statements.
 // Literals and identifiers never become keywords or executable SQL here.
-function classifyChildren(value: unknown): StatementClass {
+// `restrictFunctions` is off only for the row limiter, which asks what the
+// statement is rather than whether a read-only tool may run it.
+function classifyChildren(value: unknown, restrictFunctions: boolean): StatementClass {
   if (!value || typeof value !== "object") return "read";
   if (Array.isArray(value))
     return value.reduce<StatementClass>(
-      (result, child) => strictest(result, classifyChildren(child)),
+      (result, child) => strictest(result, classifyChildren(child, restrictFunctions)),
       "read"
     );
   const object = value as Record<string, unknown>;
   const node = value as Node;
-  if ("FuncCall" in node) {
-    const last = node.FuncCall.funcname?.slice(-1)[0];
-    const name = last && "String" in last ? last.String.sval : undefined;
-    if (name && restrictedFunctions.has(name)) return "admin";
-  }
+  if (restrictFunctions && callsRestrictedFunction(node)) return "admin";
   if (Object.keys(object).some((key) => key.endsWith("Stmt") && key[0] === key[0].toUpperCase()))
-    return classifyNode(node);
+    return classifyNode(node, restrictFunctions);
   return Object.values(object).reduce<StatementClass>(
-    (result, child) => strictest(result, classifyChildren(child)),
+    (result, child) => strictest(result, classifyChildren(child, restrictFunctions)),
     "read"
   );
 }
 
-function classifyNode(node: Node): StatementClass {
+function classifyNode(node: Node, restrictFunctions = true): StatementClass {
   if ("ExplainStmt" in node) {
     return explainExecutes(node.ExplainStmt)
       ? node.ExplainStmt.query
-        ? classifyNode(node.ExplainStmt.query)
+        ? classifyNode(node.ExplainStmt.query, restrictFunctions)
         : "unknown"
       : "read";
   }
   if ("SelectStmt" in node) {
     const { larg, rarg, ...select } = node.SelectStmt;
-    let result = strictest(select.intoClause ? "ddl" : "read", classifyChildren(select));
+    let result = strictest(
+      select.intoClause ? "ddl" : "read",
+      classifyChildren(select, restrictFunctions)
+    );
     // Set-operation branches are unwrapped SelectStmt objects in PostgreSQL's AST.
     for (const branch of [larg, rarg]) {
-      if (branch) result = strictest(result, classifyNode({ SelectStmt: branch }));
+      if (branch) result = strictest(result, classifyNode({ SelectStmt: branch }, restrictFunctions));
     }
     return result;
   }
   if ("VariableShowStmt" in node) return "read";
   if ("InsertStmt" in node || "UpdateStmt" in node || "DeleteStmt" in node || "MergeStmt" in node) {
-    return strictest("dml", classifyChildren(Object.values(node)));
+    return strictest("dml", classifyChildren(Object.values(node), restrictFunctions));
   }
   if ("GrantStmt" in node || "GrantRoleStmt" in node) return "admin";
   if (Object.keys(node).some((key) => ddlNodes.has(key))) return "ddl";
@@ -171,10 +235,20 @@ export function classifyPostgresSQL(sql: string): StatementClass {
   );
 }
 
-export function isPostgresSelect(sql: string): boolean {
-  const parsed = parsePostgresSQL(sql);
-  const node = parsed?.stmts?.length === 1 ? parsed.stmts[0].stmt : undefined;
-  return !!node && "SelectStmt" in node && classifyNode(node) === "read";
+/**
+ * Whether `sql` is one row-returning query whose rows a LIMIT can cap: a
+ * SELECT (VALUES and TABLE included) that writes nothing, so neither SELECT
+ * INTO nor a data-modifying CTE. This is about the statement's shape, not
+ * about what a read-only tool allows: a restricted function call does not make
+ * a SELECT any less row-returning. Null when the parser cannot read the text.
+ */
+export function isPostgresSelect(sql: string): boolean | null {
+  if (!sql.trim()) return false;
+  const outcome = parseOrError(sql);
+  if ("error" in outcome) return null;
+  const { stmts } = outcome.parsed;
+  const node = stmts?.length === 1 ? stmts[0].stmt : undefined;
+  return !!node && "SelectStmt" in node && classifyNode(node, false) === "read";
 }
 
 /** Validate the exact EXPLAIN text that the tool will send to PostgreSQL. */
@@ -184,8 +258,11 @@ export function validatePostgresExplain(sql: string): string | null {
     return "explain_sql input must not itself start with EXPLAIN";
   }
   const explain = `EXPLAIN ${sql}`;
-  const parsed = parsePostgresSQL(explain);
-  if (!parsed) return "explain_sql requires valid PostgreSQL EXPLAIN syntax";
+  const outcome = parseOrError(explain);
+  if ("error" in outcome) {
+    return `explain_sql requires valid PostgreSQL EXPLAIN syntax: ${outcome.error.message}`;
+  }
+  const { parsed } = outcome;
   // The connector runs each piece splitSQLStatements produces, so it must see
   // the one statement the parser does.
   if (parsed.stmts?.length !== 1 || splitSQLStatements(explain, "postgres").length !== 1) {

@@ -48,8 +48,9 @@ export class SQLRowLimiter {
    * `WITH` leads a CTE whose final statement is normally a SELECT, so it is
    * limitable too, except for a data-modifying CTE
    * (`WITH x AS (DELETE ... RETURNING *) SELECT ...`), where a LIMIT would cap
-   * the rows handed back while the write still runs in full. PostgreSQL uses
-   * the AST classifier; other dialects use the shared keyword heuristic.
+   * the rows handed back while the write still runs in full. PostgreSQL reads
+   * the statement's shape from the AST; other dialects, and PostgreSQL text
+   * the parser cannot read, use the shared keyword heuristic.
    *
    * `dialect` selects the connector's scanner so dialect-specific quoting
    * (PostgreSQL dollar quotes, MySQL backticks, SQL Server brackets) is
@@ -57,7 +58,12 @@ export class SQLRowLimiter {
    * ANSI syntax is recognized.
    */
   private static isSelectQuery(sql: string, dialect?: ConnectorType): boolean {
-    if (dialect === "postgres") return isPostgresSelect(sql);
+    if (dialect === "postgres") {
+      // Text the parser cannot read (a Postgres-compatible engine's own
+      // syntax, say) falls through to the keyword heuristic below.
+      const parsedAsSelect = isPostgresSelect(sql);
+      if (parsedAsSelect !== null) return parsedAsSelect;
+    }
     const blankedSQL = blankCommentsAndStrings(sql, dialect).trim().toLowerCase();
     // Leading parentheses are skipped: `(SELECT ...) UNION (SELECT ...)` is a
     // row-returning statement whose first token is `(`. So is a leading

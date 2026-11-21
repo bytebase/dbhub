@@ -260,6 +260,20 @@ describe("SQLRowLimiter", () => {
   });
 
   describe("dialect-aware scanning", () => {
+    it("caps a PostgreSQL SELECT whatever it calls, and one the parser cannot read", () => {
+      // A restricted function changes what a read-only tool allows, not whether rows come back.
+      const restricted = "SELECT pg_ls_dir('.')";
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(restricted, 10, "postgres")).toEqual({
+        sql: `${restricted}\nLIMIT 11`,
+        probeApplied: true,
+      });
+      // Another engine's syntax behind a postgres:// DSN: the keyword heuristic still applies.
+      const foreign = "SELECT * FROM t AS OF SYSTEM TIME '-10s'";
+      expect(SQLRowLimiter.applyMaxRows(foreign, 10, "postgres")).toBe(`${foreign}\nLIMIT 10`);
+      const foreignWrite = "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d AS OF SYSTEM TIME '-10s'";
+      expect(SQLRowLimiter.applyMaxRows(foreignWrite, 10, "postgres")).toBe(foreignWrite);
+    });
+
     it("does not mistake a PostgreSQL dollar-quoted literal for a data-modifying CTE", () => {
       const sql = "WITH x AS (SELECT $$DELETE FROM t$$ AS s) SELECT * FROM x";
       expect(SQLRowLimiter.applyMaxRows(sql, 100, "postgres")).toBe(`${sql}\nLIMIT 100`);

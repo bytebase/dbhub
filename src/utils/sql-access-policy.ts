@@ -1,4 +1,3 @@
-import { classifyPostgresSQL } from "./postgres-sql.js";
 /**
  * SQL access policy: the single pipeline behind every read-only decision.
  *
@@ -22,6 +21,7 @@ import {
   hasEscapeHatchFunction,
   sqlServerDynamicSqlPattern,
 } from "./allowed-keywords.js";
+import { classifyPostgresSQL } from "./postgres-sql.js";
 import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "./sql-parser.js";
 
 /**

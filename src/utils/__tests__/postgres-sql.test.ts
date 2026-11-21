@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPostgresSQL, isPostgresSelect } from "../postgres-sql.js";
+import { classifyPostgresSQL, isPostgresSelect, postgresSyntaxError } from "../postgres-sql.js";
 import { policyFromReadonly, sqlVerdict } from "../sql-access-policy.js";
 import { splitSQLStatements } from "../sql-parser.js";
 
@@ -17,6 +17,10 @@ describe("PostgreSQL AST classification", () => {
     ["SELECT pg_ls_dir('x')", "admin"],
     ["SELECT 1 UNION SELECT pg_read_file('x')", "admin"],
     ["INSERT INTO t SELECT pg_read_file('x')", "admin"],
+    // Attribute notation: PostgreSQL calls a one-argument function written as a field.
+    ["SELECT ('PG_VERSION'::text).pg_read_file", "admin"],
+    ["SELECT (t.path).pg_ls_dir FROM t", "admin"],
+    ["SELECT (t.c).name FROM t", "read"],
     ["SELECT set_config, 'DELETE', $$; DROP TABLE t$$ FROM t", "read"],
     ["EXPLAIN DELETE FROM t", "read"],
     ["EXPLAIN ANALYZE SELECT 1", "read"],
@@ -61,5 +65,28 @@ describe("PostgreSQL AST classification", () => {
     expect(isPostgresSelect("SELECT 1 INTO backup UNION SELECT 2")).toBe(false);
     expect(isPostgresSelect("WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d")).toBe(false);
     expect(isPostgresSelect("SELECT 1; SELECT 2")).toBe(false);
+  });
+
+  // Whether a LIMIT applies depends on the statement's shape, not on whether a
+  // read-only tool would allow it.
+  it("treats a SELECT calling a restricted function as an ordinary SELECT to limit", () => {
+    expect(classifyPostgresSQL("SELECT pg_ls_dir('.')")).toBe("admin");
+    expect(isPostgresSelect("SELECT pg_ls_dir('.')")).toBe(true);
+    expect(isPostgresSelect("SELECT *, set_config('app.x', '1', true) FROM t")).toBe(true);
+    expect(isPostgresSelect("EXPLAIN ANALYZE SELECT 1")).toBe(false);
+    expect(isPostgresSelect("-- comment")).toBe(false);
+  });
+
+  it("cannot tell the shape of SQL the parser does not read", () => {
+    expect(isPostgresSelect("SELECT * FROM t AS OF SYSTEM TIME '-10s'")).toBeNull();
+  });
+
+  it("reports the parser's error, with PostgreSQL's 1-based position", () => {
+    expect(postgresSyntaxError("SELECT * FORM t")).toBe('syntax error at or near "FORM" (position 10)');
+    // Readable as a whole, but not as the pieces the connector would send.
+    expect(postgresSyntaxError("SELECT $\u00e9$; COMMIT; $\u00e9$")).toMatch(/unterminated/);
+    expect(postgresSyntaxError("DELETE FROM t")).toBeNull();
+    expect(postgresSyntaxError("-- comment")).toBeNull();
+    expect(postgresSyntaxError("")).toBeNull();
   });
 });

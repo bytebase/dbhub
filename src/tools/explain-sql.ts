@@ -1,4 +1,3 @@
-import { validatePostgresExplain } from "../utils/postgres-sql.js";
 import { z } from "zod";
 import {
   LEADING_SQL_NOISE,
@@ -10,6 +9,7 @@ import {
   nonExecutingExplainOptions,
   readExplainOptionList,
 } from "../utils/allowed-keywords.js";
+import { validatePostgresExplain } from "../utils/postgres-sql.js";
 import type { ConnectorType } from "../connectors/interface.js";
 import { BUILTIN_TOOL_EXPLAIN_SQL } from "./builtin-tools.js";
 import { resolveTrackedToolName, runToolRequest, ToolError } from "../utils/tool-handler-helpers.js";
