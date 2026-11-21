@@ -35,9 +35,7 @@ The [MCP Bundle](/mcpb), the [Claude Code Plugin](/claude-code-plugin) and the [
 
 A statement goes through two layers.
 
-**1. SQL classifier.** PostgreSQL uses `libpg-query` (the PostgreSQL 18 parser) to inspect every statement and nested operation, including modifying CTEs, `SELECT INTO`, EXPLAIN options, and restricted function calls. Syntax the parser cannot read and statement types the classifier does not support are rejected in read-only mode; there is no keyword fallback. Writable tools still permit unknown SQL. Other dialects use the existing comment/string-aware keyword classifier. Every statement in a batch must pass before execution.
-
-PostgreSQL read-only transactions set `standard_conforming_strings = on` locally to match the parser's string interpretation. Database permissions and read-only transactions remain necessary: parsing does not resolve user-defined functions or prove that they have no side effects.
+**1. SQL classifier.** Before anything reaches the database, DBHub checks that every statement in the request only reads. PostgreSQL statements are parsed with the PostgreSQL parser (`libpg-query`), and SQL it cannot parse is rejected. Other dialects use a keyword classifier that ignores comments and string literals.
 
 **2. Engine-level backstop.** The statement then runs under the database's own read-only mechanism, so the database rejects or discards a write even if the classifier is evaded:
 
