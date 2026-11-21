@@ -11,6 +11,10 @@
     "dark": "#323236"
   },
   "favicon": "/favicon.svg",
+  "banner": {
+    "content": "[Meet us at AWS re:Invent · Nov 30–Dec 4, 2026 · Booth 1634 →](https://www.bytebase.com/events/reinvent26/)",
+    "dismissible": false
+  },
   "navigation": {
     "pages": [
       "introduction",
