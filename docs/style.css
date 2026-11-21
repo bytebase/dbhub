@@ -296,11 +296,6 @@
   }
 }
 
-.dbhub-home-details {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
 @media (max-width: 900px) {
   .dbhub-hero {
     grid-template-columns: minmax(0, 1fr);
@@ -630,5 +625,103 @@
   }
   .dbhub-use-case-body {
     padding: 24px;
+  }
+}
+
+.dbhub-resources > .dbhub-section-label {
+  margin: 0 0 12px;
+  color: var(--home-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dbhub-resources > h2 {
+  margin: 0 0 28px;
+  font-size: clamp(24px, 2.6vw, 30px);
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.dbhub-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dbhub-resource {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 232px;
+  padding: 24px;
+  border-radius: 10px;
+  background: var(--home-surface);
+  color: var(--home-text);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.dbhub-resource-icon {
+  display: block;
+  align-self: flex-end;
+  width: 132px;
+  height: 88px;
+  margin: auto -24px -8px 0;
+  padding-top: 16px;
+  box-sizing: content-box;
+  object-fit: contain;
+}
+
+.dark .dbhub-resource-icon {
+  filter: invert(1);
+}
+
+.dbhub-resource:focus-visible {
+  outline: 2px solid var(--home-accent);
+  outline-offset: 4px;
+}
+
+.dbhub-resource h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.dbhub-resource p {
+  margin: 8px 0 0;
+  color: var(--home-muted);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+@media (hover: hover) {
+  .dbhub-resource:hover {
+    background: color-mix(in oklch, var(--home-surface), var(--home-text) 5%);
+  }
+}
+
+@media (max-width: 1000px) {
+  .dbhub-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .dbhub-resource-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .dbhub-resource {
+    padding: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbhub-resource {
+    transition: none;
   }
 }

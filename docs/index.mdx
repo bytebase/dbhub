@@ -179,24 +179,30 @@ codex plugin add dbhub@dbhub
   </div>
 </section>
 
-<div className="dbhub-home-details">
-
-## Start building with DBHub
-
-<CardGroup cols={2}>
-  <Card title="Introduction" icon="book-open" href="/introduction">
-    Learn how DBHub connects AI assistants to your databases.
-  </Card>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
-    Run the demo and connect your first AI client.
-  </Card>
-  <Card title="MCP tools" icon="wrench" href="/tools/overview">
-    Explore schemas, execute SQL, and add custom tools.
-  </Card>
-  <Card title="Workbench" icon="desktop" href="/workbench/overview">
-    Run database tools and inspect requests in your browser.
-  </Card>
-</CardGroup>
-
-</div>
+<section className="not-prose dbhub-resources" aria-labelledby="resources-heading">
+  <p className="dbhub-section-label">Resources</p>
+  <h2 id="resources-heading">Start building with DBHub</h2>
+  <div className="dbhub-resource-grid">
+    <a className="dbhub-resource" href="/introduction">
+      <h3>Introduction</h3>
+      <p>How DBHub connects AI to your databases.</p>
+      <img className="dbhub-resource-icon" src="/images/illustrations/seastar.svg" alt="" width="132" height="88" />
+    </a>
+    <a className="dbhub-resource" href="/quickstart">
+      <h3>Quickstart</h3>
+      <p>Run the demo and connect your first client.</p>
+      <img className="dbhub-resource-icon" src="/images/illustrations/sailboat.svg" alt="" width="132" height="88" />
+    </a>
+    <a className="dbhub-resource" href="/tools/overview">
+      <h3>MCP tools</h3>
+      <p>Explore schemas, run SQL, and define tools.</p>
+      <img className="dbhub-resource-icon" src="/images/illustrations/octopus.svg" alt="" width="132" height="88" />
+    </a>
+    <a className="dbhub-resource" href="/workbench/overview">
+      <h3>Workbench</h3>
+      <p>Run tools and inspect requests in your browser.</p>
+      <img className="dbhub-resource-icon" src="/images/illustrations/harbor.svg" alt="" width="132" height="88" />
+    </a>
+  </div>
+</section>
 </div>
