@@ -12,46 +12,41 @@
   },
   "favicon": "/favicon.svg",
   "navigation": {
-    "tabs": [
+    "groups": [
       {
-        "tab": "Docs",
-        "groups": [
+        "group": "Getting Started",
+        "pages": [
+          "introduction",
           {
-            "group": "Getting Started",
-            "pages": [
-              "index",
-              {
-                "group": "Installation",
-                "root": "installation",
-                "expanded": true,
-                "pages": ["mcpb", "claude-code-plugin", "codex-plugin"]
-              },
-              "quickstart"
-            ]
+            "group": "Installation",
+            "root": "installation",
+            "expanded": true,
+            "pages": ["mcpb", "claude-code-plugin", "codex-plugin"]
           },
-          {
-            "group": "MCP Tools",
-            "pages": [
-              "tools/overview",
-              "tools/execute-sql",
-              "tools/search-objects",
-              "tools/explain-sql",
-              "tools/health-check",
-              "tools/custom-tools"
-            ]
-          },
-          {
-            "group": "Workbench",
-            "pages": ["workbench/overview", "workbench/tool-execution", "workbench/request-trace"]
-          },
-          {
-            "group": "Configuration",
-            "pages": ["config/command-line", "config/toml", "config/read-only-mode", "config/debug"]
-          }
+          "quickstart"
         ]
       },
       {
-        "tab": "Blog",
+        "group": "MCP Tools",
+        "pages": [
+          "tools/overview",
+          "tools/execute-sql",
+          "tools/search-objects",
+          "tools/explain-sql",
+          "tools/health-check",
+          "tools/custom-tools"
+        ]
+      },
+      {
+        "group": "Workbench",
+        "pages": ["workbench/overview", "workbench/tool-execution", "workbench/request-trace"]
+      },
+      {
+        "group": "Configuration",
+        "pages": ["config/command-line", "config/toml", "config/read-only-mode", "config/debug"]
+      },
+      {
+        "group": "Blog",
         "pages": [
           "blog/modelcontextprotocol-server-postgres-alternative",
           "blog/database-mcp-server-token-benchmark-2026",
@@ -67,13 +62,24 @@
   },
   "logo": {
     "light": "/images/logo/full-light.svg",
-    "dark": "/images/logo/full-dark.svg"
+    "dark": "/images/logo/full-dark.svg",
+    "href": "/"
   },
   "navbar": {
     "primary": {
       "type": "github",
       "href": "https://github.com/bytebase/dbhub"
-    }
+    },
+    "links": [
+      {
+        "label": "Docs",
+        "href": "/introduction"
+      },
+      {
+        "label": "Blog",
+        "href": "/blog/modelcontextprotocol-server-postgres-alternative"
+      }
+    ]
   },
   "footer": {
     "socials": {

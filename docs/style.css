@@ -1,0 +1,222 @@
+.is-custom #search-bar-entry,
+.is-custom #search-bar-entry-mobile,
+.is-custom button:has(> div > .sr-only) {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  #navbar:not(.is-custom) #search-bar-entry {
+    position: fixed;
+    top: calc(var(--mintlify-slot-header-height, 4rem) + var(--banner-height, 0px) + 1.5rem);
+    left: max(2rem, calc((100% - 92rem) / 2 + 2rem));
+    width: calc(var(--sidebar-width, 18rem) - 2rem);
+  }
+
+  #sidebar #sidebar-content {
+    top: 4.5rem;
+  }
+}
+
+.dbhub-home {
+  --home-text: #323236;
+  --home-muted: oklch(0.48 0.012 286);
+  --home-border: rgb(0 0 0 / 8%);
+  --home-surface: #fafafa;
+  --home-inverse: #fff;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+  color: var(--home-text);
+}
+
+.dark .dbhub-home {
+  --home-text: #f4f4f5;
+  --home-muted: #a1a1aa;
+  --home-border: #27272a;
+  --home-surface: #18181b;
+  --home-inverse: #323236;
+}
+
+.dbhub-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 64px;
+  align-items: center;
+  padding: 24px 0 64px;
+}
+
+.dbhub-eyebrow {
+  margin: 0 0 20px;
+  color: var(--home-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dbhub-hero-copy h1 {
+  margin: 0;
+  font-size: clamp(40px, 4.8vw, 64px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.dbhub-hero-description {
+  max-width: 42ch;
+  margin: 24px 0 0;
+  color: var(--home-muted);
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.dbhub-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  margin-top: 28px;
+}
+
+.dbhub-hero-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.dbhub-primary-link {
+  padding: 0 20px;
+  border-radius: 8px;
+  background: var(--home-text);
+  color: var(--home-inverse);
+}
+
+.dbhub-primary-link:hover {
+  background: color-mix(in oklch, var(--home-text) 85%, var(--home-inverse));
+}
+
+.dbhub-primary-link:active {
+  transform: translateY(1px);
+}
+.dbhub-secondary-link {
+  color: var(--home-text);
+}
+.dbhub-secondary-link:hover,
+.dbhub-install-footer a:hover {
+  text-decoration: underline;
+}
+.dbhub-home a:focus-visible {
+  outline: 2px solid var(--home-muted);
+  outline-offset: 4px;
+}
+
+.dbhub-featured {
+  display: block;
+  width: 245px;
+  max-width: 100%;
+  margin-top: 32px;
+}
+
+.dbhub-featured img {
+  width: 100%;
+  height: auto;
+  margin: 0;
+}
+
+.dbhub-install {
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid var(--home-border);
+  border-radius: 16px;
+  background: var(--home-surface);
+}
+
+.dbhub-install-heading h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.dbhub-install-heading p {
+  margin: 8px 0 24px;
+  color: var(--home-muted);
+  font-size: 14px;
+}
+.dbhub-install [role="tabpanel"] {
+  min-height: 295px;
+}
+.dbhub-install-footer {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--home-border);
+  padding-top: 20px;
+  font-size: 13px;
+}
+.dbhub-install-footer span {
+  color: var(--home-muted);
+}
+.dbhub-install-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--home-text);
+  font-weight: 500;
+}
+
+.dbhub-databases {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 32px;
+  padding: 24px 0;
+  border-top: 1px solid var(--home-border);
+  border-bottom: 1px solid var(--home-border);
+  font-size: 13px;
+}
+
+.dbhub-databases > span {
+  color: var(--home-muted);
+}
+.dbhub-databases ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 500;
+}
+.dbhub-home-details {
+  max-width: 800px;
+  margin: 64px auto 0;
+}
+
+@media (max-width: 900px) {
+  .dbhub-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+  .dbhub-hero-copy h1 {
+    font-size: clamp(40px, 8vw, 60px);
+  }
+  .dbhub-hero-description {
+    max-width: 52ch;
+  }
+}
+
+@media (max-width: 480px) {
+  .dbhub-home {
+    padding: 24px 16px 48px;
+  }
+  .dbhub-hero {
+    padding-top: 8px;
+    padding-bottom: 40px;
+  }
+  .dbhub-install {
+    padding: 20px 16px;
+  }
+}

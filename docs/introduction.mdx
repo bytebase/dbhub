@@ -1,0 +1,185 @@
+---
+title: "Introduction"
+---
+
+<img
+  className="mx-auto mb-8 block h-auto w-80 max-w-full sm:w-[400px] dark:hidden"
+  src="/images/logo/full-light.svg"
+  alt="DBHub"
+/>
+
+<img
+  className="mx-auto mb-8 hidden h-auto w-80 max-w-full sm:w-[400px] dark:block"
+  src="/images/logo/full-dark.svg"
+  alt="DBHub"
+/>
+
+DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two tools by default with opt-in extras. This lightweight gateway allows MCP-compatible clients to connect to and explore different databases.
+
+<div style={{ width: "640px", maxWidth: "100%", marginInline: "auto" }}>
+
+```
+ +------------------+    +--------------+    +------------------+
+ |                  |    |              |    |                  |
+ |  Claude Desktop  +--->+              +--->+    PostgreSQL    |
+ |                  |    |              |    |                  |
+ |  Claude Code     +--->+              +--->+    SQL Server    |
+ |                  |    |              |    |                  |
+ |  Codex           +--->+    DBHub     +--->+    Oracle        |
+ |                  |    |              |    |                  |
+ |  Cursor          +--->+              +--->+    SQLite        |
+ |                  |    |              |    |                  |
+ |  VS Code         +--->+              +--->+    MySQL         |
+ |                  |    |              |    |                  |
+ |  Other Clients   +--->+              +--->+    MariaDB       |
+ |                  |    |              |    |                  |
+ |                  |    |              +--->+    ClickHouse    |
+ |                  |    |              |    |                  |
+ +------------------+    +--------------+    +------------------+
+     MCP Clients           MCP Server             Databases
+```
+
+</div>
+
+<div className="not-prose mx-auto my-6" style={{ width: "280px", maxWidth: "100%" }}>
+<a
+  href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database"
+  className="block"
+  style={{ border: "none", textDecoration: "none", boxShadow: "none" }}
+>
+  <img
+    className="m-0 block h-auto w-full dark:hidden"
+    src="/images/featured-by-claude-code-light.svg"
+    alt="Featured in the official Claude Code docs — read the DBHub example"
+    width={560}
+    height={128}
+  />
+  <img
+    className="m-0 hidden h-auto w-full dark:block"
+    src="/images/featured-by-claude-code-dark.svg"
+    alt="Featured in the official Claude Code docs — read the DBHub example"
+    width={560}
+    height={128}
+  />
+</a>
+</div>
+
+<div className="not-prose my-10">
+  <img
+    className="m-0 block h-auto w-full rounded-lg"
+    src="/images/community-logo-wall.png"
+    alt="Our community includes developers from 24 companies and 10 universities, including Microsoft, NVIDIA, Amazon, Google, Oxford, Cornell, Duke, Tsinghua, Peking, KAIST, UBC, and Waseda."
+    width={1536}
+    height={1024}
+    loading="lazy"
+  />
+</div>
+
+## Token Efficiency
+
+DBHub loads just 2 tools by default at **0.5k tokens** — 16-25x fewer than alternatives — keeping the context window open for your actual work.
+
+| MCP Server | Default Config | Default Tools |
+|------------|---------------|--------------|
+| **DBHub** | **0.5k** | 2 (`execute_sql`, `search_objects`) |
+| MCP Toolbox | 7.7k | 29 |
+| Supabase MCP | 11.6k | 36 |
+
+## Use Cases
+
+- **Local Development**: Schema exploration, query validation, and data debugging with Claude Code, VS Code, Cursor, etc.
+- **Non-Technical Access**: Expose curated, read-only views to non-technical staff via Claude Desktop, VS Code, Cursor, etc.
+- **Multi-Database Consolidation**: Replace separate MCP servers for each database with a single DBHub process
+- **Production Troubleshooting**: Read-only diagnostics with guardrails against runaway queries
+
+<Note>
+Read-only mode is a guardrail, not a permission boundary. Always connect with a least-privilege, read-only database user. See [Read-Only Mode](/config/read-only-mode).
+</Note>
+
+## Supported Databases
+
+PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, and SQLite.
+
+## Why DBHub?
+
+DBHub brings powerful database capabilities to AI coding assistants:
+
+- **Minimal**: Zero dependency, token efficient with a minimal set of MCP tools to maximize context window
+- **Multi-Database**: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, ClickHouse, and SQLite through a single interface
+- **Multi-Connection**: Connect to multiple databases simultaneously with TOML configuration
+- **Guardrails**: Read-only mode, row limiting, and query timeout to prevent runaway operations
+- **Secure Access**: SSH tunneling and SSL/TLS encryption
+
+## Key Features
+
+### MCP Tools
+
+DBHub provides AI assistants with direct database access through these tools:
+- **[execute_sql](/tools/execute-sql)**: Run queries with transaction support and safety controls
+- **[search_objects](/tools/search-objects)**: Explore schemas, tables, columns, indexes, and procedures
+- **[explain_sql](/tools/explain-sql)** (opt-in): Show a query's execution plan without running it
+- **[health_check](/tools/health-check)** (opt-in): Report connection pool state and buffer cache hit ratio
+- **[Custom Tools](/tools/custom-tools)**: Define reusable, parameterized SQL operations
+
+### Workbench
+
+A [web-based interface](/workbench/overview) for running database tools and viewing request traces without requiring an MCP client.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    %% Human User
+    User["Human User"]
+
+    %% Workbench
+    WB["DBHub Workbench"]
+
+    %% AI Agent with MCP Client
+    subgraph Agent["AI Agent"]
+        MC["MCP Client"]
+    end
+
+    %% Configuration
+    Config["dbhub.toml"]
+
+    %% DBHub Server
+    subgraph DBHub["DBHub Server"]
+        MCP["/mcp endpoint"]
+        subgraph Tools["MCP Tools"]
+            ES["execute_sql"]
+            SO["search_objects"]
+            EX["explain_sql (opt-in)"]
+            HC["health_check (opt-in)"]
+            CT["custom tools"]
+        end
+    end
+
+    %% Databases
+    Databases["PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, SQLite"]
+
+    %% Connections
+    User --> WB
+    WB --> DBHub
+
+    Agent --> MC
+    MC --> MCP
+    MCP --> Tools
+
+    Config -.->|loads| DBHub
+    Tools --> Databases
+```
+
+DBHub acts as a gateway between databases and AI agents. AI agents access databases through the `/mcp` endpoint using MCP tools, while the Workbench provides direct browser-based access for humans.
+
+## Getting Started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install DBHub using Docker, NPM, the MCP Bundle, or the Claude Code and Codex plugins
+  </Card>
+
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get DBHub running with your first database connection
+  </Card>
+</CardGroup>
