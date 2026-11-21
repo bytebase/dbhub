@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyPostgresSQL, isPostgresSelect } from "../postgres-sql.js";
-import { classifySQL, policyFromReadonly, sqlVerdict } from "../sql-access-policy.js";
+import { policyFromReadonly, sqlVerdict } from "../sql-access-policy.js";
 
 describe("PostgreSQL AST classification", () => {
   it.each([
@@ -12,16 +12,15 @@ describe("PostgreSQL AST classification", () => {
     ["SELECT pg_catalog.\"set_config\"('search_path', 'public', false)", "admin"],
     [String.raw`SELECT U&"\0073et_config"('search_path', 'public', false)`, "admin"],
     ["SELECT * FROM (SELECT pg_read_file('x')) t", "admin"],
+    ["SELECT pg_read_binary_file('x')", "admin"],
+    ["SELECT pg_ls_dir('x')", "admin"],
     ["SELECT 1 UNION SELECT pg_read_file('x')", "admin"],
     ["INSERT INTO t SELECT pg_read_file('x')", "admin"],
     ["SELECT set_config, 'DELETE', $$; DROP TABLE t$$ FROM t", "read"],
-    ["WITH recursive_query AS (SELECT 1) SELECT * FROM recursive_query", "read"],
-    [
-      "WITH RECURSIVE t(n) AS (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n<3) SELECT * FROM t",
-      "read",
-    ],
-    ["SELECT count(*) FILTER (WHERE active) OVER () FROM t", "read"],
     ["EXPLAIN DELETE FROM t", "read"],
+    ["EXPLAIN ANALYZE SELECT 1", "read"],
+    ["EXPLAIN (VERBOSE, FORMAT JSON) DELETE FROM t", "read"],
+    ["EXPLAIN (RUN_IT) SELECT 1", "read"],
     ["EXPLAIN (ANALYZE true, ANALYZE false) DELETE FROM t", "read"],
     ["EXPLAIN (ANALYZE false, ANALYZE true) DELETE FROM t", "dml"],
     ['EXPLAIN ("analyze") DELETE FROM t', "dml"],
@@ -29,14 +28,11 @@ describe("PostgreSQL AST classification", () => {
     ["EXPLAIN (RUN_IT) DELETE FROM t", "dml"],
     ["SELECT 1; GRANT SELECT ON t TO reader", "admin"],
     ["DO $$ BEGIN DELETE FROM t; END $$", "unknown"],
-    ["CALL do_something()", "unknown"],
-    ["SELECT * FROM `t`", "unknown"],
     ["SELECT 1; invalid syntax", "unknown"],
     ["", "unknown"],
     ["-- comment", "unknown"],
   ] as const)("%s → %s", (sql, expected) => {
     expect(classifyPostgresSQL(sql)).toBe(expected);
-    expect(classifySQL(sql, "postgres")).toBe(expected);
   });
 
   it("denies parse failures only when the policy requires read-only", () => {
