@@ -13,6 +13,7 @@ import { generateRdsAuthToken } from "../utils/aws-rds-signer.js";
 import { parseSSHConfig, looksLikeSSHAlias, getDefaultSSHConfigPath, resolveJumpHosts } from "../utils/ssh-config-parser.js";
 import { TUNNEL_ERROR_MARKER } from "../utils/error-classifier.js";
 import { getMissingDriverHint } from "../utils/module-loader.js";
+import { assertPostgresParserLoaded } from "../utils/postgres-sql.js";
 
 // Singleton instance for global access
 let managerInstance: ConnectorManager | null = null;
@@ -55,6 +56,7 @@ export class ConnectorManager {
     if (sources.length === 0) {
       throw new Error("No sources provided");
     }
+    this.assertPostgresParserFor(sources);
 
     const eagerSources = sources.filter(s => !s.lazy);
     const lazySources = sources.filter(s => s.lazy);
@@ -71,6 +73,21 @@ export class ConnectorManager {
     // Register lazy sources without connecting
     for (const source of lazySources) {
       this.registerLazySource(source);
+    }
+  }
+
+  /**
+   * A PostgreSQL source needs the SQL parser its read-only classifier runs on.
+   * Checked when sources are registered, lazy ones included and before any of
+   * them connects, so a parser that failed to load stops startup (or the
+   * reload adding the source) instead of failing that source's first query.
+   */
+  private assertPostgresParserFor(sources: SourceConfig[]): void {
+    const hasPostgres = sources.some(
+      (source) => getDatabaseTypeFromDSN(buildDSNFromSource(source)) === "postgres"
+    );
+    if (hasPostgres) {
+      assertPostgresParserLoaded();
     }
   }
 
@@ -357,6 +374,7 @@ export class ConnectorManager {
     if (this.sourceIds.includes(source.id)) {
       throw new Error(`Source '${source.id}' already exists`);
     }
+    this.assertPostgresParserFor([source]);
     if (source.lazy) {
       this.registerLazySource(source);
     } else {

@@ -3,8 +3,10 @@ import type { StatementClass } from "./sql-access-policy.js";
 import { splitSQLStatements } from "./sql-parser.js";
 
 // Loaded at import so that classification can stay synchronous. A failure is
-// kept and raised the first time PostgreSQL SQL is parsed: it must not become
-// an SQL verdict, and it must not stop a server that has no PostgreSQL source.
+// kept rather than thrown here: it must not become an SQL verdict, and it must
+// not stop a server that has no PostgreSQL source. It is raised when a
+// PostgreSQL source is registered (assertPostgresParserLoaded), and again by
+// any attempt to parse.
 let parser: typeof import("libpg-query") | undefined;
 let parserLoadError: unknown;
 try {
@@ -24,6 +26,11 @@ function loadedParser(): typeof import("libpg-query") {
     });
   }
   return parser;
+}
+
+/** Throws when the parser failed to load. For failing a PostgreSQL source at startup. */
+export function assertPostgresParserLoaded(): void {
+  loadedParser();
 }
 
 const severity: Record<StatementClass, number> = { read: 0, dml: 1, ddl: 2, admin: 3, unknown: 4 };
