@@ -82,6 +82,8 @@ export interface TableColumn {
 export interface TableIndex {
   index_name: string;
   column_names: string[];
+  /** Non-key INCLUDE columns, when reported by the connector. */
+  included_columns?: string[];
   is_unique: boolean;
   is_primary: boolean;
 }

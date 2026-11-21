@@ -260,6 +260,7 @@ async function searchTables(
               indexes: indexes.map((idx: any) => ({
                 name: idx.index_name,
                 columns: idx.column_names,
+                ...(idx.included_columns?.length ? { included_columns: idx.included_columns } : {}),
                 unique: idx.is_unique,
                 primary: idx.is_primary,
               })),
@@ -598,6 +599,7 @@ async function searchIndexes(
                 table: tableName,
                 schema: schemaName,
                 columns: index.column_names,
+                ...(index.included_columns?.length ? { included_columns: index.included_columns } : {}),
                 unique: index.is_unique,
                 primary: index.is_primary,
               });

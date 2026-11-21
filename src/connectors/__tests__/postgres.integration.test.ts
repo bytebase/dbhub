@@ -160,6 +160,32 @@ describe('PostgreSQL Connector Integration Tests', () => {
   postgresTest.createCommonTests();
   postgresTest.createSSLTests();
 
+  describe('index metadata', () => {
+    it.each([
+      ['composite', 'PRIMARY KEY (c, a, b)', '', ['c', 'a', 'b'], undefined, true],
+      ['covering', 'PRIMARY KEY (c, a) INCLUDE (b)', '', ['c', 'a'], ['b'], true],
+      ['expression', '', 'CREATE INDEX expression_idx ON index_metadata_expression ((a + b), c) INCLUDE (b, a)', ['(a + b)', 'c'], ['b', 'a'], false],
+    ] as const)('preserves key order and included columns: %s', async (name, constraint, indexSql, keys, included, primary) => {
+      const table = `index_metadata_${name}`;
+      await postgresTest.connector.executeSQL(
+        `CREATE TABLE ${table} (a int, b int, c int${constraint ? `, ${constraint}` : ''})`, {}
+      );
+      try {
+        if (indexSql) await postgresTest.connector.executeSQL(indexSql, {});
+        const indexes = await postgresTest.connector.getTableIndexes(table, 'public');
+        expect(indexes).toEqual([{
+          index_name: primary ? `${table}_pkey` : 'expression_idx',
+          column_names: [...keys],
+          ...(included ? { included_columns: [...included] } : {}),
+          is_unique: primary,
+          is_primary: primary,
+        }]);
+      } finally {
+        await postgresTest.connector.executeSQL(`DROP TABLE ${table}`, {});
+      }
+    });
+  });
+
   describe('query_timeout', () => {
     /** Statements carrying `probe` that the server is running, as `observer` sees them. */
     const runningProbeCount = async (observer: Connector, probe: string): Promise<number> => {

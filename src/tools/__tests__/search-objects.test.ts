@@ -363,6 +363,19 @@ describe('search_database_objects tool', () => {
       ]);
     });
 
+    it.each(['table', 'index'])('keeps INCLUDE columns separate in %s details', async (objectType) => {
+      vi.mocked(mockConnector.getTableSchema).mockResolvedValue([idColumn]);
+      mockConnector.getTableRowCount = vi.fn().mockResolvedValue(0);
+      vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([
+        { ...usersPkey, column_names: ['id'], included_columns: ['email'] },
+      ]);
+      const { parsed } = await search({ object_type: objectType, detail_level: 'full' });
+      const result = parsed.data.results[0];
+      const index = objectType === 'table' ? result.indexes[0] : result;
+      expect(index.columns).toEqual(['id']);
+      expect(index.included_columns).toEqual(['email']);
+    });
+
     it('should return index details in summary level', async () => {
       vi.mocked(mockConnector.getTableIndexes).mockResolvedValue([usersEmailIdx]);
 
