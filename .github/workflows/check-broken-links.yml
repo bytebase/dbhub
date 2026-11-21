@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'docs/**'
+      - 'scripts/sync-featured-blog*'
       - '.github/workflows/check-broken-links.yml'
   push:
     branches:
       - main
     paths:
       - 'docs/**'
+      - 'scripts/sync-featured-blog*'
       - '.github/workflows/check-broken-links.yml'
   workflow_dispatch:
 
@@ -26,6 +28,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check featured blog
+        run: |
+          node --test scripts/sync-featured-blog.test.mjs
+          pnpm check:featured-blog
 
       # `mint` is the current name of the Mintlify CLI (see docs/README.md)
       - name: Install Mintlify CLI

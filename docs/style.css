@@ -99,6 +99,66 @@
   letter-spacing: -0.045em;
 }
 
+.dbhub-blog-pill {
+  --announcement-accent: var(--home-accent);
+  --announcement-fill: 9%;
+  --announcement-hover: 13%;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 28px;
+  margin-bottom: 16px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklch, var(--announcement-accent) 12%, transparent);
+  border-radius: 6px;
+  background: color-mix(in oklch, var(--announcement-accent) var(--announcement-fill), transparent);
+  color: color-mix(in oklch, var(--home-text) 80%, var(--home-muted));
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-decoration: none;
+}
+
+.dark .dbhub-blog-pill {
+  --announcement-fill: 12%;
+  --announcement-hover: 16%;
+  border-color: color-mix(in oklch, var(--home-accent) 15%, var(--home-surface));
+}
+
+.dbhub-blog-pill::after {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+
+.dbhub-blog-pill:hover {
+  background: color-mix(in oklch, var(--announcement-accent) var(--announcement-hover), transparent);
+  color: var(--home-text);
+}
+
+.dbhub-blog-pill:active {
+  background: color-mix(in oklch, var(--announcement-accent) 20%, transparent);
+}
+
+.dbhub-blog-pill:focus-visible {
+  outline: 2px solid var(--home-text);
+  outline-offset: 4px;
+}
+
+.dbhub-blog-pill-label {
+  color: var(--home-muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.dbhub-blog-pill > [aria-hidden] {
+  color: var(--home-muted);
+  font-weight: 400;
+}
+
 .dbhub-hero-description {
   max-width: 40ch;
   margin: 24px 0 0;
@@ -424,6 +484,31 @@
 }
 
 @media (min-width: 901px) {
+  .dbhub-hero {
+    align-items: stretch;
+  }
+
+  .dbhub-hero-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dbhub-hero-actions {
+    width: 100%;
+    margin-top: auto;
+    padding-top: 28px;
+  }
+
+  .dbhub-install {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dbhub-code-panel {
+    flex: 1;
+  }
+
   .dbhub-community-grid li:nth-child(6n + 1):nth-last-child(4) {
     grid-column: 2;
   }

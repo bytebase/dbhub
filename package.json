@@ -38,6 +38,8 @@
     "test:build": "node scripts/smoke-test-build.mjs",
     "sync-version": "node scripts/sync-version.mjs",
     "sync:branding": "node scripts/sync-branding.mjs",
+    "sync:featured-blog": "node scripts/sync-featured-blog.mjs",
+    "check:featured-blog": "node scripts/sync-featured-blog.mjs --check",
     "version": "pnpm run sync-version && git add plugin/.claude-plugin/plugin.json plugin/.codex-plugin/plugin.json plugin/.mcp.json plugin/mcp.codex.json server.json"
   },
   "engines": {
@@ -112,6 +114,7 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
-    "vitest": "^4.0.6"
+    "vitest": "^4.0.6",
+    "yaml": "2.8.0"
   }
 }
