@@ -39,26 +39,32 @@
 
 .dbhub-hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  gap: 64px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 48px;
   align-items: center;
   padding: 24px 0 64px;
 }
 
+.dbhub-hero-copy {
+  container-type: inline-size;
+  min-width: 0;
+}
+
 .dbhub-hero-copy h1 {
   margin: 0;
-  font-size: clamp(40px, 4.8vw, 64px);
+  font-size: clamp(20px, 8cqw, 48px);
   font-weight: 600;
   line-height: 1.08;
   letter-spacing: -0.045em;
 }
 
 .dbhub-hero-description {
-  max-width: 42ch;
+  max-width: 40ch;
   margin: 24px 0 0;
   color: var(--home-muted);
   font-size: 18px;
-  line-height: 1.65;
+  line-height: 1.6;
+  text-wrap: pretty;
 }
 
 .dbhub-hero-actions {
@@ -101,9 +107,10 @@
 
 .dbhub-featured {
   display: block;
-  width: 245px;
+  width: 290px;
+  height: 44px;
   max-width: 100%;
-  margin: 0 0 0 auto;
+  margin: 0 0 16px auto;
 }
 
 .dbhub-featured img {
@@ -196,7 +203,7 @@
 }
 
 .dbhub-code-panel [data-component-part="code-block-root"] {
-  min-height: 192px;
+  min-height: 144px;
   background: var(--home-surface) !important;
   border-radius: 0 !important;
   transition: none;
@@ -215,7 +222,7 @@
 }
 
 .dbhub-databases {
-  margin-top: 28px;
+  margin-top: 20px;
 }
 
 .dbhub-databases ul {
@@ -297,9 +304,6 @@
   .dbhub-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 40px;
-  }
-  .dbhub-hero-copy h1 {
-    font-size: clamp(40px, 8vw, 60px);
   }
   .dbhub-hero-description {
     max-width: 52ch;

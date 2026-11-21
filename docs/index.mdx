@@ -1,5 +1,5 @@
 ---
-title: "DBHub — Universal database MCP server. Minimal context overhead."
+title: "DBHub — Universal database MCP. Minimal context overhead."
 sidebarTitle: "Home"
 description: "Connect your AI assistant to PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, and SQLite with a minimal, token-efficient MCP server."
 mode: "custom"
@@ -8,17 +8,17 @@ mode: "custom"
 <div className="dbhub-home">
 <section className="dbhub-hero" aria-labelledby="dbhub-heading">
   <div className="not-prose dbhub-hero-copy">
-    <h1 id="dbhub-heading">Universal database<br />MCP server.<br />Minimal context overhead.</h1>
+    <h1 id="dbhub-heading">Universal database MCP.<br />Minimal context overhead.</h1>
     <p className="dbhub-hero-description">Connect your AI assistant to your databases with just two tools and 0.5k tokens of context. Explore schemas, write SQL, and debug data without crowding your context window.</p>
     <div className="dbhub-hero-actions">
       <a className="dbhub-primary-link" href="/quickstart">Get started <span aria-hidden="true">→</span></a>
-      <a className="not-prose dbhub-featured" href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
-        <img className="block dark:hidden" src="/images/featured-by-claude-code-light.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
-        <img className="hidden dark:block" src="/images/featured-by-claude-code-dark.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
-      </a>
     </div>
   </div>
   <div className="dbhub-install" aria-label="Install DBHub">
+    <a className="not-prose dbhub-featured" href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
+      <img className="block dark:hidden" src="/images/featured-by-claude-code-light.svg" alt="Featured in the official Claude Code docs" width={290} height={44} />
+      <img className="hidden dark:block" src="/images/featured-by-claude-code-dark.svg" alt="Featured in the official Claude Code docs" width={290} height={44} />
+    </a>
 
 <CodeGroup className="dbhub-code-panel">
 
@@ -30,8 +30,7 @@ npx -y @bytebase/dbhub@latest \
 ```
 
 ```bash Docker
-docker run --rm --init \
-  --publish 8080:8080 \
+docker run --rm --init --publish 8080:8080 \
   bytebase/dbhub \
   --transport http \
   --port 8080 --demo
@@ -53,12 +52,12 @@ codex plugin add dbhub@dbhub
 <div className="not-prose dbhub-databases" aria-label="Supported databases">
   <ul>
     <li><span className="dbhub-database-logo" data-database="postgresql"><img src="/images/databases/postgresql.svg" alt="" width={48} height={48} noZoom /></span><span>PostgreSQL</span></li>
-    <li><span className="dbhub-database-logo" data-database="mysql"><img src="/images/databases/mysql.svg" alt="" width={48} height={48} noZoom /></span><span>MySQL</span></li>
     <li><span className="dbhub-database-logo" data-database="microsoftsqlserver"><img src="/images/databases/microsoftsqlserver.svg" alt="" width={48} height={48} noZoom /></span><span>SQL Server</span></li>
-    <li><span className="dbhub-database-logo" data-database="mariadb"><img src="/images/databases/mariadb.svg" alt="" width={48} height={48} noZoom /></span><span>MariaDB</span></li>
     <li><span className="dbhub-database-logo" data-database="oracle"><img src="/images/databases/oracle.svg" alt="" width={48} height={48} noZoom /></span><span>Oracle</span></li>
-    <li><span className="dbhub-database-logo" data-database="clickhouse"><img src="/images/databases/clickhouse.svg" alt="" width={48} height={48} noZoom /></span><span>ClickHouse</span></li>
+    <li><span className="dbhub-database-logo" data-database="mysql"><img src="/images/databases/mysql.svg" alt="" width={48} height={48} noZoom /></span><span>MySQL</span></li>
+    <li><span className="dbhub-database-logo" data-database="mariadb"><img src="/images/databases/mariadb.svg" alt="" width={48} height={48} noZoom /></span><span>MariaDB</span></li>
     <li><span className="dbhub-database-logo" data-database="sqlite"><img src="/images/databases/sqlite.svg" alt="" width={48} height={48} noZoom /></span><span>SQLite</span></li>
+    <li><span className="dbhub-database-logo" data-database="clickhouse"><img src="/images/databases/clickhouse.svg" alt="" width={48} height={48} noZoom /></span><span>ClickHouse</span></li>
   </ul>
 </div>
 
