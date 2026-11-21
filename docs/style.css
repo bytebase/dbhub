@@ -212,6 +212,7 @@
   margin: 0;
   color: var(--home-muted);
   font-size: 12px;
+  line-height: 18px;
 }
 
 .dbhub-code-panel {
@@ -395,6 +396,10 @@
 }
 
 @media (max-width: 600px) {
+  .dbhub-client-install {
+    padding: 16px;
+  }
+
   .dbhub-code-panel [role="tab"] > div:first-child {
     padding-inline: 8px;
   }
