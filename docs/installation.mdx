@@ -409,13 +409,15 @@ Prefer a one-click, read-only install with no JSON editing? Use the [MCP Bundle]
 
 <Tabs>
   <Tab title="One-Click Install">
-    Click the link below to install DBHub in Cursor:
+    Install DBHub with the built-in demo database to try it without database credentials. Requires **Node.js 22.5+** on your machine.
 
-    <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=dbhub&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAYnl0ZWJhc2UvZGJodWIiLCItLXRyYW5zcG9ydCIsInN0ZGlvIiwiLS1kc24iLCJwb3N0Z3JlczovL3VzZXI6cGFzc3dvcmRAbG9jYWxob3N0OjU0MzIvZGJuYW1lIl19">
+    <a href="cursor://anysphere.cursor-deeplink/mcp/install?name=dbhub&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBieXRlYmFzZS9kYmh1YkBsYXRlc3QiLCItLXRyYW5zcG9ydCIsInN0ZGlvIiwiLS1kZW1vIl19">
       <img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Install DBHub MCP server in Cursor" height="32" />
     </a>
 
-    After installing, edit the DSN in your Cursor MCP settings to point to your database.
+    Accept the installation prompt in Cursor, then open an Agent chat and ask: **"What tables are in the database?"** Cursor starts DBHub automatically using stdio.
+
+    To connect your own database, edit the `dbhub` entry in your Cursor MCP configuration (`~/.cursor/mcp.json` on macOS/Linux or `%USERPROFILE%\.cursor\mcp.json` on Windows). Replace `"--demo"` in `args` with `"--dsn", "YOUR_CONNECTION_STRING"`. See the **Stdio (Local)** tab for a complete example and [DSN Configuration](/config/command-line#param-dsn) for supported connection strings.
   </Tab>
 
   <Tab title="Stdio (Local)">

@@ -164,6 +164,56 @@
   min-width: 0;
 }
 
+.dbhub-cursor-install {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  min-height: 176px;
+  align-content: center;
+  padding: 24px;
+  font-size: 14px;
+}
+
+.dbhub-cursor-install a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.dbhub-cursor-button {
+  padding: 0 16px;
+  border: 1px solid var(--home-border);
+  border-radius: 8px;
+  color: var(--home-text);
+  font-weight: 600;
+}
+
+.dbhub-cursor-button:hover {
+  background: var(--home-surface);
+}
+
+.dbhub-cursor-button:active {
+  transform: translateY(1px);
+}
+
+.dbhub-cursor-guide {
+  color: var(--home-muted);
+}
+
+.dbhub-cursor-guide:hover {
+  text-decoration: underline;
+}
+
+.dbhub-cursor-install p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--home-muted);
+  font-size: 12px;
+}
+
 .dbhub-code-panel {
   --install-selected: #e4e4e7;
   --install-hover: #f0f0f2;
@@ -180,39 +230,58 @@
   --install-hover: #27272a;
 }
 
-.dbhub-code-panel [data-component-part="code-group-tab-bar"] {
-  padding: 4px 8px;
-  gap: 8px;
-  border-bottom: 1px solid var(--home-border);
+.dbhub-code-panel .tabs {
+  margin: 0;
+}
+
+.dbhub-code-panel [role="tabpanel"] {
+  height: 176px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dbhub-code-panel .code-block {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 .dbhub-code-panel [role="tablist"] {
+  margin: 0;
+  padding: 4px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--home-border);
   gap: 2px;
   font-size: 13px;
   line-height: 20px;
 }
 
 .dbhub-code-panel [role="tab"] {
+  display: flex;
+  align-items: center;
   min-height: 44px;
   margin: 0 !important;
   padding: 0;
   color: var(--home-muted);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .dbhub-code-panel [role="tab"] > div:first-child {
+  margin: 0;
   padding: 6px 12px;
+  border: 0;
   border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
   background: transparent;
   color: inherit;
   transition:
     background-color 150ms ease-out,
     color 150ms ease-out;
-}
-
-/* Mintlify's native underline is replaced by the filled selected tab. */
-.dbhub-code-panel [role="tab"] > div + div {
-  display: none;
 }
 
 .dbhub-code-panel [role="tab"][aria-selected="true"] {
@@ -237,14 +306,26 @@
   outline-offset: -2px;
 }
 
+.dbhub-code-panel [data-floating-buttons] {
+  top: 4px;
+  right: 8px;
+}
+
+.dbhub-code-panel .code-block-fade-overlay {
+  display: none;
+}
+
 .dbhub-code-panel .code-block-copy-button button {
   width: 44px;
   height: 44px;
   border-radius: 6px;
+  background: transparent;
 }
 
 .dbhub-code-panel [data-component-part="code-block-root"] {
+  height: 176px !important;
   min-height: 176px;
+  overflow: hidden;
   background: var(--home-surface) !important;
   border-radius: 0 !important;
   transition: none;
@@ -253,7 +334,8 @@
 .dbhub-code-panel
   [data-component-part="code-block-root"]
   [data-component-part="scroll-area-viewport"] {
-  padding: 40px 24px;
+  height: 176px;
+  padding: 56px 24px 24px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -20,34 +20,62 @@ mode: "custom"
   </div>
   <div className="dbhub-install" aria-label="Install DBHub">
 
-<CodeGroup className="dbhub-code-panel">
+<div className="dbhub-code-panel">
+<Tabs>
 
-```bash npx
+<Tab title="npx">
+
+```bash
 npx -y @bytebase/dbhub@latest \
   --transport http \
   --port 8080 \
   --demo
 ```
 
-```bash Docker
+</Tab>
+
+<Tab title="Docker">
+
+```bash
 docker run --rm --init --publish 8080:8080 \
   bytebase/dbhub \
   --transport http \
   --port 8080 --demo
 ```
 
-```text Claude Code
+</Tab>
+
+<Tab title="Claude Code">
+
+```text
 /plugin marketplace add bytebase/dbhub
 /plugin install dbhub@dbhub
 ```
 
-```bash Codex
+</Tab>
+
+<Tab title="Codex">
+
+```bash
 export DBHUB_DSN="postgres://user:password@localhost:5432/dbname"
 codex plugin marketplace add bytebase/dbhub
 codex plugin add dbhub@dbhub
 ```
 
-</CodeGroup>
+</Tab>
+
+<Tab title="Cursor">
+
+<div className="not-prose dbhub-cursor-install">
+  <a className="dbhub-cursor-button" href="cursor://anysphere.cursor-deeplink/mcp/install?name=dbhub&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBieXRlYmFzZS9kYmh1YkBsYXRlc3QiLCItLXRyYW5zcG9ydCIsInN0ZGlvIiwiLS1kZW1vIl19">Install in Cursor</a>
+  <a className="dbhub-cursor-guide" href="/installation#cursor">Cursor setup guide <span aria-hidden="true">→</span></a>
+  <p>Try the demo database. Requires Node.js 22.5+.</p>
+</div>
+
+</Tab>
+
+</Tabs>
+</div>
 
 <div className="not-prose dbhub-databases" aria-label="Supported databases">
   <ul>
