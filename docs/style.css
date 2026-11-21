@@ -5,6 +5,33 @@
 }
 
 @media (min-width: 1024px) {
+  #navbar div:has(> nav[aria-label="Main"]) {
+    position: static;
+  }
+
+  #navbar nav[aria-label="Main"] {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    pointer-events: none;
+  }
+
+  #navbar nav[aria-label="Main"] > ul {
+    height: 100%;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  #navbar nav[aria-label="Main"] > ul > li {
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  #navbar nav[aria-label="Main"] > ul > li:not(.navbar-link) {
+    position: absolute;
+    right: 48px;
+  }
+
   #navbar:not(.is-custom) #search-bar-entry {
     position: fixed;
     top: calc(var(--mintlify-slot-header-height, 4rem) + var(--banner-height, 0px) + 1.5rem);
