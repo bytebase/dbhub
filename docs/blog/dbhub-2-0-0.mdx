@@ -1,0 +1,92 @@
+---
+title: "DBHub 2.0.0"
+description: "DBHub 2.0.0 brings a fresh look and ClickHouse support while keeping the same minimal MCP experience. Trailing 30-day npm downloads grew 9.6× over the past year."
+mode: "center"
+hideFooterPagination: true
+contextual:
+  options: []
+---
+
+*November 21, 2026*
+
+DBHub 2.0.0 is out. It brings a new look and support for our first analytical database, ClickHouse. The goal stays the same: a minimal, maintained MCP server that works across databases and is easy to use out of the box.
+
+We're seeing demand for database access through MCP grow rapidly. Across twelve monthly snapshots, DBHub's trailing 30-day npm downloads grew from **37,807 in December 2025 to 363,897 in November 2026**, a **9.6× increase**.
+
+DBHub ranks **No. 1 among the multi-database MCP servers in this comparison by trailing 30-day npm downloads**, with **77% more downloads than MCP Toolbox by Google**.
+
+![Trailing 30-day npm downloads, sampled monthly from December 2025 to November 2026. DBHub ends at 363,897 and MCP Toolbox by Google at 205,589, after Toolbox led in the preceding two observations.](/images/blog/dbhub-2-0-0/npm-monthly-downloads.svg)
+
+## A familiar starfish, with more personality
+
+The original starfish expressed the hub in DBHub: several arms meeting at one center, like databases connected through one server.
+
+<div style={{ padding: "32px", display: "flex", justifyContent: "center" }}>
+  <img className="block dark:hidden" src="/images/blog/dbhub-2-0-0/original-logo-light.svg" alt="The original DBHub logo: a yellow starfish with blue dots beside the DBHub wordmark." width={471} height={132} />
+  <img className="hidden dark:block" src="/images/blog/dbhub-2-0-0/original-logo-dark.svg" alt="The original DBHub logo: a yellow starfish with blue dots beside the DBHub wordmark." width={471} height={132} />
+</div>
+
+We kept that idea and gave the starfish softer, flowing arms, a smile, and a mint-to-violet gradient. We call it Aurora Bloom.
+
+<div style={{ padding: "32px", display: "flex", justifyContent: "center" }}>
+  <img className="block dark:hidden" src="/images/logo/full-light.svg" alt="DBHub" width={547} height={132} />
+  <img className="hidden dark:block" src="/images/logo/full-dark.svg" alt="DBHub" width={547} height={132} />
+</div>
+
+![Aurora Bloom logo palette: mint #B2FCCB, turquoise #19DECD, blue #2AA1FE, violet #955BFE, ink #19253C, zinc #323236, and white #FFFFFF.](/images/blog/dbhub-2-0-0/aurora-bloom-palette.svg)
+
+The starfish now has some company. Simple sea sketches carry the theme through the website and docs, including a pearl, a nautilus shell, and branching coral. Their quiet zinc outlines leave the color to the logo.
+
+![A pearl in an open shell, a nautilus shell, and branching coral, drawn in zinc outlines.](/images/blog/dbhub-2-0-0/sea-illustrations.svg)
+
+## ClickHouse joins the hub
+
+Until now, DBHub focused on operational databases: PostgreSQL, MySQL, MariaDB, SQL Server, Oracle, and SQLite. ClickHouse extends that support to analytical workloads.
+
+Useful questions often need both. Suppose you want to know which paying customers stopped using a feature after a release. PostgreSQL might hold accounts and subscription status, while ClickHouse holds the product events. An assistant can look up paying accounts in PostgreSQL, query usage trends in ClickHouse, and combine the results in one conversation.
+
+With [multiple sources configured](/config/toml), one DBHub process gives the assistant access to both. Each SQL query runs against its selected source; the assistant connects the findings across queries. You can investigate customer activity without setting up a separate MCP server for each engine.
+
+## PostgreSQL parsing, coming next
+
+Alongside this release, we have replaced PostgreSQL's keyword-based SQL classifier with PostgreSQL's parser through `libpg-query`.
+
+The parser lets DBHub inspect the structure of a statement, including writes nested inside a `WITH` query, instead of inferring its behavior from keywords. Statements it cannot parse are rejected. This makes classification more reliable as SQL gets more complex. PostgreSQL's read-only transaction guard remains a second layer of protection.
+
+We will evaluate whether suitable parsers can bring the same approach to the other database engines. See [read-only mode](/config/read-only-mode) for how the protections work.
+
+## More databases, still minimal
+
+Our design goal is an out-of-the-box experience with little setup and little context overhead. The default interface still has just two tools: `search_objects` to discover database objects and `execute_sql` to query them.
+
+DBHub still has the smallest tool-definition footprint among the three database MCP servers in our [benchmark](/blog/database-mcp-server-token-benchmark-2026):
+
+| Server | Tool-definition tokens |
+| --- | ---: |
+| DBHub 2.0.1 | 261 |
+| MCP Toolbox 1.18.0 | 3,901 |
+| Supabase MCP 0.19.0 | 6,982 |
+
+All counts use the `cl100k_base` tokenizer on tool names, descriptions, and input schemas. They compare the configurations documented in the benchmark, whose capabilities differ. They measure tool definitions, not total session context or cost.
+
+## Since 1.0.0
+
+From the 1.0.0 tag to our November 21 snapshot:
+
+- **187 commits** on `main`, including **139 through the 2.0.0 tag**.
+- **49 issues closed**.
+- **7 hours 18 minutes median time to close**, measured from issue creation to closure across those 49 issues.
+
+As of this writing, we have closed every user-reported issue. The only open issue is our own [invitation to share use cases](https://github.com/bytebase/dbhub/issues/146). We cannot promise an empty queue forever, but we want people to be able to rely on a maintained, vendor-neutral, multi-database MCP server.
+
+![DBHub GitHub issues on November 21, 2026: one open issue, the invitation to share use cases, and 207 closed issues.](/images/blog/dbhub-2-0-0/github-open-issues.png)
+
+That commitment aligns with our flagship product, [Bytebase](https://www.bytebase.com/), the universal database governance platform. Bytebase also has a built-in MCP server with advanced guardrails, including fine-grained access control, approval workflows, dynamic data masking, and audit logging. Together, DBHub and Bytebase serve AI agents across the full spectrum: an easy start for local development with DBHub, and enterprise-level governance with Bytebase.
+
+Try the latest release with the built-in demo:
+
+```bash
+npx @bytebase/dbhub@latest --demo
+```
+
+Or follow the [quickstart](/quickstart) to connect your own database. Thank you to everyone who filed a report, shared a use case, or contributed a fix.

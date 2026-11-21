@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300" role="img" aria-labelledby="title desc">
+<title id="title">DBHub sea illustrations</title>
+<desc id="desc">Zinc line drawings of a pearl in an open shell, a spiral nautilus shell, and branching coral.</desc>
+<rect width="960" height="300" rx="16" fill="#FAFAFA"/>
+<g transform="translate(28 32)">
+  <g fill="none" stroke="#323236" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M94 109C82 95 68 79 72 67C74 61 80 58 87 60C82 47 88 38 99 40C99 28 111 24 121 32C127 21 140 21 146 32C156 24 168 28 168 40C179 38 185 47 180 60C187 58 193 61 195 67C199 79 185 95 173 109"/>
+    <path d="M91 72C96 83 104 92 112 98M108 48C111 63 116 77 122 87M157 48C154 63 149 77 143 87M174 72C169 83 161 92 153 98"/>
+    <path d="M117 113C101 107 83 109 73 117C84 136 106 146 133 146C160 146 181 136 192 117C182 109 164 107 148 113"/>
+    <circle cx="132.5" cy="109" r="15.5"/>
+  </g>
+</g>
+<text x="160" y="252" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" fill="#323236">Pearl</text>
+<g transform="translate(348 32)">
+<g fill="none" stroke="#323236" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M189 117C198 99 194 74 181 55C165 33 138 25 114 31C84 37 68 60 68 86C67 116 89 140 117 144C144 148 163 133 166 114C170 94 158 76 141 72C123 67 107 78 105 92C102 106 111 117 122 117C133 118 141 109 138 101C137 96 132 94 128 96"/>
+<path d="M166 114C174 114 183 115 189 117"/>
+
+</g>
+</g>
+<text x="480" y="252" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" fill="#323236">Nautilus shell</text>
+<g transform="translate(668 32)">
+<g fill="none" stroke="#323236" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M109 143C116 130 118 119 112 109C107 101 90 101 79 94C68 87 64 74 69 69C75 63 82 72 88 76C95 81 103 83 108 78C114 72 104 59 105 49C105 42 111 39 116 44C124 53 123 68 130 73C137 76 143 63 141 51C139 39 140 29 147 28C156 27 160 37 157 49C155 57 154 63 158 65C162 68 168 58 174 54C180 50 187 53 184 61C181 70 166 78 159 85C151 93 148 107 152 112C156 118 167 107 175 104C184 101 191 105 187 112C182 122 166 124 157 131C151 135 151 140 154 146C145 151 122 151 109 143Z"/>
+
+</g>
+</g>
+<text x="800" y="252" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" fill="#323236">Branching coral</text>
+</svg>

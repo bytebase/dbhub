@@ -46,6 +46,7 @@
         "searchable": true,
         "pages": [
           "blog",
+          "blog/dbhub-2-0-0",
           "blog/modelcontextprotocol-server-postgres-alternative",
           "blog/database-mcp-server-token-benchmark-2026",
           "blog/dbhub-1-0-0",
