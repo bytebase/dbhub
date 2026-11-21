@@ -20,7 +20,7 @@ export interface MaxRowsRewrite {
 interface TopLevelClause {
   index: number;
   length: number;
-  /** Null when the clause holds a parameter placeholder instead of a literal. */
+  /** Null when the clause's row count is not a literal (a parameter placeholder, say). */
   value: number | null;
 }
 
@@ -69,9 +69,8 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Extract the statement's own LIMIT value. Null when it has no LIMIT of its
-   * own, or when that LIMIT is a parameter placeholder rather than a literal
-   * (see hasParameterizedLimit).
+   * Extract the statement's own LIMIT row count. Null when it has no LIMIT of
+   * its own, or when that count is not a literal (see hasParameterizedLimit).
    */
   private static extractLimitValue(sql: string, dialect?: ConnectorType): number | null {
     return this.findTopLevelLimit(sql, dialect)?.value ?? null;
@@ -85,8 +84,9 @@ export class SQLRowLimiter {
   }
 
   /**
-   * Check if the statement's own LIMIT clause uses a parameter placeholder
-   * ($1, ?, @p1) instead of a literal number.
+   * Check if the statement's own LIMIT clause has a row count that is not a
+   * literal number: a parameter placeholder ($1, ?, @p1), or an unrecognized
+   * count in the `LIMIT offset, count` form.
    */
   private static hasParameterizedLimit(sql: string, dialect?: ConnectorType): boolean {
     const limit = this.findTopLevelLimit(sql, dialect);
@@ -102,9 +102,10 @@ export class SQLRowLimiter {
     if (limit !== null && limit.value !== null) {
       // Splice at the clause's own position rather than replacing the first
       // LIMIT found textually, which on a CTE would rewrite the CTE's cap and
-      // leave the statement itself uncapped.
+      // leave the statement itself uncapped. Only the count is replaced, so
+      // the offset of `LIMIT offset, count` is preserved.
       const effectiveLimit = Math.min(limit.value, maxRows);
-      return `${sql.slice(0, limit.index)}LIMIT ${effectiveLimit}${sql.slice(limit.index + limit.length)}`;
+      return `${sql.slice(0, limit.index)}${effectiveLimit}${sql.slice(limit.index + limit.length)}`;
     }
 
     // Add LIMIT clause to the end of the query
@@ -158,22 +159,34 @@ export class SQLRowLimiter {
     return found;
   }
 
-  /** The statement's own LIMIT clause, literal or parameterized ($1, ?, @p1). */
+  /**
+   * The statement's own LIMIT clause, in either form: `LIMIT count` or the
+   * MySQL/MariaDB/SQLite `LIMIT offset, count`, where the first operand is the
+   * offset and must never be read (or rewritten) as the row count.
+   *
+   * `value` is the literal row count, or null when the count is not a literal:
+   * a parameter placeholder ($1, ?, @p1), or, after a comma, anything else
+   * (`LIMIT 5, :n`). `index`/`length` span a literal count only, so it can be
+   * tightened in place while an offset before it stays exactly as written.
+   */
   private static findTopLevelLimit(sql: string, dialect?: ConnectorType): TopLevelClause | null {
     const match = this.findTopLevelMatch(
       sql,
-      /\(|\)|\blimit\s+(?:(\d+)|\$\d+|\?|@p\d+)/gi,
+      /\(|\)|\blimit\s+(?:(\d+)|\$\d+|\?|@p\d+)(\s*,\s*(\d+)?)?/gi,
       "last",
       dialect
     );
     if (match === null) {
       return null;
     }
-    return {
-      index: match.index,
-      length: match[0].length,
-      value: match[1] !== undefined ? parseInt(match[1], 10) : null,
-    };
+    const hasOffset = match[2] !== undefined;
+    const count: string | undefined = hasOffset ? match[3] : match[1];
+    const end = match.index + match[0].length;
+    if (count === undefined) {
+      return { index: end, length: 0, value: null };
+    }
+    // A literal count is always the last thing the pattern matched.
+    return { index: end - count.length, length: count.length, value: parseInt(count, 10) };
   }
 
   /**

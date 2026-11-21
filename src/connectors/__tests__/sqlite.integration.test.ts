@@ -97,6 +97,7 @@ describe('SQLite Connector Integration Tests', () => {
   sqliteTest.registerLifecycle();
 
   sqliteTest.createCommonTests();
+  sqliteTest.createOffsetCountLimitTests();
 
   describe('SQLite-specific Features', () => {
     it('should include virtual and stored generated columns in table schemas', async () => {
