@@ -47,7 +47,10 @@
       },
       {
         "group": "Blog",
+        "hidden": true,
+        "searchable": true,
         "pages": [
+          "blog",
           "blog/modelcontextprotocol-server-postgres-alternative",
           "blog/database-mcp-server-token-benchmark-2026",
           "blog/dbhub-1-0-0",
@@ -77,7 +80,7 @@
       },
       {
         "label": "Blog",
-        "href": "/blog/modelcontextprotocol-server-postgres-alternative"
+        "href": "/blog"
       }
     ]
   },

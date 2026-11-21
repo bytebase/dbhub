@@ -1,3 +1,7 @@
+#navbar.is-center #search-bar-entry {
+  display: none;
+}
+
 .is-custom #search-bar-entry,
 .is-custom #search-bar-entry-mobile,
 .is-custom button:has(> div > .sr-only) {
@@ -32,7 +36,7 @@
     right: 48px;
   }
 
-  #navbar:not(.is-custom) #search-bar-entry {
+  #navbar:not(.is-custom):not(.is-center) #search-bar-entry {
     position: fixed;
     top: calc(var(--mintlify-slot-header-height, 4rem) + var(--banner-height, 0px) + 1.5rem);
     left: max(2rem, calc((100% - 92rem) / 2 + 2rem));
@@ -751,4 +755,103 @@
   .dbhub-resource {
     transition: none;
   }
+}
+
+.dbhub-blog {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 64px 24px 80px;
+  color: #323236;
+}
+
+.dark .dbhub-blog {
+  color: #f4f4f5;
+}
+
+.dbhub-blog-heading {
+  margin-bottom: 48px;
+}
+
+.dbhub-blog-heading h1 {
+  margin: 0 0 16px;
+  font-size: clamp(36px, 5vw, 48px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.dbhub-blog-heading p,
+.dbhub-blog-entry > p {
+  color: #62626b;
+  line-height: 1.65;
+}
+
+.dark .dbhub-blog-heading p,
+.dark .dbhub-blog-entry > p {
+  color: #a1a1aa;
+}
+
+.dbhub-blog-entry {
+  padding: 28px 0;
+  border-top: 1px solid rgb(0 0 0 / 8%);
+}
+
+.dark .dbhub-blog-entry {
+  border-color: #27272a;
+}
+
+.dbhub-blog-entry .dbhub-blog-date {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.dbhub-blog-entry h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  line-height: 1.35;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.dbhub-blog-entry h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.dbhub-blog-entry h2 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.dbhub-blog-entry > p:last-child {
+  margin: 0;
+  font-size: 15px;
+}
+
+#header:has(.dbhub-blog-breadcrumb) > .prose {
+  display: none;
+}
+
+#header .dbhub-blog-breadcrumb {
+  color: #62626b;
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+  text-underline-offset: 4px;
+}
+
+.dark #header .dbhub-blog-breadcrumb {
+  color: #a1a1aa;
+}
+
+#header .dbhub-blog-breadcrumb:hover {
+  text-decoration: underline;
+}
+
+#header .dbhub-blog-breadcrumb:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+  border-radius: 2px;
 }
