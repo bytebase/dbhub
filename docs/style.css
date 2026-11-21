@@ -336,6 +336,12 @@
   }
 }
 
+@media (min-width: 901px) {
+  .dbhub-community-grid li:nth-child(6n + 1):nth-last-child(4) {
+    grid-column: 2;
+  }
+}
+
 @media (max-width: 900px) {
   .dbhub-hero {
     grid-template-columns: minmax(0, 1fr);
@@ -521,18 +527,6 @@
   }
   .dbhub-community {
     margin-bottom: 56px;
-  }
-}
-
-@media (min-width: 901px) {
-  .dbhub-community-grid li:nth-child(31) {
-    grid-column: 2;
-  }
-}
-
-@media (min-width: 601px) and (max-width: 900px) {
-  .dbhub-community-grid li:nth-child(33) {
-    grid-column: 2;
   }
 }
 

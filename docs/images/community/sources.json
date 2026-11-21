@@ -220,5 +220,47 @@
     "file": "waseda-university.png",
     "source": "https://upload.wikimedia.org/wikipedia/commons/7/75/Waseda_University_Logo.png",
     "page": "https://en.wikipedia.org/wiki/Waseda_University"
+  },
+  {
+    "name": "Vercel",
+    "slug": "vercel",
+    "file": "vercel.svg",
+    "source": "https://vercel.com/geist/brands/assets/vercel-logotype-black.svg",
+    "page": "https://vercel.com/geist/brands"
+  },
+  {
+    "name": "Maersk",
+    "slug": "maersk",
+    "file": "maersk.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Maersk_Group_Logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Maersk"
+  },
+  {
+    "name": "Yahoo",
+    "slug": "yahoo",
+    "file": "yahoo.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Yahoo%21_%282019%29.svg",
+    "page": "https://en.wikipedia.org/wiki/Yahoo"
+  },
+  {
+    "name": "Hitachi",
+    "slug": "hitachi",
+    "file": "hitachi.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/8/85/Hitachi_2025_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Hitachi"
+  },
+  {
+    "name": "Target",
+    "slug": "target",
+    "file": "target.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/d/db/Target_old_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Target_Corporation"
+  },
+  {
+    "name": "Rakuten",
+    "slug": "rakuten",
+    "file": "rakuten.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/4/4c/Rakuten_Global_Brand_Logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Rakuten"
   }
 ]

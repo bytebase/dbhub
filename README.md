@@ -45,7 +45,7 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
 - **Secure Access**: SSH tunneling and SSL/TLS encryption
 
 <p align="center">
- <img src="docs/images/community-logo-wall.png" alt="Our community includes developers from 24 companies and 10 universities, including Microsoft, NVIDIA, Amazon, Google, Oxford, Cornell, Duke, Tsinghua, Peking, KAIST, UBC, and Waseda." width="100%" />
+ <img src="docs/images/community-logo-wall.png" alt="Our community includes developers from 30 companies and 10 universities, including Microsoft, NVIDIA, Amazon, Google, Oxford, Cornell, Duke, Tsinghua, Peking, KAIST, UBC, and Waseda." width="100%" />
 </p>
 
 ## Token Efficiency
