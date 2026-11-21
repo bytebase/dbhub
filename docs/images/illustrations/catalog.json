@@ -1,0 +1,268 @@
+[
+  {
+    "id": "docs",
+    "title": "Docs illustrations",
+    "description": "Preferred pairings for concrete tasks. Keep the same pairing wherever the topic appears.",
+    "items": [
+      {
+        "asset": "sailboat.svg",
+        "subject": "Sailboat",
+        "meaning": "Quickstart",
+        "description": "Starting the journey with a first connection.",
+        "href": "/quickstart"
+      },
+      {
+        "asset": "anchor.svg",
+        "subject": "Anchor",
+        "meaning": "Installation",
+        "description": "Establishing a starting point.",
+        "href": "/installation"
+      },
+      {
+        "asset": "wheel.svg",
+        "subject": "Ship’s wheel",
+        "meaning": "Configuration",
+        "description": "Controlling how DBHub runs.",
+        "href": "/config/toml"
+      },
+      {
+        "asset": "octopus.svg",
+        "subject": "Octopus",
+        "meaning": "MCP tools",
+        "description": "Several capabilities available through one server.",
+        "href": "/tools/overview"
+      },
+      {
+        "asset": "diving-mask.svg",
+        "subject": "Diving goggles",
+        "meaning": "Schema exploration",
+        "description": "Looking closely at tables, columns, and indexes.",
+        "href": "/tools/search-objects"
+      },
+      {
+        "asset": "current.svg",
+        "subject": "Current",
+        "meaning": "SQL execution",
+        "description": "A request flowing through to its result.",
+        "href": "/tools/execute-sql"
+      },
+      {
+        "asset": "bottle.svg",
+        "subject": "Message in a bottle",
+        "meaning": "Custom tools",
+        "description": "Packaging a reusable SQL operation.",
+        "href": "/tools/custom-tools"
+      },
+      {
+        "asset": "coral.svg",
+        "subject": "Coral",
+        "meaning": "Multiple sources",
+        "description": "Several database connections branching from one process.",
+        "href": "/config/toml#configuration-structure"
+      },
+      {
+        "asset": "harbor.svg",
+        "subject": "Harbor",
+        "meaning": "Workbench",
+        "description": "A place to run and inspect database tools.",
+        "href": "/workbench/overview"
+      },
+      {
+        "asset": "porthole.svg",
+        "subject": "Porthole",
+        "meaning": "Results inspection",
+        "description": "A window into a tool’s output.",
+        "href": "/workbench/tool-execution"
+      },
+      {
+        "asset": "chart.svg",
+        "subject": "Sea chart",
+        "meaning": "Request traces",
+        "description": "Following the path of a request.",
+        "href": "/workbench/request-trace"
+      },
+      {
+        "asset": "pressure-gauge.svg",
+        "subject": "Pressure gauge",
+        "meaning": "Health checks",
+        "description": "Reading the current state of a connection.",
+        "href": "/tools/health-check"
+      },
+      {
+        "asset": "lifebuoy.svg",
+        "subject": "Lifebuoy",
+        "meaning": "Read-only guardrails",
+        "description": "Protection around database access.",
+        "href": "/config/read-only-mode"
+      },
+      {
+        "asset": "buoy.svg",
+        "subject": "Buoy",
+        "meaning": "Query limits",
+        "description": "Marking boundaries such as row limits and timeouts.",
+        "href": "/config/toml#tool-options"
+      },
+      {
+        "asset": "chest.svg",
+        "subject": "Treasure chest",
+        "meaning": "Credentials",
+        "description": "Sensitive information used to connect to a database.",
+        "href": "/config/toml#environment-variable-interpolation"
+      },
+      {
+        "asset": "submarine.svg",
+        "subject": "Submarine",
+        "meaning": "SSH tunnels",
+        "description": "Reaching a database through an indirect route.",
+        "href": "/config/toml#ssh-tunnel-options"
+      },
+      {
+        "asset": "pearl.svg",
+        "subject": "Pearl shell",
+        "meaning": "Curated data access",
+        "description": "Making selected data available to a team.",
+        "href": "/mcpb"
+      }
+    ]
+  },
+  {
+    "id": "editorial",
+    "title": "Editorial metaphors",
+    "description": "Use when the surrounding copy establishes the connection. These are not fixed feature symbols.",
+    "items": [
+      {
+        "asset": "iceberg.svg",
+        "subject": "Iceberg",
+        "meaning": "Hidden overhead",
+        "description": "The visible tip contrasts with the larger context cost below.",
+        "href": "/blog/database-mcp-server-token-benchmark-2026"
+      },
+      {
+        "asset": "nautilus.svg",
+        "subject": "Nautilus",
+        "meaning": "Looking beneath the surface",
+        "description": "A supporting image for query plans or investigating data issues.",
+        "href": null
+      },
+      {
+        "asset": "sonar.svg",
+        "subject": "Sonar",
+        "meaning": "Discovery",
+        "description": "Finding something that is not immediately visible.",
+        "href": null
+      },
+      {
+        "asset": "shoal.svg",
+        "subject": "Shoal",
+        "meaning": "Many working together",
+        "description": "Useful for connection pools or groups of sources when the copy names them.",
+        "href": null
+      },
+      {
+        "asset": "ships-bell.svg",
+        "subject": "Ship’s bell",
+        "meaning": "Announcements",
+        "description": "Drawing attention to release notes or important notices.",
+        "href": null
+      },
+      {
+        "asset": "dock-cleat.svg",
+        "subject": "Dock cleat",
+        "meaning": "Holding a connection",
+        "description": "Keeping a connection in place.",
+        "href": null
+      },
+      {
+        "asset": "lighthouse.svg",
+        "subject": "Lighthouse",
+        "meaning": "Guidance",
+        "description": "Helping readers find their way through a guide or troubleshooting article.",
+        "href": null
+      },
+      {
+        "asset": "clownfish.svg",
+        "subject": "Clownfish",
+        "meaning": "Demo experience",
+        "description": "A friendly recurring character for sample data and first-run examples.",
+        "href": "/quickstart"
+      }
+    ]
+  },
+  {
+    "id": "brand",
+    "title": "Brand illustrations",
+    "description": "Use for warmth, variety, and sea-themed compositions. No fixed technical meaning.",
+    "items": [
+      {
+        "asset": "seastar.svg",
+        "subject": "Seastar",
+        "meaning": "Primary brand motif",
+        "description": "The original DBHub silhouette; the default for brand-led compositions.",
+        "href": null
+      },
+      {
+        "asset": "seahorse.svg",
+        "subject": "Seahorse",
+        "meaning": "Supporting sea life",
+        "description": "A tall silhouette with a curled tail.",
+        "href": null
+      },
+      {
+        "asset": "crab.svg",
+        "subject": "Crab",
+        "meaning": "Supporting sea life",
+        "description": "A broad silhouette with expressive claws.",
+        "href": null
+      },
+      {
+        "asset": "jellyfish.svg",
+        "subject": "Jellyfish",
+        "meaning": "Supporting sea life",
+        "description": "Soft curves and trailing tentacles.",
+        "href": null
+      },
+      {
+        "asset": "sea-turtle.svg",
+        "subject": "Sea turtle",
+        "meaning": "Supporting sea life",
+        "description": "A calm rounded form with a distinctive shell.",
+        "href": null
+      },
+      {
+        "asset": "fish.svg",
+        "subject": "Fish",
+        "meaning": "Supporting sea life",
+        "description": "A simple horizontal companion to the seastar.",
+        "href": null
+      },
+      {
+        "asset": "manta-ray.svg",
+        "subject": "Manta ray",
+        "meaning": "Supporting sea life",
+        "description": "A flowing wide silhouette.",
+        "href": null
+      },
+      {
+        "asset": "whale.svg",
+        "subject": "Whale",
+        "meaning": "Supporting sea life",
+        "description": "A large rounded silhouette.",
+        "href": null
+      },
+      {
+        "asset": "diving-fins.svg",
+        "subject": "Diving fins",
+        "meaning": "Supporting dive equipment",
+        "description": "Equipment for underwater exploration scenes.",
+        "href": null
+      },
+      {
+        "asset": "seaweed.svg",
+        "subject": "Seaweed",
+        "meaning": "Supporting scenery",
+        "description": "Organic framing and background detail.",
+        "href": null
+      }
+    ]
+  }
+]
