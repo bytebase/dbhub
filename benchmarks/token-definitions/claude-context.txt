@@ -1,0 +1,107 @@
+## Context Usage
+
+**Model:** claude-opus-5-5  
+**Tokens:** 46.1k / 1m (5%)
+
+### Estimated usage by category
+
+| Category | Tokens | Percentage |
+|----------|--------|------------|
+| System prompt | 2.5k | 0.3% |
+| System tools | 23.2k | 2.3% |
+| MCP tools | 17.7k | 1.8% |
+| MCP server instructions | 442 | 0.0% |
+| Skills | 2.2k | 0.2% |
+| Free space | 920.9k | 92.1% |
+| Autocompact buffer | 33k | 3.3% |
+
+### MCP Tools
+
+| Tool | Server | Tokens |
+|------|--------|--------|
+| mcp__dbhub__execute_sql | dbhub | 107 |
+| mcp__dbhub__search_objects | dbhub | 313 |
+| mcp__supabase__apply_migration | supabase | 319 |
+| mcp__supabase__confirm_cost | supabase | 205 |
+| mcp__supabase__create_branch | supabase | 432 |
+| mcp__supabase__create_notebook | supabase | 1.5k |
+| mcp__supabase__create_project | supabase | 587 |
+| mcp__supabase__delete_branch | supabase | 93 |
+| mcp__supabase__delete_feedback | supabase | 209 |
+| mcp__supabase__delete_notebook | supabase | 180 |
+| mcp__supabase__deploy_edge_function | supabase | 619 |
+| mcp__supabase__execute_sql | supabase | 305 |
+| mcp__supabase__generate_typescript_types | supabase | 102 |
+| mcp__supabase__get_advisors | supabase | 264 |
+| mcp__supabase__get_cost | supabase | 195 |
+| mcp__supabase__get_edge_function | supabase | 126 |
+| mcp__supabase__get_notebook | supabase | 202 |
+| mcp__supabase__get_organization | supabase | 114 |
+| mcp__supabase__get_project | supabase | 166 |
+| mcp__supabase__get_project_url | supabase | 96 |
+| mcp__supabase__get_publishable_keys | supabase | 238 |
+| mcp__supabase__list_branches | supabase | 145 |
+| mcp__supabase__list_edge_functions | supabase | 102 |
+| mcp__supabase__list_extensions | supabase | 97 |
+| mcp__supabase__list_migrations | supabase | 97 |
+| mcp__supabase__list_notebooks | supabase | 125 |
+| mcp__supabase__list_organizations | supabase | 84 |
+| mcp__supabase__list_projects | supabase | 108 |
+| mcp__supabase__list_tables | supabase | 284 |
+| mcp__supabase__merge_branch | supabase | 109 |
+| mcp__supabase__pause_project | supabase | 93 |
+| mcp__supabase__query_logs | supabase | 925 |
+| mcp__supabase__rebase_branch | supabase | 137 |
+| mcp__supabase__reset_branch | supabase | 155 |
+| mcp__supabase__restore_project | supabase | 94 |
+| mcp__supabase__run_notebook | supabase | 836 |
+| mcp__supabase__search_docs | supabase | 795 |
+| mcp__supabase__submit_feedback | supabase | 266 |
+| mcp__toolbox__database_overview | toolbox | 127 |
+| mcp__toolbox__execute_sql | toolbox | 79 |
+| mcp__toolbox__get_column_cardinality | toolbox | 353 |
+| mcp__toolbox__get_query_plan | toolbox | 179 |
+| mcp__toolbox__list_active_queries | toolbox | 386 |
+| mcp__toolbox__list_autovacuum_configurations | toolbox | 79 |
+| mcp__toolbox__list_available_extensions | toolbox | 89 |
+| mcp__toolbox__list_database_stats | toolbox | 766 |
+| mcp__toolbox__list_indexes | toolbox | 469 |
+| mcp__toolbox__list_installed_extensions | toolbox | 79 |
+| mcp__toolbox__list_invalid_indexes | toolbox | 102 |
+| mcp__toolbox__list_locks | toolbox | 112 |
+| mcp__toolbox__list_memory_configurations | toolbox | 76 |
+| mcp__toolbox__list_pg_settings | toolbox | 249 |
+| mcp__toolbox__list_publication_tables | toolbox | 302 |
+| mcp__toolbox__list_query_stats | toolbox | 249 |
+| mcp__toolbox__list_replication_slots | toolbox | 109 |
+| mcp__toolbox__list_roles | toolbox | 317 |
+| mcp__toolbox__list_schemas | toolbox | 237 |
+| mcp__toolbox__list_sequences | toolbox | 264 |
+| mcp__toolbox__list_stored_procedure | toolbox | 252 |
+| mcp__toolbox__list_table_stats | toolbox | 449 |
+| mcp__toolbox__list_tables | toolbox | 234 |
+| mcp__toolbox__list_tablespaces | toolbox | 228 |
+| mcp__toolbox__list_top_bloated_tables | toolbox | 129 |
+| mcp__toolbox__list_triggers | toolbox | 325 |
+| mcp__toolbox__list_views | toolbox | 197 |
+| mcp__toolbox__long_running_transactions | toolbox | 271 |
+| mcp__toolbox__replication_stats | toolbox | 179 |
+
+### Skills
+
+| Skill | Source | Tokens |
+|-------|--------|--------|
+| dataviz | Built-in | ~480 |
+| update-config | Built-in | ~240 |
+| keybindings-help | Built-in | ~80 |
+| code-review | Built-in | ~420 |
+| simplify | Built-in | ~60 |
+| fewer-permission-prompts | Built-in | ~60 |
+| loop | Built-in | ~120 |
+| claude-api | Built-in | ~390 |
+| workflow-authoring | Built-in | ~80 |
+| run | Built-in | ~120 |
+| plugin-authoring | Built-in | ~90 |
+| init | Built-in | ~20 |
+| security-review | Built-in | ~30 |
+

@@ -1,0 +1,10 @@
+{
+  "name": "dbhub-tool-token-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": { "count": "node count.mjs", "capture": "node capture.mjs" },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "js-tiktoken": "1.0.21"
+  }
+}

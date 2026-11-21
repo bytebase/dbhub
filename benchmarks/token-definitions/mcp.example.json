@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "dbhub": {
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub@2.0.1", "--transport", "stdio", "--demo"]
+    },
+    "toolbox": {
+      "command": "npx",
+      "args": ["-y", "@toolbox-sdk/server@1.18.0", "--prebuilt", "postgres", "--stdio"],
+      "env": {
+        "POSTGRES_HOST": "127.0.0.1",
+        "POSTGRES_PORT": "55439",
+        "POSTGRES_DATABASE": "postgres",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "benchmark"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@0.19.0", "--access-token", "benchmark-placeholder-not-a-real-token"]
+    }
+  }
+}

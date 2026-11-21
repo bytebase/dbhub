@@ -50,13 +50,15 @@ DBHub is a minimal MCP server: token-efficient, zero-dependency, and just two to
 
 ## Token Efficiency
 
-DBHub loads just 2 tools by default at **0.5k tokens** — 16-25x fewer than alternatives — keeping the context window open for your actual work.
+DBHub's two built-in tool definitions total **261 tokens** with the `cl100k_base` tokenizer.
 
-| MCP Server | Default Config | Default Tools |
-|------------|---------------|--------------|
-| **DBHub** | **0.5k** | 2 (`execute_sql`, `search_objects`) |
-| MCP Toolbox | 7.7k | 29 |
-| Supabase MCP | 11.6k | 36 |
+| MCP Server | Definition Tokens | Tools |
+|------------|-------------------|-------|
+| **DBHub 2.0.1** | **261** | 2 |
+| MCP Toolbox 1.18.0 | 3,901 | 29 |
+| Supabase MCP 0.19.0 | 6,982 | 36 |
+
+Full tool definitions, not session usage. See the [November 2026 benchmark](https://dbhub.ai/blog/database-mcp-server-token-benchmark-2026) for configurations and reproduction steps.
 
 ## Use Cases
 

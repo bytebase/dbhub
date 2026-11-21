@@ -69,24 +69,24 @@ codex plugin add dbhub@dbhub
 
 <section className="not-prose dbhub-token-comparison" aria-labelledby="token-comparison-heading">
   <div className="dbhub-comparison-intro">
-  <h2 id="token-comparison-heading">16–25× less context overhead.</h2>
-  <p className="dbhub-comparison-subtitle">More room for your work.</p>
+  <h2 id="token-comparison-heading">Small tool definitions. More context for your work.</h2>
+  <p className="dbhub-comparison-subtitle">261 tokens for DBHub’s two built-in tools.</p>
   </div>
-  <div className="dbhub-token-chart" role="img" aria-label="Tool-definition tokens: DBHub 468, MCP Toolbox 7,674, Supabase MCP approximately 11,600. Bars share a zero baseline and a scale of 11,600 tokens.">
+  <div className="dbhub-token-chart" role="img" aria-label="Tool-definition tokens using cl100k_base: DBHub 261, MCP Toolbox 3,901, Supabase MCP 6,982. Bars share a zero baseline and a scale of 6,982 tokens.">
     <div className="dbhub-token-row dbhub-token-row-primary">
-      <div className="dbhub-token-label"><span>DBHub <small>1.7.0 · 2 tools</small></span><strong>468</strong></div>
-      <div className="dbhub-token-track"><div className="dbhub-token-bar" style={{ width: "4.03%" }} /></div>
+      <div className="dbhub-token-label"><span>DBHub <small>2.0.1 · 2 tools</small></span><strong>261</strong></div>
+      <div className="dbhub-token-track"><div className="dbhub-token-bar" style={{ width: "3.74%" }} /></div>
     </div>
     <div className="dbhub-token-row">
-      <div className="dbhub-token-label"><span>MCP Toolbox <small>1.17.0 · 29 tools</small></span><strong>7,674 <small>16×</small></strong></div>
-      <div className="dbhub-token-track"><div className="dbhub-token-bar" style={{ width: "66.16%" }} /></div>
+      <div className="dbhub-token-label"><span>MCP Toolbox <small>1.18.0 · 29 tools</small></span><strong>3,901 <small>14.9×</small></strong></div>
+      <div className="dbhub-token-track"><div className="dbhub-token-bar" style={{ width: "55.87%" }} /></div>
     </div>
     <div className="dbhub-token-row">
-      <div className="dbhub-token-label"><span>Supabase MCP <small>0.17.0 · 36 tools</small></span><strong>~11,600 <small>25×</small></strong></div>
+      <div className="dbhub-token-label"><span>Supabase MCP <small>0.19.0 · 36 tools</small></span><strong>6,982 <small>26.8×</small></strong></div>
       <div className="dbhub-token-track"><div className="dbhub-token-bar" style={{ width: "100%" }} /></div>
     </div>
   </div>
-  <p className="dbhub-comparison-note">Default tool definitions, measured in Claude Code · Nov 2026. <a href="/blog/database-mcp-server-token-benchmark-2026">Methodology and caveats</a>.</p>
+  <p className="dbhub-comparison-note">Full tool definitions, counted with cl100k_base · Nov 21, 2026. Actual session usage varies by client. <a href="/blog/database-mcp-server-token-benchmark-2026">Methodology and caveats</a>.</p>
 </section>
 
 <section className="not-prose dbhub-community" aria-labelledby="community-heading">

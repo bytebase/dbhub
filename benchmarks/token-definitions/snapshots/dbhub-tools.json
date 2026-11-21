@@ -1,0 +1,95 @@
+{
+  "serverInfo": {
+    "name": "DBHub MCP Server",
+    "version": "2.0.1"
+  },
+  "tools": [
+    {
+      "name": "execute_sql",
+      "description": "Execute SQL queries on the sqlite database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sql": {
+            "type": "string",
+            "description": "SQL to execute (multiple statements separated by ;)"
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "annotations": {
+        "title": "Execute SQL (sqlite)",
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "search_objects",
+      "description": "Search and list database objects on the sqlite database",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object_type": {
+            "type": "string",
+            "enum": [
+              "schema",
+              "table",
+              "view",
+              "column",
+              "procedure",
+              "function",
+              "index"
+            ],
+            "description": "Object type to search"
+          },
+          "pattern": {
+            "default": "%",
+            "description": "LIKE pattern (% = any chars, _ = one char)",
+            "type": "string"
+          },
+          "schema": {
+            "description": "Filter to schema",
+            "type": "string"
+          },
+          "table": {
+            "description": "Filter to table (requires schema; column/index only)",
+            "type": "string"
+          },
+          "detail_level": {
+            "default": "names",
+            "description": "Detail: names (minimal), summary (metadata), full (all)",
+            "type": "string",
+            "enum": [
+              "names",
+              "summary",
+              "full"
+            ]
+          },
+          "limit": {
+            "default": 100,
+            "description": "Max results",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 1000
+          }
+        },
+        "required": [
+          "object_type"
+        ],
+        "$schema": "https://json-schema.org/draft/2020-12/schema"
+      },
+      "annotations": {
+        "title": "Search Database Objects (sqlite)",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}
