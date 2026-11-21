@@ -108,10 +108,10 @@
 
 .dbhub-featured {
   display: block;
-  width: 290px;
+  width: 250px;
   height: 44px;
   max-width: 100%;
-  margin: 0 0 16px auto;
+  margin: 0 0 0 auto;
 }
 
 .dbhub-featured img {
@@ -204,7 +204,7 @@
 }
 
 .dbhub-code-panel [data-component-part="code-block-root"] {
-  min-height: 144px;
+  min-height: 176px;
   background: var(--home-surface) !important;
   border-radius: 0 !important;
   transition: none;
@@ -213,7 +213,7 @@
 .dbhub-code-panel
   [data-component-part="code-block-root"]
   [data-component-part="scroll-area-viewport"] {
-  padding: 24px;
+  padding: 40px 24px;
 }
 
 @media (prefers-reduced-motion: reduce) {
