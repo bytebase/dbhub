@@ -1,0 +1,224 @@
+[
+  {
+    "name": "Microsoft",
+    "slug": "microsoft",
+    "file": "microsoft.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/9/96/Microsoft_logo_%282012%29.svg",
+    "page": "https://en.wikipedia.org/wiki/Microsoft"
+  },
+  {
+    "name": "NVIDIA",
+    "slug": "nvidia",
+    "file": "nvidia.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/a/a4/NVIDIA_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Nvidia"
+  },
+  {
+    "name": "Amazon",
+    "slug": "amazon",
+    "file": "amazon.svg",
+    "source": "https://raw.githubusercontent.com/glincker/thesvg/main/public/icons/amazon/default.svg"
+  },
+  {
+    "name": "Cloudflare",
+    "slug": "cloudflare",
+    "file": "cloudflare.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/cloudflare.svg"
+  },
+  {
+    "name": "Atlassian",
+    "slug": "atlassian",
+    "file": "atlassian.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/7/72/Atlassian-horizontal-blue-rgb.svg",
+    "page": "https://en.wikipedia.org/wiki/Atlassian"
+  },
+  {
+    "name": "Docker",
+    "slug": "docker",
+    "file": "docker.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/3/3a/Docker_logo_2026.svg",
+    "page": "https://en.wikipedia.org/wiki/Docker,_Inc."
+  },
+  {
+    "name": "Coinbase",
+    "slug": "coinbase",
+    "file": "coinbase.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/1/1a/Coinbase.svg",
+    "page": "https://en.wikipedia.org/wiki/Coinbase"
+  },
+  {
+    "name": "Plaid",
+    "slug": "plaid",
+    "file": "plaid.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/c/c0/Plaid_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Plaid_Inc."
+  },
+  {
+    "name": "Cisco",
+    "slug": "cisco",
+    "file": "cisco.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg",
+    "page": "https://en.wikipedia.org/wiki/Cisco"
+  },
+  {
+    "name": "Oracle",
+    "slug": "oracle",
+    "file": "oracle.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/oracle.svg"
+  },
+  {
+    "name": "Red Hat",
+    "slug": "red-hat",
+    "file": "red-hat.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/redhat.svg"
+  },
+  {
+    "name": "ByteDance",
+    "slug": "bytedance",
+    "file": "bytedance.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/0/07/ByteDance_logo_English.svg"
+  },
+  {
+    "name": "Tencent",
+    "slug": "tencent",
+    "file": "tencent-english.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/6/6a/Tencent_logo_2017.svg",
+    "treatment": "SVG viewport limited to the English wordmark; Chinese lockup excluded."
+  },
+  {
+    "name": "Alibaba",
+    "slug": "alibaba",
+    "file": "alibaba.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/en/8/80/Alibaba-Group-Logo.svg"
+  },
+  {
+    "name": "Apple",
+    "slug": "apple",
+    "file": "apple.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/apple.svg"
+  },
+  {
+    "name": "Riot Games",
+    "slug": "riot-games",
+    "file": "riot-games-wordmark.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/en/5/5b/Riot_Games_2022.svg"
+  },
+  {
+    "name": "Google",
+    "slug": "google",
+    "file": "google.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/google.svg"
+  },
+  {
+    "name": "IBM",
+    "slug": "ibm",
+    "file": "ibm.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/ibm.svg"
+  },
+  {
+    "name": "Intel",
+    "slug": "intel",
+    "file": "intel.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/intel.svg"
+  },
+  {
+    "name": "Shopify",
+    "slug": "shopify",
+    "file": "shopify.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg"
+  },
+  {
+    "name": "GitHub",
+    "slug": "github",
+    "file": "github.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/github.svg"
+  },
+  {
+    "name": "PayPal",
+    "slug": "paypal",
+    "file": "paypal-wordmark.svg",
+    "source": "https://raw.githubusercontent.com/pheralb/svgl/main/static/library/paypal-wordmark.svg"
+  },
+  {
+    "name": "Zoom",
+    "slug": "zoom",
+    "file": "zoom.svg",
+    "source": "https://raw.githubusercontent.com/gilbarbara/logos/main/logos/zoom.svg"
+  },
+  {
+    "name": "Thoughtworks",
+    "slug": "thoughtworks",
+    "file": "thoughtworks.png",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/f/f6/Thoughtworks_logo.png",
+    "page": "https://en.wikipedia.org/wiki/Thoughtworks"
+  },
+  {
+    "name": "University of Oxford",
+    "slug": "university-of-oxford",
+    "file": "university-of-oxford.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/2/2f/University_of_Oxford.svg",
+    "page": "https://en.wikipedia.org/wiki/University_of_Oxford"
+  },
+  {
+    "name": "Cornell University",
+    "slug": "cornell-university",
+    "file": "cornell-university-lockup.png",
+    "source": "https://hr.cornell.edu/sites/default/files/2022-12/cornell_logo_simp_transp.png",
+    "page": "https://hr.cornell.edu/hr-partners/tools-resources/style-guide"
+  },
+  {
+    "name": "Duke University",
+    "slug": "duke-university",
+    "file": "duke-university.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Duke_University_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Duke_University"
+  },
+  {
+    "name": "University of Zurich",
+    "slug": "university-of-zurich",
+    "file": "university-of-zurich.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/8/89/Universit%C3%A4t_Z%C3%BCrich_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/University_of_Zurich"
+  },
+  {
+    "name": "Tel Aviv University",
+    "slug": "tel-aviv-university",
+    "file": "tel-aviv-university.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/en/b/b3/Tel_Aviv_university_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/Tel_Aviv_University"
+  },
+  {
+    "name": "Tsinghua University",
+    "slug": "tsinghua-university",
+    "file": "tsinghua-university.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/en/7/78/Tsinghua_University_logo_and_wordmark_in_Chinese_and_English_characters.svg"
+  },
+  {
+    "name": "Peking University",
+    "slug": "peking-university",
+    "file": "peking-university-wordmark.png",
+    "source": "https://english.pku.edu.cn/Uploads/Bden/Picture/2020/11/25/s5fbdbf048bc00.png",
+    "page": "https://english.pku.edu.cn/"
+  },
+  {
+    "name": "KAIST",
+    "slug": "kaist",
+    "file": "kaist.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/en/2/29/KAIST_logo_small.svg",
+    "page": "https://en.wikipedia.org/wiki/KAIST"
+  },
+  {
+    "name": "University of British Columbia",
+    "slug": "university-of-british-columbia",
+    "file": "university-of-british-columbia.svg",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/7/73/British_columbia_ca_univ_logo.svg",
+    "page": "https://en.wikipedia.org/wiki/University_of_British_Columbia"
+  },
+  {
+    "name": "Waseda University",
+    "slug": "waseda-university",
+    "file": "waseda-university.png",
+    "source": "https://upload.wikimedia.org/wikipedia/commons/7/75/Waseda_University_Logo.png",
+    "page": "https://en.wikipedia.org/wiki/Waseda_University"
+  }
+]
