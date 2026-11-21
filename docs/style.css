@@ -45,13 +45,6 @@
   padding: 24px 0 64px;
 }
 
-.dbhub-eyebrow {
-  margin: 0 0 20px;
-  color: var(--home-muted);
-  font-size: 14px;
-  font-weight: 500;
-}
-
 .dbhub-hero-copy h1 {
   margin: 0;
   font-size: clamp(40px, 4.8vw, 64px);
@@ -101,13 +94,6 @@
 .dbhub-primary-link:active {
   transform: translateY(1px);
 }
-.dbhub-secondary-link {
-  color: var(--home-text);
-}
-.dbhub-secondary-link:hover,
-.dbhub-install-footer a:hover {
-  text-decoration: underline;
-}
 .dbhub-home a:focus-visible {
   outline: 2px solid var(--home-muted);
   outline-offset: 4px;
@@ -117,7 +103,7 @@
   display: block;
   width: 245px;
   max-width: 100%;
-  margin-top: 32px;
+  margin: 0 0 0 auto;
 }
 
 .dbhub-featured img {
@@ -128,42 +114,6 @@
 
 .dbhub-install {
   min-width: 0;
-  padding: 28px;
-  border: 1px solid var(--home-border);
-  border-radius: 16px;
-  background: var(--home-surface);
-}
-
-.dbhub-install-heading h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-.dbhub-install-heading p {
-  margin: 8px 0 24px;
-  color: var(--home-muted);
-  font-size: 14px;
-}
-.dbhub-install [role="tabpanel"] {
-  min-height: 295px;
-}
-.dbhub-install-footer {
-  display: grid;
-  gap: 4px;
-  border-top: 1px solid var(--home-border);
-  padding-top: 20px;
-  font-size: 13px;
-}
-.dbhub-install-footer span {
-  color: var(--home-muted);
-}
-.dbhub-install-footer a {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  color: var(--home-text);
-  font-weight: 500;
 }
 
 .dbhub-databases {
@@ -215,8 +165,5 @@
   .dbhub-hero {
     padding-top: 8px;
     padding-bottom: 40px;
-  }
-  .dbhub-install {
-    padding: 20px 16px;
   }
 }

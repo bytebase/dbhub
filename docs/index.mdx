@@ -1,5 +1,5 @@
 ---
-title: "DBHub — Your databases. Your AI. Connected."
+title: "DBHub — Universal database MCP server. Minimal context overhead."
 sidebarTitle: "Home"
 description: "Connect your AI assistant to PostgreSQL, MySQL, SQL Server, MariaDB, Oracle, ClickHouse, and SQLite with a minimal, token-efficient MCP server."
 mode: "custom"
@@ -8,85 +8,48 @@ mode: "custom"
 <div className="dbhub-home">
 <section className="dbhub-hero" aria-labelledby="dbhub-heading">
   <div className="not-prose dbhub-hero-copy">
-    <p className="dbhub-eyebrow">The minimal database MCP server</p>
-    <h1 id="dbhub-heading">Your databases.<br />Your AI.<br />Connected.</h1>
-    <p className="dbhub-hero-description">Give your AI assistant the context inside your databases. Explore schemas, write SQL, and debug data with just two tools.</p>
+    <h1 id="dbhub-heading">Universal database<br />MCP server.<br />Minimal context overhead.</h1>
+    <p className="dbhub-hero-description">Connect your AI assistant to your databases with just two tools and 0.5k tokens of context. Explore schemas, write SQL, and debug data without crowding your context window.</p>
     <div className="dbhub-hero-actions">
       <a className="dbhub-primary-link" href="/quickstart">Get started <span aria-hidden="true">→</span></a>
-      <a className="dbhub-secondary-link" href="/tools/overview">Explore the tools <span aria-hidden="true">→</span></a>
+      <a className="not-prose dbhub-featured" href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
+        <img className="block dark:hidden" src="/images/featured-by-claude-code-light.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
+        <img className="hidden dark:block" src="/images/featured-by-claude-code-dark.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
+      </a>
     </div>
-    <a className="dbhub-featured" href="https://code.claude.com/docs/en/mcp#example-query-your-postgresql-database">
-      <img className="block dark:hidden" src="/images/featured-by-claude-code-light.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
-      <img className="hidden dark:block" src="/images/featured-by-claude-code-dark.svg" alt="Featured in the official Claude Code docs" width={560} height={128} />
-    </a>
   </div>
-  <div className="dbhub-install">
-    <div className="not-prose dbhub-install-heading">
-      <h2>Start with DBHub</h2>
-      <p>Pick your setup. Connect in minutes.</p>
-    </div>
+  <div className="dbhub-install" aria-label="Install DBHub">
 
-<Tabs>
-  <Tab title="npx">
-    Try it with a built-in sample database:
+<CodeGroup>
 
-    ```bash
-    npx -y @bytebase/dbhub@latest \
-      --transport http \
-      --port 8080 \
-      --demo
-    ```
+```bash npx
+npx -y @bytebase/dbhub@latest \
+  --transport http \
+  --port 8080 \
+  --demo
+```
 
-    Open the Workbench at [localhost:8080](http://localhost:8080). Requires Node.js 22.5+.
+```bash Docker
+docker run --rm --init \
+  --publish 8080:8080 \
+  bytebase/dbhub \
+  --transport http \
+  --port 8080 --demo
+```
 
-    [Connect your own database →](/quickstart)
-  </Tab>
-  <Tab title="Docker">
-    Run the sample database in a container:
+```text Claude Code
+/plugin marketplace add bytebase/dbhub
+/plugin install dbhub@dbhub
+```
 
-    ```bash
-    docker run --rm --init \
-      --publish 8080:8080 \
-      bytebase/dbhub \
-      --transport http \
-      --port 8080 --demo
-    ```
+```bash Codex
+export DBHUB_DSN="postgres://user:password@localhost:5432/dbname"
+codex plugin marketplace add bytebase/dbhub
+codex plugin add dbhub@dbhub
+```
 
-    Open the Workbench at [localhost:8080](http://localhost:8080). Requires Docker.
+</CodeGroup>
 
-    [Docker installation guide →](/installation#docker)
-  </Tab>
-  <Tab title="Claude Code">
-    Run these commands inside Claude Code:
-
-    ```text
-    /plugin marketplace add bytebase/dbhub
-    /plugin install dbhub@dbhub
-    ```
-
-    Enter your database connection string when prompted. Read-only by default. Requires Node.js 22.5+.
-
-    [Claude Code setup guide →](/claude-code-plugin)
-  </Tab>
-  <Tab title="Codex">
-    Set your database connection string:
-
-    ```bash
-    export DBHUB_DSN="postgres://user:password@localhost:5432/dbname"
-    codex plugin marketplace add bytebase/dbhub
-    codex plugin add dbhub@dbhub
-    ```
-
-    Launch Codex from this shell. Read-only by default. Requires Node.js 22.5+.
-
-    [Codex setup guide →](/codex-plugin)
-  </Tab>
-</Tabs>
-
-    <div className="not-prose dbhub-install-footer">
-      <span>Using Claude Desktop or another client?</span>
-      <a href="/installation">All installation options <span aria-hidden="true">→</span></a>
-    </div>
   </div>
 </section>
 
