@@ -434,6 +434,31 @@ export abstract class IntegrationTestBase<TContainer extends TestContainer> {
     });
   }
 
+  /**
+   * `LIMIT offset, count` is MySQL, MariaDB and SQLite syntax, so only those
+   * suites call this. The cap must land on the count and leave the offset
+   * alone: a rewritten offset returns a different page with no error.
+   */
+  createOffsetCountLimitTests(): void {
+    describe('maxRows with LIMIT offset, count', () => {
+      const numbers = [1, 2, 3, 4, 5, 6].map((n) => `SELECT ${n} AS n`).join(' UNION ALL ');
+
+      it.each([
+        { label: 'keeps an offset above the cap', limit: '4, 2', maxRows: 1, rows: [5], truncated: true },
+        { label: 'caps the count behind an offset below the cap', limit: '1, 4', maxRows: 2, rows: [2, 3], truncated: true },
+        { label: 'leaves a count within the cap alone', limit: '4, 2', maxRows: 2, rows: [5, 6], truncated: undefined },
+      ])('$label (LIMIT $limit, maxRows $maxRows)', async ({ limit, maxRows, rows, truncated }) => {
+        const result = await this.connector.executeSQL(
+          `SELECT n FROM (${numbers}) AS t ORDER BY n LIMIT ${limit}`,
+          { maxRows }
+        );
+
+        expect(result.resultSets[0].rows.map((row) => Number(rowValue(row, 'n')))).toEqual(rows);
+        expect(result.resultSets[0].truncated).toBe(truncated);
+      });
+    });
+  }
+
   createReadonlyBackstopTests(): void {
     describe('Per-tool readonly engine backstop (options.readonly)', () => {
       // The realistic config: the connection is writable (read-only and

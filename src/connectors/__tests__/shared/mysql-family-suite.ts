@@ -120,6 +120,7 @@ export abstract class MySQLFamilyIntegrationTest<
   /** The common connector tests plus everything MySQL and MariaDB share. */
   createFamilyTests(traits: MySQLFamilyTraits): void {
     this.createCommonTests();
+    this.createOffsetCountLimitTests();
     this.createSSLTests(traits.ssl);
 
     describe('MySQL-family Features', () => {

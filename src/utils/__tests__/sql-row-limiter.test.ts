@@ -102,6 +102,60 @@ describe("SQLRowLimiter", () => {
       expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(capped);
       expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual(probeResult(sql, probed));
     });
+
+    // MySQL, MariaDB and SQLite accept `LIMIT offset, count`: the first number
+    // is the offset, so the cap applies to the second and the offset is kept
+    // exactly as written.
+    it.each<CapAndProbeCase>([
+      [
+        "tightens the count, not the offset",
+        "SELECT * FROM users LIMIT 500, 200",
+        "SELECT * FROM users LIMIT 500, 100",
+        "SELECT * FROM users LIMIT 500, 101",
+      ],
+      [
+        "tightens a count above the cap behind an offset below it",
+        "SELECT * FROM users LIMIT 5, 200",
+        "SELECT * FROM users LIMIT 5, 100",
+        "SELECT * FROM users LIMIT 5, 101",
+      ],
+      ["keeps a count below the cap behind an offset above it", "SELECT * FROM users LIMIT 500, 50", "SELECT * FROM users LIMIT 500, 50", null],
+      ["keeps a count equal to the cap", "SELECT * FROM users LIMIT 500, 100", "SELECT * FROM users LIMIT 500, 100", null],
+      [
+        "tightens the count without spaces around the comma",
+        "SELECT * FROM users LIMIT 500,200;",
+        "SELECT * FROM users LIMIT 500,100;",
+        "SELECT * FROM users LIMIT 500,101;",
+      ],
+      [
+        "tightens the count behind a parameterized offset",
+        "SELECT * FROM users LIMIT ?, 200",
+        "SELECT * FROM users LIMIT ?, 100",
+        "SELECT * FROM users LIMIT ?, 101",
+      ],
+      [
+        "wraps a parameterized count",
+        "SELECT * FROM users LIMIT 500, ?",
+        "SELECT * FROM (SELECT * FROM users LIMIT 500, ?\n) AS subq LIMIT 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT 500, ?\n) AS subq LIMIT 101",
+      ],
+      // SQLite named parameter: not a literal, so the count is unknown
+      [
+        "wraps a count that is not a literal number",
+        "SELECT * FROM users LIMIT 5, :count",
+        "SELECT * FROM (SELECT * FROM users LIMIT 5, :count\n) AS subq LIMIT 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT 5, :count\n) AS subq LIMIT 101",
+      ],
+      [
+        "tightens LIMIT count OFFSET offset, leaving the offset alone",
+        "SELECT * FROM users LIMIT 200 OFFSET 500",
+        "SELECT * FROM users LIMIT 100 OFFSET 500",
+        "SELECT * FROM users LIMIT 101 OFFSET 500",
+      ],
+    ])("LIMIT offset, count: %s", (_name, sql, capped, probed) => {
+      expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(capped);
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual(probeResult(sql, probed));
+    });
   });
 
   describe("applyMaxRows", () => {
