@@ -504,3 +504,131 @@
 .dbhub-community-grid img[alt="Amazon"] {
   transform: translateY(3px);
 }
+
+.dbhub-use-cases {
+  margin: 0 0 96px;
+}
+
+.dbhub-use-cases-intro {
+  margin-bottom: 32px;
+}
+
+.dbhub-use-cases-intro .dbhub-section-label {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dbhub-use-cases-intro h2 {
+  margin: 0;
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.dbhub-use-cases-intro p {
+  margin: 16px 0 0;
+  color: var(--home-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.dbhub-use-case-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.dbhub-use-case {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--home-border);
+  border-radius: 12px;
+  background: var(--home-surface);
+}
+
+.dbhub-use-case-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 176px;
+  background: #f3f4f4;
+  user-select: none;
+  pointer-events: none;
+}
+
+.dbhub-use-case-art img {
+  display: block;
+  width: 264px;
+  height: 176px;
+  margin: 0;
+  object-fit: contain;
+}
+
+.dark .dbhub-use-case-art {
+  background: #111113;
+}
+
+.dark .dbhub-use-case-art img {
+  filter: invert(1);
+}
+
+.dbhub-use-case-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px 32px 24px;
+}
+
+.dbhub-use-case h3 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.dbhub-use-case-body p {
+  margin: 12px 0 20px;
+  color: var(--home-muted);
+  font-size: 15px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.dbhub-use-case-body a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-top: auto;
+  color: var(--home-text);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+@media (hover: hover) {
+  .dbhub-use-case-body a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dbhub-use-cases {
+    margin-bottom: 64px;
+  }
+  .dbhub-use-case-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+  }
+  .dbhub-use-case-body {
+    padding: 24px;
+  }
+}
