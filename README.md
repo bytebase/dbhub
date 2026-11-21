@@ -85,7 +85,11 @@ DBHub implements MCP tools for database operations:
 
 DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) for interacting with your database tools. It provides a visual way to execute queries, run custom tools, and view request traces without requiring an MCP client.
 
-![DBHub Workbench showing connection details and available tools](docs/images/workbench/workbench.webp)
+<table>
+  <tr>
+    <td><img src="docs/images/workbench/workbench.webp" alt="DBHub Workbench showing connection details and available tools" /></td>
+  </tr>
+</table>
 
 ## Installation
 
