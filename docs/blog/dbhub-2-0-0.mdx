@@ -49,7 +49,7 @@ Useful questions often need both. Suppose you want to know which paying customer
 
 With [multiple sources configured](/config/toml), one DBHub process gives the assistant access to both. Each SQL query runs against its selected source; the assistant connects the findings across queries. You can investigate customer activity without setting up a separate MCP server for each engine.
 
-## PostgreSQL parsing, coming next
+## PostgreSQL parsing
 
 Alongside this release, we have replaced PostgreSQL's keyword-based SQL classifier with PostgreSQL's parser through `libpg-query`.
 
