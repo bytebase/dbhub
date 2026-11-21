@@ -20,7 +20,7 @@ mode: "custom"
   </div>
   <div className="dbhub-install" aria-label="Install DBHub">
 
-<CodeGroup>
+<CodeGroup className="dbhub-code-panel">
 
 ```bash npx
 npx -y @bytebase/dbhub@latest \
@@ -50,15 +50,23 @@ codex plugin add dbhub@dbhub
 
 </CodeGroup>
 
+<div className="not-prose dbhub-databases" aria-label="Supported databases">
+  <ul>
+    <li><span className="dbhub-database-logo" data-database="postgresql"><img src="/images/databases/postgresql.svg" alt="" width={48} height={48} noZoom /></span><span>PostgreSQL</span></li>
+    <li><span className="dbhub-database-logo" data-database="mysql"><img src="/images/databases/mysql.svg" alt="" width={48} height={48} noZoom /></span><span>MySQL</span></li>
+    <li><span className="dbhub-database-logo" data-database="microsoftsqlserver"><img src="/images/databases/microsoftsqlserver.svg" alt="" width={48} height={48} noZoom /></span><span>SQL Server</span></li>
+    <li><span className="dbhub-database-logo" data-database="mariadb"><img src="/images/databases/mariadb.svg" alt="" width={48} height={48} noZoom /></span><span>MariaDB</span></li>
+    <li><span className="dbhub-database-logo" data-database="oracle"><img src="/images/databases/oracle.svg" alt="" width={48} height={48} noZoom /></span><span>Oracle</span></li>
+    <li><span className="dbhub-database-logo" data-database="clickhouse"><img src="/images/databases/clickhouse.svg" alt="" width={48} height={48} noZoom /></span><span>ClickHouse</span></li>
+    <li><span className="dbhub-database-logo" data-database="sqlite"><img src="/images/databases/sqlite.svg" alt="" width={48} height={48} noZoom /></span><span>SQLite</span></li>
+  </ul>
+</div>
+
+
   </div>
 </section>
 
-<div className="not-prose dbhub-databases" aria-label="Supported databases">
-  <span>One server. Seven databases.</span>
-  <ul>
-    <li>PostgreSQL</li><li>MySQL</li><li>SQL Server</li><li>MariaDB</li><li>Oracle</li><li>ClickHouse</li><li>SQLite</li>
-  </ul>
-</div>
+
 
 <div className="dbhub-home-details">
 

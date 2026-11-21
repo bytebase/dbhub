@@ -116,30 +116,178 @@
   min-width: 0;
 }
 
-.dbhub-databases {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px 32px;
-  padding: 24px 0;
-  border-top: 1px solid var(--home-border);
-  border-bottom: 1px solid var(--home-border);
-  font-size: 13px;
+.dbhub-code-panel {
+  --install-selected: #e4e4e7;
+  --install-hover: #f0f0f2;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--home-border);
+  border-radius: 12px;
+  background: var(--home-surface);
 }
 
-.dbhub-databases > span {
-  color: var(--home-muted);
+.dark .dbhub-code-panel {
+  --install-selected: #3f3f46;
+  --install-hover: #27272a;
 }
+
+.dbhub-code-panel [data-component-part="code-group-tab-bar"] {
+  padding: 4px 8px;
+  gap: 8px;
+  border-bottom: 1px solid var(--home-border);
+}
+
+.dbhub-code-panel [role="tablist"] {
+  gap: 2px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.dbhub-code-panel [role="tab"] {
+  min-height: 44px;
+  margin: 0 !important;
+  padding: 0;
+  color: var(--home-muted);
+  cursor: pointer;
+}
+
+.dbhub-code-panel [role="tab"] > div:first-child {
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+/* Mintlify's native underline is replaced by the filled selected tab. */
+.dbhub-code-panel [role="tab"] > div + div {
+  display: none;
+}
+
+.dbhub-code-panel [role="tab"][aria-selected="true"] {
+  color: var(--home-text);
+}
+
+.dbhub-code-panel [role="tab"][aria-selected="true"] > div:first-child {
+  background: var(--install-selected);
+}
+
+@media (hover: hover) {
+  .dbhub-code-panel [role="tab"][aria-selected="false"]:hover > div:first-child,
+  .dbhub-code-panel .code-block-copy-button button:hover {
+    background: var(--install-hover);
+    color: var(--home-text);
+  }
+}
+
+.dbhub-code-panel [role="tab"]:focus-visible > div:first-child,
+.dbhub-code-panel .code-block-copy-button button:focus-visible {
+  outline: 2px solid var(--home-muted);
+  outline-offset: -2px;
+}
+
+.dbhub-code-panel .code-block-copy-button button {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+}
+
+.dbhub-code-panel [data-component-part="code-block-root"] {
+  min-height: 192px;
+  background: var(--home-surface) !important;
+  border-radius: 0 !important;
+  transition: none;
+}
+
+.dbhub-code-panel
+  [data-component-part="code-block-root"]
+  [data-component-part="scroll-area-viewport"] {
+  padding: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbhub-code-panel [role="tab"] > div:first-child {
+    transition: none;
+  }
+}
+
+.dbhub-databases {
+  margin-top: 28px;
+}
+
 .dbhub-databases ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 24px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 20px 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-weight: 500;
 }
+
+.dbhub-databases li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--home-muted);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.dbhub-database-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 36px;
+}
+
+.dbhub-database-logo img {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  object-fit: contain;
+}
+
+.dbhub-database-logo[data-database="oracle"] img {
+  width: 56px;
+  height: 56px;
+}
+
+.dbhub-database-logo[data-database="mariadb"] img,
+.dbhub-database-logo[data-database="mysql"] img {
+  width: 38px;
+  height: 38px;
+}
+
+@media (max-width: 600px) {
+  .dbhub-code-panel [role="tab"] > div:first-child {
+    padding-inline: 8px;
+  }
+
+  .dbhub-code-panel
+    [data-component-part="code-block-root"]
+    [data-component-part="scroll-area-viewport"] {
+    padding-inline: 16px;
+  }
+
+  .dbhub-databases ul {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  .dbhub-databases li {
+    grid-column: span 2;
+  }
+
+  .dbhub-databases li:nth-child(5) {
+    grid-column: 2 / span 2;
+  }
+}
+
 .dbhub-home-details {
   max-width: 800px;
   margin: 64px auto 0;
