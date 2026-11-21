@@ -144,7 +144,12 @@ export function createCustomToolHandler(toolConfig: CustomToolConfig) {
         // 4. Gate the statement through the policy
         if (sqlVerdict(policy, toolConfig.statement, connector.id) === "deny") {
           throw new ToolError(
-            createReadonlyViolationMessage(toolConfig.name, toolConfig.source, connector.id),
+            createReadonlyViolationMessage(
+              toolConfig.name,
+              toolConfig.source,
+              connector.id,
+              toolConfig.statement
+            ),
             "READONLY_VIOLATION"
           );
         }

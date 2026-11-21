@@ -220,10 +220,27 @@ function scanTokenAnsi(sql: string, i: number): SQLToken {
     ?? plainToken(i);
 }
 
+// PostgreSQL identifier or keyword (scan.l: ident_start, ident_cont).
+const postgresIdentifierRegex = /[A-Za-z_\u0080-￿][\w$\u0080-￿]*/y;
+
+/**
+ * A whole PostgreSQL identifier, as one plain token. `$` is an identifier
+ * character, so the `$$` in `a$$` belongs to the name and does not open a
+ * dollar quote. Reading it as one would hide the SQL up to the next `$$` from
+ * the statement splitter, while the server still runs it.
+ */
+function scanPostgresIdentifier(sql: string, i: number): SQLToken | null {
+  postgresIdentifierRegex.lastIndex = i;
+  return postgresIdentifierRegex.test(sql)
+    ? { type: TokenType.Plain, end: postgresIdentifierRegex.lastIndex }
+    : null;
+}
+
 function scanTokenPostgres(sql: string, i: number): SQLToken {
   return scanSingleLineComment(sql, i)
     ?? scanNestedMultiLineComment(sql, i)
     ?? scanPostgresEscapeString(sql, i)
+    ?? scanPostgresIdentifier(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)
     ?? scanDollarQuotedBlock(sql, i)
@@ -433,7 +450,7 @@ export function blankCommentsAndStrings(sql: string, dialect?: ConnectorType): s
   while (i < sql.length) {
     const token = scanToken(sql, i);
     if (token.type === TokenType.Plain) {
-      result += sql[i];
+      result += sql.substring(i, token.end);
     } else {
       result += " ".repeat(token.end - i);
     }

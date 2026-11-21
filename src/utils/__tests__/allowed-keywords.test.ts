@@ -17,24 +17,13 @@ const rejects = (_label: string, dialect: ConnectorType, sql: string) => {
 };
 
 describe("isReadOnlySQL", () => {
-  describe("basic read-only detection", () => {
-    it.each<Case>([
-      ["SELECT", "postgres", "SELECT * FROM users"],
-      ["a lower-case select (keywords are case-insensitive)", "postgres", "select * from users"],
-      ["WITH", "postgres", "WITH cte AS (SELECT 1) SELECT * FROM cte"],
-      ["EXPLAIN", "postgres", "EXPLAIN SELECT * FROM users"],
-      ["a SELECT after a multi-line comment naming a write", "postgres", "/* INSERT */ SELECT * FROM users"],
-      ["a SELECT after a commented-out destructive statement", "postgres", "-- DELETE FROM users\nSELECT * FROM users"],
-    ])("allows %s (%s)", allows);
-
-    it.each<Case>([
-      ["INSERT", "postgres", "INSERT INTO users VALUES (1)"],
-      ["UPDATE", "postgres", "UPDATE users SET name = 'test'"],
-      ["DELETE", "postgres", "DELETE FROM users"],
-      ["a write after a comment naming SELECT", "postgres", "/* SELECT */ INSERT INTO users VALUES (1)"],
-      // Attacker-crafted input may reduce to nothing once comments are stripped.
-      ["SQL that is empty after comment stripping", "postgres", "-- just a comment"],
-    ])("rejects %s (%s)", rejects);
+  // PostgreSQL policy cases live in postgres-sql.test.ts; keep only routing coverage here.
+  it.each([
+    ["SELECT 1", true],
+    [`SELECT pg_catalog."set_config"('search_path', 'public', false)`, false],
+    ["not valid SQL", false],
+  ] as const)("routes PostgreSQL to the AST classifier: %s", (sql, expected) => {
+    expect(isReadOnlySQL(sql, "postgres")).toBe(expected);
   });
 
   describe("database-specific keywords", () => {
@@ -48,7 +37,6 @@ describe("isReadOnlySQL", () => {
 
     it.each<Case>([
       ["SHOW", "sqlite", "SHOW TABLES"],
-      ["standalone ANALYZE (updates statistics)", "postgres", "ANALYZE users"],
       ["standalone ANALYZE (updates statistics)", "mysql", "ANALYZE"],
       ["SHOWPLAN (not a real T-SQL statement)", "sqlserver", "SHOWPLAN SELECT * FROM users"],
       ["bare SET SHOWPLAN_XML (session-scoped, handled via EXPLAIN)", "sqlserver", "SET SHOWPLAN_XML ON"],
@@ -56,15 +44,6 @@ describe("isReadOnlySQL", () => {
   });
 
   describe("CTE with mutating operations", () => {
-    it.each([
-      ["UPDATE", "WITH updated AS (UPDATE contracts SET site_location_postcode = 'SW11' WHERE id = 1 RETURNING id) SELECT * FROM updated"],
-      ["DELETE", "WITH deleted AS (DELETE FROM users WHERE id = 1 RETURNING *) SELECT * FROM deleted"],
-      ["INSERT", "WITH inserted AS (INSERT INTO users (name) VALUES ('test') RETURNING *) SELECT * FROM inserted"],
-      ["DROP (CTE-like construct)", "WITH x AS (SELECT 1) DROP TABLE users"],
-    ])("should reject %s inside a CTE", (_keyword, sql) => {
-      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
-    });
-
     it.each(["mysql", "sqlite"] as const)(
       "should reject REPLACE INTO (non-function) inside WITH in %s",
       (dialect) => {
@@ -74,73 +53,16 @@ describe("isReadOnlySQL", () => {
     );
 
     it.each<Case>([
-      ["mutating keywords in string literals", "postgres", "WITH cte AS (SELECT 'UPDATE me' AS note) SELECT * FROM cte"],
       ["a CTE named 'replace'", "mysql", "WITH replace AS (SELECT 1) SELECT * FROM replace"],
       // MySQL's mutating pattern knows REPLACE INTO; a REPLACE() call must not match it.
       ["REPLACE() inside a WITH CTE", "mysql", "WITH cte AS (SELECT REPLACE(name, 'a', 'b') AS cleaned FROM users) SELECT * FROM cte"],
     ])("allows %s (%s)", allows);
   });
 
-  describe("EXPLAIN", () => {
-    it.each([
-      // EXPLAIN doesn't execute the statement, just shows the plan
-      "EXPLAIN DELETE FROM users",
-      // EXPLAIN ANALYZE executes it, which is fine for a read
-      "EXPLAIN ANALYZE SELECT * FROM users",
-      "EXPLAIN ANALYZE VERBOSE SELECT * FROM users",
-      // PostgreSQL accepts ANALYSE wherever it accepts ANALYZE (#501).
-      "EXPLAIN ANALYSE SELECT * FROM users",
-      // ANALYZE switched off: not executed
-      "EXPLAIN (ANALYZE false) DELETE FROM users",
-      "EXPLAIN (ANALYZE off) DELETE FROM users",
-      "EXPLAIN (ANALYSE false) DELETE FROM users",
-      // An unrecognized option might execute the statement, which is fine for a read
-      "EXPLAIN (RUN_IT) SELECT * FROM users",
-      // Options that only shape the plan output
-      "EXPLAIN (VERBOSE, COSTS off, FORMAT JSON) DELETE FROM users",
-      "EXPLAIN (BUFFERS, SETTINGS, GENERIC_PLAN) DELETE FROM users",
-      // A leading parenthesis that opens a query is not an option list.
-      "EXPLAIN (SELECT id FROM users) UNION (SELECT id FROM admins)",
-      'EXPLAIN (SELECT id, "analyze" FROM users) UNION (SELECT 1, 2)',
-      "EXPLAIN ((SELECT 1)) UNION (SELECT 2)",
-      "EXPLAIN (VALUES (1)) UNION (VALUES (2))",
-      "EXPLAIN (WITH x AS (SELECT 1) SELECT * FROM x)",
-    ])("allows %s", (sql) => {
-      expect(isReadOnlySQL(sql, "postgres")).toBe(true);
-    });
-
-    it.each([
-      // EXPLAIN ANALYZE with DML: Postgres executes the statement
-      "EXPLAIN ANALYZE DELETE FROM users",
-      "EXPLAIN (ANALYZE) DELETE FROM users",
-      "EXPLAIN ANALYZE SELECT * INTO new_table FROM users",
-      "EXPLAIN ANALYZE VERBOSE DELETE FROM users",
-      // PostgreSQL accepts ANALYSE wherever it accepts ANALYZE (#501).
-      "EXPLAIN ANALYSE DELETE FROM users",
-      "EXPLAIN ANALYSE VERBOSE DELETE FROM users",
-      "EXPLAIN (ANALYSE) DELETE FROM users",
-      "EXPLAIN (VERBOSE, ANALYSE true) DELETE FROM users",
-      // A quoted option name is still the option to PostgreSQL, but it is
-      // stripped before classification, so the list cannot be shown to be safe.
-      'EXPLAIN ("analyze") DELETE FROM users',
-      'EXPLAIN ("analyze" true) DELETE FROM users',
-      'EXPLAIN (VERBOSE, "analyze") DELETE FROM users',
-      'EXPLAIN (U&"\\0061nalyze") DELETE FROM users',
-      // An unrecognized option might be one that executes the statement
-      "EXPLAIN (RUN_IT) DELETE FROM users",
-      // PostgreSQL applies options in order, so a later ANALYZE wins.
-      "EXPLAIN (ANALYZE false, ANALYZE) DELETE FROM users",
-    ])("rejects %s", (sql) => {
-      expect(isReadOnlySQL(sql, "postgres")).toBe(false);
-    });
-  });
-
   describe("SELECT INTO", () => {
     it.each<Case>([
-      ["SELECT INTO (Postgres table creation)", "postgres", "SELECT * INTO new_table FROM users"],
       ["SELECT INTO OUTFILE (MySQL)", "mysql", "SELECT * INTO OUTFILE '/tmp/data.csv' FROM users"],
       ["SELECT INTO with WHERE clause", "sqlserver", "SELECT id, name INTO backup_table FROM users WHERE active = true"],
-      ["WITH ... SELECT INTO", "postgres", "WITH cte AS (SELECT * FROM users) SELECT * INTO new_table FROM cte"],
     ])("rejects %s (%s)", rejects);
   });
 
@@ -294,15 +216,6 @@ describe("isReadOnlySQL", () => {
       ["mysql", "SELECT RELEASE_ALL_LOCKS()"],
       ["mariadb", "SELECT LOAD_FILE('/etc/passwd')"],
       ["mariadb", "SELECT get_lock('x', 10)"],
-      ["postgres", "SELECT pg_read_file('/etc/passwd')"],
-      ["postgres", "SELECT pg_read_binary_file('server.key')"],
-      ["postgres", "SELECT pg_ls_dir('/var/lib/postgresql')"],
-      // set_config is SET in function form; the session-scoped variant undoes
-      // the statement_timeout / search_path applied at connect (issue #448).
-      // Reading a setting through current_setting stays allowed; that pair is
-      // pinned together in sql-access-policy.test.ts.
-      ["postgres", "SELECT set_config('statement_timeout', '0', false)"],
-      ["postgres", "SELECT pg_catalog.set_config('search_path', 'pg_catalog,public', false)"],
       // SQL Server pass-through sources share the same call-position guard:
       // OPENQUERY's payload runs on the remote server, OPENROWSET(BULK) reads
       // server-side files, OPENDATASOURCE opens ad-hoc connections.
@@ -322,14 +235,11 @@ describe("isReadOnlySQL", () => {
 
     it("rejects an escape-hatch call buried in a subquery / FROM clause", () => {
       expect(isReadOnlySQL("SELECT * FROM (SELECT LOAD_FILE('/etc/passwd') AS x) t", "mysql")).toBe(false);
-      expect(isReadOnlySQL("WITH t AS (SELECT pg_read_file('x')) SELECT * FROM t", "postgres")).toBe(false);
     });
 
     it.each<Case>([
       ["a column", "mysql", "SELECT load_file FROM documents"],
       ["an alias", "mysql", "SELECT count(*) AS get_lock FROM t"],
-      ["a column", "postgres", "SELECT pg_read_file FROM audit"],
-      ["a column", "postgres", "SELECT set_config FROM audit"],
       ["a bare column (no call syntax)", "sqlserver", "SELECT openquery FROM logs"],
       ["an identifier that merely starts with the name", "sqlserver", "SELECT openquery_audit FROM logs"],
       ["a column", "oracle", "SELECT utl_http FROM audit_log"],
@@ -340,8 +250,6 @@ describe("isReadOnlySQL", () => {
       // load_file is MySQL's, and openquery is SQL Server's, so elsewhere even a
       // call of that name is fine.
       ["a column named after another dialect's function", "mysql", "SELECT pg_read_file FROM t"],
-      ["a column named after another dialect's function", "postgres", "SELECT load_file FROM t"],
-      ["a call of another dialect's function", "postgres", "SELECT * FROM openquery(a, b)"],
     ])("still allows %s named like an escape-hatch function (%s): %s", allows);
   });
 });

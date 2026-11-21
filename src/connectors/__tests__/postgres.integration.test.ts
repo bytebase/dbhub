@@ -456,6 +456,24 @@ describe('PostgreSQL Connector Integration Tests', () => {
   });
 
   describe('[sources.session] settings', () => {
+    it('matches parser string semantics in read-only transactions and restores the session', async () => {
+      await postgresTest.withConnector(
+        { poolMaxConnections: 1, sessionSettings: { standard_conforming_strings: false } },
+        async (connector) => {
+          const sql = "SHOW standard_conforming_strings";
+          expect((await connector.executeSQL(sql, {})).resultSets[0].rows)
+            .toEqual([{ standard_conforming_strings: 'off' }]);
+          expect((await connector.executeSQL(sql, { readonly: true })).resultSets[0].rows)
+            .toEqual([{ standard_conforming_strings: 'on' }]);
+          expect((await connector.executeSQL(sql, {})).resultSets[0].rows)
+            .toEqual([{ standard_conforming_strings: 'off' }]);
+          await expect(connector.executeSQL('SELECT 1 / 0', { readonly: true })).rejects.toThrow();
+          expect((await connector.executeSQL(sql, {})).resultSets[0].rows)
+            .toEqual([{ standard_conforming_strings: 'off' }]);
+        }
+      );
+    });
+
     it('should apply each setting to every new connection as its default', async () => {
       await postgresTest.withConnector(
         {

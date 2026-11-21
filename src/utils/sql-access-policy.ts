@@ -21,6 +21,7 @@ import {
   hasEscapeHatchFunction,
   sqlServerDynamicSqlPattern,
 } from "./allowed-keywords.js";
+import { classifyPostgresSQL } from "./postgres-sql.js";
 import { splitSQLStatementVariants, stripCommentsAndStringsVariants } from "./sql-parser.js";
 
 /**
@@ -91,6 +92,7 @@ export function isReadOnlyPolicy(policy: AccessPolicy): boolean {
  * the first matching keyword family.
  */
 export function classifyStatement(sql: string, connectorType: ConnectorType): StatementClass {
+  if (connectorType === "postgres") return classifyPostgresSQL(sql);
   if (isReadOnlySQL(sql, connectorType)) {
     return "read";
   }
@@ -107,6 +109,7 @@ export function classifyStatement(sql: string, connectorType: ConnectorType): St
  * among its statements wins.
  */
 export function classifySQL(sql: string, connectorType: ConnectorType): StatementClass {
+  if (connectorType === "postgres") return classifyPostgresSQL(sql);
   let strictest: StatementClass = "read";
   for (const statements of splitSQLStatementVariants(sql, connectorType)) {
     for (const statement of statements) {

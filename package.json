@@ -73,6 +73,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.18.2",
+    "libpg-query": "18.2.4",
     "ssh-config": "^5.0.3",
     "ssh2": "^1.16.0",
     "zod": "^4.2.0"

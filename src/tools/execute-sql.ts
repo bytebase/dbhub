@@ -8,6 +8,7 @@ import {
   runToolRequest,
   ToolError,
   toStatementsPayload,
+  unparsedSQLReason,
 } from "../utils/tool-handler-helpers.js";
 
 // Schema for execute_sql tool. The raw shape stays exported for consumers
@@ -49,8 +50,13 @@ export function createExecuteSqlToolHandler(sourceId?: string) {
         // statement's verdict)
         const policy = policyFromReadonly(toolConfig?.readonly);
         if (sqlVerdict(policy, sql, connector.id) === "deny") {
+          // SQL the parser cannot read is refused too; say so, or a typo reads
+          // as a blocked write.
+          const unparsed = unparsedSQLReason(sql, connector.id);
           throw new ToolError(
-            `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`,
+            unparsed
+              ? `Read-only mode is enabled, and this SQL could not be parsed as PostgreSQL, so it was not run: ${unparsed}`
+              : `Read-only mode is enabled. Only the following SQL operations are allowed: ${allowedKeywords[connector.id]?.join(", ") || "none"}`,
             "READONLY_VIOLATION"
           );
         }

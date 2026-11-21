@@ -147,6 +147,22 @@ describe('execute-sql tool', () => {
       expect(mockConnector.executeSQL).not.toHaveBeenCalled();
     });
 
+    it('should say so when PostgreSQL SQL was refused because it could not be parsed', async () => {
+      const postgres = createMockConnector('postgres', 'pg_source');
+      mockGetCurrentConnector.mockReturnValue(postgres);
+
+      const { result, parsed } = await execute(
+        'SELECT * FORM users',
+        createExecuteSqlToolHandler('pg_source')
+      );
+
+      expect(result.isError).toBe(true);
+      expect(parsed.code).toBe('READONLY_VIOLATION');
+      expect(parsed.error).toContain('could not be parsed as PostgreSQL');
+      expect(parsed.error).toContain('syntax error at or near "FORM" (position 10)');
+      expect(postgres.executeSQL).not.toHaveBeenCalled();
+    });
+
     it('should forward the connector dialect to the classifier (MySQL conditional comment bypass)', async () => {
       mockGetCurrentConnector.mockReturnValue(createMockConnector('mysql', 'mysql_source'));
 

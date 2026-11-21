@@ -5,6 +5,7 @@ import path from 'path';
 export default defineConfig({
   entry: ['src/index.ts'],
   format: ['esm'],
+  target: 'node22', // Matches package.json; supports WASM initialization via top-level await.
   dts: true,
   clean: true,
   outDir: 'dist',
@@ -20,6 +21,7 @@ export default defineConfig({
   // supported"). Cloud auth packages are externalized to keep their large
   // dependency trees out of the bundle.
   external: [
+    'libpg-query', // Preserve the WASM loader and its adjacent binary.
     'pg',
     'mysql2',
     'mariadb',

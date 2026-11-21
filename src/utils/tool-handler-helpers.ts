@@ -11,6 +11,7 @@ import { getClientIdentifier } from "./client-identifier.js";
 import { classifyConnectionError } from "./error-classifier.js";
 import { createToolErrorResponse, createToolSuccessResponse } from "./response-formatter.js";
 import { normalizeSourceId } from "./normalize-id.js";
+import { postgresSyntaxError } from "./postgres-sql.js";
 
 /**
  * Request metadata for tracking
@@ -68,18 +69,35 @@ export function resolveTrackedToolName(sourceId: string | undefined, baseName: s
 }
 
 /**
+ * For a read-only denial: the parser's error when the SQL was refused because
+ * it could not be read, rather than because it writes. PostgreSQL only; other
+ * dialects are classified by keyword and have no parser to fail. Without it a
+ * typo reads as a blocked write and gives the caller nothing to correct.
+ */
+export function unparsedSQLReason(sql: string, connectorType: ConnectorType): string | null {
+  return connectorType === "postgres" ? postgresSyntaxError(sql) : null;
+}
+
+/**
  * Create a readonly violation error message
  * @param toolName Tool name for error message
  * @param sourceId Source ID for error message
  * @param connectorType Database connector type
+ * @param statement The tool's SQL, to say so when it was refused as unparseable
  * @returns Formatted error message
  */
 export function createReadonlyViolationMessage(
   toolName: string,
   sourceId: string,
-  connectorType: ConnectorType
+  connectorType: ConnectorType,
+  statement?: string
 ): string {
-  return `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'. Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
+  const prefix = `Tool '${toolName}' cannot execute in readonly mode for source '${sourceId}'.`;
+  const unparsed = statement === undefined ? null : unparsedSQLReason(statement, connectorType);
+  if (unparsed) {
+    return `${prefix} Its statement could not be parsed as PostgreSQL, so it was not run: ${unparsed}`;
+  }
+  return `${prefix} Only read-only SQL operations are allowed: ${allowedKeywords[connectorType]?.join(", ") || "none"}`;
 }
 
 /**

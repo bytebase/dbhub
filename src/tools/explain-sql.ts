@@ -9,6 +9,7 @@ import {
   nonExecutingExplainOptions,
   readExplainOptionList,
 } from "../utils/allowed-keywords.js";
+import { validatePostgresExplain } from "../utils/postgres-sql.js";
 import type { ConnectorType } from "../connectors/interface.js";
 import { BUILTIN_TOOL_EXPLAIN_SQL } from "./builtin-tools.js";
 import { resolveTrackedToolName, runToolRequest, ToolError } from "../utils/tool-handler-helpers.js";
@@ -57,6 +58,7 @@ const ANALYZE_NOT_SUPPORTED =
  * statements past the single EXPLAIN we emit.
  */
 function validateExplainInput(sql: string, connectorType: ConnectorType): string | null {
+  if (connectorType === "postgres") return validatePostgresExplain(sql);
   // Every reading of the dialect's string syntax must see one statement, since
   // the server's setting (e.g. MySQL NO_BACKSLASH_ESCAPES) is not known here.
   const variants = splitSQLStatementVariants(sql, connectorType);

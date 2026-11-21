@@ -74,6 +74,9 @@ describe("stripCommentsAndStrings", () => {
       ["a $tag$ with an underscore in the tag name", "postgres", "DO $fn_body$ SELECT 1; $fn_body$", "DO  "],
       ["a dollar-quote after other content", "postgres", "SELECT 1; DO $$ BEGIN NULL; END; $$", "SELECT 1; DO  "],
       ["adjacent dollar-quoted blocks", "postgres", "SELECT $$a$$, $$b$$", "SELECT  ,  "],
+      // `$` is an identifier character, so this $$ opens nothing and the comment is a comment.
+      ["a $$ ending an identifier, which is not a dollar-quote", "postgres", "SELECT 1 AS a$$ -- $$ ; COMMIT", "SELECT 1 AS a$$  "],
+      ["a $$ block right after a number", "postgres", "SELECT 1$$;$$", "SELECT 1 "],
       ["a $tag$ with digits after the first character", "postgres", "DO $tag1$ body; $tag1$", "DO  "],
       ["an $outer$ block that a $$ inside it does not close", "postgres", "DO $outer$ x := 'text; with $$ inside'; $outer$; SELECT 1", "DO  ; SELECT 1"],
       ["dollar-quoting, left as plain text", "mysql", "SELECT $$a$$", "SELECT $$a$$"],
@@ -167,6 +170,12 @@ describe("splitSQLStatements", () => {
     it.each<[string, ConnectorType, string, string[]]>([
       ["semicolons inside a $$ block", "postgres", "DO $$ BEGIN RAISE NOTICE 'test'; END; $$", ["DO $$ BEGIN RAISE NOTICE 'test'; END; $$"]],
       ["a statement after a dollar-quoted block ends", "postgres", "DO $$ BEGIN NULL; END; $$; SELECT 1", ["DO $$ BEGIN NULL; END; $$", "SELECT 1"]],
+      [
+        "no split in a comment after an identifier ending in $$",
+        "postgres",
+        "SELECT 1 AS a$$ -- $$ ; COMMIT; DELETE FROM t",
+        ["SELECT 1 AS a$$ -- $$ ; COMMIT; DELETE FROM t"],
+      ],
       [
         "semicolons inside a $tag$ function body",
         "postgres",
