@@ -179,10 +179,6 @@ This tool can reduce token usage by 90-99% compared to listing all objects:
 Always start with `detail_level: "names"` and only request `"summary"` or `"full"` when you need additional information. This minimizes token usage while exploring the database.
 </Tip>
 
-## PostgreSQL Index Metadata
-
-Index `columns` follow the declared key order, including expressions. Non-key `INCLUDE` columns appear separately as `included_columns` when present; they do not participate in uniqueness. This applies to table `full` details and index `summary`/`full` details.
-
 ## Table and Column Comments
 
 When using `detail_level: "summary"` or `"full"`, the tool includes database comments/descriptions if they exist. This helps LLMs understand the purpose of tables and columns, especially in complex or legacy databases.
