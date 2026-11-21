@@ -243,7 +243,9 @@ export class MySQLConnector extends MySQLFamilyConnector {
   dsnParser = new MySQLDSNParser();
 
   private pool: mysql.Pool | null = null;
-  private queryTimeoutMs?: number;
+  // Client-side fallback deadline, which trails the server-side limit (see
+  // query-timeout.ts).
+  private clientQueryTimeoutMs?: number;
   // connection_timeout also bounds the wait for a free pool connection
   private connectionTimeoutMs?: number;
   // How the read-only backstop takes effect on this server (which session
@@ -260,16 +262,24 @@ export class MySQLConnector extends MySQLFamilyConnector {
   async connect(dsn: string, initScript?: string, config?: ConnectorConfig): Promise<void> {
     try {
       const connectionOptions = await this.dsnParser.parse(dsn, config);
+      const queryTimeoutMs =
+        config?.queryTimeoutSeconds !== undefined
+          ? Math.ceil(config.queryTimeoutSeconds * 1000)
+          : undefined;
+      // Client-side fallback, applied per query (see query-timeout.ts).
+      // Resolved before the pool exists: clientQueryTimeoutMs throws on a limit
+      // no timer can represent, and connect() is where that has to surface,
+      // not executeSQL with a connection already checked out.
+      this.clientQueryTimeoutMs =
+        queryTimeoutMs !== undefined ? clientQueryTimeoutMs(queryTimeoutMs) : undefined;
+
       this.pool = mysql.createPool(connectionOptions);
       this.connectionTimeoutMs =
         config?.connectionTimeoutSeconds !== undefined
           ? config.connectionTimeoutSeconds * 1000
           : undefined;
 
-      if (config?.queryTimeoutSeconds !== undefined) {
-        const queryTimeoutMs = Math.ceil(config.queryTimeoutSeconds * 1000);
-        // Client-side fallback, applied per query (see query-timeout.ts).
-        this.queryTimeoutMs = queryTimeoutMs;
+      if (queryTimeoutMs !== undefined) {
         // Server-side limit: have MySQL itself stop a read-only SELECT that
         // runs past the limit, as PostgreSQL (statement_timeout) and MariaDB
         // (max_statement_time) already do. It is a session variable, so it is
@@ -373,9 +383,7 @@ export class MySQLConnector extends MySQLFamilyConnector {
     // Captured up front, before a timeout can lead to conn.destroy() below.
     const threadId = conn.threadId;
     let isConnectionDiscarded = false;
-    // The client-side deadline trails the server-side one (see query-timeout.ts).
-    const timeout =
-      this.queryTimeoutMs !== undefined ? clientQueryTimeoutMs(this.queryTimeoutMs) : undefined;
+    const timeout = this.clientQueryTimeoutMs;
     try {
       // Engine-level read-only backstop (shared with MariaDB); see
       // withReadOnlyTransaction for the semantics and the TiDB/Doris caveats.

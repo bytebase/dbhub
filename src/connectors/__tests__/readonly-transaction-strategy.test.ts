@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { CLIENT_QUERY_TIMEOUT_GRACE_MS } from "../../utils/query-timeout.js";
+import {
+  CLIENT_QUERY_TIMEOUT_GRACE_MS,
+  MAX_QUERY_TIMEOUT_SECONDS,
+} from "../../utils/query-timeout.js";
 import {
   READ_ONLY_OPEN,
   readOnlyFlagQuery,
@@ -415,6 +418,23 @@ describe("readonly transaction strategy", () => {
           timeout: 30_000 + CLIENT_QUERY_TIMEOUT_GRACE_MS,
         })
       );
+    });
+
+    // The config loader bounds query_timeout; this covers a caller that hands
+    // the connector a ConnectorConfig directly.
+    it.each([
+      ["NaN", Number.NaN],
+      ["Infinity", Number.POSITIVE_INFINITY],
+      ["a value past the timer range", MAX_QUERY_TIMEOUT_SECONDS + 1],
+    ])("rejects %s at connect, before any connection is borrowed", async (_label, seconds) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { pool } = makeFakePool(MYSQL_VERSION, asMysql);
+
+      await expect(connectMysql(pool, { queryTimeoutSeconds: seconds })).rejects.toThrow(
+        RangeError
+      );
+      expect(mysqlCreatePool).not.toHaveBeenCalled();
+      expect(pool.getConnection).not.toHaveBeenCalled();
     });
   });
 
