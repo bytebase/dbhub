@@ -88,17 +88,17 @@ DBHub includes a [built-in web interface](https://dbhub.ai/workbench/overview) f
 <table>
   <tr>
     <td colspan="2">
-      <strong>Workbench overview</strong><br />
+      <strong>Workbench overview</strong><br /><br />
       <a href="docs/images/workbench/workbench.webp"><img src="docs/images/workbench/workbench.webp" alt="DBHub Workbench showing connection details and available tools" width="100%" /></a>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <strong>Execute SQL</strong><br />
+      <strong>Execute SQL</strong><br /><br />
       <a href="docs/images/workbench/execute-sql.webp"><img src="docs/images/workbench/execute-sql.webp" alt="SQL editor showing an employee query and its results" width="100%" /></a>
     </td>
     <td width="50%" valign="top">
-      <strong>Request traces</strong><br />
+      <strong>Request traces</strong><br /><br />
       <a href="docs/images/workbench/request-trace.webp"><img src="docs/images/workbench/request-trace.webp" alt="Recent SQL requests with execution times and client details" width="100%" /></a>
     </td>
   </tr>
