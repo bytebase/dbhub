@@ -163,6 +163,29 @@ describe('execute-sql tool', () => {
       expect(postgres.executeSQL).not.toHaveBeenCalled();
     });
 
+    it('should not let a quote inside a MySQL # comment hide a write', async () => {
+      const mysql = createMockConnector('mysql', 'mysql_source');
+      mockGetCurrentConnector.mockReturnValue(mysql);
+
+      const { parsed } = await execute(
+        "SELECT 1 # it's a note\n; DROP TABLE users",
+        createExecuteSqlToolHandler('mysql_source')
+      );
+
+      expect(parsed.code).toBe('READONLY_VIOLATION');
+      expect(mysql.executeSQL).not.toHaveBeenCalled();
+    });
+
+    it('should allow a query that starts with a MySQL # comment', async () => {
+      const mysql = createMockConnector('mysql', 'mysql_source');
+      mockGetCurrentConnector.mockReturnValue(mysql);
+      vi.mocked(mysql.executeSQL).mockResolvedValue({ resultSets: [{ rows: [], rowCount: 0 }] });
+
+      const { parsed } = await execute('# list users\nSELECT * FROM users', createExecuteSqlToolHandler('mysql_source'));
+
+      expect(parsed.success).toBe(true);
+    });
+
     it('should forward the connector dialect to the classifier (MySQL conditional comment bypass)', async () => {
       mockGetCurrentConnector.mockReturnValue(createMockConnector('mysql', 'mysql_source'));
 

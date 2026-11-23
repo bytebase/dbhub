@@ -152,3 +152,31 @@ describe("classifySQL with backslash-escaped quotes", () => {
     expect(classifySQL(sql, dialect)).toBe("read");
   });
 });
+
+describe("classifySQL with MySQL/MariaDB # comments", () => {
+  it.each([
+    // A quote inside the comment must not open a string that hides the DROP
+    ["mysql", "SELECT 1 # it's a note\n; DROP TABLE t", "ddl"],
+    ["mariadb", "SELECT 1 # it's a note\n; DROP TABLE t", "ddl"],
+    ["mysql", 'SELECT 1 # say "hi\n; DROP TABLE t', "ddl"],
+    ["mysql", "SELECT 1 # note\n; DROP TABLE t", "ddl"],
+  ] as const)("%s: %j is %s", (dialect, sql, expected) => {
+    expect(classifySQL(sql, dialect)).toBe(expected);
+  });
+
+  it.each([
+    ["mysql", "# list users\nSELECT * FROM users"],
+    ["mariadb", "# list users\nSELECT * FROM users"],
+    ["mysql", "SELECT * FROM users # DROP TABLE t"],
+    ["mysql", "SELECT '#' AS a, `#x` AS b FROM t"],
+  ] as const)("%s: %j stays read", (dialect, sql) => {
+    expect(classifySQL(sql, dialect)).toBe("read");
+  });
+
+  it.each(["postgres", "sqlite", "sqlserver"] as const)(
+    "%s: # is not a comment",
+    (dialect) => {
+      expect(classifySQL("# note\nSELECT 1", dialect)).not.toBe("read");
+    }
+  );
+});

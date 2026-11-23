@@ -42,6 +42,19 @@ function scanSingleLineCommentMySQL(sql: string, i: number): SQLToken | null {
   return { type: TokenType.Comment, end: j };
 }
 
+/**
+ * MySQL/MariaDB `#` comment: from a `#` to the end of the line. Unlike `--`,
+ * it needs no whitespace after it and does not depend on sql_mode. A quote
+ * inside it is not a string start, so reading it as plain text would let the
+ * rest of the line open a string that swallows the statements after it.
+ */
+function scanHashComment(sql: string, i: number): SQLToken | null {
+  if (sql[i] !== "#") { return null; }
+  let j = i;
+  while (j < sql.length && sql[j] !== "\n") { j++; }
+  return { type: TokenType.Comment, end: j };
+}
+
 function scanMultiLineComment(sql: string, i: number): SQLToken | null {
   if (sql[i] !== "/" || sql[i + 1] !== "*") { return null; }
   let j = i + 2;
@@ -249,6 +262,7 @@ function scanTokenPostgres(sql: string, i: number): SQLToken {
 
 function scanTokenMySQL(sql: string, i: number): SQLToken {
   return scanSingleLineCommentMySQL(sql, i)
+    ?? scanHashComment(sql, i)
     ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedStringBackslash(sql, i)
     ?? scanDoubleQuotedStringBackslash(sql, i)
@@ -259,6 +273,7 @@ function scanTokenMySQL(sql: string, i: number): SQLToken {
 /** MySQL/MariaDB with sql_mode ANSI_QUOTES: "..." is an identifier, with no backslash escapes. */
 function scanTokenMySQLAnsiQuotes(sql: string, i: number): SQLToken {
   return scanSingleLineCommentMySQL(sql, i)
+    ?? scanHashComment(sql, i)
     ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedStringBackslash(sql, i)
     ?? scanDoubleQuotedString(sql, i)
@@ -272,6 +287,7 @@ function scanTokenMySQLAnsiQuotes(sql: string, i: number): SQLToken {
  */
 function scanTokenMySQLNoBackslashEscapes(sql: string, i: number): SQLToken {
   return scanSingleLineCommentMySQL(sql, i)
+    ?? scanHashComment(sql, i)
     ?? scanMultiLineCommentMySQL(sql, i)
     ?? scanSingleQuotedString(sql, i)
     ?? scanDoubleQuotedString(sql, i)

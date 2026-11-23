@@ -363,3 +363,33 @@ describe("ClickHouse syntax", () => {
     ).toEqual(["SELECT 'a;b'", "// one; two\nSELECT `c;d` FROM t", "/* x; */ SELECT 3"]);
   });
 });
+
+describe("MySQL/MariaDB # comments", () => {
+  it.each(["mysql", "mariadb"] as const)("%s: a # comment runs to the end of the line", (dialect) => {
+    expect(stripCommentsAndStrings("SELECT 1 # DROP TABLE t\n, 2", dialect)).toBe("SELECT 1  \n, 2");
+    expect(splitSQLStatements("SELECT 1 # a; b\n; SELECT 2", dialect)).toEqual([
+      "SELECT 1 # a; b",
+      "SELECT 2",
+    ]);
+  });
+
+  it.each(["mysql", "mariadb"] as const)("%s: a quote in a # comment does not open a string", (dialect) => {
+    expect(splitSQLStatements("SELECT 1 # it's\n; SELECT 2", dialect)).toEqual([
+      "SELECT 1 # it's",
+      "SELECT 2",
+    ]);
+    for (const stripped of stripCommentsAndStringsVariants("SELECT 1 # it's\n; DROP TABLE t", dialect)) {
+      expect(stripped).toContain("DROP");
+    }
+  });
+
+  it.each(["mysql", "mariadb"] as const)("%s: # inside strings, backticks and block comments is literal", (dialect) => {
+    expect(splitSQLStatements("SELECT '#; x'; SELECT `a#;b`; SELECT 3", dialect)).toHaveLength(3);
+    expect(splitSQLStatements("SELECT /* # */ 1; SELECT 2", dialect)).toHaveLength(2);
+  });
+
+  it.each(["postgres", "sqlite", "sqlserver", "oracle"] as const)("%s: # is not a comment", (dialect) => {
+    expect(splitSQLStatements("SELECT 1 # a; b", dialect)).toEqual(["SELECT 1 # a", "b"]);
+    expect(stripCommentsAndStrings("SELECT 1 # x", dialect)).toBe("SELECT 1 # x");
+  });
+});
