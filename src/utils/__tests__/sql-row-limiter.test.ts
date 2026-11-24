@@ -146,6 +146,19 @@ describe("SQLRowLimiter", () => {
         "SELECT * FROM (SELECT * FROM users LIMIT 5, :count\n) AS subq LIMIT 100",
         "SELECT * FROM (SELECT * FROM users LIMIT 5, :count\n) AS subq LIMIT 101",
       ],
+      // SQLite: a negative count means no upper bound, and OFFSET is only legal after a LIMIT
+      [
+        "wraps LIMIT -1 OFFSET n instead of appending a second LIMIT",
+        "SELECT * FROM users ORDER BY id LIMIT -1 OFFSET 5",
+        "SELECT * FROM (SELECT * FROM users ORDER BY id LIMIT -1 OFFSET 5\n) AS subq LIMIT 100",
+        "SELECT * FROM (SELECT * FROM users ORDER BY id LIMIT -1 OFFSET 5\n) AS subq LIMIT 101",
+      ],
+      [
+        "wraps a negative count behind an offset",
+        "SELECT * FROM users LIMIT 5, -1;",
+        "SELECT * FROM (SELECT * FROM users LIMIT 5, -1\n) AS subq LIMIT 100;",
+        "SELECT * FROM (SELECT * FROM users LIMIT 5, -1\n) AS subq LIMIT 101;",
+      ],
       [
         "tightens LIMIT count OFFSET offset, leaving the offset alone",
         "SELECT * FROM users LIMIT 200 OFFSET 500",

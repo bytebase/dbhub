@@ -172,14 +172,16 @@ export class SQLRowLimiter {
    * offset and must never be read (or rewritten) as the row count.
    *
    * `value` is the literal row count, or null when the count is not a literal:
-   * a parameter placeholder ($1, ?, @p1), or, after a comma, anything else
+   * a parameter placeholder ($1, ?, @p1), a negative number (SQLite reads
+   * `LIMIT -1` as no upper bound, and `LIMIT -1 OFFSET n` is how it skips rows
+   * without capping them), or, after a comma, anything else
    * (`LIMIT 5, :n`). `index`/`length` span a literal count only, so it can be
    * tightened in place while an offset before it stays exactly as written.
    */
   private static findTopLevelLimit(sql: string, dialect?: ConnectorType): TopLevelClause | null {
     const match = this.findTopLevelMatch(
       sql,
-      /\(|\)|\blimit\s+(?:(\d+)|\$\d+|\?|@p\d+)(\s*,\s*(\d+)?)?/gi,
+      /\(|\)|\blimit\s+(?:(\d+)|-\s*\d+|\$\d+|\?|@p\d+)(\s*,\s*(\d+)?)?/gi,
       "last",
       dialect
     );

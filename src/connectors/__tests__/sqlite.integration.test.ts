@@ -321,6 +321,19 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBe(true);
     });
 
+    it('should apply maxRows to LIMIT -1 OFFSET n, the only way SQLite skips rows without a cap', async () => {
+      const all = await sqliteTest.connector.executeSQL('SELECT name FROM users ORDER BY name', {});
+      const skipped = all.resultSets[0].rows.length - 1;
+
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY name LIMIT -1 OFFSET 1',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(Math.min(2, skipped));
+      expect(result.resultSets[0].truncated).toBe(skipped > 2);
+    });
+
   });
 
   describe('DSN Path Parsing', () => {
