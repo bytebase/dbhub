@@ -15,6 +15,10 @@
 </a>
 </p>
 
+<p align="center">
+<a href="https://glama.ai/mcp/servers/bytebase/dbhub"><img src="https://glama.ai/mcp/servers/bytebase/dbhub/badges/score.svg" alt="bytebase/dbhub MCP server on Glama" /></a>
+</p>
+
 ```bash
             +------------------+    +--------------+    +------------------+
             |                  |    |              |    |                  |
