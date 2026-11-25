@@ -228,10 +228,13 @@ This page covers command-line flags and environment variables. For TOML configur
 
       <Note>
         The path is the **service name** (e.g. `FREEPDB1` on Oracle Database
-        Free). DBHub uses node-oracledb in Thin mode, so no Oracle Instant
-        Client is needed. `verify-full` validates the server certificate
-        against the system trust store; `sslrootcert` is not supported for
-        Oracle.
+        Free). DBHub uses node-oracledb in Thin mode by default, so no Oracle
+        Instant Client is needed. `verify-full` validates the server
+        certificate against the system trust store; `sslrootcert` is not
+        supported for Oracle. If the server requires Native Network Encryption
+        (`NJS-533` / `ORA-12660`), install Oracle Instant Client and set
+        `DBHUB_ORACLE_THICK=true` to use Thick mode; the Docker image does not
+        include Instant Client.
       </Note>
     </Tab>
 
