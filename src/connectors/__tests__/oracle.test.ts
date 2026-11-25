@@ -179,3 +179,43 @@ describe('OracleConnector session tags', () => {
     ]);
   });
 });
+
+describe('OracleConnector thick mode', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    { thick: 'true', expected: ['initOracleClient', 'createPool'] },
+    { thick: undefined, expected: ['createPool'] },
+  ])('with DBHUB_ORACLE_THICK=$thick calls $expected in order', async ({ thick, expected }) => {
+    vi.stubEnv('DBHUB_ORACLE_THICK', thick);
+    const calls: string[] = [];
+    const connection = {
+      execute: vi.fn(async () => ({ rows: [{ SCHEMA_NAME: 'APP' }] })),
+      commit: vi.fn(async () => {}),
+      rollback: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+    const pool = {
+      getConnection: vi.fn(async () => connection),
+      close: vi.fn(async () => {}),
+    };
+    // Stubbed so the test never loads the Oracle Client libraries.
+    vi.spyOn(oracledb, 'initOracleClient').mockImplementation(() => {
+      calls.push('initOracleClient');
+    });
+    vi.spyOn(oracledb, 'createPool').mockImplementation((async () => {
+      calls.push('createPool');
+      return pool;
+    }) as unknown as typeof oracledb.createPool);
+
+    const connector = new OracleConnector();
+    await connector.connect('oracle://app:secret@db/FREEPDB1');
+    await connector.disconnect();
+
+    // Thick mode is process-wide and must be enabled before the first pool exists.
+    expect(calls).toEqual(expected);
+  });
+});

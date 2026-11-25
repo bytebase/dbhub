@@ -182,8 +182,9 @@ export class OracleDSNParser implements DSNParser {
 }
 
 /**
- * Oracle connector, built on node-oracledb's Thin mode (pure JavaScript, no
- * Oracle Instant Client needed).
+ * Oracle connector, built on node-oracledb's Thin mode by default (pure
+ * JavaScript, no Oracle Instant Client needed). Set DBHUB_ORACLE_THICK=true to
+ * use Thick mode instead, which requires Oracle Instant Client.
  *
  * Identifier case: Oracle folds unquoted identifiers to upper case, so the
  * catalog stores `users` as `USERS`. Metadata lookups apply the same folding
@@ -229,6 +230,13 @@ export class OracleConnector implements Connector {
     try {
       const parsed = await this.dsnParser.parse(dsn, config);
       this.callTimeoutMs = parsed.callTimeoutMs;
+      // Thin mode (the default) cannot negotiate Oracle Native Network Encryption
+      // (NJS-533 / ORA-12660). DBHUB_ORACLE_THICK=true opts into Thick mode, which
+      // needs Oracle Instant Client. The mode is process-wide and must be set before
+      // the first pool; node-oracledb ignores repeat calls with the same arguments.
+      if (process.env.DBHUB_ORACLE_THICK === "true") {
+        oracledb.initOracleClient();
+      }
       this.pool = await oracledb.createPool(parsed.pool);
 
       // Resolve the session's default schema once; it doubles as the
