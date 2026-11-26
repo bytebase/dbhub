@@ -55,7 +55,7 @@ export interface ConnectionParams {
   wallet_password?: string; // Password of an encrypted ewallet.pem
   ssl_server_cert_dn?: string; // Expected server certificate DN, for hosts whose name does not match the certificate
   // SQL Server authentication options
-  authentication?: "ntlm" | "azure-active-directory-access-token";
+  authentication?: "ntlm" | "azure-active-directory-access-token" | "entra-service-principal";
   domain?: string; // Required for NTLM authentication
   applicationIntent?: string; // SQL Server only: "ReadOnly" or "ReadWrite", case-insensitive; ReadOnly routes to a readable secondary
 }

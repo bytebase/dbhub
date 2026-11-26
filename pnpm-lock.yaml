@@ -125,8 +125,8 @@ importers:
         specifier: ^3.4.0
         version: 3.4.2
       mssql:
-        specifier: ^11.0.1
-        version: 11.0.1
+        specifier: ^12.7.0
+        version: 12.8.1
       mysql2:
         specifier: ^3.13.0
         version: 3.14.1
@@ -356,6 +356,10 @@ packages:
     resolution: {integrity: sha512-nBrLsEWm4J2u5LpAPjxADTlq3trDgVZZXHNKabeXZtpq3d3AbN/KGO82R87rdDz5/lYB024rtEf10/q0urNgsA==}
     engines: {node: '>=18.0.0'}
 
+  '@azure/core-auth@1.11.0':
+    resolution: {integrity: sha512-IUZydyTUkDnYdstOW9pFOOUQlBjAepK5teihDE3x6yxsPJs/hsAaaYpeGxdxrgtOiJbBKSjKW7MDk7AEhb4LRg==}
+    engines: {node: '>=22.0.0'}
+
   '@azure/core-auth@1.9.0':
     resolution: {integrity: sha512-FPwHpZywuyasDSLMqJ6fhbOK3TqUdviZNF8OqRGA4W5Ewib2lEEZ+pBsYcBa88B2NGO/SEnYPGhyBqNlE8ilSw==}
     engines: {node: '>=18.0.0'}
@@ -376,6 +380,10 @@ packages:
     resolution: {integrity: sha512-YKWi9YuCU04B55h25cnOYZHxXYtEvQEbKST5vqRga7hWY9ydd3FZHdeQF8pyh+acWZvppw13M/LMGx0LABUVMA==}
     engines: {node: '>=18.0.0'}
 
+  '@azure/core-process@1.0.0':
+    resolution: {integrity: sha512-/shnJ+ooO8WPxDhPEeI/2oRQuubn16gZ6CvlbpWbEswZfzwI9tI/sMAHmF3x1LuQ9yZYXfLW3TjzGMLEC5blKg==}
+    engines: {node: '>=22.0.0'}
+
   '@azure/core-rest-pipeline@1.21.0':
     resolution: {integrity: sha512-a4MBwe/5WKbq9MIxikzgxLBbruC5qlkFYlBdI7Ev50Y7ib5Vo/Jvt5jnJo7NaWeJ908LCHL0S1Us4UMf1VoTfg==}
     engines: {node: '>=18.0.0'}
@@ -388,17 +396,33 @@ packages:
     resolution: {integrity: sha512-13IyjTQgABPARvG90+N2dXpC+hwp466XCdQXPCRlbWHgd3SJd5Q1VvaBGv6k1BIa4MQm6hAF1UBU1m8QUxV8sQ==}
     engines: {node: '>=18.0.0'}
 
+  '@azure/core-util@1.14.0':
+    resolution: {integrity: sha512-9n2pWK61veAuN0V20t9lOuoV4CFMdyAZ1ygZzvBGk/pBBJRib/PjL9PLXa/aI2CcPpyHfqVsxxqLCYl6uZlfDw==}
+    engines: {node: '>=22.0.0'}
+
   '@azure/identity@4.10.1':
     resolution: {integrity: sha512-YM/z6RxRtFlXUH2egAYF/FDPes+MUE6ZoknjEdaq7ebJMMNUzn9zCJ3bd2ZZZlkP0r1xKa88kolhFH/FGV7JnA==}
     engines: {node: '>=18.0.0'}
+
+  '@azure/identity@4.14.1':
+    resolution: {integrity: sha512-HHuuFrmN1uuF9D5A6aAo5eHzNFNX4Q+P4SksZqDKse5YaJFFy/zDLG3wXHEV2FVGgetZ3QM8jGURNBtnQYf1NQ==}
+    engines: {node: '>=22.0.0'}
 
   '@azure/keyvault-common@2.0.0':
     resolution: {integrity: sha512-wRLVaroQtOqfg60cxkzUkGKrKMsCP6uYXAOomOIysSMyt1/YM0eUn9LqieAWM8DLcU4+07Fio2YGpPeqUbpP9w==}
     engines: {node: '>=18.0.0'}
 
+  '@azure/keyvault-common@2.1.1':
+    resolution: {integrity: sha512-SxpomJRTBfDTQnuii3w10WnZNQJGPNi15tRPdPUQz7BqyB3yk976knEueS7R0H9kSLtXbP0wJZXRh0EbRTQ0lw==}
+    engines: {node: '>=22.0.0'}
+
   '@azure/keyvault-keys@4.10.0':
     resolution: {integrity: sha512-eDT7iXoBTRZ2n3fLiftuGJFD+yjkiB1GNqzU2KbY1TLYeXeSPVTVgn2eJ5vmRTZ11978jy2Kg2wI7xa9Tyr8ag==}
     engines: {node: '>=18.0.0'}
+
+  '@azure/keyvault-keys@4.11.0':
+    resolution: {integrity: sha512-aj4FiVbwimC/avV4SKJ2ZAmkK1H7fh4XWHYZVBogDRlbUJHuNTZqMRlOI4QKhIvqHQhWMryw2hNtsxyvjY9HHw==}
+    engines: {node: '>=22.0.0'}
 
   '@azure/logger@1.2.0':
     resolution: {integrity: sha512-0hKEzLhpw+ZTAfNJyRrn6s+V0nDWzXk9OjBr2TiGIu0OfMr5s2V4FpKLTAK3Ca5r5OKLbf4hkOGDPyiRjie/jA==}
@@ -408,13 +432,25 @@ packages:
     resolution: {integrity: sha512-oTp2zhVljB2CRp87swOTsBcqLDrvZq9In+yDMBzuuMN4z2wrIU6ITHBZlLfs+FaAVmM1zY3k7ITekXaJ2bsDKA==}
     engines: {node: '>=0.8.0'}
 
+  '@azure/msal-browser@5.30.0':
+    resolution: {integrity: sha512-o/ADxWxEFcVrE65a7ssOGuxnivq8lcy+2hSGlOOwtn0gGd6iiwl3q8/BMVRorYE81UB/r4B+8WGEUxWnqP7ryA==}
+    engines: {node: '>=0.8.0'}
+
   '@azure/msal-common@15.7.0':
     resolution: {integrity: sha512-m9M5hoFoxhe/HlXNVa4qBHekrX60CVPkWzsjhKQGuzw/OPOmurosKRPDIMn8fug/E1hHI5v33DvT1LVJfItjcg==}
+    engines: {node: '>=0.8.0'}
+
+  '@azure/msal-common@16.17.0':
+    resolution: {integrity: sha512-rNvtEm7Axzj18neIk0C8kjr1ZXbJsHkWDqGedCfOiLVBjSCxWBcbJ26/I7g9owoeGKUoyrOgs73cIk7WxLd9qA==}
     engines: {node: '>=0.8.0'}
 
   '@azure/msal-node@3.6.0':
     resolution: {integrity: sha512-MRZ38Ou6l9LiRkz/968mG0czfIvD1PxMZ/3Jyz5k00ZMnhNOwv+DIliEcy//laoWDobAAq+/cz97xefCcHPgjg==}
     engines: {node: '>=16'}
+
+  '@azure/msal-node@7.2.3':
+    resolution: {integrity: sha512-eRIo5XuQAJrubo4514gEnmREKI35045LItjucOEK/YNQYj3LhEpYEbBdqjlu/wmd9Rcqp2c3GJ4ynFoEqby3sg==}
+    engines: {node: '>=20'}
 
   '@babel/code-frame@7.27.1':
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
@@ -1298,8 +1334,8 @@ packages:
   '@tanstack/virtual-core@3.13.13':
     resolution: {integrity: sha512-uQFoSdKKf5S8k51W5t7b2qpfkyIbdHMzAn+AMQvHPxKUPeo1SsGaA4JRISQT87jm28b7z8OEqPcg1IOZagQHcA==}
 
-  '@tediousjs/connection-string@0.5.0':
-    resolution: {integrity: sha512-7qSgZbincDDDFyRweCIEvZULFAw5iz/DeunhvuxpL31nfntX3P4Yd4HkHBRg9H8CdqY1e5WFN1PZIz/REL9MVQ==}
+  '@tediousjs/connection-string@1.1.3':
+    resolution: {integrity: sha512-9ZCb//U/Ua1XCDRPyeGPUXG5HGHpoq/6QxPv79q17ntBD5YeEGBQ0q2WlAfr9YvYOkcMRAXFUNY/qfJ6dheWDg==}
 
   '@testcontainers/clickhouse@11.14.0':
     resolution: {integrity: sha512-kjsXHAHiL5kmF0xMg5SXOioVz7ss8hPaManDjmb3rgkM3HMh2xXTbIuN7lYmZIJYAoLNf7NTT7/16MdOs4xhYw==}
@@ -1432,6 +1468,10 @@ packages:
   '@typespec/ts-http-runtime@0.2.3':
     resolution: {integrity: sha512-oRhjSzcVjX8ExyaF8hC0zzTqxlVuRlgMHL/Bh4w3xB9+wjbm0FpXylVU/lBrn+kgphwYTrOk3tp+AVShGmlYCg==}
     engines: {node: '>=18.0.0'}
+
+  '@typespec/ts-http-runtime@0.3.11':
+    resolution: {integrity: sha512-KZlacW7zFdcIOAcpNiV5U9fy0Tfgw7xdEc4rVyuUtQS+UR1Sn32PXuAz+AJ70Y0yzTWh62/pEEpFmWUJl6YySw==}
+    engines: {node: '>=22.0.0'}
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -1594,6 +1634,9 @@ packages:
 
   bl@6.1.0:
     resolution: {integrity: sha512-ClDyJGQkc8ZtzdAAbAwBmhMSpwN/sC9HA8jxdYm6nVUbCfZbe2mgza4qh7AuEYyEPB/c4Kznf9s66bnsKMQDjw==}
+
+  bl@6.1.6:
+    resolution: {integrity: sha512-jLsPgN/YSvPUg9UX0Kd73CXpm2Psg9FxMeCSXnk3WBO3CMT10JMwijubhGfHCnFu6TPn1ei3b975dxv7K2pWVg==}
 
   body-parser@1.20.3:
     resolution: {integrity: sha512-7rAxByjUMqQ3/bHJy7D6OGXvx/MMc4IqBn/X0fcM1QUcAItpZrBEYhWGem+tzXH90c+G01ypMcYJBO9Y30203g==}
@@ -1822,6 +1865,10 @@ packages:
 
   default-browser@5.2.1:
     resolution: {integrity: sha512-WY/3TUME0x3KPYdRRxEJJvXRHV4PyPoUsxtZa78lwItwRQRHhd2U9xOscaT/YTf8uCXIAjeJOFBVEh/7FtD8Xg==}
+    engines: {node: '>=18'}
+
+  default-browser@5.5.1:
+    resolution: {integrity: sha512-m1pAzaJgZ/gssEqlOhJkPJp8Xly7QyW6xcrkUa2KKcDeDSEMP7X8xipU3snUcfisTQx0w1AGae+9UtJSfVnXGw==}
     engines: {node: '>=18'}
 
   define-lazy-prop@3.0.0:
@@ -2127,6 +2174,10 @@ packages:
     resolution: {integrity: sha512-4fCk79wshMdzMp2rH06qWrJE4iolqLhCUH+OiuIgU++RB0+94NlDL81atO7GX55uUKueo0txHNtvEyI6D7WdMw==}
     engines: {node: '>=0.10.0'}
 
+  iconv-lite@0.7.3:
+    resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
+    engines: {node: '>=0.10.0'}
+
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
 
@@ -2153,6 +2204,10 @@ packages:
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
+
+  is-in-ssh@1.0.0:
+    resolution: {integrity: sha512-jYa6Q9rH90kR1vKB6NM7qqd1mge3Fx4Dhw5TVlK1MUBqhEOuCagrEHMevNuCcbECmXZ0ThXkRm+Ymr51HwEPAw==}
+    engines: {node: '>=20'}
 
   is-inside-container@1.0.0:
     resolution: {integrity: sha512-KIYLCCJghfHZxqjYBE7rEy0OBuTd5xCHS7tHVgvCLkx7StIoaxwNW3hCALgEUjFfeRk+MG/Qxmp/vtETEF3tRA==}
@@ -2446,9 +2501,9 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  mssql@11.0.1:
-    resolution: {integrity: sha512-KlGNsugoT90enKlR8/G36H0kTxPthDhmtNUCwEHvgRza5Cjpjoj+P2X6eMpFUDN7pFrJZsKadL4x990G8RBE1w==}
-    engines: {node: '>=18'}
+  mssql@12.8.1:
+    resolution: {integrity: sha512-Fyj4qtXxHbOPYoJB3vpb/+zy132CVkx710Etxh694Y0XScZLT/Q3sRXS1+uaph9hr3c28ykX8zyvjXo+QOnzVQ==}
+    engines: {node: '>=18.19.0'}
     hasBin: true
 
   mute-stream@1.0.0:
@@ -2510,6 +2565,10 @@ packages:
   open@10.1.2:
     resolution: {integrity: sha512-cxN6aIDPz6rm8hbebcP7vrQNhvRcveZoJU72Y7vskh4oIm+BZwBECnx5nTmrlres1Qapvx27Qo1Auukpf8PKXw==}
     engines: {node: '>=18'}
+
+  open@11.0.4:
+    resolution: {integrity: sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg==}
+    engines: {node: '>=20'}
 
   openapi-typescript@7.10.1:
     resolution: {integrity: sha512-rBcU8bjKGGZQT4K2ekSTY2Q5veOQbVG/lTKZ49DeCyT9z62hM2Vj/LLHjDHC9W7LJG8YMHcdXpRZDqC1ojB/lw==}
@@ -2648,6 +2707,10 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
+  powershell-utils@0.2.1:
+    resolution: {integrity: sha512-C+y9x90UElAddDZmV4qOx9W53B61PO7cIqWz2dQsWlwswuq4mr8NEwytdGKboYbQlGZ3awrkTeNvcZiZNHnQ8A==}
+    engines: {node: '>=20'}
+
   prettier@3.5.3:
     resolution: {integrity: sha512-QQtaxnoDJeAkDvDKWCLiwIXkTgRhwYDEQCghU9Z6q03iyek/rxRh/2lC3HB7P8sWT2xC/y5JDctPLBIGzHKbhw==}
     engines: {node: '>=14'}
@@ -2771,9 +2834,6 @@ packages:
   retry@0.12.0:
     resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
     engines: {node: '>= 4'}
-
-  rfdc@1.4.1:
-    resolution: {integrity: sha512-q1b3N5QkRUWUl7iyylaaj3kOpIT0N2i9MqIEQXP73GVsN9cw3fdx8X63cEmWhJGi2PPCF23Ijp7ktmd39rawIA==}
 
   rollup@4.43.0:
     resolution: {integrity: sha512-wdN2Kd3Twh8MAEOEJZsuxuLKCsBEo4PVNLK6tQWAn10VhsVewQLzcucMgLolRlhFybGxfclbPeEYBaP6RvUFGg==}
@@ -2993,6 +3053,10 @@ packages:
   tedious@18.6.1:
     resolution: {integrity: sha512-9AvErXXQTd6l7TDd5EmM+nxbOGyhnmdbp/8c3pw+tjaiSXW9usME90ET/CRG1LN1Y9tPMtz/p83z4Q97B4DDpw==}
     engines: {node: '>=18'}
+
+  tedious@20.4.3:
+    resolution: {integrity: sha512-ivH+3CjagU2fndrUeqKsWH5n8SOhyn74RYYTL8Rjcgz/4Sbvqjj/zcg5mpTAmOYnXxr0+59nQShv0HMmMaSQZA==}
+    engines: {node: '>=22'}
 
   testcontainers@11.0.3:
     resolution: {integrity: sha512-Xu6ZAaE1FaLyHzFSYdCsd+xMPxUegUjkum0r6zgO8SinnFDHRX/PllIHMt1D+DVUmJqBvPQI6vge/J5jgE5vng==}
@@ -3273,6 +3337,10 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
+
+  wsl-utils@1.0.1:
+    resolution: {integrity: sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ==}
+    engines: {node: '>=20'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -3766,6 +3834,15 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@azure/core-auth@1.11.0':
+    dependencies:
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-util': 1.14.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@azure/core-auth@1.9.0':
     dependencies:
       '@azure/abort-controller': 2.1.2
@@ -3807,6 +3884,9 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
+  '@azure/core-process@1.0.0':
+    optional: true
+
   '@azure/core-rest-pipeline@1.21.0':
     dependencies:
       '@azure/abort-controller': 2.1.2
@@ -3831,6 +3911,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@azure/core-util@1.14.0':
+    dependencies:
+      '@azure/abort-controller': 2.1.2
+      '@typespec/ts-http-runtime': 0.3.11
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@azure/identity@4.10.1':
     dependencies:
       '@azure/abort-controller': 2.1.2
@@ -3847,6 +3936,24 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@azure/identity@4.14.1':
+    dependencies:
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.11.0
+      '@azure/core-client': 1.9.4
+      '@azure/core-process': 1.0.0
+      '@azure/core-rest-pipeline': 1.21.0
+      '@azure/core-tracing': 1.2.0
+      '@azure/core-util': 1.12.0
+      '@azure/logger': 1.2.0
+      '@azure/msal-browser': 5.30.0
+      '@azure/msal-node': 7.2.3
+      open: 11.0.4
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@azure/keyvault-common@2.0.0':
     dependencies:
       '@azure/abort-controller': 2.1.2
@@ -3859,6 +3966,20 @@ snapshots:
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
+
+  '@azure/keyvault-common@2.1.1':
+    dependencies:
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.11.0
+      '@azure/core-rest-pipeline': 1.21.0
+      '@azure/core-tracing': 1.2.0
+      '@azure/core-util': 1.12.0
+      '@azure/logger': 1.2.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
 
   '@azure/keyvault-keys@4.10.0':
     dependencies:
@@ -3877,6 +3998,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@azure/keyvault-keys@4.11.0':
+    dependencies:
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/core-auth': 1.11.0
+      '@azure/core-lro': 2.7.2
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.21.0
+      '@azure/core-tracing': 1.2.0
+      '@azure/core-util': 1.12.0
+      '@azure/keyvault-common': 2.1.1
+      '@azure/logger': 1.2.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@azure/logger@1.2.0':
     dependencies:
       '@typespec/ts-http-runtime': 0.2.3
@@ -3888,13 +4026,27 @@ snapshots:
     dependencies:
       '@azure/msal-common': 15.7.0
 
+  '@azure/msal-browser@5.30.0':
+    dependencies:
+      '@azure/msal-common': 16.17.0
+    optional: true
+
   '@azure/msal-common@15.7.0': {}
+
+  '@azure/msal-common@16.17.0':
+    optional: true
 
   '@azure/msal-node@3.6.0':
     dependencies:
       '@azure/msal-common': 15.7.0
       jsonwebtoken: 9.0.2
       uuid: 8.3.2
+
+  '@azure/msal-node@7.2.3':
+    dependencies:
+      '@azure/msal-common': 16.17.0
+      jsonwebtoken: 9.0.2
+    optional: true
 
   '@babel/code-frame@7.27.1':
     dependencies:
@@ -4900,7 +5052,7 @@ snapshots:
 
   '@tanstack/virtual-core@3.13.13': {}
 
-  '@tediousjs/connection-string@0.5.0':
+  '@tediousjs/connection-string@1.1.3':
     optional: true
 
   '@testcontainers/clickhouse@11.14.0':
@@ -5107,6 +5259,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@typespec/ts-http-runtime@0.3.11':
+    dependencies:
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6(supports-color@10.2.2)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   '@vitejs/plugin-react@4.7.0(vite@6.4.1(@types/node@22.15.31)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3)(yaml@2.8.0))':
     dependencies:
       '@babel/core': 7.28.5
@@ -5275,6 +5436,14 @@ snapshots:
       buffer: 6.0.3
       inherits: 2.0.4
       readable-stream: 4.7.0
+
+  bl@6.1.6:
+    dependencies:
+      '@types/readable-stream': 4.0.21
+      buffer: 6.0.3
+      inherits: 2.0.4
+      readable-stream: 4.7.0
+    optional: true
 
   body-parser@1.20.3:
     dependencies:
@@ -5492,6 +5661,12 @@ snapshots:
     dependencies:
       bundle-name: 4.1.0
       default-browser-id: 5.0.0
+
+  default-browser@5.5.1:
+    dependencies:
+      bundle-name: 4.1.0
+      default-browser-id: 5.0.0
+    optional: true
 
   define-lazy-prop@3.0.0: {}
 
@@ -5859,6 +6034,11 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
+  iconv-lite@0.7.3:
+    dependencies:
+      safer-buffer: 2.1.2
+    optional: true
+
   ieee754@1.2.1: {}
 
   ignore@7.0.6: {}
@@ -5872,6 +6052,9 @@ snapshots:
   is-docker@3.0.0: {}
 
   is-fullwidth-code-point@3.0.0: {}
+
+  is-in-ssh@1.0.0:
+    optional: true
 
   is-inside-container@1.0.0:
     dependencies:
@@ -6113,14 +6296,13 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mssql@11.0.1:
+  mssql@12.8.1:
     dependencies:
-      '@tediousjs/connection-string': 0.5.0
+      '@tediousjs/connection-string': 1.1.3
       commander: 11.1.0
-      debug: 4.4.1
-      rfdc: 1.4.1
+      debug: 4.4.3(supports-color@10.2.2)
       tarn: 3.0.2
-      tedious: 18.6.1
+      tedious: 20.4.3
     transitivePeerDependencies:
       - supports-color
     optional: true
@@ -6184,6 +6366,16 @@ snapshots:
       define-lazy-prop: 3.0.0
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
+
+  open@11.0.4:
+    dependencies:
+      default-browser: 5.5.1
+      define-lazy-prop: 3.0.0
+      is-in-ssh: 1.0.0
+      is-inside-container: 1.0.0
+      powershell-utils: 0.2.1
+      wsl-utils: 1.0.1
+    optional: true
 
   openapi-typescript@7.10.1(typescript@5.8.3):
     dependencies:
@@ -6302,6 +6494,9 @@ snapshots:
   postgres-interval@1.2.0:
     dependencies:
       xtend: 4.0.2
+
+  powershell-utils@0.2.1:
+    optional: true
 
   prettier@3.5.3: {}
 
@@ -6435,9 +6630,6 @@ snapshots:
   resolve-pkg-maps@1.0.0: {}
 
   retry@0.12.0: {}
-
-  rfdc@1.4.1:
-    optional: true
 
   rollup@4.43.0:
     dependencies:
@@ -6731,6 +6923,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  tedious@20.4.3:
+    dependencies:
+      '@azure/core-auth': 1.11.0
+      '@azure/identity': 4.14.1
+      '@azure/keyvault-keys': 4.11.0
+      '@types/node': 22.15.31
+      bl: 6.1.6
+      iconv-lite: 0.7.3
+      js-md4: 0.3.2
+      native-duplexpair: 1.0.0
+    transitivePeerDependencies:
+      - supports-color
+    optional: true
+
   testcontainers@11.0.3:
     dependencies:
       '@balena/dockerignore': 1.0.2
@@ -6999,6 +7205,12 @@ snapshots:
       strip-ansi: 7.1.0
 
   wrappy@1.0.2: {}
+
+  wsl-utils@1.0.1:
+    dependencies:
+      is-wsl: 3.1.0
+      powershell-utils: 0.2.1
+    optional: true
 
   xtend@4.0.2: {}
 
