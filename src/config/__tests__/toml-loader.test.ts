@@ -872,6 +872,21 @@ authentication = "azure-active-directory-access-token"
         expect(result?.sources[0].password).toBeUndefined();
       });
 
+      it('should accept authentication = "entra-service-principal" without password', () => {
+        const result = loadToml(`
+[[sources]]
+id = "test_db"
+type = "sqlserver"
+host = "myserver.datawarehouse.fabric.microsoft.com"
+database = "testdb"
+user = "00000000-0000-0000-0000-000000000000"
+authentication = "entra-service-principal"
+`);
+
+        expect(result?.sources[0].authentication).toBe('entra-service-principal');
+        expect(result?.sources[0].password).toBeUndefined();
+      });
+
       it.each([
         ['an unknown authentication value', 'authentication = "invalid"', "invalid authentication 'invalid'"],
         ['NTLM authentication without domain', 'authentication = "ntlm"', "'domain' is not specified"],

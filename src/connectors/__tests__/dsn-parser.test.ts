@@ -578,6 +578,46 @@ describe('DSN Parser - SQL Server NTLM Authentication', () => {
   });
 });
 
+describe('DSN Parser - SQL Server Entra service principal authentication', () => {
+  const connector = new SQLServerConnector();
+  const parser = connector.dsnParser;
+  const dsn = 'sqlserver://client-id@example.datawarehouse.fabric.microsoft.com:1433/db?authentication=entra-service-principal&sslmode=require';
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('should configure service principal authentication from the environment', async () => {
+    vi.stubEnv('AZURE_CLIENT_ID', 'client-id');
+    vi.stubEnv('AZURE_CLIENT_SECRET', 'client-secret');
+    vi.stubEnv('AZURE_TENANT_ID', 'tenant-id');
+
+    const config = await parser.parse(dsn);
+
+    expect(config.authentication).toEqual({
+      type: 'azure-active-directory-service-principal-secret',
+      options: {
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        tenantId: 'tenant-id',
+      },
+    });
+    // Fabric rejects SET XACT_ABORT during connection initialization
+    expect(config.options?.abortTransactionOnError).toBeNull();
+    expect(config.options?.encrypt).toBe(true);
+  });
+
+  it('should list every missing environment variable', async () => {
+    vi.stubEnv('AZURE_CLIENT_ID', 'client-id');
+    vi.stubEnv('AZURE_CLIENT_SECRET', '');
+    vi.stubEnv('AZURE_TENANT_ID', '');
+
+    await expect(parser.parse(dsn)).rejects.toThrow(
+      'requires environment variables: AZURE_CLIENT_SECRET, AZURE_TENANT_ID'
+    );
+  });
+});
+
 describe('DSN Parser - missing database component', () => {
   describe.each([
     { label: 'MySQL', connector: () => new MySQLConnector(), scheme: 'mysql' },

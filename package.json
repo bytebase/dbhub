@@ -86,7 +86,7 @@
     "@azure/identity": "^4.8.0",
     "@clickhouse/client": "^1.25.0",
     "mariadb": "^3.4.0",
-    "mssql": "^11.0.1",
+    "mssql": "^12.7.0",
     "mysql2": "^3.13.0",
     "oracledb": "^7.0.1",
     "pg": "^8.13.3"

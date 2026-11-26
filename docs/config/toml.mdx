@@ -564,6 +564,7 @@ Sources define database connections. Each source represents a database that DBHu
   **Options:**
   - `ntlm` - Windows/NTLM authentication. Requires `domain` parameter.
   - `azure-active-directory-access-token` - Azure AD authentication. Token is fetched automatically using Azure SDK.
+  - `entra-service-principal` - Microsoft Entra service principal authentication (for example Microsoft Fabric). The client ID, client secret and tenant ID are read from the `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` and `AZURE_TENANT_ID` environment variables. `user` is still required by the configuration format (use the client ID); no password is needed.
 
   ```toml
   [[sources]]

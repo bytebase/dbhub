@@ -806,7 +806,7 @@ function validateSourceConfig(source: SourceConfig, configPath: string): void {
       );
     }
 
-    const validAuthMethods = ["ntlm", "azure-active-directory-access-token"];
+    const validAuthMethods = ["ntlm", "azure-active-directory-access-token", "entra-service-principal"];
     if (!validAuthMethods.includes(source.authentication)) {
       throw new Error(
         `Configuration file ${configPath}: source '${source.id}' has invalid authentication '${source.authentication}'. ` +
@@ -1342,13 +1342,14 @@ export function buildDSNFromSource(source: SourceConfig): string {
   }
 
   // For other databases, require host, user, database
-  // Password is optional for Azure AD access token authentication and AWS IAM auth
+  // Password is optional for passwordless authentication methods and AWS IAM auth
   const isAwsIamPasswordless =
     source.aws_iam_auth === true &&
     ["postgres", "mysql", "mariadb"].includes(source.type);
   // ClickHouse's `default` user has no password out of the box.
   const passwordRequired =
     source.authentication !== "azure-active-directory-access-token" &&
+    source.authentication !== "entra-service-principal" &&
     !isAwsIamPasswordless &&
     source.type !== "clickhouse";
   if (!source.host || !source.user || !source.database) {
@@ -1360,7 +1361,7 @@ export function buildDSNFromSource(source: SourceConfig): string {
   if (passwordRequired && !source.password) {
     throw new Error(
       `Source '${source.id}': password is required. ` +
-        `(Password is optional for azure-active-directory-access-token authentication, ` +
+        `(Password is optional for azure-active-directory-access-token or entra-service-principal authentication, ` +
         `when aws_iam_auth=true, or for ClickHouse)`
     );
   }

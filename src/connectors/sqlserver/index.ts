@@ -155,6 +155,33 @@ export class SQLServerDSNParser implements DSNParser {
           }
           break;
         }
+        case "entra-service-principal": {
+          const { AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID } = process.env;
+          const missing = [
+            ["AZURE_CLIENT_ID", AZURE_CLIENT_ID],
+            ["AZURE_CLIENT_SECRET", AZURE_CLIENT_SECRET],
+            ["AZURE_TENANT_ID", AZURE_TENANT_ID],
+          ].filter(([, value]) => !value).map(([name]) => name);
+          if (missing.length > 0) {
+            throw new Error(`Fabric service-principal authentication requires environment variables: ${missing.join(", ")}`);
+          }
+          config.authentication = {
+            type: "azure-active-directory-service-principal-secret",
+            options: {
+              clientId: AZURE_CLIENT_ID!,
+              clientSecret: AZURE_CLIENT_SECRET!,
+              tenantId: AZURE_TENANT_ID!,
+            },
+          };
+          // Fabric rejects SET XACT_ABORT ON/OFF during connection initialization.
+          // null tells Tedious not to send either form. Tedious accepts null at
+          // runtime, but its typings only allow boolean | undefined.
+          config.options = {
+            ...config.options,
+            abortTransactionOnError: null as unknown as undefined,
+          };
+          break;
+        }
         case "ntlm":
           config.authentication = {
             type: "ntlm",

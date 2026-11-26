@@ -303,7 +303,7 @@ This page covers command-line flags and environment variables. For TOML configur
   | `sslcert` | PostgreSQL | PEM client certificate for client certificate authentication (set with `sslkey`; requires `require`, `verify-ca` or `verify-full`) | `?sslcert=~/.ssl/client.crt` |
   | `sslkey` | PostgreSQL | Unencrypted PEM private key for `sslcert` | `?sslkey=~/.ssl/client.key` |
   | `instanceName` | SQL Server | Named instance | `?instanceName=SQLEXPRESS` |
-  | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token` | `?authentication=ntlm` |
+  | `authentication` | SQL Server | Auth method: `ntlm`, `azure-active-directory-access-token`, `entra-service-principal` | `?authentication=ntlm` |
   | `domain` | SQL Server | Windows domain (with `authentication=ntlm`) | `?domain=CORP` |
   | `applicationIntent` | SQL Server | `ReadOnly` routes to a readable secondary (Always On AG, Azure SQL Database read scale-out, Managed Instance Business Critical); `ReadWrite` is the default. Key and value are case-insensitive | `?applicationIntent=ReadOnly` |
   | `sid` | Oracle | Connect by SID instead of service name | `?sid=ORCL` |
