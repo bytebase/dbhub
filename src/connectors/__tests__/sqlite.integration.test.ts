@@ -321,6 +321,38 @@ describe('SQLite Connector Integration Tests', () => {
       expect(result.resultSets[0].truncated).toBe(true);
     });
 
+    it('should apply maxRows to LIMIT -1 OFFSET n, the only way SQLite skips rows without a cap', async () => {
+      const all = await sqliteTest.connector.executeSQL('SELECT name FROM users ORDER BY name', {});
+      const skipped = all.resultSets[0].rows.length - 1;
+
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY name LIMIT -1 OFFSET 1',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(Math.min(2, skipped));
+      // truncated is only set when rows were cut off
+      expect(result.resultSets[0].truncated).toBe(skipped > 2 ? true : undefined);
+    });
+
+    it('should apply maxRows to a LIMIT count that is an expression', async () => {
+      const result = await sqliteTest.connector.executeSQL(
+        'SELECT name FROM users ORDER BY name LIMIT -1, 1 + 100',
+        { maxRows: 2 }
+      );
+
+      expect(result.resultSets[0].rows).toHaveLength(2);
+      expect(result.resultSets[0].truncated).toBe(true);
+    });
+
+    it('should keep repeated column names under LIMIT -1 with maxRows', async () => {
+      const sql = 'SELECT 1 AS n, 2 AS n LIMIT -1';
+      const plain = await sqliteTest.connector.executeSQL(sql, {});
+      const capped = await sqliteTest.connector.executeSQL(sql, { maxRows: 5 });
+
+      expect(Object.keys(capped.resultSets[0].rows[0])).toEqual(Object.keys(plain.resultSets[0].rows[0]));
+    });
+
   });
 
   describe('DSN Path Parsing', () => {
