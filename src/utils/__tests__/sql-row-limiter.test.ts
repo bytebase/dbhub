@@ -169,6 +169,39 @@ describe("SQLRowLimiter", () => {
       expect(SQLRowLimiter.applyMaxRows(sql, 100)).toBe(capped);
       expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100)).toEqual(probeResult(sql, probed));
     });
+
+    // SQLite reads a negative count as no upper bound, so it is tightened in
+    // place (no wrapper, so the column names stay as SQLite reports them).
+    // A count that is an expression is not a literal and is wrapped.
+    it.each<CapAndProbeCase>([
+      [
+        "tightens LIMIT -1 OFFSET n in place",
+        "SELECT * FROM users ORDER BY id LIMIT -1 OFFSET 5",
+        "SELECT * FROM users ORDER BY id LIMIT 100 OFFSET 5",
+        "SELECT * FROM users ORDER BY id LIMIT 101 OFFSET 5",
+      ],
+      [
+        "tightens a negative count behind an offset in place",
+        "SELECT * FROM users LIMIT 5, -1;",
+        "SELECT * FROM users LIMIT 5, 100;",
+        "SELECT * FROM users LIMIT 5, 101;",
+      ],
+      [
+        "wraps a count that is an expression",
+        "SELECT * FROM users LIMIT 1 + 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT 1 + 100\n) AS subq LIMIT 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT 1 + 100\n) AS subq LIMIT 101",
+      ],
+      [
+        "wraps an expression count behind a negative offset",
+        "SELECT * FROM users LIMIT -1, 1 + 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT -1, 1 + 100\n) AS subq LIMIT 100",
+        "SELECT * FROM (SELECT * FROM users LIMIT -1, 1 + 100\n) AS subq LIMIT 101",
+      ],
+    ])("SQLite: %s", (_name, sql, capped, probed) => {
+      expect(SQLRowLimiter.applyMaxRows(sql, 100, "sqlite")).toBe(capped);
+      expect(SQLRowLimiter.applyMaxRowsWithTruncationProbe(sql, 100, "sqlite")).toEqual(probeResult(sql, probed));
+    });
   });
 
   describe("applyMaxRows", () => {

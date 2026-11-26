@@ -21,7 +21,10 @@ export interface MaxRowsRewrite {
 interface TopLevelClause {
   index: number;
   length: number;
-  /** Null when the clause's row count is not a literal (a parameter placeholder, say). */
+  /**
+   * Null when the clause's row count is not a literal (a parameter placeholder,
+   * say). Infinity for SQLite's negative LIMIT, which sets no upper bound.
+   */
   value: number | null;
 }
 
@@ -172,30 +175,44 @@ export class SQLRowLimiter {
    * offset and must never be read (or rewritten) as the row count.
    *
    * `value` is the literal row count, or null when the count is not a literal:
-   * a parameter placeholder ($1, ?, @p1), a negative number (SQLite reads
-   * `LIMIT -1` as no upper bound, and `LIMIT -1 OFFSET n` is how it skips rows
-   * without capping them), or, after a comma, anything else
-   * (`LIMIT 5, :n`). `index`/`length` span a literal count only, so it can be
-   * tightened in place while an offset before it stays exactly as written.
+   * a parameter placeholder ($1, ?, @p1), an expression (`LIMIT 1 + 100`, where
+   * the count is not 1), or, after a comma, anything else (`LIMIT 5, :n`).
+   * A negative count is no upper bound in SQLite (`LIMIT -1 OFFSET n` is how it
+   * skips rows without capping them), so there its value is Infinity and it is
+   * tightened in place like any other literal. Other databases reject a
+   * negative count, so elsewhere it is null and the statement is wrapped.
+   * `index`/`length` span a literal count only, so it can be tightened in place
+   * while an offset before it stays exactly as written.
    */
   private static findTopLevelLimit(sql: string, dialect?: ConnectorType): TopLevelClause | null {
+    // A number is the count only when no operator follows it.
+    const whole = String.raw`(?![\w.]|\s*[-+*/%|&^(])`;
     const match = this.findTopLevelMatch(
       sql,
-      /\(|\)|\blimit\s+(?:(\d+)|-\s*\d+|\$\d+|\?|@p\d+)(\s*,\s*(\d+)?)?/gi,
+      new RegExp(
+        String.raw`\(|\)|\blimit\s+(?:(\d+)${whole}|(-\s*\d+)${whole}|-?\s*\d+|\$\d+|\?|@p\d+)` +
+          String.raw`(\s*,\s*(?:(\d+)${whole}|(-\s*\d+)${whole})?)?`,
+        "gi"
+      ),
       "last",
       dialect
     );
     if (match === null) {
       return null;
     }
-    const hasOffset = match[2] !== undefined;
-    const count: string | undefined = hasOffset ? match[3] : match[1];
+    const hasOffset = match[3] !== undefined;
+    const count: string | undefined = hasOffset ? (match[4] ?? match[5]) : (match[1] ?? match[2]);
     const end = match.index + match[0].length;
-    if (count === undefined) {
+    const negative = count?.startsWith("-") ?? false;
+    if (count === undefined || (negative && dialect !== "sqlite")) {
       return { index: end, length: 0, value: null };
     }
     // A literal count is always the last thing the pattern matched.
-    return { index: end - count.length, length: count.length, value: parseInt(count, 10) };
+    return {
+      index: end - count.length,
+      length: count.length,
+      value: negative ? Number.POSITIVE_INFINITY : parseInt(count, 10),
+    };
   }
 
   /**
