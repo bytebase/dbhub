@@ -172,8 +172,70 @@ class MySQLDSNParser implements DSNParser {
 
 /** The callback-style connection mysql2 passes to the pool's 'connection' event. */
 interface RawPoolConnection {
-  query(sql: string, callback: (err: unknown) => void): void;
+  query(sql: string, callback: (err: unknown, results?: unknown) => void): void;
   stream: { destroy(err?: Error): void };
+}
+
+/**
+ * Extracts a positive safe integer thread id from a `SELECT CONNECTION_ID() AS id`
+ * result set. Handles `number`, numeric `string` (when `supportBigNumbers: true`
+ * is enabled), and `bigint`. Returns `undefined` for malformed or non-positive values.
+ */
+export function parseConnectionId(rows: unknown): number | undefined {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return undefined;
+  }
+  const firstRow = rows[0] as Record<string, unknown> | undefined;
+  const raw = firstRow?.id;
+  if (typeof raw === "number") {
+    return Number.isSafeInteger(raw) && raw > 0 ? raw : undefined;
+  }
+  if (typeof raw === "bigint") {
+    const num = Number(raw);
+    return Number.isSafeInteger(num) && num > 0 ? num : undefined;
+  }
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    const num = Number(raw.trim());
+    return Number.isSafeInteger(num) && num > 0 ? num : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Resolves the backend server thread id for a checked-out mysql2 PoolConnection,
+ * preferring the cached `SELECT CONNECTION_ID()` value recorded on the underlying
+ * raw connection over `conn.threadId` (which reflects the proxy greeting behind a
+ * handshake-terminating proxy such as Teleport).
+ */
+export function resolveServerThreadId(
+  conn: mysql.PoolConnection,
+  serverThreadIds: WeakMap<object, number>,
+  fallbackThreadId: number
+): number {
+  const rawConn = (conn as unknown as { connection?: object }).connection ?? conn;
+  return serverThreadIds.get(rawConn) ?? fallbackThreadId;
+}
+
+/**
+ * Queries `SELECT CONNECTION_ID() AS id` once per new pool connection and stores
+ * the backend thread id in `serverThreadIds` keyed by the raw mysql2 connection.
+ * Best-effort: failures are ignored so callers fall back to `conn.threadId`.
+ */
+export function trackServerThreadIds(
+  pool: mysql.Pool,
+  serverThreadIds: WeakMap<object, number>
+): void {
+  (pool as unknown as NodeJS.EventEmitter).on("connection", (connection: RawPoolConnection) => {
+    connection.query("SELECT CONNECTION_ID() AS id", (err, rows) => {
+      if (err) {
+        return;
+      }
+      const id = parseConnectionId(rows);
+      if (id !== undefined) {
+        serverThreadIds.set(connection, id);
+      }
+    });
+  });
 }
 
 /**
@@ -243,6 +305,10 @@ export class MySQLConnector extends MySQLFamilyConnector {
   dsnParser = new MySQLDSNParser();
 
   private pool: mysql.Pool | null = null;
+  // Real backend thread ids queried via SELECT CONNECTION_ID() once per new
+  // pool connection, keyed by the underlying raw mysql2 connection so destroyed
+  // connections are garbage-collected automatically.
+  private serverThreadIds = new WeakMap<object, number>();
   // Client-side fallback deadline, which trails the server-side limit (see
   // query-timeout.ts).
   private clientQueryTimeoutMs?: number;
@@ -297,6 +363,13 @@ export class MySQLConnector extends MySQLFamilyConnector {
             connection.query(setServerLimit, () => {});
           }
         );
+
+        // Capture each new connection's real backend thread id via
+        // SELECT CONNECTION_ID() so the client-side timeout fallback KILL QUERY
+        // targets the backend thread even behind a handshake-terminating proxy
+        // where conn.threadId holds the proxy's synthetic greeting id.
+        this.serverThreadIds = new WeakMap<object, number>();
+        trackServerThreadIds(this.pool, this.serverThreadIds);
       }
 
       // Per-source [sources.session] settings become the default of every new
@@ -380,8 +453,8 @@ export class MySQLConnector extends MySQLFamilyConnector {
     // Get a dedicated connection from the pool to ensure session consistency
     // This is critical for session-specific features like LAST_INSERT_ID()
     const conn = await getConnectionWithin(this.pool, this.connectionTimeoutMs);
-    // Captured up front, before a timeout can lead to conn.destroy() below.
-    const threadId = conn.threadId;
+    // Captured up front as a fallback before a timeout can lead to conn.destroy().
+    const fallbackThreadId = conn.threadId;
     let isConnectionDiscarded = false;
     const timeout = this.clientQueryTimeoutMs;
     try {
@@ -415,6 +488,10 @@ export class MySQLConnector extends MySQLFamilyConnector {
         // destroyed, not reused. Destroy it first, so its pool slot is free
         // for the kill below, then best-effort kill the server-side statement
         // so the timeout actually frees whatever the query was holding.
+        // Resolve the server thread id here (not before the query) so a
+        // brand-new connection's pipelined `SELECT CONNECTION_ID()` callback
+        // has already settled ahead of the timed-out statement.
+        const threadId = resolveServerThreadId(conn, this.serverThreadIds, fallbackThreadId);
         isConnectionDiscarded = true;
         conn.destroy();
         await this.killQuery(threadId);
@@ -437,7 +514,7 @@ export class MySQLConnector extends MySQLFamilyConnector {
    * of the user's query_timeout.
    */
   private async killQuery(threadId: number): Promise<void> {
-    if (!this.pool) return;
+    if (!this.pool || !Number.isSafeInteger(threadId) || threadId <= 0) return;
     let killer;
     let killerPoisoned = false;
     try {
